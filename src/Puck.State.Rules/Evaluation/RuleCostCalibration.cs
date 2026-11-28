@@ -6,7 +6,7 @@ namespace Puck.State.Rules;
 
 /// <summary>What one priced quantity of the work sheet costs on one device, in picoseconds, measured by
 /// <c>puck bench rules</c> over compiled rules on the closure evaluator. The sheet counts work in units
-/// (<see cref="RuleWorkContributor"/>); a calibration turns those counts into time, so a world's worst tick is compared
+/// (<see cref="RuleWorkContributor"/>); a calibration turns those counts into time, so a world's realistic tick is compared
 /// with a share of the tick period rather than with a unit ceiling resting on a guessed nanosecond a unit. Besides the
 /// unit kinds it prices the two fixed costs the units leave out, judging one binding (the evaluator's visit, its frame
 /// and its verdict) and firing once (the journal scope, the latch and the commit), and it prices a door
@@ -78,26 +78,72 @@ public sealed record RuleCostCalibration(
     }
     // One firing: its fixed cost, its doors at the door figure, and the rest of its units at the element figure.
     private RuleWork OneFiring(RuleCost cost) => ((RuleWork.Known(units: Firing) + (cost.Doors * RuleWork.Known(units: Door))) + (cost.EffectElements * Effect));
-    /// <summary>Returns a tick's worst-case time: every line converted (<see cref="Time"/>) and tallied through the same
-    /// exclusion tree that bounds the units (<see cref="RuleWorkBudget.Tally"/>), plus the host's own passes.</summary>
+    /// <summary>Returns what one firing of a line costs with the judgement that opened it, in picoseconds: the price a
+    /// tick's firing allowance charges (<see cref="RuleTickAllowance"/>).</summary>
+    /// <param name="line">The line, priced in units.</param>
+    /// <returns>The picoseconds, or <see cref="long.MaxValue"/> for a cost nothing prices.</returns>
+    public long FiringPicoseconds(RuleWorkContributor line) {
+        var price = ((RuleWork.Known(units: Binding) + (line.Cost.Check * Check)) + OneFiring(cost: line.Cost));
+
+        return (price.IsKnown ? price.Units : long.MaxValue);
+    }
+    /// <summary>Returns a tick's price in time. Admission holds the realistic tick (<see cref="RuleTickPrice.Tick"/>):
+    /// what recurs on every tick of play, every line's <see cref="RuleWorkContributor.RecurringCheckUnits"/> and
+    /// <see cref="RuleWorkContributor.RecurringFiringUnits"/> tallied through the exclusion tree
+    /// (<see cref="RuleWorkBudget.Tally"/>), plus the host's own passes, plus the dearest answer any one line gives one
+    /// change. A tick whose changes cost more spreads its firings over the following ticks at run time
+    /// (<see cref="RuleTickAllowance"/>). The sheet's own total, one change at every line at once, and the worst case,
+    /// every binding of every line, are reported beside it.</summary>
     /// <param name="lines">The sheet's lines, priced in units.</param>
     /// <param name="writers">Per cell, the firings that can write it and their places (<see cref="RuleWorkBudget.CountWriters"/>).</param>
     /// <param name="hostUnits">The units of the passes the host runs beside the rules.</param>
-    /// <returns>The tick's time and its worst case (every line's worst case at once).</returns>
-    public (RuleTime Tick, RuleTime Worst) Price(IReadOnlyList<RuleWorkContributor> lines, IReadOnlyDictionary<(int RowOrdinal, CellKey Key), RuleCellWriters> writers, RuleWork hostUnits) {
+    /// <returns>The price.</returns>
+    public RuleTickPrice Price(IReadOnlyList<RuleWorkContributor> lines, IReadOnlyDictionary<(int RowOrdinal, CellKey Key), RuleCellWriters> writers, RuleWork hostUnits) {
         ArgumentNullException.ThrowIfNull(argument: lines);
         ArgumentNullException.ThrowIfNull(argument: writers);
 
         var timed = new RuleWorkContributor[lines.Count];
+        var recurring = new RuleWorkContributor[lines.Count];
         var host = (hostUnits * Host);
         var worst = host;
+        var dearest = RuleWork.Zero;
+        var dearestName = string.Empty;
+        var recurringChecks = host;
 
         for (var index = 0; (index < timed.Length); index++) {
-            timed[index] = Time(line: lines[index]);
+            var line = lines[index];
+
+            timed[index] = Time(line: line);
             worst += timed[index].WorstUnits;
+
+            var check = ((line.RecurringSetupUnits * Setup) + (line.RecurringJudged * RuleWork.Known(units: Binding))) + ((line.RecurringJudged * line.Cost.Check) * Check);
+            var firing = (line.RecurringFirings * OneFiring(cost: line.Cost));
+
+            recurring[index] = timed[index] with { CheckUnits = check, FiringUnits = firing, WorkUnits = (check + firing) };
+            recurringChecks += check;
+
+            // A line's answer to one change: what it costs beyond what recurs. An unpriced share is the dearest of all.
+            var change = (timed[index].WorkUnits.IsKnown && recurring[index].WorkUnits.IsKnown)
+                ? RuleWork.Known(units: Math.Max(val1: 0L, val2: (timed[index].WorkUnits.Units - recurring[index].WorkUnits.Units)))
+                : timed[index].WorkUnits;
+
+            if (RuleWork.Compare(left: change, right: dearest) > 0) {
+                dearest = change;
+                dearestName = line.Name;
+            }
         }
 
-        return (RuleTime.FromPicoseconds(picoseconds: (RuleWorkBudget.Tally(contributors: timed, writers: writers).Work + host)), RuleTime.FromPicoseconds(picoseconds: worst));
+        var recurringTotal = (RuleWorkBudget.Tally(contributors: recurring, writers: writers).Work + host);
+
+        return new RuleTickPrice(
+            Changes: RuleTime.FromPicoseconds(picoseconds: (RuleWorkBudget.Tally(contributors: timed, writers: writers).Work + host)),
+            DearestChange: RuleTime.FromPicoseconds(picoseconds: dearest),
+            DearestChangeLine: dearestName,
+            Recurring: RuleTime.FromPicoseconds(picoseconds: recurringTotal),
+            RecurringChecks: RuleTime.FromPicoseconds(picoseconds: recurringChecks),
+            Tick: RuleTime.FromPicoseconds(picoseconds: (recurringTotal + dearest)),
+            Worst: RuleTime.FromPicoseconds(picoseconds: worst)
+        );
     }
     /// <summary>Returns what an arena growth of <paramref name="units"/> costs.</summary>
     /// <param name="units">The growth units (<see cref="StateArena.ReservationWork"/>).</param>
@@ -109,6 +155,24 @@ public sealed record RuleCostCalibration(
         provider: CultureInfo.InvariantCulture,
         handler: $"rules {{ setup: {Setup}, binding: {Binding}, check: {Check}, firing: {Firing}, door: {Door}, effect: {Effect}, host: {Host}, growth: {Growth}{((Build is null) ? string.Empty : $", build: \"{Build}\"")} }}"
     );
+}
+/// <summary>One device's price of a tick of rules (<see cref="RuleCostCalibration.Price"/>).</summary>
+/// <param name="Tick">The realistic tick admission holds to the budget: <paramref name="Recurring"/> plus
+/// <paramref name="DearestChange"/>.</param>
+/// <param name="Recurring">What recurs on every tick of play whatever changes, with the host's own passes.</param>
+/// <param name="RecurringChecks">The judgements of <paramref name="Recurring"/> and the host's passes: the recurring work a firing allowance does not meter.</param>
+/// <param name="DearestChange">The most any one line's answer to one change costs.</param>
+/// <param name="DearestChangeLine">The line that answer is, or empty.</param>
+/// <param name="Changes">The sheet's total, one change at every line in one tick: reported, never admitted.</param>
+/// <param name="Worst">Every binding of every line judged and firing at once: reported, never admitted.</param>
+public readonly record struct RuleTickPrice(RuleTime Tick, RuleTime Recurring, RuleTime RecurringChecks, RuleTime DearestChange, string DearestChangeLine, RuleTime Changes, RuleTime Worst) {
+    /// <summary>Deconstructs the price into the admitted tick and the worst case.</summary>
+    /// <param name="tick">The realistic tick.</param>
+    /// <param name="worst">The worst case.</param>
+    public void Deconstruct(out RuleTime tick, out RuleTime worst) {
+        tick = Tick;
+        worst = Worst;
+    }
 }
 /// <summary>A bound on rule work in calibrated time: picoseconds on one device, a reachable operation nothing prices,
 /// or a time no <see cref="long"/> holds. Kept apart from <see cref="RuleWork"/>, whose units are not time.</summary>

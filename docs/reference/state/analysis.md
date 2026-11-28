@@ -241,11 +241,13 @@ the multiplier, and `worst=` when the line's worst case is more than its price;
 `world.budget.rules --why <rule>` prints which of the cases above the line
 fell under.
 
-One change per line per tick is the sheet's stated expectation, not a bound.
-A tick in which many things move at once (a boot, a schedule that turns every
-group over on one tick) costs more, up to the worst tick the sheet reports
-beside its total. Each binding's work stays bounded by its check and its
-effects, and `world.budget.rules --spent` reads what a run actually spent.
+Summed over every line, these prices are the sheet's total: one change at every
+line in one tick. No tick does that, and admission does not hold it; it holds
+the [realistic tick](#the-realistic-tick), built from the same responses, and a
+tick in which many things move at once (a boot, every station pressed on one
+tick) [spreads](#spread-a-tick-that-runs-over) its firings over the ticks after
+it. Each binding's work stays bounded by its check and its effects, and
+`world.budget.rules --spent` reads what a run actually spent.
 
 A host whose commit of one firing spends more than the effects themselves
 prices that into the firing's effects: `Contributor` takes the commit's units.
@@ -446,8 +448,8 @@ picoseconds per setup unit, check unit and effect unit, per door (a cell
 write's or an effect arm's fixed cost, `RuleWorkBudget.DoorUnits` on the
 sheet), per binding judged and per firing (fixed costs the units leave out),
 per host unit and per arena growth unit. `WorldRuleTimePricing` converts every
-line with each device's figures, tallies the same exclusion tree in
-picoseconds, and holds the slowest device's worst tick to the rules' budget:
+line with each device's figures and holds the slowest device's
+[realistic tick](#the-realistic-tick) to the rules' budget:
 `simulation.rulePercent` of the tick period, or
 `WorldSimulationDefaults.DefaultRulePercent` where the world authors none.
 Nothing reads the machine the check runs on, so a document admitted on one
@@ -455,13 +457,85 @@ machine is admitted on every machine and by every authority. A device without
 figures borrows the slowest calibrated device's, and a world with none
 calibrated is priced at `RuleCostCalibration.Uncalibrated`, the 1.6 ns a unit
 the unit ceiling assumed; `world.budget.rules` names which figures priced each
-device. A world whose sheet is unmodeled, overflowed, or over the budget is
-refused, and the refusal names the three costliest lines in time.
+device. A world whose sheet is unmodeled, overflowed, or whose realistic tick is
+over the budget is refused, and the refusal names the three costliest lines in
+time. A tick that runs over at run time is never a reason to refuse a world: it
+[spreads](#spread-a-tick-that-runs-over).
 
 An arena growth while a tick runs is charged in the same time: the growth and
 its rollback, at the slowest device's growth figure, must fit what the budget
-leaves after the worst tick (`WorldRuleTimePricing.RefuseGrowth`), and the
+leaves after the realistic tick (`WorldRuleTimePricing.RefuseGrowth`), and the
 sheet's time line reports that headroom.
+
+#### The realistic tick
+
+Admission prices the tick play actually runs, not one change at every line at
+once (the sheet's own total, which no tick does) and not every binding of every
+line (the worst case, which only a boot does). A **realistic tick** is
+`RuleCostCalibration.Price`'s `RuleTickPrice.Tick`, the sum of two parts:
+
+- **What recurs.** On every tick of play, whatever the players do, a line is
+  judged in full when it is judged in place (a group's, a decision, an
+  interaction, a sweep over a set no version names) or when its judgement reads
+  something that moves with time ($tick outside a deadline, a pose, a
+  pointer, a trait row). Its firings recur only when motion drives them: a Level
+  gate nothing latches, or an Edge, over such a read
+  (`RuleResponse.RecurringJudged` and `RecurringFired`). These are tallied
+  through the exclusion tree, with the host's own passes.
+- **The dearest change.** Everything else answers a change: a line judged by
+  change, a Level gate that holds without motion (it fires only while the change
+  that opened it keeps its firings changing state), a latched line. The
+  realistic tick holds room for the costliest answer any one line gives one
+  change (`RuleTickPrice.DearestChange`, the line `world.budget.rules` names
+  beside it): a tick of play has changes in it, and the dearest single answer is
+  what every tick must be able to absorb without spreading.
+
+`world.budget.rules` prints, per device, the realistic tick, its two parts,
+the sheet's total of one change per line (`one-change-per-line=`) and the
+worst case. Only the realistic tick is admitted; the others are reported.
+
+#### Spread a tick that runs over
+
+A tick whose changes cost more than the realistic tick holds does not run
+long: it carries its remaining due work to the next ticks
+(`RuleTickAllowance`, installed by the world host for each compilation and
+read by `RuleEvaluator.Allowance`).
+
+- **The allowance** is `WorldRuleTimePricing.FiringAllowancePicoseconds`: the
+  budget less the recurring judgements and host passes, in the slowest device's
+  picoseconds. It is a document constant, so every machine and every authority
+  carries the same work on the same tick.
+- **What is charged** is each firing that moved something (a row, an arm, the
+  host) or that refused or faulted, at its line's price for one firing and the
+  judgement that opened it (`RuleCostCalibration.FiringPicoseconds`). A binding
+  a due list leaves alone answers idle, and a settled Level binding moves
+  nothing, so these are exactly the firings an evaluation that judges every
+  binding in place runs, in the same order: the tick reaches its allowance at
+  the same firing whether its schedules are on or off, and
+  `puck test --reproduce` replays it.
+- **What carries.** The firing that passes the allowance completes, since a
+  firing is atomic. From then on the tick visits no further rule and judges no
+  further binding: a due rule stays due, a keyed sweep keeps the bindings it had
+  not reached due (`RuleEvaluator`'s `Defer`, as `maxFirings` does), an in-place
+  sweep touches their latch entries so its end closes none, and no group starts.
+  Each carried binding is judged on a later tick against the state it finds
+  then, as any due binding is. The next tick walks from its first rule again, so
+  in-tick order is never changed on a tick that does not run over.
+- **What never carries**: a firing already started; the rest of a group pass
+  already under way (a pass is one unit of the group's progress); a sweep of
+  this tick's events, whose events are gone on the next tick; and a rule whose
+  gate holds on one tick alone (`$tick == …`), which a later tick would never
+  fire (`RuleTickAllowance.Transient`). A search job keeps its own allowance
+  and is not charged here.
+- **Sustained overrun.** A world that carries work on a rate's worth of ticks
+  in a row is not keeping up. `world.budget.rules` names it in its `spread:`
+  line (with the allowance, what the last tick charged, the peak, and the ticks
+  that carried), and `world.counters world.tick` counts
+  `world.tick.rule-carried-ticks` and `world.tick.rule-sustained-overrun`.
+  Neither refuses the world; they say where to look.
+
+`worlds/debug/rule-spread-tests.puck` scripts a burst of 2048 firings against a
+1% share and shows it carrying over several ticks and reproducing.
 
 The search jobs run in the same tick, right after the rules, on a lane of their
 own ([Search](search.md#work-is-priced-in-units)). One

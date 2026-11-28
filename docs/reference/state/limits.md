@@ -27,11 +27,12 @@ A few rules apply to every limit on this page:
 > [!NOTE]
 > Work units are heuristic prices; admission converts them to time with each
 > device's measured calibration (`RuleCostCalibration`). The sheet a document is
-> held to under the tick's rule budget (`WorldRuleTimePricing`) prices
-> a tick at rest plus one change for each rule the evaluator judges by change,
-> and every binding for each other line; it doesn't guarantee how long a tick
-> takes, and a tick in which many things change at once costs more, up to the
-> worst tick the sheet reports. Search jobs are priced apart from the sheet,
+> held to under the tick's rule budget (`WorldRuleTimePricing`) is its
+> realistic tick: what recurs on every tick of play plus the dearest single
+> change. A tick in which many things change at once carries the firings past
+> the document's allowance to the ticks after it
+> ([spread](analysis.md#spread-a-tick-that-runs-over)), and the worst tick is
+> reported beside the price, never admitted. Search jobs are priced apart from the sheet,
 > each against its own step lane (`SearchCapacity.MaxWorkUnitsPerStep`) less its
 > own upkeep, so no rule shrinks a search. A rule that fires
 > only a few of its bindings is priced by its enforced `maxFirings`. See

@@ -14,6 +14,21 @@ public sealed partial class RuleEvaluator {
     }
 
     private readonly List<int> m_dueLive = [];
+    private int m_groupPasses;
+
+    /// <summary>Gets or sets the tick's firing allowance, or <see langword="null"/> for none. The host opens each tick's
+    /// account (<see cref="RuleTickAllowance.BeginTick"/>) before its rule pass; once a tick passes it, the rest of the
+    /// tick's due work carries to the next ticks, identically whether schedules are on or off.</summary>
+    public RuleTickAllowance? Allowance { get; set; }
+
+    // Whether the tick has passed its allowance and so leaves this rule's remaining work for a later tick: never a rule
+    // whose work a later tick could not do (RuleTickAllowance.Transient), and never inside a group pass, which is one
+    // unit of its group's progress.
+    private bool Carries(CompiledRule rule) => (
+        (Allowance is { Exhausted: true } allowance) &&
+        (m_groupPasses == 0) &&
+        !allowance.Transient(rule: rule)
+    );
 
     private Puck.Abstractions.Counting.WorkCount m_due;
     private Puck.Abstractions.Counting.WorkCount m_elided;
@@ -60,6 +75,10 @@ public sealed partial class RuleEvaluator {
         var visited = 0;
 
         for (var index = list.NextDue(from: 0); (index >= 0); index = list.NextDue(from: (index + 1))) {
+            // A tick past its allowance leaves the rule due, unvisited, for a later tick.
+            if (Carries(rule: rules[index])) {
+                continue;
+            }
             list.BeginVisit(index: index);
             visited++;
             m_due.Increment();
@@ -129,7 +148,7 @@ public sealed partial class RuleEvaluator {
 
                 continue;
             }
-            if (cap.Spent) {
+            if (cap.Spent || Carries(rule: list.Rules[index])) {
                 Defer(binding: body, index: index, key: key, list: list);
 
                 continue;
@@ -236,9 +255,9 @@ public sealed partial class RuleEvaluator {
             }
         }
     }
-    // A binding a capped sweep reached after its firings were spent: left as it stands, its latch entry kept as an
-    // in-place sweep keeps it, and due on the next tick, when the sweep reaches it again. The due list remembers it
-    // exactly, so the cap spreads the bindings over ticks instead of judging every binding every tick.
+    // A binding a sweep reached after its firings were spent, its own cap's or the tick's allowance: left as it stands,
+    // its latch entry kept as an in-place sweep keeps it, and due on the next tick, when the sweep reaches it again. The
+    // due list remembers it exactly, so the work spreads over ticks instead of being judged again in full.
     private void Defer(RuleDueList list, int index, int binding, CellKey key, int member = -1) {
         list.Latch.Touch(binding: SweepLatchKey(key: key, member: member, rule: list.Rules[index]), state: list.States[index]);
         list.MarkBindingNext(binding: binding, index: index);
@@ -294,7 +313,7 @@ public sealed partial class RuleEvaluator {
 
             var member = ((members is null) ? -1 : members[position]);
 
-            if (cap.Spent) {
+            if (cap.Spent || Carries(rule: list.Rules[index])) {
                 Defer(binding: position, index: index, key: keys[position], list: list, member: member);
 
                 continue;

@@ -73,7 +73,7 @@ public sealed class WorldRuleCompilation {
     /// admission holds the slowest device to.</summary>
     public WorldRuleTimePricing Pricing => m_pricing.Value;
     /// <summary>Returns a deterministic refusal of a proposed arena reservation's work: the tick's growth and a possible
-    /// rollback in time, against what the rule budget leaves after the slowest device's worst tick
+    /// rollback in time, against what the rule budget leaves after the slowest device's realistic tick
     /// (<see cref="WorldRuleTimePricing.RefuseGrowth"/>). The sheet prices every row at its declared room
     /// (<see cref="Puck.State.Rules.RuleCompileContext.RowCapacity(int)"/>), so a reservation never changes it and nothing
     /// is compiled again.</summary>

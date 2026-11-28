@@ -1094,6 +1094,23 @@ spend cannot keep up is reported. The allowance is a document constant derived
 from the slowest supported device's calibration, never host timing, so every
 machine defers identically and determinism holds.
 
+As built: the realistic tick is what recurs on every tick of play (lines judged
+in place or over a read that moves with time, and the firings motion drives)
+through the exclusion tree, plus the dearest answer any one line gives one
+change (`RuleCostCalibration.Price`). The allowance is the budget less the
+recurring judgements and host passes (`WorldRuleTimePricing.FiringAllowancePicoseconds`),
+and it meters firings alone, and only those that moved something or refused:
+those are the firings an in-place evaluation runs too, in the same order, so the
+tick carries at the same firing with schedules on or off and the reproduce replay
+holds. Judging every binding was the other option for metering, rejected because
+a due list judges fewer bindings than the replay, so the two would pass the
+allowance at different points. Enforcement: one charge point
+(`RuleEvaluator.EvaluateOnceCore`) and one carry predicate serve both walks, and
+`puck test --reproduce` compares them; `worlds/debug/rule-spread-tests.puck`
+scripts a burst that carries over several ticks. What it does not cover: the
+judgements a carrying tick already made are not metered, and a change that
+cascades through several lines is priced at its dearest line, the rest spreading.
+
 **A price reads declarations, never members.** Every price reads a row's room
 through one door, `RuleCompileContext.RowCapacity`, and the answer is a
 function of declarations alone: a slot is one cell, a lattice its topology's

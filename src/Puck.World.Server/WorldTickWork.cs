@@ -25,6 +25,13 @@ public static class WorldTickWork {
     /// it at (<see cref="WorldPlacementRegion.Capacity"/>): one per body past it, per sweep. A count that keeps
     /// growing names a region whose capacity is authored too small.</summary>
     public static WorkKind RegionSweepOverflow { get; } = new(name: "world.tick.region-sweep-overflow", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the ticks whose rule pass passed its firing allowance and carried its remaining
+    /// due work to the next ticks (<see cref="Puck.State.Rules.RuleTickAllowance"/>).</summary>
+    public static WorkKind RuleCarriedTicks { get; } = new(name: "world.tick.rule-carried-ticks", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the carrying ticks that fell inside a sustained overrun: a rate's worth or more of
+    /// ticks in a row that each carried due work. A count that keeps growing names a world whose spend does not keep
+    /// up with its allowance.</summary>
+    public static WorkKind RuleSustainedOverrun { get; } = new(name: "world.tick.rule-sustained-overrun", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting continuation folds: one per hash that folded bodies' simulation continuations
     /// (<see cref="WorldPopulation.AppendContinuationHash(ref Puck.Maths.Fnv1aHash, bool)"/>), the whole population's or a replay scope's.</summary>
     public static WorkKind ContinuationFolds { get; } = new(name: "world.tick.continuation-folds", unit: "count", workClass: WorkClass.Deterministic);
@@ -135,7 +142,7 @@ public static class WorldTickWork {
             FederatedBatches, FederatedRetimed, FederatedStale, FederatedRestarts, FederatedCarried,
             InputAdmissions, InputAdmissionsStanding, InputAdmissionsSteady, InputRefreshes, InputRefreshesStanding,
             InputSynchronizations, InputSynchronizationsStanding,
-            FactDerives, FactSlots, RegionSweepOverflow, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids, NearestCells, DealRedeals,
+            FactDerives, FactSlots, RegionSweepOverflow, RuleCarriedTicks, RuleSustainedOverrun, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids, NearestCells, DealRedeals,
             ContinuationProfiles, ContinuationProfileBytes, ContinuationTailBytes, .. SectionEncodes, .. SectionBytes,
             .. SectionComparedBytes, .. SectionFilteredCompares, .. SectionUnchangedEncodes,
         ],

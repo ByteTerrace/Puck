@@ -49,6 +49,12 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
     /// (one change opens at least every member's binding there, and at most one member's bindings). So the dearest of
     /// them bounds them all.</summary>
     public bool PinsByMember { get; init; }
+    /// <summary>Gets the bindings of <see cref="Judged"/> judged on every tick of play whatever changes: every binding
+    /// of a line judged in place or reading something that moves with time, and none of a line judged by change.</summary>
+    public long RecurringJudged { get; init; }
+    /// <summary>Gets the firings of <see cref="Fired"/> that recur on every tick of play: those motion drives (a Level
+    /// gate nothing latches, or an Edge, over a read that moves with time). Every other firing answers a change.</summary>
+    public long RecurringFired { get; init; }
     /// <summary>Derives a line's response.</summary>
     /// <param name="rule">The compiled rule.</param>
     /// <param name="multiplier">The bindings one sweep can hold.</param>
@@ -83,17 +89,14 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
         // The lines a due list visits every tick in full (RuleDueList.Classify): one over a live row selection, and one
         // whose key set no version names.
-        if (
+        var judgedInPlace = (
             inPlace ||
             (rule.Zones is { References.Count: > 0, PerBinding: false }) ||
             (rule.PoolForEach is not null) ||
             rule.ForEachZones ||
             (rule.ForEachBodies && !context.LiveBodiesVersioned) ||
             ((rule.Iteration is { } iteration) && !iteration.Versioned)
-        ) {
-            return new RuleResponse(Fired: firings, Judged: multiplier, Latching: latching, Why: $"judged in place every tick{never}");
-        }
-
+        );
         var reads = new List<CellAccess>();
         var needs = new RuleNeedsBuilder();
         var deadline = RuleDeadline.Find(gate: rule.Gate);
@@ -177,6 +180,19 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             latching = RuleLatching.None;
         }
 
+        // What recurs on every tick of play whatever changes (the realistic tick's share, RuleCostCalibration.Price):
+        // the judgements a moving read forces, and the firings motion drives, a Level gate nothing latches or an Edge
+        // over a moving input. A Level gate that holds without motion fires only as long as the change that opened it
+        // keeps its firings changing state, which is change work.
+        var motionFires = ((moving is not null) && !holdsNever && (latching is RuleLatching.None or RuleLatching.Edge));
+
+        if (judgedInPlace) {
+            return new RuleResponse(Fired: firings, Judged: multiplier, Latching: latching, Why: $"judged in place every tick{never}") {
+                RecurringFired = (motionFires ? firings : 0L),
+                RecurringJudged = multiplier,
+            };
+        }
+
         // At rest: a Level gate nothing latches fires every tick it holds, so every binding may be judged and fire;
         // an Edge over a moving input can cross again and again.
         // A gate that never holds neither holds again nor crosses again, so only a moving read revisits it at rest.
@@ -212,7 +228,11 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             Judged: judged,
             Latching: latching,
             Why: $"{rest}; {fire}; one change opens {opened} of {multiplier} binding(s){(backlog ? $"; maxFirings={rule.MaxFirings} can leave bindings due, so every binding is judged" : string.Empty)}"
-        ) { PinsByMember = ((rule.ForEachFamily is not null) && !shared && (deadline is null) && (judgedAtRest == 0L) && (firedAtRest == 0L) && (opened <= members.Capacity)) };
+        ) {
+            PinsByMember = ((rule.ForEachFamily is not null) && !shared && (deadline is null) && (judgedAtRest == 0L) && (firedAtRest == 0L) && (opened <= members.Capacity)),
+            RecurringFired = (motionFires ? fired : 0L),
+            RecurringJudged = ((moving is not null) ? multiplier : 0L),
+        };
     }
     /// <summary>Returns whether a rule's gate provably never holds on the host its context describes: a host that
     /// answers one search ply (<see cref="RuleCompileContext.SearchPlyIsFixed"/>) answers the live ply, zero

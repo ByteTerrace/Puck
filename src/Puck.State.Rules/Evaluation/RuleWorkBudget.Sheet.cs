@@ -114,7 +114,21 @@ public readonly record struct RuleWorkContributor(
     string Response = "",
     RuleWork SetupUnits = default,
     long WorstFirings = 0L
-);
+) {
+    /// <summary>Gets the bindings of <see cref="Judged"/> judged on every tick of play whatever changes
+    /// (<see cref="RuleResponse.RecurringJudged"/>).</summary>
+    public long RecurringJudged { get; init; }
+    /// <summary>Gets the firings of <see cref="Firings"/> that recur on every tick of play
+    /// (<see cref="RuleResponse.RecurringFired"/>).</summary>
+    public long RecurringFirings { get; init; }
+    /// <summary>Gets the setup the recurring judgements snapshot.</summary>
+    public RuleWork RecurringSetupUnits { get; init; }
+    /// <summary>Gets the line's recurring check units: <see cref="RecurringSetupUnits"/> plus
+    /// <see cref="RecurringJudged"/> x Check.</summary>
+    public RuleWork RecurringCheckUnits => (RecurringSetupUnits + (RecurringJudged * Cost.Check));
+    /// <summary>Gets the line's recurring firing units: <see cref="RecurringFirings"/> x Effects.</summary>
+    public RuleWork RecurringFiringUnits => (RecurringFirings * Cost.Effects);
+}
 /// <summary>The firings per tick that can write one cell, each at its place in the tick's evaluation pass. A write
 /// changes what the lines after it read and nothing before, so two lines can read different values of the cell only
 /// when a write lands between them: one at or after the earlier line's place and before the later one's. A writer
@@ -275,14 +289,15 @@ public static partial class RuleWorkBudget {
             }
         }
         var capped = Firings(multiplier: multiplier, rule: rule);
-        var response = (((context is RuleCompileContext compile) && !inPlace && !isInteraction)
-            ? RuleResponse.Of(context: compile, multiplier: multiplier, rule: rule)
-            : new RuleResponse(Fired: capped, Judged: multiplier, Latching: RuleLatching.None, Why: "judged in place every tick"));
+        var response = ((context is RuleCompileContext compile)
+            ? RuleResponse.Of(context: compile, inPlace: (inPlace || isInteraction), multiplier: multiplier, rule: rule)
+            : new RuleResponse(Fired: capped, Judged: multiplier, Latching: RuleLatching.None, Why: "judged in place every tick") { RecurringFired = capped, RecurringJudged = multiplier });
         // A sweep's setup is one unit per key it snapshots, and a sweep that judges some bindings snapshots none
         // beyond them.
-        var setup = ((cost.Setup.IsKnown && (response.Judged < multiplier))
-            ? RuleWork.Known(units: Math.Min(val1: cost.Setup.Units, val2: response.Judged))
+        RuleWork Setup(long judged) => ((cost.Setup.IsKnown && (judged < multiplier))
+            ? RuleWork.Known(units: Math.Min(val1: cost.Setup.Units, val2: judged))
             : cost.Setup);
+        var setup = Setup(judged: response.Judged);
         var checkUnits = (setup + (response.Judged * cost.Check));
         var firingUnits = (response.Fired * cost.Effects);
 
@@ -308,7 +323,11 @@ public static partial class RuleWorkBudget {
             WorkUnits: (checkUnits + firingUnits),
             WorstFirings: capped,
             WorstUnits: ((cost.Setup + (multiplier * cost.Check)) + (capped * cost.Effects))
-        );
+        ) {
+            RecurringFirings = response.RecurringFired,
+            RecurringJudged = response.RecurringJudged,
+            RecurringSetupUnits = ((response.RecurringJudged == 0L) ? RuleWork.Zero : Setup(judged: response.RecurringJudged)),
+        };
     }
     /// <summary>Returns how many of a rule's evaluations per tick can fire: its multiplier, bounded by the rule's
     /// <see cref="CompiledRule.MaxFirings"/>, which the evaluator enforces by ending the sweep.</summary>

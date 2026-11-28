@@ -569,6 +569,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         m_host.RefreshFacts();
 
         for (var index = 0; (index < rules.Length); index++) {
+            // A tick past its allowance visits no further rule, as a due list's walk leaves it due.
+            if (Carries(rule: rules[index])) {
+                continue;
+            }
+
             var outcome = EvaluateRule(
                 applied: out var moved,
                 bindings: states[index],
@@ -685,9 +690,10 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
                 var poolBinding = new LatchKey(Left: slotKey.Ordinal, Right: -1, LeftGeneration: handle.Generation);
 
-                if ((rule.MaxFirings > 0) && (poolFirings >= rule.MaxFirings)) {
+                if (((rule.MaxFirings > 0) && (poolFirings >= rule.MaxFirings)) || Carries(rule: rule)) {
                     latch.Touch(binding: poolBinding, state: bindings);
-                    // The bindings the cap left are judged on a later tick, so a due list visits the rule again.
+                    // The bindings the cap or the tick's allowance left are judged on a later tick, so a due list
+                    // visits the rule again.
                     m_anyRerun = true;
                     continue;
                 }
@@ -720,9 +726,10 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
             // A sweep that has spent its firings leaves its remaining bindings as they stand, so an open edge waits for
             // the tick that reaches it instead of being closed by the sweep's end.
-            if ((rule.MaxFirings > 0) && (firings >= rule.MaxFirings)) {
+            if (((rule.MaxFirings > 0) && (firings >= rule.MaxFirings)) || Carries(rule: rule)) {
                 latch.Touch(binding: eachBinding, state: bindings);
-                // The bindings the cap left are judged on a later tick, so a due list visits the rule again.
+                // The bindings the cap or the tick's allowance left are judged on a later tick, so a due list visits
+                // the rule again.
                 m_anyRerun = true;
                 continue;
             }
@@ -998,7 +1005,12 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         var settled = false;
 
         m_commitArmed = false;
+        // A rewind's firing opens no commit, so the previous firing's answer must not stand for it.
+        m_commitArenaOnly = true;
 
+        // Held as identities alone, to tell afterwards whether the firing moved anything.
+        object arenaBefore = m_host.Arena;
+        var movesBefore = m_host.Arena.MoveSequence;
         var outcome = ((fires && (rule.Effects is [RewindGroupEffect]))
             ? FireRewind(
                 applied: out applied,
@@ -1046,6 +1058,13 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             // judges the binding again.
             scheduling.Owner = null;
             m_rerun = true;
+        }
+        // The tick's allowance is charged for every firing that ran its effects and moved something, or refused or
+        // faulted: exactly the firings an in-place evaluation runs too, since a firing that moved nothing is one a due
+        // list may skip as settled.
+        if ((Allowance is { } allowance) && (outcome != RuleOutcome.Idle) && ((outcome != RuleOutcome.Fired) ||
+            !ReferenceEquals(objA: arenaBefore, objB: m_host.Arena) || (m_host.Arena.MoveSequence != movesBefore) || m_commitArmed || !m_commitArenaOnly)) {
+            allowance.Charge(rule: rule);
         }
         if (outcome == RuleOutcome.Fired) {
             m_firings.Increment();

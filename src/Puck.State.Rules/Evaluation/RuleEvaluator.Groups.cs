@@ -39,6 +39,11 @@ public sealed partial class RuleEvaluator {
         }
 
         foreach (var group in groups) {
+            // A tick past its allowance starts no group: its trigger and its pass wait, its progress kept, for a later
+            // tick. A pass already started runs to its end (Carries).
+            if (Allowance is { Exhausted: true }) {
+                break;
+            }
             if ((m_host is IArenaUndoHost suppressingUndo) && suppressingUndo.UndoGroupSuppressed(group: group.Name, tick: m_host.Tick)) {
                 continue;
             }
@@ -73,12 +78,14 @@ public sealed partial class RuleEvaluator {
             if (attributed) {
                 ((IArenaUndoHost)m_host).BeginUndoPass(group: group.Name);
             }
+            m_groupPasses++;
             try {
                 applied |= ((group.Shape == RuleGroupShape.Fixpoint)
                     ? RunFixpoint(group: group, latch: latch, rules: rules, state: state, stepTicks: stepTicks)
                     : RunStaged(group: group, latch: latch, rules: rules, state: state, stepTicks: stepTicks)
                 );
             } finally {
+                m_groupPasses--;
                 if (attributed) {
                     ((IArenaUndoHost)m_host).EndUndoPass(group: group.Name);
                 }

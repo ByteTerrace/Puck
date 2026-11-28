@@ -234,13 +234,21 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   source) answers the key itself (`IStateReader.TryFactKey`), and a source that
   answers no key there wakes the wrong binding, which the replay catches.
 - **Bounded before it runs.** Every row, pool, pattern and search has a
-  ceiling checked at compile or load, and a world whose rules could exceed the
+  ceiling checked at compile or load, and a world whose realistic tick exceeds the
   tick's rule budget on its slowest device is refused at load: the sheet's units
   are converted to time with each device profile's measured figures
-  (`WorldDeviceProfile.Rules`, a `RuleCostCalibration` from `puck bench rules`)
-  and compared with `simulation.rulePercent` of the tick period
-  (`WorldRuleTimePricing`). Nothing reads the machine the check runs on, so the
-  verdict is the same everywhere. When merged content hits the budget, first
+  (`WorldDeviceProfile.Rules`, a `RuleCostCalibration` from `puck bench rules`),
+  and what recurs on every tick of play plus the dearest single change
+  (`RuleCostCalibration.Price`, `RuleTickPrice.Tick`) is compared with
+  `simulation.rulePercent` of the tick period (`WorldRuleTimePricing`). Nothing
+  reads the machine the check runs on, so the verdict is the same everywhere. A
+  tick that runs over at run time spreads: once its charged firings pass the
+  document's firing allowance (`RuleTickAllowance`, read by
+  `RuleEvaluator.Allowance`), the rest of its due work carries to the next ticks,
+  identically with schedules on or off; only firings that moved something are
+  charged, which is what keeps the replay equal. Never carried: a started
+  firing, the rest of a group pass, an events sweep, a `$tick ==` gate
+  (`RuleTickAllowance.Transient`). When merged content hits the budget, first
   check the sheet prices only what can run (`world.budget.rules --why`), then
   that the devices are calibrated, then raise the authored share rather than
   cutting content
@@ -346,7 +354,7 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 | Latch lifecycle writes stay outside firings | `RuleLatch` writers take the journal and refuse inside a scope |
 | A transform reads no names while it runs | `RuleCompiler.TryResolveTransform` resolves to an `ArenaTransform` of ordinals |
 | A rule fits its host | `RuleNeeds`, read off the rule's own declarations by `RuleNeedsBuilder` and admitted against the host's facets; a rule the host cannot serve is refused before evaluation |
-| Worst-case work fits a tick | `RuleWorkBudget` in time (`RuleCostCalibration.Price`, the same exclusion tree over every line in picoseconds) against the slowest device's budget (`WorldRuleTimePricing`), at load and at every reuse of the programs, which reads the devices and the share afresh; an arena growth while a tick runs against what that budget leaves (`WorldRuleTimePricing.RefuseGrowth`); the evaluator's deferred locals and the sheet read one `CompiledRule.Deferred`, and the world host's rule pass and the sheet's line places (`RuleWorkContributor.Order`) read one `RuleEvaluationOrder`. A host with another pass order builds its own |
+| A realistic tick fits the budget, and a tick that runs over carries the same work everywhere | `RuleWorkBudget` in time (`RuleCostCalibration.Price`: the recurring lines through the exclusion tree in picoseconds plus the dearest change) against the slowest device's budget (`WorldRuleTimePricing`), at load and at every reuse of the programs, which reads the devices and the share afresh; an arena growth while a tick runs against what that budget leaves (`WorldRuleTimePricing.RefuseGrowth`); the evaluator's deferred locals and the sheet read one `CompiledRule.Deferred`, and the world host's rule pass and the sheet's line places (`RuleWorkContributor.Order`) read one `RuleEvaluationOrder`. A host with another pass order builds its own. At run time the one charge point (`RuleEvaluator.EvaluateOnceCore`, firings that moved something) and the one carry predicate (`RuleEvaluator`'s `Carries`) serve both the due walk and the in-place walk, and `puck test --reproduce` compares them |
 | A price is a function of declarations | `RuleCompileContext.RowCapacity`, the one room `IRuleCostContext` serves every fact, search price and rewind estimate; `RecipientOracleLawTests` compares two hidden-member variants. Nothing refuses a new price that reads storage instead |
 | A read audience encloses the destination's | `StateArena.ReadAudienceEncloses`, called by search and the disclosure transforms, over the restricting zones the arena derives from its own rows and layout (a catalog is reused across a policy-only redeclaration, so a list it derived goes stale). A transform's firing reads its bound live ends, `ArenaTransform.DisclosureReads` and the member reads of its own binding (`ArenaTransformBinding.Each`), which `RuleCompiler.SettleDisclosure` settles: only a member a live end selects by the binding's own key, read by that same key, is left to the bound-end check |
 | A session mirror presents another stream's image only while disclosed alike | `WorldImageClasses.Judge`, the one door that binds a mirror to its class leader's (`WorldSessionMirror.Presented`), comparing `WorldRecipientView.DisclosureClass` at every delivery; review holds that the class names everything a stream's composition reads ([hazards](../../../docs/development/hazards.md#silent-invariants)) |

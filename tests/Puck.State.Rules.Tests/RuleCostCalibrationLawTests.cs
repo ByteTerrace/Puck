@@ -71,7 +71,7 @@ public sealed class RuleCostCalibrationLawTests {
         var other = pinned with { High = 1L, Low = 1L };
         var left = Line(check: 1L, elements: 2L, name: "left") with { Discriminators = [pinned] };
         var right = Line(check: 1L, elements: 9L, name: "right") with { Discriminators = [other] };
-        var tick = calibration.Price(hostUnits: 0L, lines: [left, right], writers: NoWriters).Tick.Picoseconds;
+        var tick = calibration.Price(hostUnits: 0L, lines: [left, right], writers: NoWriters).Changes.Picoseconds;
         var (leftTimed, rightTimed) = (calibration.Time(line: left), calibration.Time(line: right));
 
         // Both checks are charged; of two firings that pin one cell to different values, only the dearer can run.
