@@ -8730,6 +8730,127 @@ export type WorldFlockProfile = {
 
 export type WorldFlockSpace = "Tangent" | "Volume";
 
+/**
+ * One side of a form transition: a band that sweeps over the form's real surface, building it behind the band as it arrives or dissolving it as it leaves, with an emissive edge and motes that settle onto or rise off the surface the band crosses; and, for a form shed or assembled piece by piece, each moving part of it launched off with a seeded impulse (bouncing off the world's real surfaces) or flown in from a scattered start to lock into place. Every value has a neutral default, so an author states only what the effect needs; the standard package's form transition module (worlds/standard/form-transition.puck) chooses the values its effects use.
+ */
+export type WorldFormEffect = {
+  /**
+   * How long the band takes to sweep the form, seconds; positive.
+   */
+  seconds?: number;
+  /**
+   * How long after the switch the effect starts, seconds; not negative. A leaving form waits drawn whole, an arriving one waits undrawn.
+   */
+  delay?: number;
+  /**
+   * The way the band sweeps, in the creation's own frame, or null for up.
+   */
+  direction?: DocumentVector3;
+  /**
+   * The edge's hex colour (#RRGGBB), or null for white.
+   */
+  edgeColor?: string | null;
+  /**
+   * The edge's luminance, nits; zero draws no edge.
+   */
+  edgeLuminance?: number;
+  /**
+   * How far behind the band the edge glows, metres.
+   */
+  edgeWidth?: number;
+  /**
+   * How far the band's front wanders along its sweep by the lattice noise at each surface point, metres; zero is a flat front.
+   */
+  roughness?: number;
+  /**
+   * The wavelength of that noise, metres; positive.
+   */
+  roughnessScale?: number;
+  /**
+   * How many motes rise off or settle onto the form; zero for none.
+   */
+  motes?: number;
+  /**
+   * The motes' hex colour, or null for the edge's.
+   */
+  moteColor?: string | null;
+  /**
+   * The motes' luminance at their brightest, nits.
+   */
+  moteLuminance?: number;
+  /**
+   * A mote's diameter, metres.
+   */
+  moteSize?: number;
+  /**
+   * A mote's life, seconds.
+   */
+  moteSeconds?: number;
+  /**
+   * How fast a mote drifts off the surface, metres a second.
+   */
+  moteSpeed?: number;
+  /**
+   * The acceleration a mote takes along world up, metres a second squared; negative falls.
+   */
+  moteRise?: number;
+  /**
+   * How fast a mote's drift turns about the sweep, radians a second.
+   */
+  moteSwirl?: number;
+  /**
+   * Whether the form's moving parts fly apart (leaving) or fly together (arriving) as separate pieces, each with a band of its own, rather than the whole form under one band.
+   */
+  pieces?: boolean;
+  /**
+   * How fast a shed piece is launched off the body, metres a second; an assembling piece's flight is timed to PieceSeconds instead.
+   */
+  pieceSpeed?: number;
+  /**
+   * How much of a shed piece's launch leans up, from zero (straight out from the body) to one.
+   */
+  pieceLift?: number;
+  /**
+   * How fast a piece tumbles, radians a second.
+   */
+  pieceSpin?: number;
+  /**
+   * The acceleration a shed piece falls by, metres a second squared.
+   */
+  pieceGravity?: number;
+  /**
+   * The share of its speed a shed piece keeps off a surface it strikes, from zero to one.
+   */
+  pieceBounce?: number;
+  /**
+   * How far from its place an assembling piece starts, metres.
+   */
+  pieceReach?: number;
+  /**
+   * How long a piece flies before its band sweeps it (shed) or how long an assembling piece takes to reach its place, seconds.
+   */
+  pieceSeconds?: number;
+  /**
+   * The most a piece's start is delayed past the effect's, seconds, drawn per piece.
+   */
+  pieceStagger?: number;
+  /**
+   * Gets the longest any part of the effect plays from the switch, seconds: its delay, its staggered pieces' flights and its sweep, and the last motes' lives after it; a form is let go once this has passed.
+   */
+  totalSeconds?: number;
+};
+
+export type WorldFormTransition = {
+  /**
+   * What plays as the look starts to be worn, or null for an instant start.
+   */
+  arrive?: WorldFormEffect | null;
+  /**
+   * What plays as the look stops being worn, or null for an instant end. While it plays, the outgoing form is drawn beside the incoming one.
+   */
+  leave?: WorldFormEffect | null;
+};
+
 export type WorldFrameBar = {
   /**
    * The window's client width in pixels.
@@ -10446,6 +10567,10 @@ export type WorldLook = {
    * How the look animates with the body (see WorldLookMotion).
    */
   motion: WorldLookMotion;
+  /**
+   * Gets how a body's form changes on screen as it starts or stops wearing the look (see WorldFormTransition), or null, the default, for an instant switch.
+   */
+  transition?: WorldFormTransition | null;
 };
 
 export type WorldLookCue = {

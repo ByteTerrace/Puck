@@ -184,6 +184,27 @@
             },
             "additionalProperties": false,
             "title": "WorldLookMotion"
+          },
+          "transition": {
+            "description": "Gets how a body\u0027s form changes on screen as it starts or stops wearing the look (see WorldFormTransition), or null, the default, for an instant switch.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "arrive": {
+                "$ref": "./common.schema.json#/$defs/WorldFormEffect",
+                "description": "What plays as the look starts to be worn, or null for an instant start.",
+                "default": null
+              },
+              "leave": {
+                "$ref": "./common.schema.json#/$defs/WorldFormEffect",
+                "description": "What plays as the look stops being worn, or null for an instant end. While it plays, the outgoing form is drawn beside the incoming one.",
+                "default": null
+              }
+            },
+            "additionalProperties": false,
+            "title": "WorldFormTransition"
           }
         },
         "required": [

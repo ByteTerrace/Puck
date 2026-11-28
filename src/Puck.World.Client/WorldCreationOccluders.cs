@@ -21,7 +21,6 @@ namespace Puck.World.Client;
 /// first view.</remarks>
 public sealed class WorldCreationOccluders {
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldPrototype, SdfOccluder?[]> Locals = new();
-    private static readonly CreationStampTransform Rest = new(Vector3.Zero, Quaternion.Identity, 1f, null);
 
     // The definition the placements were gathered from, the placements carrying an occluding creation (each with the
     // anchor it rides and its solid at the row's scale), and whether any creation the definition holds occludes at all.
@@ -52,30 +51,7 @@ public sealed class WorldCreationOccluders {
         return (prototype.Occlusion is null) ? null : Locals.GetValue(key: prototype, derive: static row => [Derive(prototype: row)])[0];
     }
     private static SdfOccluder? Derive(WorldPrototype prototype) {
-        var document = prototype.EngineDocument;
-        var shapes = (document.Shapes ?? []);
-        var low = new Vector3(value: float.PositiveInfinity);
-        var high = new Vector3(value: float.NegativeInfinity);
-
-        for (var index = 0; (index < shapes.Count); index++) {
-            if (SdfBoundAlgebra.Carves(blend: (shapes[index].Blend ?? SdfBlendOp.Union))) {
-                continue;
-            }
-
-            var box = CreationStampEmitter.ShapeStampBox(document: document, shapeIndex: index, transform: Rest);
-
-            if (box is not { } corners) {
-                var (center, radius) = CreationStampEmitter.ShapeStampBound(document: document, shapeIndex: index, transform: Rest);
-
-                corners = ((center - new Vector3(value: radius)), (center + new Vector3(value: radius)));
-            }
-            if (!float.IsFinite(f: ((corners.Low.X + corners.Low.Y) + corners.Low.Z)) || !float.IsFinite(f: ((corners.High.X + corners.High.Y) + corners.High.Z))) {
-                continue;
-            }
-
-            low = Vector3.Min(value1: low, value2: corners.Low);
-            high = Vector3.Max(value1: high, value2: corners.High);
-        }
+        var (low, high) = CreationGeometry.RestBox(document: prototype.EngineDocument);
 
         return ((SdfOccluder.Fit(fit: (prototype.Occlusion!.Shape ?? SdfOccluderFit.Auto), high: high, low: low) is { } fitted)
             ? prototype.Occlusion.Apply(fitted: fitted)

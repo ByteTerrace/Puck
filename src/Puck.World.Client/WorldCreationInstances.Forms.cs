@@ -62,7 +62,7 @@ public sealed partial class WorldCreationInstances {
             foreach (var index in forms) {
                 if (m_pool[index] is not { Form: { } form } live) { continue; }
                 NoteDrawn(index: index, live: live);
-                moved |= (!form.Drawn && !m_formsWanted.Contains(item: body));
+                moved |= (!form.Drawn && !live.FormLingers && !m_formsWanted.Contains(item: body));
             }
         }
         if ((m_rateViews.Count == 0) || (m_switchingBodies.Count == 0)) { return moved; }
@@ -92,10 +92,11 @@ public sealed partial class WorldCreationInstances {
         WakeEntry(index: index);
     }
     // Whether a registration is a form its body neither wears nor is drawn in, which holds the rest pose on the root.
-    private static bool Rests(Registration live) => ((live.Form is { Drawn: false }) && !live.FormNamed);
-    // Whether a registration's geometry is drawn: a row's, or a body's form the bake draws. A form drawn by no row carries
-    // no volume, mesh draw or door clip, so nothing the frame shows of it precedes its geometry.
-    private static bool Shows(Registration live) => (live.Form?.Drawn ?? true);
+    private static bool Rests(Registration live) => ((live.Form is { Drawn: false }) && !live.FormNamed && !live.FormLingers);
+    // Whether a registration's geometry is drawn: a row's, a body's form the bake draws, or one kept drawn while its leave
+    // effect plays. A form drawn by no row carries no volume, mesh draw or door clip, so nothing the frame shows of it
+    // precedes its geometry.
+    private static bool Shows(Registration live) => ((live.Form?.Drawn ?? true) || live.FormLingers);
 
     // Reconciles every body's forms against the census: a body that left releases every form; a body's look's creation
     // names the form it wears (an existing one, updated in place, or a new registration); every other form stays while
@@ -147,6 +148,7 @@ public sealed partial class WorldCreationInstances {
 
             wearing.Form ??= new SdfMeshForm(Owner: owner);
             wearing.FormNamed = true;
+            ForgetLinger(live: wearing);
             ArrayCapacity.EnsureLength(array: ref m_bodySlots, required: (body + 1));
             m_bodySlots[body] = (worn + 1);
 
@@ -159,11 +161,14 @@ public sealed partial class WorldCreationInstances {
             foreach (var index in others) {
                 var form = m_pool[index]!;
 
+                // A form that loses the name while drawn lingers if its look plays a leave effect, so the bake keeps it
+                // drawn past the hand-over (SdfMeshFormRange.Lingers) until the effect has played.
+                if (form.FormNamed && (form.Form?.Drawn == true) && (form.Look?.Transition?.Leave is not null)) { form.FormLingers = true; }
                 form.FormNamed = false;
                 if (choices.Remove(key: form.Creation.Hash, value: out var choice)) {
                     Wear(dynamics: dynamics, live: form, stamp: choice);
                     kept.Add(item: index);
-                } else if (form.Form?.Drawn == true) {
+                } else if ((form.Form?.Drawn == true) || form.FormLingers) {
                     kept.Add(item: index);
                 } else {
                     Release(index: index);
@@ -270,7 +275,7 @@ public sealed partial class WorldCreationInstances {
             if (!TryFindBody(bodyIndex: body, live: out var named, poolIndex: out var namedIndex) || (named.Form is not { } namedForm)) { continue; }
             m_formRanges.Add(item: new SdfMeshFormRange(Form: namedForm, FirstSlot: (slotBase + RootSlotOffset(index: namedIndex)), Named: true, SlotCount: SlotsAt(index: namedIndex)));
             foreach (var index in m_bodyForms[body]) {
-                if (m_pool[index]?.Form is { } form) { m_formRanges.Add(item: new SdfMeshFormRange(Form: form, FirstSlot: (slotBase + RootSlotOffset(index: index)), Named: false, SlotCount: SlotsAt(index: index))); }
+                if (m_pool[index] is { Form: { } form } other) { m_formRanges.Add(item: new SdfMeshFormRange(Form: form, FirstSlot: (slotBase + RootSlotOffset(index: index)), Named: false, SlotCount: SlotsAt(index: index), Lingers: other.FormLingers)); }
             }
         }
     }

@@ -1505,6 +1505,9 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.motion.replayFrames requires a positive secondsPerFrame (a zero-hold replay is an infinite loop).");
             }
 
+            ValidateFormEffect(effect: look.Transition?.Arrive, path: $"{path}.transition.arrive", errors: errors);
+            ValidateFormEffect(effect: look.Transition?.Leave, path: $"{path}.transition.leave", errors: errors);
+
             if (look.Motion.Lanes is { Count: > 4 }) {
                 errors.Add(item: $"looks row '{look.Name}' carries more than four render lanes.");
             }

@@ -3454,6 +3454,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `looks.rows[].transition.arrive.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
+| `looks.rows[].transition.leave.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
 | `looks.assignment.rows` | State | Binding | Binding | `WorldRowAssignment.Rows` |
 | `dynamics[].name` | Dynamics | Declares |  | `DynamicsRow.Name` |
 | `hud.defaults.cursor.visible[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -8099,6 +8101,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `looks.rows[].transition.arrive.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `looks.rows[].transition.arrive.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
+| `looks.rows[].transition.leave.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `looks.rows[].transition.leave.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `looks.assignment.select[].name` | `WorldRowSelector.Name` | a row selector's name |
 | `looks.assignment.select[].bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
