@@ -152,8 +152,14 @@ authored roughness drives both its light response and its optical frost and
 environment. The standard water program keeps the underlying glass smooth while
 its reveal supplies foam, selected by the `flow` template's structural glass argument.
 The frame operations share the old layers' slot and transformed-static-draw
-conventions. Each executed instruction increments `sdfWorkShadeOperations`, which counts as
+conventions. Executed instructions contribute to `sdfWorkShadeOperations`, which counts as
 `gpu.shade.operations`, never as `gpu.march.steps`.
+The interpreter adds its validated instruction count once after the phase;
+straight-line emission adds the number of values it emits once after each
+phase or light carry. Keep those counts beside value selection in
+`SdfShadeHlsl.EmitValues`, rather than adding a mutable counter
+update to every value's body. Specialization emits only the op overloads its
+typed streams use; the interpreter still emits every admitted signature.
 
 The standard programs live in `worlds/standard/shading.puck`, called by the
 foliage, water and styles libraries and the debug world's exhibits; the terrain
@@ -179,8 +185,9 @@ makes a frame's views search for edges (`SdfFrameBlock`'s `inkEdges`). All progr
 operands and shape side-table addresses are slice-relative. `sdfShadeRead` checks
 the relative range and the enclosing allocation before reading; shape helpers
 receive a relocated address only after their complete side table passes it.
-The shade fingerprint covers templates, generator code and the embedded field
-helper include closure. It joins the renderer stamp, not the field identity.
+The shade fingerprint covers templates and the embedded field helper semantics.
+Emitter C# source is not part of program identity: the shader compiler's content
+key already includes the emitted HLSL. It joins the renderer stamp, not the field identity.
 
 Costs are checked sums over allocated instructions. `SdfShadeCost.Shape` charges
 convex vertices, ellipse bisection, and every sweep strand/sample/refinement;
@@ -296,12 +303,12 @@ compiles them off the frame thread on `ShaderCompileTurns` through the World's
 `ShaderCompiler` (counted in `shaders.compiler`, a hit runs no tool), reflects
 and builds the pipelines (`SdfShadePipelines`), and publishes only an arrival
 whose identity (programs, op fingerprint, `SdfShadeKernels.InterpreterOf`: the
-kernels' content key and their sources' keys) is still requested and which
+specialized kernels' bytecode and source keys) is still requested and which
 covers the active set. A set compiles the `SdfKernelSource` its kernel set
 carries for views and glass (`SdfKernelSet.SourceOf`, read when the bytecode was
 taken and replaced only with it), never the tree as it stands: an include the
-source lacks refuses the plan, and bytecode installed without its source stays
-interpreted. An overtaken or released build is retired to the catalog's
+source lacks refuses the plan, and bytecode installed without its source keeps
+the automatic tier on plain shading. An overtaken or released build is retired to the catalog's
 `RetiredBuilds`, disposed on the pool as it finishes and drained at device
 loss and World root teardown, so neither waits on the frame thread.
 A frame whose active set leaves the published one keeps it, shading the programs
@@ -317,6 +324,10 @@ Publication moves no revision; `world.shaders.tier` and `world.shaders.bins`,
 and a tier that grows costlier (the interpreter after a specialization), alone
 invalidate the shading passes, from the frame `PrepareShade` takes them on.
 `world.shaders.status` lists each program's state.
+The compile-start line names the automatic fallback (plain or the published
+set); the explicit interpreted tier remains available for comparisons.
+`puck shaders specialize <world> --compile` plans and compiles the same set
+offline, reporting DXC runs and closure bytes for a round and its warm repeat.
 `SdfShadeKernels.Plan` refuses a plan whose closure lacks the generated text: the
 closure looks generated includes up by `Path.GetFullPath`'s spelling (derived
 from the stage's path, `passes/../isa/`), and a key spelled otherwise silently
@@ -337,8 +348,8 @@ kernels' lifetime, publication or binning keeps all nine.
    passes record. A frame whose kernels a reload replaced retires the set there
    before any recording; an arrival
    publishes only while its identity (the sorted program identities, the op
-   fingerprint and `SdfShadeKernels.InterpreterOf`: the kernel set's
-   `SdfKernelSet.ContentKey` and the key of each specialized kernel's
+   fingerprint and `SdfShadeKernels.InterpreterOf`: only each specialized kernel's
+   bytecode content and the key of its
    `SdfKernelSource`) is still the request and it covers the active set
    (`SdfShadeKernels.Covers`). Every views
    and glass recording takes its kernel from `SdfShadeSlots.RecordPipeline`
@@ -382,7 +393,7 @@ kernels' lifetime, publication or binning keeps all nine.
    include comes from the source (`ShaderCompiler.Plan`'s `readInclude`), so one
    it does not hold refuses the plan, and a tree edited since cannot enter the
    set. Bytecode installed without its source refuses the specialization, which
-   stays interpreted. Views and glass each specialize their own interpreter's
+   keeps automatic shading on its plain fallback. Views and glass each specialize their own interpreter's
    source, so a reload that has installed one and not yet the other specializes
    the mixed state the interpreter runs. Where it stops: the deployed tree's
    sources are taken as its bytecode's because the build publishes them

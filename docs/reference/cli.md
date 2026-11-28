@@ -876,6 +876,7 @@ puck shaders generate [--check]
 puck shaders interface <source> [--write] [--echo]
 puck shaders package <source> --output <directory> [--root <directory>] [--toolchain <directory>] [--cache <directory>] [--json]
 puck shaders pipeline <source> [--inspect] [--toolchain <directory>] [--cache <directory>]
+puck shaders specialize <world> [--tree <directory>] [--target dxil|spirv] [--cache <directory>] [--includes] [--compile]
 ```
 
 `compile` writes SPIR-V and DXIL for one HLSL source stage; `--entry` names its
@@ -888,6 +889,16 @@ plan returns exit code 1, and compilation errors identify the source location.
 A missing source, an unknown `--stage`, an unreadable file, a
 missing shader tool, or a source edited while it was read is a refusal: exit 2,
 reported as `puck shaders <verb>: <path>: <why>`.
+
+`specialize` composes one world's declared shade programs and plans the same
+kernel set as runtime specialization, without booting a World or opening a GPU
+device. It reports generated HLSL bytes, counter update sites, each kernel's
+include count and closure bytes, cache identities, and how many DXC invocations
+a compile would need. `--includes` lists the files and their UTF-8 sizes.
+`--compile` runs the plans and repeats them against the warm cache, reporting
+actual DXC invocations and the sum of their closure bytes per round. Use an
+empty `--cache` for a cold count. Neighbour worlds are not visited. The default
+target is DXIL; `--target spirv` audits Vulkan separately.
 
 `compare` holds every compiled SPIR-V module (`.spv`) in one tree to the same
 file in another, byte for byte. Both trees are walked for SPIR-V, omitting

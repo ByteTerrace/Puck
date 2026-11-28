@@ -1,4 +1,5 @@
 using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 using Puck.SignedDistance;
 
@@ -65,8 +66,8 @@ public sealed class SdfShadeKernels {
         return m_identities.IsSupersetOf(other: active);
     }
 
-    /// <summary>Returns the identity of a kernel set as a specialization replaces it: its bytecode's content key
-    /// (<see cref="SdfKernelSet.ContentKey"/>) and the content key of the source each specialized kernel was compiled
+    /// <summary>Returns the identity a specialization replaces: the bytecode content of each specialized kernel
+    /// and the content key of the source it was compiled
     /// from (<see cref="SdfKernelSource.Key"/>), or that none is known. A set published under one identity specializes
     /// exactly the sources it names.</summary>
     /// <param name="kernels">The kernel set.</param>
@@ -75,8 +76,9 @@ public sealed class SdfShadeKernels {
     public static string InterpreterOf(SdfKernelSet kernels) {
         ArgumentNullException.ThrowIfNull(kernels);
 
+        var bytecode = GpuPipelineCacheStore.ContentKeyOf(parts: [.. Specialized.Select(kernel => kernels[kernel])]);
         return ContentDigest.HexOfText(
-            text: $"{kernels.ContentKey()}\n{string.Join(separator: '\n', values: Specialized.Select(selector: kernel => (kernels.SourceOf(kernel: kernel)?.Key ?? "unknown")))}");
+            text: $"{bytecode}\n{string.Join(separator: '\n', values: Specialized.Select(selector: kernel => (kernels.SourceOf(kernel: kernel)?.Key ?? "unknown")))}");
     }
     /// <summary>Reads the source of each specialized kernel from a kernel tree, for a build that compiles the tree's
     /// kernels itself (<c>world prepare</c>) rather than replacing a running set's.</summary>
@@ -151,8 +153,8 @@ public sealed class SdfShadeKernels {
     public Task<(SdfKernel Kernel, ReadOnlyMemory<byte> Bytecode)[]> CompileAsync(ShaderCompiler compiler, ShaderTarget target, CancellationToken cancellationToken = default) {
         if (Array.IndexOf(array: m_sources, value: null) is var missing and >= 0) {
             throw new InvalidOperationException(message: ((m_sourceRefusals[missing] is { } refusal)
-                ? $"The running '{SdfKernelSet.StemOf(kernel: Specialized[missing])}' source was refused when its kernels loaded, so no specialization can describe it; it stays interpreted: {refusal}"
-                : $"The running '{SdfKernelSet.StemOf(kernel: Specialized[missing])}' was installed without its source, so no specialization can describe it; it stays interpreted."));
+                ? $"The running '{SdfKernelSet.StemOf(kernel: Specialized[missing])}' source was refused when its kernels loaded, so no specialization can describe it; automatic shading stays on the plain fallback: {refusal}"
+                : $"The running '{SdfKernelSet.StemOf(kernel: Specialized[missing])}' was installed without its source, so no specialization can describe it; automatic shading stays on the plain fallback."));
         }
 
         return CompileAsync(compiler: compiler, plans: Plan(compiler: compiler, programs: m_programs, sources: [.. m_sources.Select(selector: static source => source!)], target: target), cancellationToken: cancellationToken);
