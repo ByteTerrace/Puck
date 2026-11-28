@@ -16272,7 +16272,7 @@ export type WorldTabletopEngage = {
  */
 export type WorldTabletopSeat = {
   /**
-   * The chair's facing, in the convention of a spawn point's and a body's yaw: 0 faces -Z (the chair stands at the board's +Z edge), 90 faces -X, 180 faces +Z and 270 faces +X. A board's topology is world-axis-aligned, so a chair faces across one of its four edges: a whole number of quarter turns.
+   * The chair's facing relative to the board, in the convention of a spawn point's and a body's yaw: 0 faces the board's -Z (the chair stands at its +Z edge), 90 faces its -X, 180 its +Z and 270 its +X. The board turns with the placement that carries it, so a chair's world facing is this plus that placement's yaw, and a chair faces across one of the board's four edges: a whole number of quarter turns.
    */
   yawDegrees: number;
 };
