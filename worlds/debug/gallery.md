@@ -51,6 +51,17 @@ The owner walked the gallery and ruled its shape:
    gallery reads only through the glass. This is the lifts' Wonderland idea
    seen from the other side: shrinking the rider and growing the building are
    one transform.
+9. **Two mouse holes, one on floor 0 and one on floor 1, are small players'
+   escape hatches.** Their tunnels meet at a junction a walker can plainly see,
+   so a player can cross from one hatch to the other in either direction or go
+   on to a single exit at the bottom: a disguised false wall that parts when
+   someone comes through and returns them to full size as they step out. While
+   it is parted, a curious full-size player can slip in. Size follows the
+   walker's place along the tunnel continuously, eased at both ends, and the
+   tunnel grows with them, so the change reads as one unbroken magical moment.
+   The tunnel has character, not a mouse house's theming: uneven walls in the
+   gallery's techno-natural style, torch-like lights, and a railing like a
+   theme park's queue, all at the walker's scale wherever they stand.
 
 ## The plan
 
