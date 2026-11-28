@@ -44,7 +44,7 @@ internal sealed class SdfResolveRecorder : SdfViewRecorder, IRenderGraphPackageR
     private readonly SdfWorldTables?[] m_portTables;
     private readonly (nint Lit, nint ColorRead, nint SurfaceRead, nint ColorWrite, nint SurfaceWrite, nint Window)[] m_portHistory;
     // Per frame slot, the glass image view and glass tiles the slot's pass set binds: only in a frame whose glass passes ran
-    // (SdfWorldPasses.GlassSeen), a filler and the tables' dummy otherwise, which marks no tile (frame/sdf-glass-tiles.hlsli).
+    // (SdfWorldPasses.GlassSeen), a filler and the tables' dummy otherwise, which shows no tile (frame/sdf-glass-tiles.hlsli).
     private readonly (nint Image, IGpuBuffer? Tiles)[] m_portGlass;
     // The positions of the glass image and the glass tiles among the pass's inputs, or -1 in a view with no glass.
     private readonly int m_glassLitInput;

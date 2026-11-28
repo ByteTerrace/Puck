@@ -94,7 +94,7 @@ public static partial class SdfWorldPackage {
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: HistoryColorWritten, type: ShaderValueType.Float4),
             Written(element: ShaderValueType.Uint, name: HistorySurfaceWritten),
             Written(element: ShaderValueType.Uint, name: HistoryWindowWritten),
-            // The render-grid color is the glass image where the glass tiles mark a sample's tile (GlassTiles); a view with
+            // The render-grid color is the glass image where the glass tiles show a sample's tile (GlassTiles); a view with
             // no glass this frame binds a filler and the tables' dummy, which holds no tile.
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: GlassLitImage, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: GlassTiles),
