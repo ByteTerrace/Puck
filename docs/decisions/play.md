@@ -773,6 +773,30 @@ ledge ahead of the commanded direction and a landing past it with the same proof
 the body on at the speed it was commanding, so a run carries over the edge. The anticipation and the pull are the
 avatar's pose over the action's `mantling` timer.
 
+## Time dilation fields
+
+The owner's rulings:
+
+- **A field is cast by a player and stays where it was cast.** It slows the
+  local time of what is inside it. The first ability is a personal field that
+  forms around its caster like a force field. The caster keeps normal time
+  inside their own field, and so does a machine the caster operates, so a game
+  played at a station inside the field runs at normal speed.
+- **Every quantity is authored.** Radius, slowdown, duration and cooldown have
+  sensible defaults in the standard package, an author can tune each one per
+  target, and a target can resist the effect in part or in full.
+- **Two puzzles on the gallery's play floor use the field.**
+  - **The solo puzzle** is the field's diegetic tutorial. A floor button sinks
+    under a player and opens a nearby net while it is held. Released, it rises
+    over a window too short to sprint through before the net closes. A field
+    cast over the button slows its rise enough for an average player to make it.
+  - **The group puzzle** needs five players on a set of tiles at once, so a solo
+    player cannot solve it. Solving it unlocks the Humble Gaming Deck cartridge
+    Moth Valley (`worlds/debug/cartridges/deck/moth-valley.hgd.puck`) on half
+    the gaming devices for a short tease. A field cast at a device keeps that
+    device's unlock open for 15 minutes. Working out to do that is the
+    puzzle's social second half.
+
 ## Decided here
 
 `replay.verify` claims only what it ran; the Group wire tag and mutation
