@@ -346,7 +346,9 @@ public sealed partial class SdfWorldTables {
                 }
                 break;
             // The glass shading pass lights the glass and reads the lit image; the clear and the glass raster are
-            // geometry alone, one signature, so a standing raster never accumulates onto a clear it did not see.
+            // geometry alone, one signature, so a standing raster never accumulates onto a clear it did not see. The glass
+            // tiles pass writes the shading pass's arguments at its plan's widths, which follow the lighting, so it signs as
+            // the shading pass does and records whenever the plan could change.
             // A binned view's filter and bins passes, the probe lookup and the reflection pass are views' own work and
             // stand or render with it: the lookup gathers the irradiance volume views would otherwise gather itself, and
             // the reflection pass reads the preceding frame's resolved light, which a standing view no longer changes.
@@ -355,6 +357,7 @@ public sealed partial class SdfWorldTables {
             case SdfWorldPackage.Parts.Views:
             case SdfWorldPackage.Parts.ViewsFilter:
             case SdfWorldPackage.Parts.ViewsBins:
+            case SdfWorldPackage.Parts.GlassTiles:
             case SdfWorldPackage.Parts.GlassShade:
             case SdfWorldPackage.Resolve:
                 hash.Add(value: lighting.Value);

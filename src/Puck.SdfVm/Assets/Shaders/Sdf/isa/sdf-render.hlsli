@@ -310,8 +310,10 @@
 #define SDF_FIELD_TILE_ENTRIES 512u
 #define SDF_FIELD_TILE_EDGE    16u
 
-// The glass sums the glass raster pass accumulates and the glass shading pass reads.
+// The glass sums the glass raster pass accumulates and the glass shading pass reads, and the glass tiles' layout (frame/sdf-glass-tiles.hlsli).
 #define SDF_GLASS_SUM_WORDS            18u
+#define SDF_GLASS_TILE_HEADER_WORDS    4u
+#define SDF_GLASS_TILE_WORDS           66u
 #define SDF_GLASS_LAYERS               4u
 #define SDF_GLASS_SUM_SCALE            4096.0
 #define SDF_GLASS_DEPTH_DISTANCE_SCALE 32768.0

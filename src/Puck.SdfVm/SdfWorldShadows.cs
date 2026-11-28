@@ -1728,11 +1728,8 @@ internal sealed class SdfWorldShadows : IDisposable {
                     destinationAccessMask: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite), destinationStageMask: GpuStage.ComputeShader);
             }
 
-            Span<byte> pushed = stackalloc byte[sizeof(uint)];
-
-            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: pushed,
-                value: ((firstX | (firstY << 8)) | (flagsOnly ? (1u << SdfKernelInterfaces.MeshShadowBlockFlagsOnlyShift) : 0u)));
-            recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: pushed, offset: 0,
+            recorder.PushIndex(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer,
+                index: ((firstX | (firstY << 8)) | (flagsOnly ? (1u << SdfKernelInterfaces.MeshShadowBlockFlagsOnlyShift) : 0u)),
                 pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
             recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: ((lastX - firstX) + 1u), groupCountY: ((lastY - firstY) + 1u), groupCountZ: 1u);
             m_blockReductions++;

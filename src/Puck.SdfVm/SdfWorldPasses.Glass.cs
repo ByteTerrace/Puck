@@ -2,14 +2,16 @@ using Puck.Hosting;
 
 namespace Puck.SdfVm;
 
-// The glass passes of a view (glass-clear, glass, glass-shade) have work only while a glass draw's box meets the view's
-// frustum, which is the glass pass's own selection (SdfMeshCull.Keeps). One decision per instance and frame is shared by
-// the three recorders, so they agree: while no glass is in view the clear and the raster skip and the shading pass draws
-// nothing, leaving its lit image standing for the opaque one. The sums and the glass target are never read on such a
-// frame, and a frame that sees glass records all three, the clear and the raster ahead of the shading that reads them.
+// The glass passes of a view (glass-clear, glass, glass-tiles, glass-shade) have work only while a glass draw's box meets
+// the view's frustum, which is the glass pass's own selection (SdfMeshCull.Keeps). One decision per instance and frame is
+// shared by the four recorders, so they agree: while no glass is in view the clear, the raster and the tiles pass skip and
+// the shading pass draws nothing, leaving the glass image unread, since every reader binds the glass tiles only in a frame
+// that sees glass (SdfSkyRecorder, SdfResolveRecorder). The sums, the tiles and the glass target are never read on such a
+// frame, and a frame that sees glass records all four, the clear, the raster and the tiles pass ahead of the shading that
+// reads them.
 public sealed partial class SdfWorldPasses {
     /// <summary>Returns whether the instance's glass passes have a glass draw to rasterize this frame, deciding it when
-    /// no glass pass has yet. The three glass recorders read this one answer.</summary>
+    /// no glass pass has yet. The glass recorders and the readers of the glass tiles read this one answer.</summary>
     /// <param name="instance">The instance's name.</param>
     /// <param name="view">The view the glass recorders follow, whose residency has begun this frame.</param>
     /// <param name="context">The frame being recorded.</param>
@@ -56,5 +58,7 @@ public sealed partial class SdfWorldPasses {
         public bool GlassSeen;
         public uint GlassWidth;
         public uint GlassHeight;
+        // The plan the glass tiles pass last wrote arguments for (ShadePlanOf with glass).
+        public SdfShadeDispatch? GlassPlan;
     }
 }

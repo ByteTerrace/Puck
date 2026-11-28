@@ -38,6 +38,7 @@
 #include "../frame/sdf-debug-modes.hlsli"
 #include "../frame/sdf-reprojection.hlsli"
 #include "../frame/sdf-history-surface.hlsli"
+#include "../frame/sdf-glass-tiles.hlsli"
 #include "../frame/sdf-work.hlsli"
 #include "../shade/sdf-transport.hlsli"
 #include "Shared/reconstruction.hlsli"
@@ -189,7 +190,8 @@ SdfResolveSample sdfResolveSampleLoad(int2 position, uint2 render) {
     SdfVisibility visibility = sdfLoadVisibility(record);
     SdfResolveSample sample;
 
-    sample.color = currentColor.Load(int3(pixel, 0));
+    // The glass image where the glass tiles mark the sample's tile, the color views wrote everywhere else.
+    sample.color = (sdfGlassTileShows(sdfGlassTiles, pixel, render) ? glassLit.Load(int3(pixel, 0)) : currentColor.Load(int3(pixel, 0)));
     sample.luma = sdfToYCoCg(sample.color.rgb).x;
     sample.reactive = reactivity[sdfReactivityIndex(pixel, 0u, render)];
     sample.hit = sdfVisibilityHit(visibility);

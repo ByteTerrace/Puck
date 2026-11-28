@@ -29,7 +29,7 @@ the debug world does not hold.
 | Light selection | `views-filter`, `views-bins` | 0.95 | 0.4 |
 | Shading | `views` | 1.9 standing, 2.5 moving | 1.6 |
 | Ink | the edge search in `views-filter`, the ink phase in `views` | about 0.9 (scaled, below) | 0.4 |
-| Glass | `glass-clear`, `glass`, `glass-shade` | 0 to 0.9 | 0.4 |
+| Glass | `glass-clear`, `glass`, `glass-tiles`, `glass-shade` | 0 to 0.9 | 0.4 |
 | Reconstruction | `resolve` | 1.9 moving, 2.5 standing | 0.7 |
 | Sky and display | `sky`, `composite`, the bloom pyramid, `display` | 1.5 | 0.9 |
 | Other views and the root | nested views, `main`, the environment | 1.5 to 4.1 | 0.7 |

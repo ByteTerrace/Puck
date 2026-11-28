@@ -22,7 +22,7 @@ public sealed partial class SdfWorldPasses {
 
     // The scope a part signs with.
     private static DrawScope DrawScopeOf(string? part) => part switch {
-        SdfWorldPackage.Parts.GlassClear or SdfWorldPackage.Parts.Glass or SdfWorldPackage.Parts.GlassShade => DrawScope.Glass,
+        SdfWorldPackage.Parts.GlassClear or SdfWorldPackage.Parts.Glass or SdfWorldPackage.Parts.GlassTiles or SdfWorldPackage.Parts.GlassShade => DrawScope.Glass,
         _ => DrawScope.Mesh,
     };
 

@@ -11,10 +11,13 @@
 //
 // A pixel's words, SDF_GLASS_SUM_WORDS of them: the clipped thickness (0), the winding (1), the RGB optical depth as
 // three 64-bit sums (2 to 7), the layer list (SdfGlassLayerWord, two words an entry, low word first), the signed
-// material key (SdfGlassMaterialWord) and the nearest back face (SdfGlassNearestBackWord).
+// material key (SdfGlassMaterialWord) and the nearest back face (SdfGlassNearestBackWord). The pixels lie tile by tile
+// (sdfGlassSumWord), so the clear zeroes the tiles the raster listed (frame/sdf-glass-tiles.hlsli) as whole runs, and
+// the raster lists a tile before it writes a word of it (sdfGlassAccumulate).
 #ifndef FRAME_SDF_GLASS_HLSLI
 #define FRAME_SDF_GLASS_HLSLI
 #include "sdf-optical-depth.hlsli"
+#include "sdf-glass-tiles.hlsli"
 
 #if defined(SDF_GLASS_ACCUMULATES)
 #define SDF_GLASS_SUMS_READ sdfGlassSumsRW
@@ -39,7 +42,7 @@ static const float SdfGlassLayerCodeOctaves = 26.0;
 static const float SdfGlassLayerCodeSteps = 4194303.0;
 
 uint sdfGlassSumWord(uint2 pixel, uint2 extent) {
-    return (SDF_GLASS_SUM_WORDS * ((pixel.y * extent.x) + pixel.x));
+    return (SDF_GLASS_SUM_WORDS * ((sdfGlassTileOf(pixel, extent) * SDF_GLASS_TILE_PIXELS) + sdfGlassTilePlace(pixel)));
 }
 // The clipped intervals' summed length, bounded to the segment being shaded.
 float sdfGlassThickness(int sum, float front, float opaque) {
@@ -110,10 +113,43 @@ void sdfGlassEnterLayer(uint word, float t, uint draw, uint triangleIndex) {
         if (carried == 0u) break;
     }
 }
-// Writes one crossing to the pixel. The caller excludes helper lanes.
-void sdfGlassAccumulate(uint word, float t, float start, float opaque, bool front, float3 absorption, int material, uint draw, uint triangleIndex, bool clippedDraw) {
+// Marks a render pixel's tile in the glass tiles and lists it the first time a fragment marks it this frame: the atomic OR
+// answers whether this fragment set the bit, so each tile enters the list once. Every tile the raster writes a sums word
+// in passes through here first, which keeps the words outside the listed tiles zero (frame/sdf-glass-tiles.hlsli).
+void sdfGlassMarkTile(uint2 pixel, uint2 extent) {
+    uint words;
+    uint stride;
+
+    sdfGlassTilesRW.GetDimensions(words, stride);
+
+    uint capacity = sdfGlassTileCapacity(words);
+    uint tile = sdfGlassTileOf(pixel, extent);
+    uint maskWord = sdfGlassTileMaskWord(tile);
+    uint bit = (1u << (tile & 31u));
+
+    // A tile past the capacity has no sums words either; the graph sizes both for the render extent's tiles.
+    if ((tile >= capacity) || ((sdfGlassTilesRW[maskWord] & bit) != 0u)) {
+        return;
+    }
+
+    uint before;
+
+    InterlockedOr(sdfGlassTilesRW[maskWord], bit, before);
+    if ((before & bit) == 0u) {
+        uint entry;
+
+        InterlockedAdd(sdfGlassTilesRW[0], 1u, entry);
+        sdfGlassTilesRW[sdfGlassTileListWord(capacity, entry)] = tile;
+    }
+}
+// Writes one crossing to a render pixel's sums, listing its tile first. The caller excludes helper lanes.
+void sdfGlassAccumulate(uint2 pixel, uint2 extent, float t, float start, float opaque, bool front, float3 absorption, int material, uint draw, uint triangleIndex, bool clippedDraw) {
     bool visible = (t < opaque);
     if (clippedDraw && !visible) return;
+
+    uint word = sdfGlassSumWord(pixel, extent);
+
+    sdfGlassMarkTile(pixel, extent);
 
     // Integrate a closed draw from the eye to the opaque hit by clamping both endpoints to that hit.
     // A draw cut by a portal plane can lack either endpoint. Keep its receiver-relative integral.

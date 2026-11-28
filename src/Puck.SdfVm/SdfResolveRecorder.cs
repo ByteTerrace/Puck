@@ -43,6 +43,12 @@ internal sealed class SdfResolveRecorder : SdfViewRecorder, IRenderGraphPackageR
     // Per frame slot, the tables the slot's pass set was written against.
     private readonly SdfWorldTables?[] m_portTables;
     private readonly (nint Lit, nint ColorRead, nint SurfaceRead, nint ColorWrite, nint SurfaceWrite, nint Window)[] m_portHistory;
+    // Per frame slot, the glass image view and glass tiles the slot's pass set binds: only in a frame whose glass passes ran
+    // (SdfWorldPasses.GlassSeen), a filler and the tables' dummy otherwise, which marks no tile (frame/sdf-glass-tiles.hlsli).
+    private readonly (nint Image, IGpuBuffer? Tiles)[] m_portGlass;
+    // The positions of the glass image and the glass tiles among the pass's inputs, or -1 in a view with no glass.
+    private readonly int m_glassLitInput;
+    private readonly int m_glassTilesInput;
 
     private bool m_disposed;
 
@@ -51,6 +57,11 @@ internal sealed class SdfResolveRecorder : SdfViewRecorder, IRenderGraphPackageR
         m_owner = owner;
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
         m_portHistory = new (nint, nint, nint, nint, nint, nint)[context.InFlightFrames];
+        m_portGlass = new (nint, IGpuBuffer?)[context.InFlightFrames];
+        var inputs = LocalNames(pass: context.Pass, part: SdfWorldPackage.Resolve, ports: context.Inputs);
+
+        m_glassLitInput = Array.IndexOf(array: inputs, value: SdfWorldPackage.Parts.GlassLit);
+        m_glassTilesInput = Array.FindIndex(array: inputs, match: SdfGlassTilesRecorder.IsTilesVersion);
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Resolve).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
     }
@@ -98,8 +109,8 @@ internal sealed class SdfResolveRecorder : SdfViewRecorder, IRenderGraphPackageR
     public void Submitted() => m_owner.MarkSampleRendered(instance: m_context.Instance);
 
     // Ordinary ports follow the slot. History follows its writer, so refresh cached bindings whenever the resolved
-    // history handles change, even on a slot whose tables stay the same. The color input follows the glass shading pass's
-    // output, which stands for the opaque image while no glass is in view, so its handle is part of the key too.
+    // history handles change, even on a slot whose tables stay the same. The color input's handle is part of the key too,
+    // and so are the glass image and tiles, bound only while the frame's glass passes run.
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
         var lit = recording.Inputs[0].ReadImage(latch: recording.Latch).ImageViewHandle;
@@ -108,11 +119,21 @@ internal sealed class SdfResolveRecorder : SdfViewRecorder, IRenderGraphPackageR
                 recording.Outputs[2].ReadImage(latch: recording.Latch).ImageViewHandle, recording.Outputs[3].Buffer!.BufferHandle, recording.Inputs[(Inputs.Length + 4)].Buffer!.BufferHandle)
             : (lit, (nint)0, (nint)0, (nint)0, (nint)0, (nint)0));
 
-        if (ReferenceEquals(objA: m_portTables[slot], objB: tables) && (m_portHistory[slot] == history)) {
+        var seen = ((m_glassLitInput >= 0) && (m_glassTilesInput >= 0) && m_owner.GlassSeen(instance: m_context.Instance, view: m_view, context: recording.Context));
+        var glass = (seen
+            ? (recording.Inputs[m_glassLitInput].ReadImage(latch: recording.Latch).ImageViewHandle, recording.Inputs[m_glassTilesInput].Buffer)
+            : (tables.SampledFiller.ImageViewHandle, tables.DummyBuffer));
+
+        if (ReferenceEquals(objA: m_portTables[slot], objB: tables) && (m_portHistory[slot] == history) &&
+            (m_portGlass[slot].Image == glass.Item1) && ReferenceEquals(objA: m_portGlass[slot].Tiles, objB: glass.Item2)) {
             return;
         }
 
         var bindings = m_context.Services.Bindings;
+
+        bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.GlassLitImage), descriptorSetHandle: set, imageViewHandle: glass.Item1);
+        tables.WriteInterfaceBuffer(buffer: glass.Item2!, layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.GlassTiles, set: set);
+        m_portGlass[slot] = glass;
 
         bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.CurrentColor), descriptorSetHandle: set, imageViewHandle: lit);
         bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.Output), descriptorSetHandle: set, imageViewHandle: recording.Outputs[0].ReadImage(latch: recording.Latch).ImageViewHandle);

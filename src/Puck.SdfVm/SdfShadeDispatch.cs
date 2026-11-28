@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Maths;
@@ -235,29 +234,41 @@ public sealed class SdfShadeDispatch {
     // Only these doors record a shade dispatch. The pushed ordinal remaps whole groups into the original 2D grid,
     // preserving the views filter's local lanes, apron and barrier even across a partial group row.
     internal void Record(in RenderGraphPackageRecording recording, IGpuComputePipeline pipeline) {
-        Span<byte> pushed = stackalloc byte[sizeof(uint)];
         foreach (var job in m_jobs) {
-            BinaryPrimitives.WriteUInt32LittleEndian(pushed, job.FirstGroup);
-            recording.Recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer,
-                data: pushed, offset: 0, pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
+            recording.Recorder.PushIndex(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, index: job.FirstGroup,
+                pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
             recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: job.Groups, groupCountY: 1, groupCountZ: 1);
+        }
+    }
+    /// <summary>Gets the most groups one job of an unsplit plan dispatches, which every job but the last does; zero for a
+    /// plan with no job.</summary>
+    public uint JobWidth => ((m_jobs.Length == 0) ? 0u : m_jobs[0].Groups);
+    // The unsplit plan's jobs over a list of tiles whose length exists only on the GPU, each reading its group count from
+    // the arguments the glass tiles pass wrote at this plan's widths (passes/sdf-glass-tiles.comp.hlsl), a record a job:
+    // the job's pushed index is its first entry in the list, and a job past the list's length dispatches no group.
+    internal void RecordIndirect(in RenderGraphPackageRecording recording, IGpuComputePipeline pipeline) {
+        for (var job = 0; (job < m_jobs.Length); job++) {
+            DispatchIndirect(index: m_jobs[job].FirstGroup, pipeline: pipeline, record: (ulong)job, recording: in recording);
         }
     }
     // A bin's jobs, each reading its group count from the arguments the bins pass wrote from the bin's count
     // (sdf-world-views-bins.comp.hlsl), a record a tile a bin, its pushed index naming the bin and the job's first entry
     // in the bin's tile list.
     internal void RecordBin(in RenderGraphPackageRecording recording, int bin, IGpuComputePipeline pipeline) {
-        var arguments = (recording.Arguments ?? throw new InvalidOperationException(message: "A binned views pass records with no indirect arguments."));
         var plan = m_bins[bin];
-        Span<byte> pushed = stackalloc byte[sizeof(uint)];
 
         for (var job = 0U; (job < plan.Jobs); job++) {
-            BinaryPrimitives.WriteUInt32LittleEndian(pushed, (((uint)bin) | ((job * plan.Width) << BinBits)));
-            recording.Recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer,
-                data: pushed, offset: 0, pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
-            recording.Recorder.DispatchIndirect(commandBufferHandle: recording.CommandBuffer, argumentBufferHandle: arguments.BufferHandle,
-                argumentBufferOffset: (ShaderPipelineDispatch.ArgumentBytes * (((ulong)(uint)bin * m_tiles) + job)));
+            DispatchIndirect(index: (((uint)bin) | ((job * plan.Width) << BinBits)), pipeline: pipeline, record: (((ulong)(uint)bin * m_tiles) + job), recording: in recording);
         }
+    }
+    // One indirect job: its pushed index, then the dispatch whose group counts the recording's arguments hold at a record.
+    private static void DispatchIndirect(in RenderGraphPackageRecording recording, IGpuComputePipeline pipeline, uint index, ulong record) {
+        var arguments = (recording.Arguments ?? throw new InvalidOperationException(message: "An indirect shading pass records with no indirect arguments."));
+
+        recording.Recorder.PushIndex(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, index: index,
+            pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
+        recording.Recorder.DispatchIndirect(commandBufferHandle: recording.CommandBuffer, argumentBufferHandle: arguments.BufferHandle,
+            argumentBufferOffset: (ShaderPipelineDispatch.ArgumentBytes * record));
     }
 
     /// <summary>The lights a plan's walk bound is rounded up to a multiple of: a view's mask that moves within a step

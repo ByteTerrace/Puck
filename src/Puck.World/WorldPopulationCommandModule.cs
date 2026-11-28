@@ -321,7 +321,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
         return m_liveText.ToString();
     }
     // The bytes the world's view allocates for its visibility records, and for the mesh pass's target and depth
-    // attachment, and for the glass passes' target, depth, sums and lit image: storages of its sdf.world passes, zero
+    // attachment, and for the glass passes' target, depth, sums, tiles, arguments and image: storages of its sdf.world passes, zero
     // before its graph installs, and the glass's zero for a world with no glass shape.
     private (ulong Visibility, ulong MeshAttachments, ulong Glass) WorldViewBytes() {
         var visibility = 0UL;
@@ -341,6 +341,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
                     IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.GlassTarget) ||
                     IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.GlassDepth) ||
                     IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.GlassSumsCleared) ||
+                    IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.GlassTilesCleared) ||
+                    IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.GlassArguments) ||
                     IsWorldStorage(name: status.Name, part: Puck.Shaders.SdfWorldPackage.Parts.GlassLit)
                 ) {
                     glass += status.AllocationBytes;

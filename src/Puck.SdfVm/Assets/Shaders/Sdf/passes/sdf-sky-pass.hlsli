@@ -20,12 +20,21 @@
 #include "../sky/sdf-sky.hlsli"
 #include "../shade/sdf-sky-environment.hlsli"
 #include "../shade/sdf-transport.hlsli"
+#include "../frame/sdf-glass-tiles.hlsli"
 
-// The lit image at a pixel, clamped to the output: the color premultiplied by its coverage, the coverage in alpha.
+// The render grid's color at a render pixel: the glass image where the glass tiles mark the pixel's tile, the lit image
+// views wrote everywhere else (frame/sdf-glass-tiles.hlsli). A view with no glass this frame binds the tables' dummy at
+// the tiles, which marks none.
+float4 sdfSkyPassRenderLit(uint2 pixel) {
+    return (sdfGlassTileShows(sdfGlassTiles, pixel, passGroup.imageExtent) ? glassLit.Load(int3(pixel, 0)) : lit.Load(int3(pixel, 0)));
+}
+// The lit image at a pixel, clamped to the output: the color premultiplied by its coverage, the coverage in alpha. A
+// resolved composite reads the resolve's lit image, which already holds the glass; every other pass reads the render
+// grid's color (sdfSkyPassRenderLit).
 float4 sdfSkyPassLit(int2 pixel) {
     uint2 clamped = (uint2)clamp(pixel, int2(0, 0), (int2(passGroup.extent) - 1));
 
-    return lit.Load(int3(clamped, 0));
+    return ((passGroup.resolvedSurface != 0u) ? lit.Load(int3(clamped, 0)) : sdfSkyPassRenderLit(clamped));
 }
 // The transport of the surface share a pixel shows, of coverage `coverage`, along its ray from `origin` along `direction`
 // (sdf-transport.hlsli): each atmosphere kind's in-scatter weight, fog in x, haze in y and medium in z, each at most its

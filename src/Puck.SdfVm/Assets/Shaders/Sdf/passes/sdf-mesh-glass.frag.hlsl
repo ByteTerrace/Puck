@@ -45,7 +45,7 @@ GlassFragment PSMain(MeshRasterVertex input, uint primitive : SV_PrimitiveID) {
         SdfMaterialData material = sdfMaterialLoad(materialId);
         bool clippedDraw = any(sdfMeshClipPlane(record) != 0.0);
 
-        sdfGlassAccumulate(sdfGlassSumWord(pixel, passGroup.imageExtent), t, start, opaque, front, material.absorption,
+        sdfGlassAccumulate(pixel, passGroup.imageExtent, t, start, opaque, front, material.absorption,
             materialId, input.draw, triangleIndex, clippedDraw);
     }
     puckCountFragmentWork(0u, 1u);
