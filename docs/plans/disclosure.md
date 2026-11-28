@@ -749,7 +749,7 @@ option is weighed by which it closes by construction.
 | R1 | Name collision | The catalog refuses a duplicate row, pool or family name, so a door that admits free names answers "free" or "taken" for a hidden one |
 | R2 | A name the declaration spells | A token domain, a live audience, a derived board's rows, a phase protocol, a vector space, an enum or a generator resolves or fails against declarations the declarer may not hold |
 | R3 | Shared ceilings | Rows, keys, arena bytes and vector bytes left are a function of every row's reservation |
-| R4 | Whole-document checks | Validation and rule compilation run over everything on a full install, so any check a new row can fail or move (a price against `RuleCapacity.MaxWorkUnitsPerTick`, a relation, a binding) answers from the whole document |
+| R4 | Whole-document checks | Validation and rule compilation run over everything on a full install, so any check a new row can fail or move (a price against the tick's rule budget, a relation, a binding) answers from the whole document |
 | R5 | Entanglement | A guest row keyed over an author's row joins that row's write footprint (`StateCatalog.DependentRows`): the author's rule can no longer remove a key the guest row holds, and another recipient's write to the author's row is refused while the guest row is withheld from it |
 | R6 | Capture and squatting | A guest takes a name the author's next edit declares, and the image's saved cells then load into the author's new row (an inference from the ladder's rule that a declared row keeps its saved cells); a guest row with `WorldStateRow.GatesDrive` can gate a body's input |
 | R7 | Work | Each declaration costs a full install of the host world, whoever submits it |

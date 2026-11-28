@@ -645,9 +645,7 @@ public sealed class WorldRuleExtensionLawTests {
             rules: rules
         );
 
-        var budget = WorldRuleWorkBudget.Measure(definition: definition);
-
-        Assert.False(condition: budget.WorkUnitsPerTick.Fits(ceiling: RuleCapacity.MaxWorkUnitsPerTick));
+        Assert.NotNull(@object: WorldRuleCompilation.Compile(definition: definition).Pricing.Refusal());
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: definition,
             reason: out var reason
@@ -655,7 +653,7 @@ public sealed class WorldRuleExtensionLawTests {
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "work units per tick"
+            expectedSubstring: "a tick on 'default'"
         );
     }
     [Fact]

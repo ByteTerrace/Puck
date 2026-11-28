@@ -24,6 +24,13 @@ namespace Puck.World;
 public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionRows, long EvaluationSlots, RuleWork WorkUnitsPerTick,
     RuleWork FlockAffinityWorkUnitsPerTick = default, int DecisionImagePointsPerTick = 0, int DecisionGridBuildsPerTick = 0, long DecisionGridPointsPerTick = 0,
     RuleWork WorstWorkUnitsPerTick = default) {
+    /// <summary>Gets the units of the passes the host runs beside the rules: the flock affinities and the decision
+    /// perception.</summary>
+    public RuleWork HostWorkUnitsPerTick { get; init; }
+    /// <summary>Gets, per cell, the firings per tick that can write it and their places in the pass, which the sheet's
+    /// exclusion tree read; a time pricing tallies the same tree over the lines in time
+    /// (<see cref="Puck.State.Rules.RuleCostCalibration.Price"/>).</summary>
+    public IReadOnlyDictionary<(int RowOrdinal, CellKey Key), Puck.State.Rules.RuleCellWriters> Writers { get; init; } = new Dictionary<(int RowOrdinal, CellKey Key), Puck.State.Rules.RuleCellWriters>();
     internal static IReadOnlyList<(string Rule, string Cell)> ContradictoryGates(CompiledRule[] rules, StateCatalog catalog) {
         var result = new List<(string, string)>();
 
@@ -91,14 +98,15 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             }
         }
 
+        var writers = RuleWorkBudget.CountWriters(rules: Multiplied(
+            context: context,
+            definition: definition,
+            interactions: interactions,
+            order: order
+        ));
         var (slots, work) = RuleWorkBudget.Tally(
             contributors: lines,
-            writers: RuleWorkBudget.CountWriters(rules: Multiplied(
-                context: context,
-                definition: definition,
-                interactions: interactions,
-                order: order
-            ))
+            writers: writers
         );
         var flockCost = FlockAffinityCost(
             context: context,
@@ -128,7 +136,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             DecisionImagePointsPerTick: imagePoints,
             DecisionGridBuildsPerTick: decisionScales.Count,
             DecisionGridPointsPerTick: gridPoints
-        );
+        ) {
+            HostWorkUnitsPerTick = (flockCost + perceptionCost),
+            Writers = writers,
+        };
     }
     private static string DescribeRegionMultiplier(WorldDefinition definition, string placementId) {
         var (bound, terms) = RegionCapacityBound(
@@ -369,37 +380,6 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return WorldRuleCompilation.Compile(definition: definition).WorkContributors;
-    }
-    /// <summary>Returns admission's refusal of a tick's work, or <see langword="null"/> when the work is admitted.
-    /// Only a known number at or under <see cref="RuleCapacity.MaxWorkUnitsPerTick"/> is admitted: a bound nothing
-    /// prices and a bound that overflowed are refused as having no number, never read as a small one.</summary>
-    /// <param name="work">The tick's worst-case work.</param>
-    /// <param name="contributors">Lists the sheet's lines, costliest first; called only to word a refusal, which
-    /// names the first three.</param>
-    /// <param name="rowsAtCeiling">Names, for one line, the rows it reads, writes or iterates that are priced at the
-    /// engine's cell ceiling for want of a capacity (<see cref="RowsAtCeiling(Puck.State.Rules.RuleCompileContext, CompiledRule)"/>), or <see langword="null"/> to name
-    /// none; called only to word a refusal.</param>
-    /// <returns>The refusal, in the author's vocabulary, or <see langword="null"/>.</returns>
-    public static string? Refuse(RuleWork work, Func<IReadOnlyList<RuleWorkContributor>> contributors, Func<string, IEnumerable<string>>? rowsAtCeiling = null) {
-        ArgumentNullException.ThrowIfNull(argument: contributors);
-
-        if (work.Fits(ceiling: RuleCapacity.MaxWorkUnitsPerTick)) {
-            return null;
-        }
-
-        var lines = contributors().Take(count: 3).ToArray();
-        var costliest = string.Join(
-            separator: ", ",
-            values: lines.Select(selector: static line => $"'{line.Name}' x{line.Multiplier} = {line.WorkUnits}")
-        );
-        var uncapped = ((rowsAtCeiling is null) ? [] : lines.SelectMany(selector: line => rowsAtCeiling(arg: line.Name)).Distinct(comparer: StringComparer.Ordinal).ToArray());
-        var fix = ((uncapped.Length == 0)
-            ? "a forEach line's multiplier is its row's capacity, so author the capacity the row needs"
-            : $"{string.Join(separator: ", ", values: uncapped.Select(selector: static name => $"'{name}'"))} declare no capacity and are priced at the {StateCapacity.MaxCellsPerRow}-cell ceiling they may grow to: author each one's capacity, or key it over a capped token domain");
-
-        return $"rules/interactions/flock affinities are priced at {(work.IsKnown
-            ? $"{work} work units per tick, exceeding"
-            : $"no bound on their work per tick ({work}), which cannot be admitted under")} the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} ({fix}; world.budget.rules lists every line and how it is priced).";
     }
     /// <summary>Returns the keyed rows a compiled rule iterates, reads or writes whose price is the engine's cell
     /// ceiling only because they declare no capacity and no capped token domain: the rows whose capacity an author

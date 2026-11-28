@@ -957,7 +957,8 @@ covers what a host does with each call.
   gate compiles to at most 1,024 tokens nested at most 64 deep, and an
   expression to at most 256 tokens and 64 shared subprograms.
 - **A bounded tick.** A document's rules are priced statically at their worst
-  case, and the whole sheet must stay within `RuleCapacity.MaxWorkUnitsPerTick`; the
+  case, and the whole sheet, converted to time with each device's calibration, must
+  stay within the tick's rule budget (`WorldRuleTimePricing`); the
   compiler doesn't accept an average-case estimate. A rule that fires only a few
   of its bindings states it with `maxFirings`, which the evaluator enforces. See
   [Rule analysis, scheduling, and work budgets](analysis.md).

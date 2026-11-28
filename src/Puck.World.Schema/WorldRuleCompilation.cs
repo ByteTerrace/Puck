@@ -7,6 +7,7 @@ public sealed class WorldRuleCompilation {
     private readonly int m_codeRevision = Puck.Abstractions.CodeRevision.Current;
     private readonly (WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors) m_work;
     private readonly Lazy<WorldCostReport> m_costReport;
+    private readonly Lazy<WorldRuleTimePricing> m_pricing;
     private readonly Lazy<IReadOnlyList<Puck.State.Rules.RuleHazard>> m_hazards;
 
     internal WorldRuleCompilation(WorldDefinition definition, Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledRuleGroup[] groups, Puck.State.Rules.CompiledRule[] interactions, CompiledTable[] tables,
@@ -22,6 +23,7 @@ public sealed class WorldRuleCompilation {
         Interactions = interactions;
         Tables = tables;
         m_work = work;
+        m_pricing = new(valueFactory: () => WorldRuleTimePricing.Of(budget: m_work.Budget, definition: Definition, lines: m_work.Contributors));
         m_costReport = new(valueFactory: () => WorldCostReport.Generate(compilation: this));
         m_hazards = new(valueFactory: () => Puck.State.Rules.RuleHazards.Analyze(
             catalog: Definition.StateCatalog,
@@ -39,6 +41,8 @@ public sealed class WorldRuleCompilation {
         Tables = held.Tables;
         m_work = held.m_work;
         m_hazards = held.m_hazards;
+        // The devices and the rule share are this definition's own, so the time pricing is read afresh.
+        m_pricing = new(valueFactory: () => WorldRuleTimePricing.Of(budget: m_work.Budget, definition: Definition, lines: m_work.Contributors));
         m_costReport = new(valueFactory: () => WorldCostReport.Generate(compilation: this));
     }
 
@@ -63,19 +67,19 @@ public sealed class WorldRuleCompilation {
     /// <summary>Gets the rule hazards for this exact compilation. Analysis is performed once on demand and
     /// shares the installed programs with cost and work-budget queries.</summary>
     public IReadOnlyList<Puck.State.Rules.RuleHazard> Hazards => m_hazards.Value;
-    /// <summary>Gets the heuristic admission sheet, computed once from the compiled programs.</summary>
+    /// <summary>Gets the work sheet in units, computed once from the compiled programs.</summary>
     public WorldRuleWorkBudget WorkBudget => m_work.Budget;
-    /// <summary>Returns a deterministic refusal of a proposed arena reservation's work: the tick's growth work and a
-    /// possible rollback, against what the ceiling leaves after this compilation's work sheet. The sheet prices every
-    /// row at its declared room (<see cref="Puck.State.Rules.RuleCompileContext.RowCapacity(int)"/>), so a reservation
-    /// never changes it and nothing is compiled again.</summary>
-    /// <param name="growthWork">The growth work already spent this tick plus the proposed change and its rollback.</param>
-    /// <returns>The refusal, or <see langword="null"/> when the work fits.</returns>
-    public string? RefuseReservation(long growthWork) {
-        var rules = WorkBudget.WorkUnitsPerTick;
-        if ((growthWork <= RuleCapacity.MaxWorkUnitsPerTick) && rules.Fits(ceiling: RuleCapacity.MaxWorkUnitsPerTick - growthWork)) { return null; }
-        return $"arena growth and rollback ({growthWork} work units) plus rules ({rules}) exceed the {RuleCapacity.MaxWorkUnitsPerTick}-unit tick allowance";
-    }
+    /// <summary>Gets the sheet in time on every device the definition authors, against the tick's rule budget: what
+    /// admission holds the slowest device to.</summary>
+    public WorldRuleTimePricing Pricing => m_pricing.Value;
+    /// <summary>Returns a deterministic refusal of a proposed arena reservation's work: the tick's growth and a possible
+    /// rollback in time, against what the rule budget leaves after the slowest device's worst tick
+    /// (<see cref="WorldRuleTimePricing.RefuseGrowth"/>). The sheet prices every row at its declared room
+    /// (<see cref="Puck.State.Rules.RuleCompileContext.RowCapacity(int)"/>), so a reservation never changes it and nothing
+    /// is compiled again.</summary>
+    /// <param name="growthWork">The growth units already spent this tick plus the proposed change and its rollback.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the growth fits.</returns>
+    public string? RefuseReservation(long growthWork) => Pricing.RefuseGrowth(growthUnits: growthWork);
     /// <summary>Gets the same sheet's contributor lines in descending cost order.</summary>
     public IReadOnlyList<Puck.State.Rules.RuleWorkContributor> WorkContributors => m_work.Contributors;
     /// <summary>Gets the compiled rule groups in document order; each member is an index into

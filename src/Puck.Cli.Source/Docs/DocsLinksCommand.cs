@@ -572,7 +572,7 @@ public static class DocsLinksCommand {
             tests/, advisory elsewhere.
 
             A code span outside a fenced block shaped like a dotted C# name (each segment opens
-            with a capital: RuleCapacity.MaxWorkUnitsPerTick, DocsCommand.Create()) must name a type,
+            with a capital: RuleCapacity.MaxEffectsPerRule, DocsCommand.Create()) must name a type,
             member, namespace or project declared under src/ or tests/, read from the syntax index
             puck declarations uses, or a type of the .NET runtime.
 

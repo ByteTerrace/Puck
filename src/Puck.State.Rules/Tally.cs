@@ -3,7 +3,7 @@ namespace Puck.State.Rules;
 /// <summary>The work units of a tally's reads and writes, priced from its declared capacity alone.</summary>
 public static class TallyWork {
     /// <summary>The units one write of a tally cell costs: what any state write costs.</summary>
-    public const long CellWrite = 512L;
+    public const long CellWrite = RuleWorkBudget.DoorUnits;
 
     /// <summary>Returns the units one probe walk costs at its bound: the two header reads, then a stamp and a key read
     /// for every bucket the walk may visit, then the found count.</summary>
@@ -120,6 +120,8 @@ public sealed class TallyAddEffect : RuleEffect, IStateAddressedEffect, IValueSo
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) =>
         ((TallyWork.Walk(capacity: Capacity) + (4L * TallyWork.CellWrite)) + Source.Cost(context: context));
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) => 4L;
 }
 /// <summary>Empties a <see cref="StateDomain.Tally"/> row (<c>row = 0</c>): one epoch write frees every bucket, however
 /// many keys the row held.</summary>
@@ -146,4 +148,6 @@ public sealed class TallyResetEffect : RuleEffect {
     }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => (2L + (2L * TallyWork.CellWrite));
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) => 2L;
 }

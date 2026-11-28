@@ -170,8 +170,11 @@ public sealed partial record WorldCostReport(
 ) {
     /// <summary>Gets the exact coefficient evidence identity; the model name alone does not identify its prices.</summary>
     public string? EvidenceDigest { get; init; }
-    /// <summary>Gets the heuristic sheet used by the current admission policy. These units are not cycles.</summary>
+    /// <summary>Gets the work sheet in units. These units are not cycles.</summary>
     public WorldRuleWorkBudget WorkBudget { get; init; }
+    /// <summary>Gets the sheet in time on every device the world authors, against the tick's rule budget: what
+    /// admission holds the slowest device to.</summary>
+    public required WorldRuleTimePricing Pricing { get; init; }
 
     /// <summary>Gets the synchronous document-edit cost, unresolved until rebuild paths have reference prices.</summary>
     public CostBound EditBurstBound { get; init; } = CostBound.Unmodeled(reason: "Synchronous document rebuilds have no complete cycle bound.");
@@ -194,7 +197,7 @@ public sealed partial record WorldCostReport(
     public static WorldCostReport Generate(WorldRuleCompilation compilation, CostModel? model = null) {
         ArgumentNullException.ThrowIfNull(compilation);
 
-        return Create(compilation.Definition, compilation.Rules, compilation.WorkContributors, compilation.WorkBudget, (model ?? CostModel.Default));
+        return Create(compilation.Definition, compilation.Rules, compilation.WorkContributors, compilation.WorkBudget, (model ?? CostModel.Default), compilation.Pricing);
     }
     /// <summary>Analyzes compiled programs before a preview host filters unsupported rules or groups. This is an
     /// analysis surface, not an installation receipt or validation result.</summary>
@@ -207,10 +210,10 @@ public sealed partial record WorldCostReport(
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentNullException.ThrowIfNull(interactions);
         var (budget, contributors) = WorldRuleWorkBudget.Analyze(context.Definition, Puck.State.Rules.RuleEvaluationOrder.Named(rules: rules, groups: context.Definition.RuleGroups), interactions, context);
-        return Create(context.Definition, rules, contributors, budget, CostModel.Default);
+        return Create(context.Definition, rules, contributors, budget, CostModel.Default, WorldRuleTimePricing.Of(budget: budget, definition: context.Definition, lines: contributors));
     }
 
-    private static WorldCostReport Create(WorldDefinition definition, CompiledRule[] rules, IReadOnlyList<RuleWorkContributor> contributors, WorldRuleWorkBudget budget, CostModel model) {
+    private static WorldCostReport Create(WorldDefinition definition, CompiledRule[] rules, IReadOnlyList<RuleWorkContributor> contributors, WorldRuleWorkBudget budget, CostModel model, WorldRuleTimePricing pricing) {
         var rateHz = definition.SimulationRateHz;
         var profile = model.ReferenceProfile;
         var stepPeriodTicks = profile.StepPeriodEngineTicks(rateHz: rateHz);
@@ -271,6 +274,7 @@ public sealed partial record WorldCostReport(
             Presentation = WorldPresentationCost.Measure(definition: definition),
             Resources = WorldResourceDimensions.Measure(definition: definition),
             WorkBudget = budget,
+            Pricing = pricing,
         };
     }
 }

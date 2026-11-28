@@ -200,7 +200,8 @@ the same sheet live, and `--spent` what it spent):
 | The debug world with its one station | 4,295,589 |
 | The gallery booted alone with eleven stations | 4,382,315 |
 
-The tick admits 4.2 million units (`RuleCapacity.MaxWorkUnitsPerTick`). Each
+The tick admits the rules a quarter of its period on the slowest device the world authors (`WorldRuleTimePricing`;
+`world.budget.rules` prints each device's time). Each
 station past the first adds about 214 thousand: its instance's own lines
 (about 177 thousand summed, chess most of them) and its members of the
 patience set's family sweeps. Every cell a firing writes is priced (about 512
