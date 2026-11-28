@@ -40,10 +40,11 @@ state {
     row {
       name: "timeProbeOpenness"
       kind: "Fixed"
-      capacity: 4
+      capacity: 6
       cells [
         { key: "held", value: -1 }
         { key: "settled", value: -1 }
+        { key: "walkFar", value: -100 }
       ]
     }
   }
@@ -163,26 +164,36 @@ test "five bodies on the tiles unlock Moth Valley, and a field holds a cabinet's
   }
 }
 
-// The net's own opening: told to open, it parts until a body can walk through where the strands stood. A token holds the
-// button while seat 1's body, full size, walks north from the aisle through the parted net, past its
-// plane (z 20.3) onto the balcony edge's far side, where the void begins.
+// The net's own opening: told to open, it parts until a body can pass where the strands stood. The button's rise is set
+// to end at its local second 1000, so the net stays open while seat 1's body, full size, runs north from the aisle (back
+// along its camera's axis, which looks south) and leaps through the parted net over its lowest strand on the floor, past
+// its plane (z 20.3) and off the balcony's edge into the void.
 rule "time-probe-through" {
   when bodyPosition(body, 0, z) > 20.6 and timeProbe.through == -1
   mode: Level
   timeProbe.through = 1
 }
+// The walk's farthest z, which says how far she got when she does not get through.
+rule "time-probe-walk-far" {
+  when $tick > 40 and bodyPosition(body, 0, z) > timeProbeOpenness.walkFar
+  mode: Level
+  timeProbeOpenness.walkFar = bodyPosition(body, 0, z)
+}
 test "a parted net lets a full-size body through where its strands stood" {
   when {
     seat1: world.state.cell.set wonderpass 0 2
     ticks 2
-    seat1: body.pose 29.5 4.8 13.5 0 0 0 509
-    seat1: body.pose 29.7 4.6 19.3 180 0 0 0
+    seat1: world.state.cell.set timeButtonDue $value 1000
+    seat1: body.pose 29.7 4.6 19.3 0 0 0 0
     ticks 40
-    seat1: body.press forward 1 2 0
+    seat1: body.press forward -1 2 0
+    ticks 4
+    seat1: body.press jump 1 0.2 0
     ticks 30
   }
   expect {
     timeProbe.heldOpen == 1
     timeProbe.through == 1
+    timeProbeOpenness.walkFar > 20.6
   }
 }

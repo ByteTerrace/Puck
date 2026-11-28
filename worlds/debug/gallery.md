@@ -460,7 +460,7 @@ spend a field there is the puzzle's second half. Moth Valley is not on the
 cartridge rack, so the tiles are the way to play it.
 
 The state a puzzle reads: `timeNetOpen` (1 while the net is told to open),
-`timeButtonHeld`, `timeButtonDue` and `timeButtonSink` for the button,
+`timeButtonHeld`, `timeButtonDue` and `timeButtonCap` (the cap's offset) for the button,
 `timeTileHeld[time-tile-<n>]`, and `timeUnlocked[<station>]` and
 `timeUnlockDue[<station>]` for the cabinets. The field's own rows are the
 standard's: `timeFieldOn[<body>]` and its centre, end and cooldown, and each

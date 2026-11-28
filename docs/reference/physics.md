@@ -631,8 +631,8 @@ point is the ellipse's at the parametric angle the node's offset makes measured
 in cells (cosine and sine read off the offset made unit), which keeps the nodes'
 order about the centre; the centre moves to the middle of its grid cell, so the
 four corners of that cell frame the hole, about the ellipse's inscribed
-rectangle. While parted, `CellColliders` leaves out the cells with a driven
-corner, which frame the hole. Every reader may bound the net by its rest layout
+rectangle. While parted, `CellColliders` writes no hold sheet, so a body running
+at the hole is never caught climbing the ropes splayed round it. Every reader may bound the net by its rest layout
 grown by `FixedNetSpec.Extent`: the reach, or for a net with an opening twice its
 longer half axis. `physics.nets` counts its work, `parting-steps` the steps a net
 took while parting or closing. The World's host is a placement's

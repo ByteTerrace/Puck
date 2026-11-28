@@ -152,6 +152,8 @@ public sealed class FixedNet {
     private const int UnitShift = 8;
     private static readonly FixedQ4816 Units = FixedQ4816.FromInteger(value: UnitsPerMetre);
     private static readonly ulong EmptyTouch = Fingerprint(loads: [], pushers: []);
+    // The raw units a driven node's offset may stand past its splay's floored length (Restore's range check).
+    private static readonly FixedQ4816 PathSlack = FixedQ4816.FromRawBits(value: 8L);
     private static readonly WorkKind Steps = new("physics.nets.steps", "count", WorkClass.Deterministic);
     private static readonly WorkKind NodesSolved = new("physics.nets.nodes-solved", "count", WorkClass.Deterministic);
     private static readonly WorkKind StrandsSolved = new("physics.nets.strands-solved", "count", WorkClass.Deterministic);
@@ -722,19 +724,19 @@ public sealed class FixedNet {
     /// sheet has no gap a body could pass.</summary>
     /// <param name="radius">The rounding, in metres: half the strand a body meets.</param>
     /// <param name="destination">Receives one collider per cell, row by row; at least <see cref="CellCount"/> long.</param>
-    /// <returns>How many colliders <paramref name="destination"/> received: every cell, except, while the net is parted,
-    /// those with a corner the opening drives, which frame the hole rather than a face a hand could take.</returns>
+    /// <returns>How many colliders <paramref name="destination"/> received: every cell, or none while the net is parted, so a
+    /// body running at the hole is never caught by a hold on the ropes splayed round it.</returns>
     public int CellColliders(FixedQ4816 radius, Span<FixedStaticCollider> destination) {
         var columns = Spec.Columns;
         var cell = 0;
         var quarter = FixedQ4816.FromDouble(value: 0.25);
-        var parted = Parted;
+
+        if (Parted) { return 0; }
 
         for (var row = 0; (row < (Spec.Rows - 1)); row++) {
             for (var column = 0; (column < (columns - 1)); column++) {
                 var first = ((row * columns) + column);
 
-                if (parted && (m_driven[first] || m_driven[(first + 1)] || m_driven[(first + columns)] || m_driven[((first + columns) + 1)])) { continue; }
                 var p00 = Position(node: first);
                 var p10 = Position(node: (first + 1));
                 var p01 = Position(node: (first + columns));
@@ -805,7 +807,9 @@ public sealed class FixedNet {
             throw new ArgumentException(message: "A net's openness lies in [0, 1], and only a net with an opening parts.", paramName: nameof(state));
         }
         for (var node = 0; (node < NodeCount); node++) {
-            if (!state.Offsets[node].IsWithin(radius: (m_driven[node] ? FixedQ4816.Max(x: reach, y: m_splay[node].Length) : reach))) {
+            // A driven node stands on its path, at most its splay from rest; its length is a floored square root and the eased
+            // path rounds each component, so it is allowed a few raw units of slack.
+            if (!state.Offsets[node].IsWithin(radius: (m_driven[node] ? FixedQ4816.Max(x: reach, y: (m_splay[node].Length + PathSlack)) : reach))) {
                 throw new ArgumentException(message: $"Node {node}'s offset lies past the net's reach.", paramName: nameof(state));
             }
         }

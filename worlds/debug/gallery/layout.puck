@@ -610,14 +610,16 @@ let timeButtonWindow = 0.25
 let timeButtonRise = (timeButtonDepth / timeButtonWindow)
 let timeNetPanel = $"south-{timeButtonBay}"
 // The net's opening (WorldNetOpening, in the panel's frame: from its left post along its width, and up from the floor): a
-// tall ellipse in the panel's middle, its foot below the floor so the ropes there are drawn down to it, so the hole it
-// frames (its inscribed rectangle, about 1.1 m by 2.3 m) passes the suited Moth, 0.7 m across and 2.06 m tall.
+// tall ellipse in the panel's middle, its foot below the floor so the ropes there are drawn down onto it. The net moves its
+// centre to the middle of the cell holding it (1.2 m up), and the hole that cell's corners frame, the inscribed rectangle,
+// runs from the floor, where its lowest strand lies, to 2.4 m up and 1.1 m across: the suited Moth, 0.7 m across and
+// 2.06 m tall, walks or leaps through. Beyond it lies the void, so a body passing steps off the balcony's edge.
 let timeNetOpening = {
   by: "state.timeNetOpen"
   centerAcross: (arcadePitch / 2)
   centerUp: 1.1
   halfWidth: 0.8
-  halfHeight: 1.6
+  halfHeight: 1.75
   openSeconds: 0.6
   closeSeconds: 0.5
   effect: formParting()

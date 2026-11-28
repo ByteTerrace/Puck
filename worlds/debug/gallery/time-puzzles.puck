@@ -17,7 +17,7 @@
 //
 //   timeButtonHeld   Int, 1 while a body stands on the button
 //   timeButtonDue    Fixed, the button's local second its rise ends at
-//   timeButtonSink   Fixed, how far the button stands sunk, metres
+//   timeButtonCap    Fixed, the cap's offset along up, metres: negative while it stands sunk
 //   timeNetOpen      Int, 1 while the net is told to open (the net facet's `opening.by`)
 //   timeTileHeld     keyed by tile: 1 while a body stands on it
 //   timeUnlocked     keyed by station: 1 while it runs Moth Valley
@@ -47,7 +47,7 @@ timeFields(casters: rentalBodies, targets: timeTargets)
 timeFieldShells(casters: rentalBodies)
 
 exports {
-  reads [timeButtonHeld, timeButtonDue, timeButtonSink, timeNetOpen, timeTileHeld, timeUnlocked, timeUnlockDue]
+  reads [timeButtonHeld, timeButtonDue, timeButtonCap, timeNetOpen, timeTileHeld, timeUnlocked, timeUnlockDue]
   bindings [timeNetOpen]
 }
 state {
@@ -59,7 +59,7 @@ state {
       value: "0"
     }
     row {
-      name: "timeButtonSink"
+      name: "timeButtonCap"
       kind: "Fixed"
       value: "0"
     }
@@ -109,7 +109,7 @@ prototypes {
       }
     }
   }
-  // The cap, which shifts down by `timeButtonSink` as it is held and back up as it rises.
+  // The cap, which shifts down by `timeButtonCap` as it is held and back up as it rises.
   prototype "time-button-cap" {
     document {
       name: "time-button-cap"
@@ -156,7 +156,7 @@ placements {
     parent: "gallery"
     position: timeButtonAt
     shift {
-      y: "state.timeButtonSink"
+      y: "state.timeButtonCap"
     }
     solid
   }
@@ -211,13 +211,14 @@ rule "time-button-net" {
   mode: Level
   timeNetOpen = open
 }
-// The cap sinks while held and rises evenly over the window, in the button's local time.
+// The cap sinks while held and rises evenly over the window, in the button's local time, never sunk past its depth.
 rule "time-button-sink" {
   local left = (timeButtonDue - timeLocalOf("time-button"))
-  local sink = ((timeButtonHeld == 1) ? timeButtonDepth : ((left > 0) ? (left * timeButtonRise) : 0))
-  when timeButtonSink != sink
+  local rising = ((left > 0) ? (left * timeButtonRise) : 0)
+  local offset = 0 - ((timeButtonHeld == 1) ? timeButtonDepth : ((rising > timeButtonDepth) ? timeButtonDepth : rising))
+  when timeButtonCap != offset
   mode: Level
-  timeButtonSink = sink
+  timeButtonCap = offset
 }
 
 // Each tile is held while a body stands on it.

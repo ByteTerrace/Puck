@@ -98,8 +98,8 @@ public sealed class WorldNets {
         public ReadOnlySpan<FixedStaticCollider> Colliders() => Posed(cache: ref m_colliders, revision: ref m_collidersRevision, strands: true, written: ref m_strandCount);
         /// <summary>Returns the surface a hold takes as the net stands: a sheet over its cells (<see cref="FixedNet.CellColliders"/>),
         /// so a climber's hands find the net between its strands as on them, recomputed only when a node moved. Bodies
-        /// do not meet it. While the net is parted, the cells framing its hole are left out, so a hand finds no face across
-        /// the hole.</summary>
+        /// do not meet it. While the net is parted it offers no hold (<see cref="FixedNet.CellColliders"/>), so a body running
+        /// at its hole is never caught climbing the ropes splayed round it.</summary>
         /// <returns>The colliders, row by row, borrowed until the net next moves.</returns>
         public ReadOnlySpan<FixedStaticCollider> HoldColliders() => Posed(cache: ref m_holdColliders, revision: ref m_holdCollidersRevision, strands: false, written: ref m_holdCount);
         private int m_strandCount;

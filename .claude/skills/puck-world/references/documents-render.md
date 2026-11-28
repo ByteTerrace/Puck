@@ -663,7 +663,7 @@ over `openSeconds`, and back over `closeSeconds` once it reads zero
 (`FixedNet.SetOpening`). The solve holds those nodes and moves the rest: the
 strands they pull bow round the hole, the cells they press into crowd, and
 bodies meet the strands where they stand, so the hole is passable at full size;
-the hold sheet leaves out the cells framing it. The net wakes for the move and
+the net offers no hold while parted. The net wakes for the move and
 sleeps once it settles, open or closed. The ellipse's centre moves to the middle
 of the grid cell holding it, and a node's way out is measured in cells, so the
 four corners of that cell leave at the ellipse's diagonals and the hole is about
