@@ -45,21 +45,21 @@ let lookLevels = [lookLevelHall, lookLevelToybox, lookLevelHall, lookLevelHall]
 // mint, lilac, peach, butter, sky, rose.
 let lookToyPiers = ["#9FE3C6", "#C6B3EA", "#FFC9A8", "#FFE98F", "#9ED4F5", "#FFA9C8"]
 // The toybox's rope nets (shell.puck's lattice panels, the standard's rope net and its `latticeNetPalette`), bold where
-// the piers are soft. Every frame wears one deep cobalt, darker than the floor's cobalt tiles, which grounds the nets
+// the piers are soft. Every frame wears one cobalt, a step deeper than the floor's cobalt tiles, which grounds the nets
 // against the sky walls and lets the rope carry the colour; every knot the grout's warm white, a toy rope's whipped
 // knot. Each panel strings its two strand sets in a complementary pair, a warm primary or secondary against the cool
-// colour opposite it, so the diamonds read crisp from across the void without either set winning: tomato and teal,
-// sunflower and violet, tangerine and azure, raspberry and leaf. Each is a saturated middle value, never neon or
-// pastel, the same family as the toybox's tomato fascia, sunflower tiles and candy coffers. The pairs step by bay
-// along each edge and the bridge, the same pair at each north and south pair so the nave stays balanced, as the piers'
-// pastels do.
-let lookToyNetFrame = "#24468E"
+// colour opposite it, the cool one a step lighter so the two sets hold equal weight under light and the diamonds read
+// crisp from across the void: tomato and teal, sunflower and violet, tangerine and azure, raspberry and leaf. Each is a
+// saturated middle value, never neon or pastel, the same family as the toybox's tomato fascia, sunflower tiles and
+// candy coffers. The pairs step by bay along each edge and the bridge, the same pair at each north and south pair so
+// the nave stays balanced, as the piers' pastels do.
+let lookToyNetFrame = "#2F62C8"
 let lookToyNetKnot = "#F7F3E8"
 let lookToyNetPairs = [
-  ["#E2453C", "#169A8C"]
-  ["#F2B52C", "#6A4FC4"]
-  ["#EF7A2E", "#2E8FD8"]
-  ["#D9468C", "#4FAA45"]
+  ["#E2453C", "#22B8A6"]
+  ["#F5BF34", "#8A6BE0"]
+  ["#F2823A", "#3FA4EC"]
+  ["#E05298", "#5CC250"]
 ]
 function lookToyNet(n) = {
   frame: lookToyNetFrame

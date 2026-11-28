@@ -346,12 +346,13 @@ one, with a bounce and a ripple outward. It settles and sleeps when no one
 touches it, and a net held still by a climber who hangs on sleeps too.
 
 The colours are bold rather than pastel (look.puck's `lookToyNet`). Every frame
-wears one deep cobalt, which grounds the nets against the sky walls, and every
-knot the grout's warm white. Each panel strings its two strand sets in a
-complementary pair: tomato and teal, sunflower and violet, tangerine and azure,
-raspberry and leaf, each a saturated middle value, never neon. The pairs step by
-bay along each edge, the same at each north and south pair as the piers'
-pastels are, and continue round the bridge.
+wears one cobalt, a step deeper than the floor's, which grounds the nets against
+the sky walls, and every knot the grout's warm white. Each panel strings its two
+strand sets in a complementary pair: tomato and teal, sunflower and violet,
+tangerine and azure, raspberry and leaf, each a saturated middle value, never
+neon, the cool one a step lighter so the two sets hold equal weight. The pairs
+step by bay along each edge, the same at each north and south pair as the
+piers' pastels are, and continue round the bridge.
 
 `debug.go rope-net` stands a body before the net of the north edge's bay 9
 (layout.puck's `toyLatticeNetBay`); `world.nets` reads every net's nodes,
