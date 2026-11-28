@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Assets.Documents;
 using Xunit;
 
@@ -6,7 +5,7 @@ namespace Puck.State.Topology.Tests;
 
 public sealed class BoardJumpDistanceLawTests {
     private static CompiledTopology Board(int width, int depth = 1) => TopologyCompilation.Compile(
-        new LatticeTopology.Grid("hops", new DocumentVector3(x: 0, y: 0, z: 0), 1, width, depth), Vector3.Zero);
+        new LatticeTopology.Grid("hops", new DocumentVector3(x: 0, y: 0, z: 0), 1, width, depth));
 
     [Fact]
     public void AChainHasNoArtificialHopLimitAndWorksAboveSixtyFourCells() {
@@ -50,7 +49,7 @@ public sealed class BoardJumpDistanceLawTests {
         var graph = TopologyCompilation.Compile(new LatticeTopology.Graph("loop", new DocumentVector3(x: 0, y: 0, z: 0), 1,
             Enumerable.Range(count: 6, start: 0).Select(selector: i => new GraphCell(i.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), new DocumentVector3(x: i, y: 0, z: 0))).ToArray(),
             [new(Name: "E", Opposite: "W"), new(Name: "W", Opposite: "E"), new(Name: "N", Opposite: "S"), new(Name: "S", Opposite: "N")],
-            [new("0", "1", CellName.Parse(candidate: "E")), new("1", "2", CellName.Parse(candidate: "E")), new("2", "3", CellName.Parse(candidate: "N")), new("3", "4", CellName.Parse(candidate: "N")), new("4", "0", CellName.Parse(candidate: "N")), new("0", "5", CellName.Parse(candidate: "N"))]), Vector3.Zero);
+            [new("0", "1", CellName.Parse(candidate: "E")), new("1", "2", CellName.Parse(candidate: "E")), new("2", "3", CellName.Parse(candidate: "N")), new("3", "4", CellName.Parse(candidate: "N")), new("4", "0", CellName.Parse(candidate: "N")), new("0", "5", CellName.Parse(candidate: "N"))]));
 
         Assert.Equal(2, BoardQueries.Evaluate(new BoardJumpDistanceQuery(graph, 4), [1, 2, 0, 2, 0, 0], 0, 0));
         Assert.Equal(-1, BoardQueries.Evaluate(new BoardJumpDistanceQuery(graph, 5), [1, 2, 0, 2, 0, 0], 0, 0));

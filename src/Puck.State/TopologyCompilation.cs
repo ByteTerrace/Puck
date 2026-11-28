@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.Maths;
 
@@ -32,7 +31,7 @@ public static class TopologyCompilation {
     // A validated graph (TryValidateGraph) compiles straight into the flat adjacency table every other kind fills
     // through its coordinates: slot (cell, direction) holds the edge's destination, the implied reverse edge fills
     // the destination's opposite slot, and every unfilled slot reads -1.
-    private static CompiledTopology CompileGraph(LatticeTopology.Graph graph, LatticeTopology source, Vector3 anchorOffset, TopologyKind kind, int radius) {
+    private static CompiledTopology CompileGraph(LatticeTopology.Graph graph, LatticeTopology source, FixedVector3 anchorPosition, FixedComplex heading, TopologyKind kind, int radius) {
         var count = graph.Cells.Count;
         var directionCount = graph.Directions.Count;
         var ids = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
@@ -92,11 +91,7 @@ public static class TopologyCompilation {
             1,
             radius,
             TopologyWrap.None,
-            new FixedVector3(
-                X: FixedQ4816.FromDouble(value: (graph.Origin.X + anchorOffset.X)),
-                Y: FixedQ4816.FromDouble(value: (graph.Origin.Y + anchorOffset.Y)),
-                Z: FixedQ4816.FromDouble(value: (graph.Origin.Z + anchorOffset.Z))
-            ),
+            AnchoredOrigin(authored: graph.Origin, anchorPosition: anchorPosition, heading: heading),
             FixedQ4816.FromDouble(value: graph.CellSize),
             FixedQ4816.Zero,
             [identity],
@@ -104,8 +99,21 @@ public static class TopologyCompilation {
             1,
             FixedQ4816.Zero,
             directionNames,
-            centres
+            centres,
+            heading: heading
         );
+    }
+    // The world origin an anchor places a topology at: the authored origin is a point of the anchor's frame, so it turns
+    // by the anchor's heading and lands at the anchor's position. The default anchor (zero position, identity heading)
+    // leaves the authored origin exactly as written.
+    private static FixedVector3 AnchoredOrigin(DocumentVector3 authored, FixedVector3 anchorPosition, FixedComplex heading) {
+        var local = new FixedVector3(
+            X: FixedQ4816.FromDouble(value: authored.X),
+            Y: FixedQ4816.FromDouble(value: authored.Y),
+            Z: FixedQ4816.FromDouble(value: authored.Z)
+        );
+
+        return (anchorPosition + heading.RotateAboutY(vector: local));
     }
     private static int ComputeMaxHexRadius() {
         var radius = 0;
@@ -617,19 +625,28 @@ public static class TopologyCompilation {
         );
     }
 
-    /// <summary>Compiles a validated discrete topology into its adjacency table, translating the authored origin by
-    /// <paramref name="anchorOffset"/> — the frame a host composes over another row's transform, or zero for the
-    /// authored frame. Translation only: the grid's own axes stay world-axis-aligned whatever the anchor's heading.</summary>
+    /// <summary>Compiles a validated discrete topology into its adjacency table, placed in an anchor's frame: the frame
+    /// a host composes over another row's transform (a placement's resolved position and yaw), or the default anchor
+    /// for the authored frame. The authored origin is a point of the anchor's frame, and the board's own axes turn with
+    /// the anchor's yaw (<see cref="CompiledTopology.Heading"/>), so a board carried by a turned placement turns with
+    /// it; a yaw within sixteen raw units of a whole number of quarter turns turns it exactly
+    /// (<see cref="FixedComplex.FromAngleCardinal"/>).</summary>
     /// <param name="topology">A discrete topology that passed <see cref="TryValidate"/>.</param>
-    /// <param name="anchorOffset">The world-space translation added to the authored origin.</param>
+    /// <param name="anchorPosition">The anchor's world position, in world units; zero for the authored frame.</param>
+    /// <param name="anchorYawRadians">The anchor's world yaw about +Y, in radians, in the convention of
+    /// <see cref="FixedQuaternion.FromAxisAngle"/>; zero for the authored frame.</param>
     /// <returns>The compiled topology.</returns>
-    public static CompiledTopology Compile(LatticeTopology topology, Vector3 anchorOffset) {
+    /// <exception cref="ArgumentNullException"><paramref name="topology"/> is <see langword="null"/>.</exception>
+    public static CompiledTopology Compile(LatticeTopology topology, FixedVector3 anchorPosition = default, FixedQ4816 anchorYawRadians = default) {
         ArgumentNullException.ThrowIfNull(argument: topology);
+
+        var heading = FixedComplex.FromAngleCardinal(angle: anchorYawRadians);
 
         if (topology is LatticeTopology.Graph graph) {
             return CompileGraph(
-                anchorOffset: anchorOffset,
+                anchorPosition: anchorPosition,
                 graph: graph,
+                heading: heading,
                 kind: TopologyKind.Graph,
                 radius: 0,
                 source: graph
@@ -638,7 +655,8 @@ public static class TopologyCompilation {
         if (topology is LatticeTopology.Tiling tiling) {
             return CompileGraph(
                 graph: TilingGenerator.Generate(tiling: tiling),
-                anchorOffset: anchorOffset,
+                anchorPosition: anchorPosition,
+                heading: heading,
                 kind: TopologyKind.Tiling,
                 radius: tiling.Radius,
                 source: tiling
@@ -756,11 +774,7 @@ public static class TopologyCompilation {
             depth,
             radius,
             wrap,
-            new FixedVector3(
-                X: FixedQ4816.FromDouble(value: (topology.Origin.X + anchorOffset.X)),
-                Y: FixedQ4816.FromDouble(value: (topology.Origin.Y + anchorOffset.Y)),
-                Z: FixedQ4816.FromDouble(value: (topology.Origin.Z + anchorOffset.Z))
-            ),
+            AnchoredOrigin(authored: topology.Origin, anchorPosition: anchorPosition, heading: heading),
             FixedQ4816.FromDouble(value: topology.CellSize),
             FixedQ4816.FromDouble(value: band),
             images,
@@ -768,7 +782,8 @@ public static class TopologyCompilation {
             layers,
             FixedQ4816.FromDouble(value: layerHeight),
             directionNames,
-            coordinates: [.. coordinates]
+            coordinates: [.. coordinates],
+            heading: heading
         );
 
         compiled.InstallElementAliases(aliases: elementAliases);
@@ -788,7 +803,7 @@ public static class TopologyCompilation {
     private static readonly Puck.Abstractions.CodeDerivedTable<LatticeTopology, System.Runtime.CompilerServices.StrongBox<bool>> Validity = new();
     /// <summary>Finds and compiles a discrete topology by name, unanchored: a Grid's <c>origin</c> resolves exactly
     /// as authored. A host that composes a topology's frame over another row's transform compiles through
-    /// <see cref="Compile"/> with that offset instead.</summary>
+    /// <see cref="Compile"/> with that anchor instead.</summary>
     /// <param name="lattices">The section's lattice topologies, or <see langword="null"/> for none.</param>
     /// <param name="name">The topology name.</param>
     /// <returns>The compiled topology, or <see langword="null"/> if absent, dense, or malformed.</returns>
@@ -803,10 +818,7 @@ public static class TopologyCompilation {
             ) {
                 return Cache.GetValue(
                     key: topology,
-                    derive: static topology => Compile(
-                        topology: topology,
-                        anchorOffset: Vector3.Zero
-                    )
+                    derive: static topology => Compile(topology: topology)
                 );
             }
         }

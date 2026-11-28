@@ -19,7 +19,11 @@ gameStationSet(stations: debugStations, holodeck: false)
 // At the station's near chair, 1.5 m from its centre at its -Z edge and facing +Z across the glass, inside the engage
 // radius: the context button sits her down.
 spawnPoints [
-  { id: "cards", position: gameStationChairAt(debugStations[0], "near"), yawDegrees: 180 }
+  {
+    id: "cards"
+    position: gameStationChairAt(debugStations[0], "near")
+    yawDegrees: gameStationChairYaw(debugStations[0], "near")
+  }
 ]
 
 state {

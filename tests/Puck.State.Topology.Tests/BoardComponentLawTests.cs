@@ -1,5 +1,4 @@
 using Puck.Maths;
-using System.Numerics;
 using Puck.Abstractions.Counting;
 using Xunit;
 using Puck.Assets.Documents;
@@ -64,8 +63,7 @@ public sealed class BoardComponentLawTests {
             Width: 5,
             Depth: 5,
             Directions: Orthogonal
-        ),
-        anchorOffset: Vector3.Zero
+        )
     );
 
     [Fact]
@@ -242,8 +240,7 @@ public sealed class BoardComponentLawTests {
                 Depth: 5,
                 Directions: Orthogonal,
                 Wrap: TopologyWrap.Both
-            ),
-            anchorOffset: Vector3.Zero
+            )
         );
 
         Assert.Equal(
@@ -409,8 +406,7 @@ public sealed class BoardComponentLawTests {
                 Width: Width,
                 Depth: Width,
                 Directions: Orthogonal
-            ),
-            anchorOffset: Vector3.Zero
+            )
         );
         var values = new long[(Width * Width)];
         var centre = ((9 * Width) + 9);

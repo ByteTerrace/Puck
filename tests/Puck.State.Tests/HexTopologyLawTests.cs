@@ -1,4 +1,3 @@
-using System.Numerics;
 using Xunit;
 using Puck.Assets.Documents;
 using Puck.Maths;
@@ -23,8 +22,7 @@ public sealed class HexTopologyLawTests {
             ),
             CellSize: 0.5f,
             Radius: Radius
-        ),
-        anchorOffset: Vector3.Zero
+        )
     );
     private static int IndexOf(HexagonalCoordinate coordinate) {
         var index = HexagonalIndex.FromCoordinate(coordinate: coordinate);

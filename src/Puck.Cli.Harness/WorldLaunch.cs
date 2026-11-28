@@ -324,7 +324,7 @@ public sealed class WorldLaunch : IDisposable {
         var lane = (request.Lane ?? CliLease.LaneOf(checkout: checkout));
         var gpu = await WorldWorkHold.AcquireAsync(checkout, name, holder, lane,
             (root, token) => LeasedAdmission.AcquireAsync(root, name, holder, lane,
-                (place, step, device, heavy, held, bound, reserve, progress, phase, cancel) => WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancel, checkout: place, device: device, heavySuite: heavy, kind: held, reserve: reserve, stage: phase, step: step),
+                (place, step, device, heavy, held, bound, reserve, progress, phase, cancel, _) => WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancel, checkout: place, device: device, heavySuite: heavy, kind: held, reserve: reserve, stage: phase, step: step),
                 checkout, request.Step, request.OpensDevice, request.HeavySuite, profile, TimeProvider.System,
                 (request.AdmissionWait ?? CliLease.DefaultWait), Console.Error, stage, token, request.Timing),
             token => AdmitHostAsync(bound: request.AdmissionWait, cancellationToken: token, profile: profile, refuse: false, request: request, reserve: true, stage: stage), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);

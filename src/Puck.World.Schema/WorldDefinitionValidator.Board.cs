@@ -148,7 +148,7 @@ public static partial class WorldDefinitionValidator {
 
                 taken[side] = true;
             } else {
-                errors.Add(item: $"{path}.seats[{index}].yawDegrees must be a whole number of quarter turns (0, 90, 180 or 270 and their turns), not {yaw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}: a board's topology is world-axis-aligned, so a chair faces across one of its edges.");
+                errors.Add(item: $"{path}.seats[{index}].yawDegrees must be a whole number of quarter turns (0, 90, 180 or 270 and their turns), not {yaw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}: a chair faces across one of the board's four edges, in the board's own frame.");
             }
         }
     }

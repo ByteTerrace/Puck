@@ -82,6 +82,7 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
                 _ = text.Append(value: " origin=(").Append(value: DescribeFixed(value: topology.Origin.X)).Append(value: ',')
                     .Append(value: DescribeFixed(value: topology.Origin.Y)).Append(value: ',')
                     .Append(value: DescribeFixed(value: topology.Origin.Z)).Append(value: ')')
+                    .Append(value: " heading=").Append(value: double.RadiansToDegrees(radians: ((double)topology.Heading.Argument)).ToString(format: "0.##", provider: System.Globalization.CultureInfo.InvariantCulture))
                     .Append(value: " cellSize=").Append(value: DescribeFixed(value: topology.CellSize));
                 if (topology.Kind == TopologyKind.Hex) {
                     _ = text.Append(value: " radius=").Append(value: topology.Radius);

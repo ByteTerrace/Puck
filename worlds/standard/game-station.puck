@@ -3,11 +3,14 @@
 // placement, its state, its rules and its console command as templates, and emits no document. Where a station stands,
 // which games its catalog holds and how each game's board is drawn are the importing world's.
 //
-// A station is `{ id, at }`: `id` names it in every cell keyed by station, and `at` is the world point of its placement,
+// A station is `{ id, at, yaw }`: `id` names it in every cell keyed by station, `at` is the world point of its placement,
 // whose creation's floor lies `gameStationFloor` under it, so a station placed at a floor's height minus that stands on
-// the floor. A station stands with no yaw: its near chair is at its -Z edge facing +Z, so +Z runs away from that player
-// and +X to their left, and its far chair at its +Z edge faces back across the glass. A catalog is a list of
-// `{ id, title }`, one row a game; a game's place in the list is its index, which the station's selection cell holds.
+// the floor, and `yaw` (degrees, 0 when absent) turns the whole station about its placement: its table, glass and
+// lettering, its chairs, its pick grid and every board and body its games stand on it. Everything below is written in
+// the station's own frame: its near chair is at its -Z edge facing +Z, so +Z runs away from that player and +X to their
+// left, and its far chair at its +Z edge faces back across the glass; at a yaw of 180 the near chair stands at the
+// world's +Z side. A catalog is a list of `{ id, title }`, one row a game; a game's place in the list is its index,
+// which the station's selection cell holds.
 //
 // The glass carries, along the near edge, the menu (GAMES, a button a game and NEW GAME) and above it the status line;
 // along the far edge the same status line reads for the far chair; between them lies the board area, the whole width
@@ -134,35 +137,40 @@ let gameStationLook = {
   off: consoleLook.field
 }
 
+// The station's yaw, in degrees, and the rotation it turns its frame into the world's by.
+function gameStationYaw(station) = ((station.yaw == null) ? 0 : station.yaw)
+function gameStationTurn(station) = rotate([0, 1, 0], gameStationYaw(station))
+// A point of the station's frame, `local` from its placement, in the world.
+function gameStationPoint(station, local) = (station.at + rotatePoint(gameStationTurn(station), local))
 // A point of the station's frame on its glass, in the world: `x` across and `z` away.
-function gameStationWorld(station, x, z) = [
-  (station.at[0] + x),
-  (station.at[1] + gameStationSurface),
-  (station.at[2] + z)
-]
+function gameStationWorld(station, x, z) = gameStationPoint(station, [x, gameStationSurface, z])
 function gameStationMid(rect) = [((rect.x0 + rect.x1) / 2), ((rect.z0 + rect.z1) / 2)]
 function gameStationHalfOf(rect) = [((rect.x1 - rect.x0) / 2), ((rect.z1 - rect.z0) / 2)]
 
-// A chair's place on the floor, in the world: 1.5 m out from the station's centre at its edge, inside the engage radius.
-function gameStationChairAt(station, chair) = [
-  station.at[0],
-  (station.at[1] + gameStationFloor),
-  (station.at[2] + ((chair == "far") ? 1.5 : -1.5))
-]
+// A chair's place on the floor, in the world: 1.5 m out from the station's centre at its edge, inside the engage radius;
+// and the yaw a body sitting in it faces, across the glass.
+function gameStationChairAt(station, chair) = gameStationPoint(
+  station,
+  [0, gameStationFloor, ((chair == "far") ? 1.5 : -1.5)]
+)
+function gameStationChairYaw(station, chair) = (gameStationYaw(station) + ((chair == "far") ? 0 : 180))
 
 // The rotation that lays a paint flat on a level glass, read from its -Z edge: the paint's +X runs to that reader's right
-// (world -X), its +Y away from the reader (world +Z) and its +Z up through the glass. `displayReadingFar` reads it from
-// the +Z edge.
+// (the glass's -X), its +Y away from the reader (the glass's +Z) and its +Z up through the glass. `displayReadingFar`
+// reads it from the +Z edge. Both are in the glass's own frame; a station's paints lie in the world, so they read through
+// `gameStationReading`, which turns them with the station.
 let displayReading = [0, 0.7071068, 0.7071068, 0]
 let displayReadingFar = compose(rotate([0, 1, 0], 180), displayReading)
-// A filled rectangle on a level glass, centred at the world point `at`, `half` its half extents across and away.
-function displayFill(at, half, color, round = 0) = faceFill(at, displayReading, half, color, round)
+function gameStationReading(station, reading = displayReading) = compose(gameStationTurn(station), reading)
+// A filled rectangle on a level glass, centred at the world point `at`, `half` its half extents across and away, laid by
+// `rotation` (a glass's reading).
+function displayFill(at, half, color, round = 0, rotation = displayReading) = faceFill(at, rotation, half, color, round)
 // A rounded rectangle's outline on a level glass, `stroke` wide, its corners rounded by `round` of its smaller half
 // extent: a cell's frame that lights without hiding what is drawn inside it.
-function displayRing(at, half, color, stroke, round = 0.25) = {
+function displayRing(at, half, color, stroke, round = 0.25, rotation = displayReading) = {
   type: "Prism"
   position: at
-  rotation: displayReading
+  rotation: rotation
   scale [half[0], half[1], 0.03]
   profile { kind: "RoundedRectangle", cornerRadius: round }
   stroke: stroke
@@ -184,21 +192,22 @@ function displayText(at, half, template, ink, em, align = "center", rotation = d
   0.03,
   "capMiddle"
 )
-// A rectangle of the station's frame filled on its glass.
+// A rectangle of the station's frame filled on its glass, and lettering on one, read from the near chair or `reading`'s.
 function gameStationFill(station, rect, color, round = 0) = displayFill(
   gameStationWorld(station, gameStationMid(rect)[0], gameStationMid(rect)[1]),
   gameStationHalfOf(rect),
   color,
-  round
+  round,
+  gameStationReading(station)
 )
-function gameStationText(station, rect, template, ink, em, align = "center", rotation = displayReading) = displayText(
+function gameStationText(station, rect, template, ink, em, align = "center", reading = displayReading) = displayText(
   gameStationWorld(station, gameStationMid(rect)[0], gameStationMid(rect)[1]),
   gameStationHalfOf(rect),
   template,
   ink,
   em,
   align,
-  rotation
+  gameStationReading(station, reading)
 )
 
 // The near strip's paints: each game's button filled in its ink (the game shown lit), NEW GAME's, and the status line
@@ -422,6 +431,7 @@ template gameStationPlacement(station, index) {
       }
     }
     position: station.at
+    yawDegrees: gameStationYaw(station)
     solid
   }
 }
