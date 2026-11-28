@@ -353,7 +353,10 @@ sibling's staged copy as `expect$<line>` with a rule gated on the claim (it
 passes on any tick the claim holds, since the instance starts when the traveller
 arrives), and `WorldTestRun` exports every instance the run started whose
 document carries a verdict row, recording its document id in the manifest so the
-report reads `garden/expect$1`. A run that started no such instance fails the
+report reads `garden/expect$1`. The block names the document as the test's
+references name it (its file, `shapes` for `labs/shapes.puck`), and staging
+renames the claim to that document's `documentId` (`lab-shapes`), the id the
+instance's export reports. A run that started no such instance fails the
 claim by name; an absent body reads `0`, so a claim of `0` pairs with a
 presence claim (`size == 1`). The instance must outlive the visit
 (`durability: persisted`). Anything outside a block reads the booted world. `puck test` takes

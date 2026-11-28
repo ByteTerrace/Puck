@@ -353,8 +353,8 @@ template panelRules(panels) {
     local now = panelBase[$each] + panelChoice[$each]
     when panelShownAt[$each] != panelChoice[$each] and panelChoice[$each] >= 0 and panelChoice[$each] < panelCount[$each]
     mode: Level
-    setState(state: panelInk, key: was, fromState: panelInks, fromKey: dim)
-    setState(state: panelInk, key: now, fromState: panelInks, fromKey: lit)
+    setState(state: panelInk, key: (was + 0), fromState: panelInks, fromKey: dim)
+    setState(state: panelInk, key: (now + 0), fromState: panelInks, fromKey: lit)
     setState(state: panelTitle, key: $each, fromState: panelTitles, fromKey: (now + 0))
     setState(state: panelNote, key: $each, fromState: panelNotes, fromKey: (now + 0))
     // The page that holds the choice: its whole part of choice / rows, divided exactly.
