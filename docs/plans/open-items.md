@@ -6573,13 +6573,31 @@ ordinary · Next: the agent harness and embeddings as features, then new
 content on the owner's call.
 
 - **The gallery's flaw is tabled** (the owner's call, while simpler work comes
-  first). `flawEnabled` in `worlds/debug/gallery/layout.puck` is off, so the
-  tube, its collars, its slab openings and its lights are not built; the route
+  first). No floor in `worlds/debug/gallery/layout.puck` enables the `flaw`
+  module, so the tube, its collars, its slab openings and its lights are not
+  built; the route
   (`flawRoute`: source at the tree's foot, a floor line down the nave, a
   switchback snaking up the south gallery's ceilings, a weave through the
   canopy, out at level 3's north doorway and back down the tree's walkway) and
-  its look stay authored. Picking it up: turn it on, judge it at night, and
-  take the owner's direction on the route.
+  its look stay authored. Picking it up: name `flaw` on a floor, judge it at
+  night, and take the owner's direction on the route.
+
+- [medium] **A scaled gallery's inhabitants and stations stand at full size.**
+  The building scales with one frame (`worlds/debug/gallery.md`, "One frame"),
+  but a body an inhabited placement spawns keeps its own size register, so the
+  holodeck's pieces and cards and the lift cars' bodies stay full size in
+  `gallery-half.puck` and `gallery-double.puck`, and the standard's game station
+  (`worlds/standard/game-station.puck`) places its table, glass, paints and
+  boards by world point and yaw with no scale, so the scaled roots leave the
+  stations out. The fix: a body an inhabited placement spawns under a scaled
+  frame starts its size register at that frame's scale (in
+  `WorldPopulation.ActivateInhabitant`, through the register `bodies.scale`
+  names), and the station takes a frame (`frame.puck`) in place of `at` and
+  `yaw`, its `gameStationPoint` becoming `frameAt`. The same record lists the
+  other two gaps: a distribution's spacing under a scaled parent
+  (`CreationStampLattice` places offsets unscaled) and an unauthored placement
+  policy's scale envelope, derived from rows' own scales rather than their
+  composed ones (`WorldPlacementPolicyDefaults.DeriveFrom`).
 
 - [medium] **`debug.go overlook` frames a featureless slab.** The overlook
   spawn (`valley.puck`, id `overlook`) sets the body 6 m in from the sector's
