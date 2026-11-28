@@ -2255,8 +2255,9 @@ through `puckCountFragmentWork`, a wave sum over the wave's lanes that are not h
 the first of them. Both return before any wave or atomic work when the pass's row is
 `GpuKernelCounters.DisabledRow`, which the node records for every counting pass while no reading
 demands the counts (`ShaderPipelineRenderNode.DemandKernelCounting`). Every generated include
-declares those functions and `puckCountDetail`, which adds an active invocation's
-work to its named row. An interface declaring no work counters
+declares those functions, `puckCountDetail`, which adds an active invocation's
+work to its named row, and `puckCountShading`, which adds a wave's authored shade
+program operations and cached environment lookups. An interface declaring no work counters
 declares them empty. A kernel therefore counts unguarded: a package's kernel
 that a document pass compiles by naming its source, such as `place` or a source
 conversion, reads the declarations the loader generates for the document's
@@ -2266,7 +2267,7 @@ counts one clear, one copy and three buffer barriers outside every pass: the
 clear before the compute and fragment stages that add, those stages before the
 copy, and the copy before the host's read. The ledger adds each row's
 kernel kinds, including `gpu.sky.evaluations`, `gpu.sky.hashes` and
-`gpu.sky.texture-loads`, to its pass once the submission
+`gpu.sky.texture-loads`, `gpu.shade.operations` and `gpu.environment.lookups`, to its pass once the submission
 completes. What the
 node does between submissions to install or rebuild a graph, the sets it
 writes and the pass blocks it sends to every frame slot, counts in no

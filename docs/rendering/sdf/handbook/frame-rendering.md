@@ -1959,7 +1959,7 @@ wave sums its lanes' counts, a fragment stage's over the lanes that are not
 helper lanes, and adds them with one atomic into the pass's row of the node's
 kernel counters, which the node clears ahead of the view's first pass and
 copies to the frame slot's readback behind its last; the counts join the pass's
-line once the submission completes, as `march.steps` and `texels.written`. The
+line once the submission completes, as `march.steps`, `texels.written`, `shade.operations` and `environment.lookups`. The
 bake samples in floats, so these counts are per backend deterministic. The clear, the copy and their
 three barriers (after the clear, before the copy, and from the copy to the host)
 count outside every pass. A pass the frame skips, such as a

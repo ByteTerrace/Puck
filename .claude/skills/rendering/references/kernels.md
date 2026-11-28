@@ -126,8 +126,8 @@ then `sdf-sky-environment-reduce.comp`) in passes of its own, and with them the
 screen reduction (`sdf-screen-emission.comp`, one group per acquired screen
 image) that direct screen lights read as `sdfScreenLights`. An upload
 skips a pass it has no work for. Every pass of the view counts its own march steps
-(`sdfWorkSteps`: each field evaluation of a bake sample, and each bounded
-volume sample) and the pixels it writes an output for (`sdfWorkTexels`: set by
+(`sdfWorkSteps`: each field evaluation of a bake sample, each bounded
+volume sample and each reflection ray step) and the pixels it writes an output for (`sdfWorkTexels`: set by
 the record and output writes; a raster pass one per fragment)
 into its node's kernel counters through the generated `puckCountWork` (one
 atomic a thread group into the row `workCounterRow` names, `GpuKernelCounters`,
@@ -145,13 +145,20 @@ it runs as background GPU work with counters of its own that nothing reads
 back, so no view's node counts its steps or shapes (its done line counts its
 samples and taps). The
 sky and composite passes also count `sky.evaluations`, `sky.hashes` and
-`sky.texture-loads` into their named layer rows through `puckCountDetail`, and
-shading's sky lookups (`shade/sdf-sky-lighting.hlsli`) add theirs to the pass row
-through `puckCountSky`. A kernel counts only through these generated functions and
+`sky.texture-loads` into their named layer rows through `puckCountDetail`. The
+shading passes (views, glass, and the reflection pass's air in-scatter) count what
+their lanes did into statics and add them once a wave through `puckCountShading`:
+`shade.operations` (`sdfWorkShadeOperations`, each value an authored shade
+program's generated code or interpreter executed, never a march step) and
+`environment.lookups` (`sdfWorkEnvironmentLookups`, each read of the cached
+environment in `shade/sdf-sky-lighting.hlsli`, which are no sky evaluations). A kernel
+that includes the sky lighting reads and shade interpreter must flush both
+statics, since a lane's count that no pass adds is lost without notice. A kernel counts only through these generated functions and
 never scales `workCounterRow` itself: the disabled row's words wrap to indices just
 below the counter buffer, a write Direct3D 12 drops and Vulkan loses the device on,
 so every add to the pass row passes `puckAddRowWork`, which tests the row first. A
-new counting site adds to `sdfWorkSteps` beside the evaluation it counts. The
+new counting site adds to the static of its own kind (`sdfWorkSteps` only for a
+spatial step) beside the work it counts. The
 runtime declares a view unchanged when nothing it renders from moved
 (`SdfWorldResidency.IsUnchanged`, `RenderGraphFrame.Unchanged`) and records none
 of its passes. The upload and the view's passes, in order:

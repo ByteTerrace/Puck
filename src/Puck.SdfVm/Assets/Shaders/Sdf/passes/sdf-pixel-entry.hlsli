@@ -104,6 +104,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     puckCountShapes(sdfWorkShapes, sdfWorkGradients);
 #if !defined(SDF_SURFACE_PASS) && !defined(SDF_VIEWS_FILTER_PASS)
     puckCountLights(sdfWorkLights, sdfWorkFaceLights);
+    puckCountShading(sdfWorkShadeOperations, sdfWorkEnvironmentLookups);
 #endif
 }
 

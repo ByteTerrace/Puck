@@ -100,14 +100,32 @@ float3 sdfMeshIndirectSeen(SdfMeshProbes probes, float3 normal) {
     }
     return sdfMeshIndirectUnanswered(normal);
 }
-// The environment a surface the volume has measured nothing about reflects: the environment as far as the camera sample
-// sees the sky open, and its surroundings for the rest; the environment whole before the sample's first reading, as the
-// diffuse light reads the open sky then (sdfMeshIndirectUnanswered).
-float3 sdfMeshReflectionUnanswered(float3 direction, float3 environment) {
+// A reflection under the irradiance volume split by what it takes of the environment: `sky * environment + added`, where
+// `sky` is the share of the environment it keeps and `added` the light of the surroundings the volume measured. A reader
+// that knows `sky` is zero reads no environment at all.
+struct SdfReflectionShare {
+    float sky;
+    float3 added;
+};
+// The share a surface the volume has measured nothing about keeps: the environment as far as the camera sample sees the
+// sky open, and its surroundings for the rest; the environment whole before the sample's first reading, as the diffuse
+// light reads the open sky then (sdfMeshIndirectUnanswered).
+SdfReflectionShare sdfMeshReflectionUnansweredShare() {
+    SdfReflectionShare share;
+
     if (passGroup.meterLight[0].w <= 0.0) {
-        return environment;
+        share.sky = 1.0;
+        share.added = float3(0.0, 0.0, 0.0);
+        return share;
     }
-    return ((environment * saturate(passGroup.airLight)) + sdfMeshCameraSurroundings());
+    share.sky = saturate(passGroup.airLight);
+    share.added = sdfMeshCameraSurroundings();
+    return share;
+}
+float3 sdfMeshReflectionUnanswered(float3 direction, float3 environment) {
+    SdfReflectionShare share = sdfMeshReflectionUnansweredShare();
+
+    return ((environment * share.sky) + share.added);
 }
 // The environment a surface reflects along a mirror direction under the volume (sdfMeshReflection), or where it has
 // measured nothing the unanswered environment.

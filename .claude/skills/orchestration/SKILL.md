@@ -1205,7 +1205,7 @@ not "religious"):
 
 **A lane's caveat is not a landing condition the lead accepts on the owner's behalf.** When a hand-back names a known failure mode the change introduces (a rate limit, a cliff, a race), the lead fixes it in the same wave or holds the change, rather than landing it with the caveat filed. A caveat that would break a bar or the hosted world under ordinary operation is a defect.
 
-**A pushed commit is never amended.** Force-pushing is an owner-only action on every branch, the integration branch included. A fix to a commit already pushed goes in a new commit. The lead amended and force-pushed `lead/rendering` once to fold in regenerated schemas; no one had fetched the replaced commit, so nothing was lost, but it broke the rule.
+**A pushed commit is never amended.** Force-pushing is an owner-only action on every branch, the integration branch included. A fix to a commit already pushed goes in a new commit. The lead amended and force-pushed the rendering integration branch once to fold in regenerated schemas; no one had fetched the replaced commit, so nothing was lost, but it broke the rule.
 
 **A hotfix onto `main` builds the whole solution before it is pushed.** A fix cherry-picked from the integration branch onto the shipped candidate can name a helper only the integration branch has, in a test as easily as in product code. CI's payload build compiles every project, tests included, and a missing member costs a whole release run. Build `Puck.slnx` in Release in the hotfix worktree, not only the projects the fix touched.
 

@@ -489,4 +489,5 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 lane : SV_GroupThreadID, uint3
     }
     // A cell whose mirror ray it marched counts as a texel, and each read of the pyramid as a step.
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
+    puckCountShading(0u, sdfWorkEnvironmentLookups);
 }

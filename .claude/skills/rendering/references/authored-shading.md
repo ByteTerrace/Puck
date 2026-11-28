@@ -152,7 +152,8 @@ authored roughness drives both its light response and its optical frost and
 environment. The standard water program keeps the underlying glass smooth while
 its reveal supplies foam, selected by the `flow` template's structural glass argument.
 The frame operations share the old layers' slot and transformed-static-draw
-conventions. Each executed instruction increments `sdfWorkSteps`.
+conventions. Each executed instruction increments `sdfWorkShadeOperations`, which counts as
+`gpu.shade.operations`, never as `gpu.march.steps`.
 
 The standard programs live in `worlds/standard/shading.puck`, called by the
 foliage, water and styles libraries and the debug world's exhibits; the terrain

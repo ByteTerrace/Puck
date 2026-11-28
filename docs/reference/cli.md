@@ -2419,11 +2419,14 @@ different sources, a note on standard error says so.
 
 ### Judging a change by counted work
 
-The SDF view counts the bake's field evaluations as march steps
-(`gpu.march.steps`), primitive distance evaluations (`gpu.shapes.evaluated`)
+The SDF view counts the bake's field evaluations and each reflection ray step as
+march steps (`gpu.march.steps`), primitive distance evaluations (`gpu.shapes.evaluated`)
 and primitive gradient evaluations (`gpu.shapes.gradients`), and every pass's
 texels written (`gpu.texels.written`); a settled frame bakes nothing, so its
-counts are the raster passes' and the shading passes' texels. To judge a change, collect a report on the same device before and after
+counts are the raster passes' and the shading passes' texels. The shading passes also
+count the values an authored shade program executed (`gpu.shade.operations`) and the
+reads of the cached environment (`gpu.environment.lookups`), neither of which is a
+march step. To judge a change, collect a report on the same device before and after
 it and compare the two with `puck counters compare`; each moved count is named
 with its backend, class, kind, pass, detail and node. Nothing records counts in
 the repository.

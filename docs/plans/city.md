@@ -167,7 +167,7 @@ gallery shows the city's time, not the valley's.
 
 ## Stages and acceptance
 
-Each stage lands a running city on `partner/city`, merged by the lead.
+Each stage lands a running city on the partner's city branch, merged by the lead.
 Acceptance is read from the running World; frame times name the device,
 size and topology.
 

@@ -289,14 +289,23 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             // every angle, so matte paint reflects little of the sky even at grazing) and local occlusion; only as far as
             // the irradiance volume sees the sky open that way, and the surroundings' light where not. Where the
             // reflection pass's mirror ray reached something on screen, or the open sky, that answers instead
-            // (sdfViewsScreenReflection).
+            // (sdfViewsScreenReflection). What the reflection takes of the sky is known from the records and the probes
+            // before the sky is read, and a reflection that takes none of it (an interior whose probes see no sky and
+            // whose rays found no open sky) never evaluates the sky.
             float3 environmentTerm = 0.0;
             float3 reflectionTerm = 0.0;
 #if !defined(SDF_VIEWS_OMIT_REFLECTION)
             if ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0)) {
                 float3 reflectDirection = reflect(p.rayDirection, normal);
-                float3 sky = worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness);
-                float3 environment = sdfViewsScreenReflection(p, surfacePoint, s.normal, s.t, sky, sdfViewsReflectionSeen(probes, reflectDirection, sky));
+                SdfViewsScreenRead screenRead = sdfViewsScreenRead(p, surfacePoint, s.normal, s.t);
+                SdfReflectionShare reflectionShare = sdfViewsReflectionShare(probes, reflectDirection);
+                float3 sky = 0.0;
+
+                if (sdfViewsReflectionReadsSky(screenRead, reflectionShare)) {
+                    sky = worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness);
+                }
+
+                float3 environment = sdfViewsScreenReflection(screenRead, reflectionShare, sky);
 
                 reflectionTerm = environment;
                 environmentTerm = ((environment * specularAlbedo) * ambientLight);

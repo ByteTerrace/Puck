@@ -439,7 +439,7 @@ pass's cost. Then the time:
    environment node writes the reflected sky, its panels included, at a few
    roughness levels; views takes one lookup. Read first what
    `SDF_VIEWS_OMIT_REFLECTION` removes, since the switch also compiles out the
-   slots' reflection read (`sdfViewsReflectionSeen`, up to twenty words of
+   slots' reflection read (`sdfViewsReflectionShare`, up to twenty words of
    the probe records) and the lobe's directional albedo. The environment
    itself (`worldEnvironmentReflection`) reads eight words of the map, the
    nine coefficient records and each sky layer's kind and visibility for the

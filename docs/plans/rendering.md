@@ -881,7 +881,7 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
      each bin over its list, a sample a lane. `SdfShadeDispatch` prices a job by
      its samples. A tile's samples stay together, so the records a job reads
      keep their locality. Check: samples listed equal the view's shading hits,
-     the views pass's `march.steps` a sample stands, the groups dispatched are
+     the views pass's `shade.operations` a sample stands, the groups dispatched are
      the samples over 64 rounded up, and the route's views means fall by about
      the share of lanes that shaded nothing.
   2. **Make a coarser shading rate pay, or leave it off.** Read on the RTX 4070

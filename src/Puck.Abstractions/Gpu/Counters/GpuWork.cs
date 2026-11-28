@@ -52,7 +52,9 @@ public static partial class GpuWork {
     internal const int MeshHitsRejectedColumn = (IndirectDrawsColumn + 1);
     internal const int LightsVisitedColumn = (MeshHitsRejectedColumn + 1);
     internal const int FaceLightsVisitedColumn = (LightsVisitedColumn + 1);
-    internal const int SubmissionColumnCount = (FaceLightsVisitedColumn + 1);
+    internal const int ShadeOperationsColumn = (FaceLightsVisitedColumn + 1);
+    internal const int EnvironmentLookupsColumn = (ShadeOperationsColumn + 1);
+    internal const int SubmissionColumnCount = (EnvironmentLookupsColumn + 1);
     internal const int TexelsWrittenColumn = 16;
     internal const int TimestampPoolsCreatedIndex = 6;
     internal const int WorkDetailsRefusedIndex = 7;
@@ -106,17 +108,19 @@ public static partial class GpuWork {
     /// <summary>Gets the kind counting the bytes each buffer-range copy transfers, including readback and
     /// device-local history copies. Image copies have no buffer-byte count; host writes have their own kind.</summary>
     public static WorkKind BufferCopyBytes { get; } = new(name: "gpu.copies.buffer-bytes", unit: "bytes", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting the field evaluations a pass's kernels make: each sample and gradient tap of the SDF
-    /// bake and each sample of a bounded volume. The kernels count it on the GPU, so it is per-backend-deterministic: the
-    /// samples run in floats.</summary>
+    /// <summary>Gets the kind counting the spatial steps a pass's kernels march: each field sample and gradient tap of the
+    /// SDF bake, each sample of a bounded volume, and each step of a mirror ray through the reflection pyramid. A shade
+    /// program's value executions are not steps (<see cref="ShadeOperations"/>). The kernels count it on the GPU, so it is
+    /// per-backend-deterministic: the samples run in floats.</summary>
     public static WorkKind MarchSteps { get; } = new(name: "gpu.march.steps", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting the pixels a pass's kernels write an output for: an image texel, or a pixel's
     /// visibility record. The kernels count it on the GPU, so it is per-backend-deterministic, as
     /// <see cref="MarchSteps"/> is.</summary>
     public static WorkKind TexelsWritten { get; } = new(name: "gpu.texels.written", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting sky layer evaluations, including analytic point layers, field fallbacks and
-    /// the gradient used by surface fog. Each evaluated layer counts once per invocation. Coverage comes from the
-    /// march, so it is per-backend-deterministic, as <see cref="MarchSteps"/> is.</summary>
+    /// the gradient used by surface fog. Each evaluated layer counts once per invocation. A read of the residency's
+    /// cached environment is no evaluation (<see cref="EnvironmentLookups"/>). Coverage comes from the march, so it is
+    /// per-backend-deterministic, as <see cref="MarchSteps"/> is.</summary>
     public static WorkKind SkyEvaluations { get; } = new(name: "gpu.sky.evaluations", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets primitive distance and analytic derivative evaluations, including winner searches and each finite-difference tap.</summary>
     public static WorkKind ShapesEvaluated { get; } = new(name: "gpu.shapes.evaluated", unit: "count", workClass: WorkClass.PerBackendDeterministic);
@@ -126,6 +130,16 @@ public static partial class GpuWork {
     public static WorkKind SkyHashes { get; } = new(name: "gpu.sky.hashes", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting texture loads of sky field runs, including invalid base taps.</summary>
     public static WorkKind SkyTextureLoads { get; } = new(name: "gpu.sky.texture-loads", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the kind counting the values an authored shade program's kernels executed: each generated value of a
+    /// specialized program and each instruction of the interpreter, once for every invocation that runs it. It is the
+    /// shading's work, which a pixel pays for each program phase it runs, and no spatial march. The kernels count it on the
+    /// GPU, so it is per-backend-deterministic.</summary>
+    public static WorkKind ShadeOperations { get; } = new(name: "gpu.shade.operations", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the kind counting the reads of the residency's cached environment a shading lane made: each diffuse
+    /// irradiance evaluation and each radiance map lookup (four taps of the octahedral map). They stand beside
+    /// <see cref="SkyEvaluations"/>, which counts the work that built the map. The kernels count it on the GPU, so it is
+    /// per-backend-deterministic.</summary>
+    public static WorkKind EnvironmentLookups { get; } = new(name: "gpu.environment.lookups", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting the hits a pass's kernels rejected at the mesh hit door: a draw and triangle read
     /// from a target or a record that name no draw the frame stages, or no triangle of its mesh, resolved as a miss
     /// instead. Zero on a correct run. The kernels count it on the GPU, so it is per-backend-deterministic.</summary>
@@ -173,8 +187,8 @@ public static partial class GpuWork {
     /// <summary>Gets the kinds a pass's kernels count on the GPU, in the order a counter row holds them
     /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, <see cref="TexelsWritten"/>, then
     /// <see cref="SkyEvaluations"/>, <see cref="SkyHashes"/> and <see cref="SkyTextureLoads"/>, then <see cref="ShapesEvaluated"/>,
-    /// <see cref="ShapeGradients"/>, <see cref="MeshHitsRejected"/>, <see cref="LightsVisited"/> and
-    /// <see cref="FaceLightsVisited"/>.</summary>
+    /// <see cref="ShapeGradients"/>, <see cref="MeshHitsRejected"/>, <see cref="LightsVisited"/>,
+    /// <see cref="FaceLightsVisited"/>, <see cref="ShadeOperations"/> and <see cref="EnvironmentLookups"/>.</summary>
     public static ReadOnlySpan<WorkKind> KernelKinds =>
         Order.Kernel;
     /// <summary>Gets the lifetime kinds, in the order a report lists them.</summary>
@@ -188,7 +202,7 @@ public static partial class GpuWork {
     // A nested holder initializes after every kind above, whatever order the members are declared in. Each array is
     // filled through the column constants, so a kind's index is its column by construction.
     private static class Order {
-        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, ShapesEvaluated, ShapeGradients, MeshHitsRejected, LightsVisited, FaceLightsVisited];
+        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, ShapesEvaluated, ShapeGradients, MeshHitsRejected, LightsVisited, FaceLightsVisited, ShadeOperations, EnvironmentLookups];
         internal static readonly WorkKind[] Lifetime = CreateLifetime();
         internal static readonly WorkKind[] Submission = CreateSubmission();
 
@@ -240,6 +254,8 @@ public static partial class GpuWork {
             kinds[MeshHitsRejectedColumn] = MeshHitsRejected;
             kinds[LightsVisitedColumn] = LightsVisited;
             kinds[FaceLightsVisitedColumn] = FaceLightsVisited;
+            kinds[ShadeOperationsColumn] = ShadeOperations;
+            kinds[EnvironmentLookupsColumn] = EnvironmentLookups;
 
             return kinds;
         }

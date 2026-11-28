@@ -158,6 +158,9 @@ public sealed class WorkCountingLawTests {
                 "gpu.draws.indirect",
                 "gpu.mesh-hits.rejected",
                 "gpu.lights.visited",
+                "gpu.lights.faces",
+                "gpu.shade.operations",
+                "gpu.environment.lookups",
             ],
             actual: GpuWork.SubmissionKinds.ToArray().Select(selector: kind => kind.Name)
         );
@@ -175,10 +178,11 @@ public sealed class WorkCountingLawTests {
             actual: GpuWork.LifetimeKinds.ToArray().Select(selector: kind => kind.Name)
         );
         Assert.Same(expected: GpuWork.Dispatches, actual: GpuWork.SubmissionKinds[0]);
-        Assert.Same(expected: GpuWork.FaceLightsVisited, actual: GpuWork.SubmissionKinds[^1]);
+        Assert.Same(expected: GpuWork.EnvironmentLookups, actual: GpuWork.SubmissionKinds[^1]);
         Assert.Equal(
             expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten, GpuWork.SkyEvaluations, GpuWork.SkyHashes, GpuWork.SkyTextureLoads,
-                GpuWork.ShapesEvaluated, GpuWork.ShapeGradients, GpuWork.MeshHitsRejected, GpuWork.LightsVisited, GpuWork.FaceLightsVisited],
+                GpuWork.ShapesEvaluated, GpuWork.ShapeGradients, GpuWork.MeshHitsRejected, GpuWork.LightsVisited, GpuWork.FaceLightsVisited,
+                GpuWork.ShadeOperations, GpuWork.EnvironmentLookups],
             actual: GpuWork.KernelKinds.ToArray()
         );
     }

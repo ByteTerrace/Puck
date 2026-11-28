@@ -626,11 +626,17 @@ float3 sdfViewsIndirectSeen(SdfMeshProbes probes, float3 normal) {
     }
     return sdfMeshIndirectUnanswered(normal);
 }
-float3 sdfViewsReflectionSeen(SdfMeshProbes probes, float3 direction, float3 environment) {
+// The reflection's split: the share of the environment the volume leaves visible along the direction, and the radiance it
+// adds. Where the volume measured nothing, the camera sample's.
+SdfReflectionShare sdfViewsReflectionShare(SdfMeshProbes probes, float3 direction) {
     if (sdfMeshAnswers(probes)) {
-        return ((environment * sdfViewsSkyShareAt(probes, direction)) + sdfViewsCubeAt(probes, SdfViewsProbeRadianceWord, direction));
+        SdfReflectionShare share;
+
+        share.sky = sdfViewsSkyShareAt(probes, direction);
+        share.added = sdfViewsCubeAt(probes, SdfViewsProbeRadianceWord, direction);
+        return share;
     }
-    return sdfMeshReflectionUnanswered(direction, environment);
+    return sdfMeshReflectionUnansweredShare();
 }
 #endif
 

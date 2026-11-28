@@ -76,7 +76,7 @@ lanes, [the release](#the-release), the
   wall that blocks it. Fewer agents also means fewer collisions: the last
   session lost three re-merges to lanes in the same files and hours to
   windowed admission waits with eight lanes holding memory.
-- **Where things stand** (`lead/rendering` at the session's end; all readings
+- **Where things stand** (the rendering integration branch at the session's end; all readings
   are attribution on a shared machine unless marked quiet):
   - **Released:** `0335a67b44` is live on Azure (admission open). The player
     channel is held: no mesh cache set exists for that build, and the player

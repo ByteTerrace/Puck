@@ -15,12 +15,23 @@ float3 worldSkyIrradiance(float3 normal) {
 }
 // The environment a lobe of a roughness reflects about a direction: the lighting-visible map there for a mirror, eased
 // toward the sky's cosine-weighted mean radiance about the direction (its irradiance over pi) as the lobe widens to
-// the hemisphere at full roughness, then the panels of the artistic reflection path.
+// the hemisphere at full roughness, then the panels of the artistic reflection path. The blend's endpoint that has no
+// weight (a mirror takes none of the irradiance, a fully rough lobe none of the map) is not read.
 float3 worldEnvironmentReflection(float3 direction, float roughness) {
     if (sdfSky[0].Reflection <= 0.0) {
         return 0.0.xxx;
     }
-    float3 result = lerp(sdfSkyMapRadiance(direction, 1u), (sdfSkyPhysicalIrradiance(direction) / 3.141592653589793), smoothstep(0.1, 0.8, roughness));
+    float lobe = smoothstep(0.1, 0.8, roughness);
+    float3 result;
+
+    [branch]
+    if (lobe <= 0.0) {
+        result = sdfSkyMapRadiance(direction, 1u);
+    } else if (lobe >= 1.0) {
+        result = (sdfSkyPhysicalIrradiance(direction) / 3.141592653589793);
+    } else {
+        result = lerp(sdfSkyMapRadiance(direction, 1u), (sdfSkyPhysicalIrradiance(direction) / 3.141592653589793), lobe);
+    }
     float3 sky = sdfSkyFrameDirection(direction);
     [loop] for (uint index = 0u; index < sdfSky[0].LayerCount; index++) {
         SdfSkyLayer layer = sdfSkyLayers[index];
