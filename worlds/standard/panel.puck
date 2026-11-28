@@ -1,0 +1,369 @@
+// A control panel: a console on a pedestal whose glass lists a set of entries, one of them chosen, the way a display
+// station's console browses its catalog (architecture.puck's console language: the ochre elbow and bar, cream and teal
+// buttons, the chosen row lit amber). A library: it hands its importers the panel's creations, placements, state, rules,
+// cameras, spawn points and terminals as templates and functions, and emits no document. What a panel's choice does is
+// its importer's: a portal routes by it (portal.puck), a lift calls its car by it.
+//
+// A panel is `{ id, title, entries, choice, site, x, y, z, yaw, parent }`: `id` names its placements (`<id>-panel`, the
+// stand, and `<id>-panel-screen`, its glass) and keys its cells; `entries` is its list, each `{ title, note }`; `choice`
+// the entry it boots on; `[x, y, z]` its foot in the frame of `parent` (a placement id, or null for the world), which
+// stands at the world point `site`; and `yaw` turns its glass's front the way a placement's yaw turns it (0 faces -z, 180
+// faces +z). Its glass's points are given facing +Z, as architecture.puck's pieces are, and placed with `panelWorld`.
+//
+// A player uses a panel as a terminal (contexts/terminal.puck): within its reach the context button engages it, the
+// seat's camera eases to the panel's desk view, and a tap on a row of its list chooses that entry. PREV and NEXT turn
+// the list a page when it holds more entries than a page shows; each page is a screen creation of its own that the glass
+// responds with, so a page's titles are paints and only the inks follow state. A world gathers every panel's terminals
+// with its other terminals into its one `terminalPlay` (`panelTerminals`), since that template is a world's singleton.
+//
+// The state, keyed by panel (`panelState` declares it once for all of a world's panels):
+//
+//   panelChoice   the chosen entry's index: the lit row, and what an importer reads (a door's routes read it whole)
+//   panelPick     the last entry a tap chose, plus one: a mailbox an importer that acts on every tap clears to 0
+//   panelPage     the page the list shows
+//   panelTitle    the chosen entry's title and note, which the glass's detail shows
+//   panelNote
+//   panelShownAt  the choice the title, note and inks were last written for
+//
+// and, keyed `<panel>-<entry>`, `panelInk` (each row's ink, the chosen one lit) and `panelCopyTitle` and
+// `panelCopyNote`, each entry's copy, which the detail is written from. A rule or a console write to `panelChoice`
+// moves the glass as a tap does.
+import "architecture"
+import "contexts/terminal"
+
+// The console's tilt back from vertical, degrees, and the glass's half extents across and up its face, metres.
+let panelTilt = 30
+let panelGlassHalf = [0.5, 0.3]
+// The glass's centre over the foot, facing +Z: its height and how far forward of the stand's middle it stands.
+let panelGlassAt = [0, 1.12, 0.12]
+let panelGlassDepth = 0.008
+// How many rows a page of the list shows.
+let panelRows = 8
+
+// The glass's rectangles, `x0..x1` across and `y0..y1` up from its centre: the elbow's column and bar, the page buttons
+// down the column, the page reading at its foot, the list, and the chosen entry's detail beside it.
+let panelColumn = { x0: -0.48, x1: -0.39 }
+let panelBar = { y0: 0.235, y1: 0.285 }
+let panelPrev = { x0: panelColumn.x0, x1: panelColumn.x1, y0: 0.03, y1: 0.12 }
+let panelNext = { x0: panelColumn.x0, x1: panelColumn.x1, y0: -0.07, y1: 0.02 }
+let panelFoot = { x0: panelColumn.x0, x1: panelColumn.x1, y0: -0.285, y1: -0.15 }
+let panelList = { x0: -0.355, x1: 0.115, y0: -0.265, y1: 0.205 }
+let panelDetail = { x0: 0.165, x1: 0.48 }
+let panelRowPitch = ((panelList.y1 - panelList.y0) / panelRows)
+let panelListEm = 0.03
+
+// The glass's outward normal and up, facing +Z.
+let panelNormal = [0, sine((panelTilt * 0.017453293)), cosine((panelTilt * 0.017453293))]
+let panelUp = [0, cosine((panelTilt * 0.017453293)), (0 - sine((panelTilt * 0.017453293)))]
+
+// How many pages a panel's list takes.
+function panelPages(panel) = floor((((length(panel.entries) + panelRows) - 1) / panelRows))
+// A point given facing +Z (x to the right of a player before the thing, y up, z toward that player), in the parent frame
+// and in the world of any row standing at `[x, y, z]` turned `yaw` in a frame at the world point `site` (a panel, a
+// portal): a creation faces its front (-Z), so the row's yaw turns a facing-+Z point a half turn more.
+function facingPoint(row, p) = ([row.x, row.y, row.z] + rotatePoint(rotate([0, 1, 0], (row.yaw + 180)), p))
+function facingWorld(row, p) = (row.site + facingPoint(row, p))
+// A point on the glass, `across` and `up` its face and `out` along its normal, facing +Z.
+function panelOnGlass(across, up, out = 0) = (panelGlassAt + ([across, 0, 0] + (panelUp * up) + (panelNormal * out)))
+// The turn that carries a paint's +X across the glass to a player's right, its +Y up the face and its +Z out of it, in
+// the world (architecture.puck's faceFill and faceText take it).
+function panelFaceTurn(panel) = compose(rotate([0, 1, 0], (panel.yaw + 180)), rotate([1, 0, 0], (0 - panelTilt)))
+
+// A filled rectangle and a run of lettering on a panel's glass, in the world's frame, as a static creation's paints stand.
+function panelFill(panel, rect, color, round = 0) = faceFill(
+  facingWorld(panel, panelOnGlass(faceMid(rect)[0], faceMid(rect)[1], panelGlassDepth)),
+  panelFaceTurn(panel),
+  faceHalf(rect),
+  color,
+  round,
+  0.06
+)
+function panelText(panel, rect, template, ink, em, align, wrap = false, markup = false, spacing = 1) = faceText(
+  facingWorld(panel, panelOnGlass(faceMid(rect)[0], faceMid(rect)[1], panelGlassDepth)),
+  panelFaceTurn(panel),
+  faceHalf(rect),
+  template,
+  ink,
+  em,
+  align,
+  wrap,
+  markup,
+  spacing,
+  0.06
+)
+// A button's face less a margin, the box its label fits.
+function panelInset(rect) = { x0: (rect.x0 + 0.01), x1: (rect.x1 - 0.01), y0: (rect.y0 + 0.008), y1: (rect.y1 - 0.008) }
+
+// The rows of page `page`: each entry's title in its ink, read from the entry's `panelInk` cell.
+function panelPageEntries(panel, page) = filter(
+  map(panel.entries, (entry, i) => { index: i, title: entry.title }),
+  entry => ((entry.index >= (page * panelRows)) and (entry.index < ((page + 1) * panelRows)))
+)
+function panelLines(panel, page) = reduce(
+  panelPageEntries(panel, page),
+  "",
+  (text, entry) => ((text == "") ? panelLine(panel, entry) : $"{text}\n{panelLine(panel, entry)}")
+)
+function panelLine(panel, entry) = $"[color={{state.panelInk.{panel.id}-{entry.index}}}]{entry.title}[/color]"
+
+// What page `page` of a panel's glass shows: the elbow and bar with the panel's title in its cap, PREV and NEXT down the
+// column and the page at its foot, the page's rows, a divider, and the chosen entry's title and note.
+function panelPaints(panel, page) = [
+  panelFill(panel, { x0: panelColumn.x0, x1: panelColumn.x1, y0: 0.15, y1: panelBar.y1 }, consoleLook.frame, 0.04)
+  panelFill(panel, { x0: (panelColumn.x0 + 0.04), x1: 0.1, y0: panelBar.y0, y1: panelBar.y1 }, consoleLook.frame)
+  panelFill(panel, { x0: panelColumn.x1, x1: (panelColumn.x1 + 0.04), y0: (panelBar.y0 - 0.04), y1: panelBar.y0 }, consoleLook.frame)
+  panelFill(panel, { x0: panelColumn.x1, x1: (panelColumn.x1 + 0.16), y0: (panelBar.y0 - 0.16), y1: panelBar.y0 }, consoleLook.field, 0.04)
+  panelFill(panel, { x0: 0.13, x1: 0.48, y0: panelBar.y0, y1: panelBar.y1 }, consoleLook.frame, 0.025)
+  panelText(panel, { x0: 0.15, x1: 0.46, y0: panelBar.y0, y1: panelBar.y1 }, panel.title, consoleLook.ink, 0.03, "right")
+  panelFill(panel, panelPrev, consoleLook.cream, 0.016)
+  panelFill(panel, panelNext, consoleLook.teal, 0.016)
+  panelText(panel, panelInset(panelPrev), "PREV", consoleLook.ink, 0.022, "right")
+  panelText(panel, panelInset(panelNext), "NEXT", consoleLook.ink, 0.022, "right")
+  panelFill(panel, panelFoot, consoleLook.terracotta, 0.03)
+  panelText(panel, panelInset(panelFoot), $"{page + 1}/{panelPages(panel)}", consoleLook.ink, 0.024, "right")
+  panelText(
+    panel,
+    panelList,
+    panelLines(panel, page),
+    consoleLook.dim,
+    panelListEm,
+    "left",
+    markup: true,
+    spacing: (panelRowPitch / (panelListEm * faceFontLine))
+  )
+  panelFill(panel, { x0: 0.135, x1: 0.145, y0: panelList.y0, y1: panelList.y1 }, consoleLook.frame, 0.005)
+  panelText(panel, { x0: panelDetail.x0, x1: panelDetail.x1, y0: 0.175, y1: 0.205 }, "CHOSEN", consoleLook.quiet, 0.02, "left")
+  panelText(panel, { x0: panelDetail.x0, x1: panelDetail.x1, y0: 0.095, y1: 0.17 }, $"{{state.panelTitle.{panel.id}}}", consoleLook.lit, 0.042, "left")
+  panelText(
+    panel,
+    { x0: panelDetail.x0, x1: panelDetail.x1, y0: -0.265, y1: 0.085 },
+    $"{{state.panelNote.{panel.id}}}",
+    consoleLook.dim,
+    0.022,
+    "left",
+    wrap: true
+  )
+  panelFill(panel, { x0: (panelColumn.x1 + 0.03), x1: 0.48, y0: -0.29, y1: -0.278 }, consoleLook.frame, 0.006)
+]
+
+// The pointer surface a panel's glass carries, in its placement's frame (the creation's: x and z turned from the facing-+Z
+// points), with the list and the page buttons as its regions.
+let panelPointer = {
+  origin: (panelOnGlass(0, 0, panelGlassDepth) * [-1, 1, -1])
+  right [-1, 0, 0]
+  up: (panelUp * [-1, 1, -1])
+  halfWidth: panelGlassHalf[0]
+  halfHeight: panelGlassHalf[1]
+  regions [
+    faceRegion("list", panelList, panelGlassHalf, panelRows)
+    faceRegion("prev", panelPrev, panelGlassHalf)
+    faceRegion("next", panelNext, panelGlassHalf)
+  ]
+}
+
+// The stand every panel shares, facing its front (-Z): a deep-teal foot, an ochre column, and a thick cream bezel tilted
+// back round the glass, with a brass lip along its foot. Its points are given facing +Z and carried in with `* [-1, 1, -1]`.
+template panelStand() {
+  name: "panel-stand"
+  schema: "puck.creation.v2"
+  palette: plinthPalette
+  shape Box "foot" {
+    material: plinthTeal
+    position: ([0, 0.05, 0] * [-1, 1, -1])
+    scale [0.34, 0.05, 0.26]
+    chamfer: 0.02
+  }
+  shape Box "column" {
+    material: plinthOchre
+    position: ([0, 0.52, -0.04] * [-1, 1, -1])
+    scale [0.13, 0.46, 0.09]
+    rounding: 0.02
+  }
+  shape Box "bezel" {
+    material: plinthCream
+    position: (panelOnGlass(0, 0, -0.035) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), rotate([1, 0, 0], (0 - panelTilt)))
+    scale [(panelGlassHalf[0] + 0.05), (panelGlassHalf[1] + 0.05), 0.035]
+    rounding: 0.025
+  }
+  shape Box "lip" {
+    material: plinthBrass
+    position: (panelOnGlass(0, (0 - (panelGlassHalf[1] + 0.05)), -0.01) * [-1, 1, -1])
+    rotation: compose(rotate([0, 1, 0], 180), rotate([1, 0, 0], (0 - panelTilt)))
+    scale [(panelGlassHalf[0] + 0.03), 0.012, 0.03]
+    rounding: 0.008
+  }
+}
+
+// The creations every panel of `panels` needs: the shared stand, and a glass for each page of each panel's list, its paints
+// placed at the panel in the world.
+template panelPrototypes(panels) {
+  prototype "panel-stand" {
+    document {
+      panelStand()
+    }
+  }
+  for panel in panels {
+    for page in range(0, panelPages(panel)) {
+      prototype $"{panel.id}-panel-{page}" {
+        document {
+          name: $"{panel.id}-panel-{page}"
+          schema: "puck.creation.v2"
+          palette [consoleGlass with { paints: panelPaints(panel, page) }]
+          shape Box "glass" {
+            material: 0
+            position: (panelOnGlass(0, 0, 0) * [-1, 1, -1])
+            rotation: compose(rotate([0, 1, 0], 180), rotate([1, 0, 0], (0 - panelTilt)))
+            scale [panelGlassHalf[0], panelGlassHalf[1], panelGlassDepth]
+            rounding: 0.006
+            lightsAs: Face
+          }
+        }
+      }
+    }
+  }
+}
+
+// Each panel's stand, solid, and its glass, which carries the pointer surface and shows the page its `panelPage` cell names.
+template panelPlacements(panels) {
+  for panel in panels {
+    placement $"{panel.id}-panel" {
+      prototype: "panel-stand"
+      if panel.parent != null {
+        parent: panel.parent
+      }
+      position: facingPoint(panel, [0, 0, 0])
+      yawDegrees: panel.yaw
+      solid
+    }
+    placement $"{panel.id}-panel-screen" {
+      prototype: $"{panel.id}-panel-0"
+      if panel.parent != null {
+        parent: panel.parent
+      }
+      position: facingPoint(panel, [0, 0, 0])
+      yawDegrees: panel.yaw
+      pointer: panelPointer
+      if panelPages(panel) > 1 {
+        respond: map(range(1, panelPages(panel)), page => {
+          when: state(state: panelPage, key: panel.id, comparison: Equal, value: page)
+          prototypeId: $"{panel.id}-panel-{page}"
+        })
+      }
+    }
+  }
+}
+
+// One cell per panel of `panels`, keyed by its id and seeded from `values` (a value a panel, in `panels`' order), and
+// one per entry of each, keyed `<panel>-<entry>` and seeded from `values` (a value an entry, panel after panel).
+template panelCells(panels, name, values, kind = "Int") {
+  row {
+    name: name
+    kind: kind
+    capacity: length(panels)
+    cells: map(range(0, length(panels)), index => { key: panels[index].id, value: values[index] })
+  }
+}
+template panelEntryCells(panels, name, values, kind = "Text") {
+  let keys = flatMap(panels, panel => map(range(0, length(panel.entries)), i => $"{panel.id}-{i}"))
+  row {
+    name: name
+    kind: kind
+    capacity: length(keys)
+    cells: map(range(0, length(keys)), index => { key: keys[index], value: values[index] })
+  }
+}
+
+// Every panel's state, for a world's `state.world`: the cells above, seeded so each glass boots on its panel's choice.
+template panelState(panels) {
+  panelCells(panels: panels, name: "panelChoice", values: map(panels, panel => panel.choice))
+  panelCells(panels: panels, name: "panelShownAt", values: map(panels, panel => panel.choice))
+  panelCells(panels: panels, name: "panelPick", values: map(panels, panel => 0))
+  panelCells(panels: panels, name: "panelPage", values: map(panels, panel => floor((panel.choice / panelRows))))
+  panelCells(panels: panels, name: "panelTitle", kind: "Text", values: map(panels, panel => panel.entries[panel.choice].title))
+  panelCells(panels: panels, name: "panelNote", kind: "Text", values: map(panels, panel => panel.entries[panel.choice].note))
+  panelEntryCells(
+    panels: panels,
+    name: "panelInk",
+    values: flatMap(panels, panel => map(range(0, length(panel.entries)), i => ((i == panel.choice) ? consoleLook.lit : consoleLook.dim)))
+  )
+  panelEntryCells(panels: panels, name: "panelCopyTitle", values: flatMap(panels, panel => map(panel.entries, entry => entry.title)))
+  panelEntryCells(panels: panels, name: "panelCopyNote", values: flatMap(panels, panel => map(panel.entries, entry => entry.note)))
+  row {
+    name: "panelInks"
+    kind: Text
+    capacity: 2
+    cells [{ key: "lit", value: consoleLook.lit }, { key: "dim", value: consoleLook.dim }]
+  }
+}
+
+// Each panel's rules. Its glass's rules sweep the contacts on it (a finger, a pen, a click: one door each): a lift on a
+// row chooses that row's entry and posts it to the mailbox, and a lift on PREV or NEXT turns the list a page. However the
+// choice moved (a tap, a rule, a console write), the detail and the inks follow it, written once a change: the rule's
+// write of `panelShownAt` closes its own gate.
+template panelRules(panels) {
+  for panel in panels {
+    let key = panel.id
+    let count = length(panel.entries)
+    let last = (panelPages(panel) - 1)
+    rule $"panel-{key}-touch" {
+      forEach: contacts($"{key}-panel-screen")
+      local chosen = panelPage[key] * panelRows + contact(each, row, list)
+      when contact(each, phase) == 3
+      mode: Level
+      if contact(each, region, list) == 1 and contact(each, row, list) >= 0 and chosen < count {
+        panelChoice[key] = chosen
+        panelPick[key] = chosen + 1
+      }
+      if contact(each, region, prev) + contact(each, region, next) > 0 {
+        panelPage[key] = clamp(panelPage[key] + contact(each, region, next) - contact(each, region, prev), 0, last)
+      }
+    }
+    rule $"panel-{key}-shown" {
+      when panelShownAt[key] != panelChoice[key]
+      mode: Level
+      for (entry, i) in panel.entries {
+        if panelChoice[key] == i {
+          setState(state: panelTitle, key: $"{key}", fromState: panelCopyTitle, fromKey: $"{key}-{i}")
+          setState(state: panelNote, key: $"{key}", fromState: panelCopyNote, fromKey: $"{key}-{i}")
+          setState(state: panelInk, key: $"{key}-{i}", fromState: panelInks, fromKey: lit)
+        } else {
+          setState(state: panelInk, key: $"{key}-{i}", fromState: panelInks, fromKey: dim)
+        }
+      }
+      for page in range(0, panelPages(panel)) {
+        if panelChoice[key] >= page * panelRows and panelChoice[key] < (page + 1) * panelRows {
+          panelPage[key] = page
+        }
+      }
+      panelShownAt[key] = panelChoice[key]
+    }
+  }
+}
+
+// Where a body stands while it works a panel: a step before its glass, facing it.
+let panelStandAt = [0, 0, 0.9]
+// The desk view of each panel, anchored on its glass's placement: the glass framed from far enough back that a terminal's
+// near plane (the world's `terminalPlay` `near`, up to 2.6 m) cuts away the body standing before it, from an eye raised
+// along the glass's normal. A spawn point at each panel's stand, and each panel's terminal, which a world passes to its
+// one `terminalPlay`.
+let panelView = { halfHeight: 0.45, fill: 0.55, fov: 30 }
+function panelCameras(panels) = map(panels, panel => terminalCamera(
+  name: $"{panel.id}-panel-view",
+  anchor: { $type: "placement", placementId: $"{panel.id}-panel-screen" },
+  centre: (panelGlassAt * [-1, 1, -1]),
+  halfHeight: panelView.halfHeight,
+  fill: panelView.fill,
+  tilt: panelTilt,
+  fieldOfView: panelView.fov
+))
+function panelSpawns(panels) = map(panels, panel => {
+  id: $"{panel.id}-panel"
+  position: facingWorld(panel, panelStandAt)
+  yawDegrees: (panel.yaw + 180)
+})
+function panelTerminals(panels) = map(panels, panel => {
+  at: facingWorld(panel, [0, 0, 0.7])
+  camera: $"{panel.id}-panel-view"
+  spawn: $"{panel.id}-panel"
+})

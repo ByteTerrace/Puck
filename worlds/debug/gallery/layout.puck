@@ -256,6 +256,10 @@ let labWingPlan = [
     id: "board-games", bay: 10, open: true, document: "labs/board-games"
     title: "BOARD GAME LAB", note: "The physical chess table beside a game station playing chess, Klondike and FreeCell, on one floor."
   }
+  {
+    id: "portals", bay: 11, open: true, document: "labs/portals"
+    title: "PORTAL LAB", note: "One portal and the panel that points it: walk in, step back out, and repoint it at another world."
+  }
 ]
 // Whether level 0's north wall keeps its bench or planter at plan x `x`: none stands behind a lab's door.
 function labWingClear(x) = (count(labWingPlan, lab => (bayX(lab.bay) == x)) == 0)
@@ -407,6 +411,31 @@ let gameStationSides = [
   { name: "south", row: (wallRowSouth + 2), bays [3, 6, 7, 8, 9, 10] }
   { name: "north", row: (wallRowNorth - 2), bays [3, 5, 6, 8, 9, 10] }
 ]
+// Level 3's portals (gallery/portals.puck): twelve, one against the outer wall of each of six bays on each gallery, facing
+// across the nave's void as level 1's deck stations face it, so a player on level 3 sees the far gallery's portals over
+// the void. The south gallery's outer wall is the projecting wing's south face (`wingSouth`), whose floor reaches 4 m
+// out past the building's south wall from the lift's bay east; the north gallery's is the north wall. A portal stands
+// `portalStandOff` in from its wall, its panel at its right. The plan keeps clear of the corner stairs (bays 0 and 12)
+// and of bays 1 to 4 south (the terrace and the old lift), and leaves bay 11 at the east end open. A portal's id names
+// its gallery and bay.
+let portalLevel = 3
+let portalBays = [5, 6, 7, 8, 9, 10]
+let portalStandOff = 0.5
+let portalSides = [
+  { name: "south", wall: (wingSouth + galleryWall), yaw: 180, facing: 1 }
+  { name: "north", wall: galleryNorth, yaw: 0, facing: -1 }
+]
+// Every portal in the building's frame, south then north, each bay west to east.
+let galleryPortalPlan = flatMap(portalSides, side => map(portalBays, b => {
+  id: $"portal-{side.name}-{b}"
+  side: side.name
+  bay: b
+  x: bayX(b)
+  y: galleryFloor[portalLevel]
+  z: (side.wall + (side.facing * portalStandOff))
+  yaw: side.yaw
+}))
+
 // Every station in the world's frame, south then north, each bay west to east. A station's creation's floor lies 0.5 m
 // under its origin (the standard's gameStationFloor), so it stands on level 3.
 let galleryGameStations = flatMap(gameStationSides, side => map(side.bays, b => {

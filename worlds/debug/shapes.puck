@@ -724,15 +724,12 @@ let consoleSlower = { x0: consoleDetail.x0, x1: 0.235, y0: consoleTurnRow.y0, y1
 let consoleHold = { x0: 0.245, x1: 0.385, y0: consoleTurnRow.y0, y1: consoleTurnRow.y1 }
 let consoleFaster = { x0: 0.395, x1: 0.475, y0: consoleTurnRow.y0, y1: consoleTurnRow.y1 }
 let consolePace = { x0: 0.49, x1: consoleDetail.x1, y0: consoleTurnRow.y0, y1: consoleTurnRow.y1 }
-// The list's row pitch, and the font's line height in ems (Inter's ascent and descent), which set each list text's
+// The list's row pitch, which with the font's line height (architecture.puck's faceFontLine) sets each list text's
 // line spacing so its lines fall on the rows the pointer's row read counts.
 let consoleRowPitch = ((consoleList.y1 - consoleList.y0) / consoleRows)
-let consoleFontLine = 1.21
 let consoleNameEm = 0.019
 let consoleGroupEm = 0.0125
 
-function consoleMid(rect) = [((rect.x0 + rect.x1) / 2), ((rect.y0 + rect.y1) / 2)]
-function consoleHalf(rect) = [((rect.x1 - rect.x0) / 2), ((rect.y1 - rect.y0) / 2)]
 // A button's face less a margin, the box its label fits.
 function consoleInset(rect) = {
   x0: (rect.x0 + 0.008)
@@ -740,22 +737,14 @@ function consoleInset(rect) = {
   y0: (rect.y0 + 0.006)
   y1: (rect.y1 - 0.006)
 }
-// A rectangle as the fractions of the glass a pointer hit reads: x right from the glass's left edge, y down from its
-// top edge.
-function consoleRegion(id, rect, rows = 1) = {
-  id: id
-  left: ((rect.x0 + plinthGlassHalf[0]) / (2 * plinthGlassHalf[0]))
-  top: ((plinthGlassHalf[1] - rect.y1) / (2 * plinthGlassHalf[1]))
-  right: ((rect.x1 + plinthGlassHalf[0]) / (2 * plinthGlassHalf[0]))
-  bottom: ((plinthGlassHalf[1] - rect.y0) / (2 * plinthGlassHalf[1]))
-  rows: rows
-}
+// A rectangle as a region of the console glass's pointer surface (architecture.puck's faceRegion).
+function consoleRegion(id, rect, rows = 1) = faceRegion(id, rect, plinthGlassHalf, rows)
 // A filled rectangle on a display's glass, its corners rounded by `round`, in the world's frame. Its box reaches
 // 8 cm either side of the glass, past any rounding, and only the glass wears its palette slot.
 function consoleFill(display, rect, color, round = 0) = faceFill(
-  displayWorld(display, plinthOnFace(consoleMid(rect)[0], consoleMid(rect)[1], displayGlassFront)),
+  displayWorld(display, plinthOnFace(faceMid(rect)[0], faceMid(rect)[1], displayGlassFront)),
   displayFaceTurn(display),
-  [(displayScale * consoleHalf(rect)[0]), (displayScale * consoleHalf(rect)[1])],
+  [(displayScale * faceHalf(rect)[0]), (displayScale * faceHalf(rect)[1])],
   color,
   (displayScale * round),
   0.08
@@ -763,9 +752,9 @@ function consoleFill(display, rect, color, round = 0) = faceFill(
 // Lettering in a rectangle on a display's glass: `em` in the plinth's units, `spacing` the line spacing, `wrap` breaking
 // lines at the box's width and `markup` reading the substituted text's colour tags. A text fits its box.
 function consoleText(display, rect, template, ink, em, align, wrap = false, markup = false, spacing = 1) = faceText(
-  displayWorld(display, plinthOnFace(consoleMid(rect)[0], consoleMid(rect)[1], displayGlassFront)),
+  displayWorld(display, plinthOnFace(faceMid(rect)[0], faceMid(rect)[1], displayGlassFront)),
   displayFaceTurn(display),
-  [(displayScale * consoleHalf(rect)[0]), (displayScale * consoleHalf(rect)[1])],
+  [(displayScale * faceHalf(rect)[0]), (displayScale * faceHalf(rect)[1])],
   template,
   ink,
   (displayScale * em),
@@ -859,7 +848,7 @@ function consolePaints(display) = concat(consoleFrame(display), [
     consoleNameEm,
     "left",
     markup: true,
-    spacing: (consoleRowPitch / (consoleNameEm * consoleFontLine))
+    spacing: (consoleRowPitch / (consoleNameEm * faceFontLine))
   )
   consoleText(
     display,
@@ -868,7 +857,7 @@ function consolePaints(display) = concat(consoleFrame(display), [
     consoleLook.quiet,
     consoleGroupEm,
     "right",
-    spacing: (consoleRowPitch / (consoleGroupEm * consoleFontLine))
+    spacing: (consoleRowPitch / (consoleGroupEm * faceFontLine))
   )
   // The chosen exhibit: its title, its group and place in the catalog, and its note.
   consoleText(
@@ -982,7 +971,7 @@ function learnPaints(display) = concat(consoleFrame(display), [
     learnTermsText(display.id),
     consoleLook.dim,
     learnTermEm,
-    spacing: (((learnTerms.y1 - learnTerms.y0) / learnTermRows) / (learnTermEm * consoleFontLine)),
+    spacing: (((learnTerms.y1 - learnTerms.y0) / learnTermRows) / (learnTermEm * faceFontLine)),
     pitch: true
   )
   // The scrub bar: a track across its region, its ticks lit up to the size the subject stands at (learnBarText), and its
@@ -1062,7 +1051,7 @@ function terminalScreenPaints(display, number) = [
     "left",
     markup: true,
     spacing: (((terminalScreenText.y1 - terminalScreenText.y0) / (terminalConsoleReplyLines + 1)) /
-      (terminalScreenEm * consoleFontLine))
+      (terminalScreenEm * faceFontLine))
   )
   consoleText(
     display,

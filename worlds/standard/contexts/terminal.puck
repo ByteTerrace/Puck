@@ -158,6 +158,21 @@ function pointerCapture(tapSources = ["mouse.button1"], restingPage = "base", sc
   }
 }
 
+// Whether `body`, standing at (px, py, pz), stands within `r` of a terminal's `at` on the ground plane and `h` of it up or
+// down, and holds every register the terminal `needs`: one rule expression, its needs folded at compile time.
+function terminalIn(terminal, body, px, py, pz, r, h) = reachedFrom(terminal.at, px, py, pz, r, h) and all(
+  terminal.conditions,
+  need => (bodyState(body, need.register) >= need.atLeast)
+)
+// The registers terminalIn folds for a terminal: its `needs`, or, for a terminal with none, the module's own `terminal`
+// register, which is never below 0, so every terminal's fold has a term and reads true when nothing is needed.
+function terminalConditions(terminal) = ((length(terminal.needs) == 0) ? [{ register: "terminal", atLeast: 0 }] : terminal.needs)
+// How many terminals one rule expression folds over: a rule expression holds at most 256 instructions, so the reach rule
+// folds its terminals a part at a time, each part into a local of its own.
+let terminalPart = 4
+// The terminal indices of part `part` of `count` terminals.
+function terminalPartOf(part, count) = range((part * terminalPart), minimum(((part + 1) * terminalPart), count))
+
 // `terminals` lists each terminal's `at` (a world point), `camera` (a camera program the seat eases to), `spawn` (the
 // spawn point the body stands at while engaged) and, optionally, `needs`: the body registers a body must hold at least
 // a value of to use it, [{ register, atLeast }] (`register: "size"` for a terminal a small body cannot reach). A body
@@ -184,7 +199,8 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
   "keyboard.enter"
 ], consoleEraseSources = ["keyboard.backspace"], scrollSources = ["mouse.wheel"]) {
   let count = length(terminals)
-  let gated = map(terminals, terminal => ({ needs [] } with terminal))
+  let gated = map(terminals, terminal => (({ needs [] } with terminal) with { conditions: terminalConditions(({ needs [] } with terminal)) }))
+  let parts = range(0, floor((((count + terminalPart) - 1) / terminalPart)))
 
   if console != null {
     terminalConsole(console: console, count: count, seats: seats, capacity: capacity)
@@ -232,8 +248,7 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
   }
 
   // Which terminal's reach each player's body stands in: a body leaves a terminal's reach `margin` past its radius, and
-  // takes the first terminal whose reach it then stands in. A terminal's `needs` fold into `fit{i}n{k}`: whether the body
-  // holds the first k of them. The answer is computed once (`target`) and written only when it differs, so the rule is
+  // takes the first terminal whose reach it then stands in, among those whose `needs` it holds (terminalFits). The answer is computed once (`target`) and written only when it differs, so the rule is
   // judged as bodies move but fires, and writes, only when a body crosses a reach.
   rule "terminal-near" {
     forEach: $players
@@ -241,36 +256,24 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
     local px = bodyPosition(each, x)
     local py = bodyPosition(each, y)
     local pz = bodyPosition(each, z)
-    for (terminal, i) in gated {
-      local $"fit{i}n0" = 1
-      for (need, k) in terminal.needs {
-        local $"fit{i}n{k + 1}" = $"fit{i}n{k}" and (bodyState(each, need.register) >= need.atLeast)
-      }
-    }
-    // Whether the body still stands in the reach of the terminal it is near, and the first terminal it would enter.
-    local kept0 = 0
-    for (terminal, i) in gated {
-      local $"kept{i + 1}" = (
-        $"kept{i}" or
-        (
-          near == i + 1 and
-            reachedFrom(terminal.at, px, py, pz, radius + margin, height) and
-            $"fit{i}n{length(terminal.needs)}"
-        )
+    // Whether the body still stands in the reach of the terminal it is near, and the first terminal it would enter, folded
+    // a part of the terminals at a time (terminalPart), so the rule's locals grow by two a part rather than three a
+    // terminal.
+    for part in parts {
+      local $"kept{part}" = any(
+        terminalPartOf(part, count),
+        i => (near == i + 1) and terminalIn(gated[i], each, px, py, pz, radius + margin, height)
+      )
+      local $"first{part}" = first(
+        terminalPartOf(part, count),
+        i => terminalIn(gated[i], each, px, py, pz, radius, height),
+        i => i + 1,
+        0
       )
     }
-    local $"first{count}" = 0
-    for j in range(0, count) {
-      local $"first{count - 1 - j}" = (
-        (
-          reachedFrom(gated[count - 1 - j].at, px, py, pz, radius, height) and
-          $"fit{count - 1 - j}n{length(gated[count - 1 - j].needs)}"
-        ) ?
-          (count - j) :
-        $"first{count - j}"
-      )
-    }
-    local target = $"kept{count}" ? near : first0
+    local kept = any(parts, part => $"kept{part}")
+    local entered = first(parts, part => $"first{part}" > 0, part => $"first{part}", 0)
+    local target = kept ? near : entered
     when terminalNear[$each] != target
     mode: Level
     terminalNear[$each] = target
