@@ -7,21 +7,16 @@
 // own look); `id` a name for rows and looks; `name` what the journal calls it; `prototype` the creation a companion of
 // that kind wears.
 //
-// What a character keeps is the body's while it plays and the character's between sessions:
+// What a character keeps is its body's registers, which cross into every world the body enters:
 //
-//   menagerieKeeps<kind>   a body register, 1 while the body keeps a companion of that kind; it crosses into every
-//                          world the body enters, as body registers do
-//   companionActive        a body register, the kind of the active companion, 0 for none
-//   the identity's facts   the same values under the same names (`identity(each, menagerieKeeps1)`), written as they
-//                          change, so the next session starts from them
-//   menagerie              the identity's record pool (identity.puck): one Companion record a kept kind, claimed once,
-//                          when the kind is first kept, which the account carries across worlds
+//   menagerieKeeps<kind>   1 while the body keeps a companion of that kind
+//   companionActive        the kind of the active companion, 0 for none
 //
-// A world's rule writes an identity's facts and records but reads no record yet (docs/reference/state/worlds.md,
-// "Limitations"), and writes no identity register, so the registers are what the journal and the companions read and
-// the facts carry them between sessions. On a body's first tick the menagerie adopts what its character's facts hold
-// (`menagerieAdopted`); only then does it grant and save. A seat playing under no identity keeps its menagerie for the
-// session: the save refuses for it by name, once, and nothing else does.
+// The character's own list is the identity's `menagerie` record pool (identity.puck), a crossing pool the account
+// carries across worlds. Nothing writes it yet: keeping a kind's record once, and reading the pool back with `record(…)`
+// as the standard's marks do (marks.puck), waits for a way to meet and befriend a companion; until then a character
+// starts each session with the granted kinds. Saving through identity facts was tried and set aside: in the debug world
+// it priced the rules past the tick's work budget.
 //
 // A companion's body wears its kind's look while its own `companionKind` register names the kind: the look
 // assignment's `companion` selector reads it (companion.puck's `companion(menagerie: true)` keeps it in step with its
@@ -34,10 +29,9 @@
 // The most kinds a menagerie offers: the active register's range.
 let menagerieLimit = 255
 
-// The menagerie of `kinds`. `granted` lists the kinds every player's character starts with: a character that does not
-// keep one is given it, and the first granted kind becomes its active companion while it has none. `seats` and
-// `capacity` size the adoption cells as journal.puck's do.
-template menagerie(kinds, granted = [], seats = 4, capacity = 16) {
+// The menagerie of `kinds`. `granted` lists the kinds every player's character starts with: a body that does not keep
+// one is given it, and the first granted kind becomes its active companion while it has none.
+template menagerie(kinds, granted = []) {
   let first = (length(granted) > 0) ? granted[0] : 0
 
   state {
@@ -62,15 +56,6 @@ template menagerie(kinds, granted = [], seats = 4, capacity = 16) {
         k => { name: $"menagerieKeeps{k.kind}", kind: "Counter", initial: 0, envelope { $type: "set", values [0, 1] } }
       )
     )
-    world {
-      // 1 once the body has adopted its character's menagerie.
-      row {
-        name: "menagerieAdopted"
-        kind: Int
-        capacity: capacity
-        cells: map(range(0, seats), body => { key: $"{body}", value: 0 })
-      }
-    }
   }
 
   // A companion's body wears its kind's look while its register names the kind.
@@ -96,27 +81,11 @@ template menagerie(kinds, granted = [], seats = 4, capacity = 16) {
     })
   }
 
-  // A body's first tick adopts what its character's facts hold.
-  rule "menagerie-adopt" {
-    forEach: $players
-    when (menagerieAdopted[$each] ?? 0) == 0
-    mode: Level
-    menagerieAdopted[$each] = 1
-    for k in kinds {
-      if identity(each, $"menagerieKeeps{k.kind}") == 1 {
-        setBodyState(key: $each, state: $"menagerieKeeps{k.kind}", expression: 1)
-      }
-    }
-    if identity(each, companionActive) > 0 {
-      setBodyState(key: $each, state: "companionActive", expression: identity(each, companionActive))
-    }
-  }
-
-  // Every player's character is given the granted kinds it does not keep, and the first of them while nothing is active.
+  // Every player's body is given the granted kinds it does not keep, and the first of them while nothing is active.
   for kindNumber in granted {
     rule $"menagerie-grant-{kindNumber}" {
       forEach: $players
-      when (menagerieAdopted[$each] ?? 0) == 1 and bodyState(each, $"menagerieKeeps{kindNumber}") == 0
+      when bodyState(each, $"menagerieKeeps{kindNumber}") == 0
       mode: Level
       setBodyState(key: $each, state: $"menagerieKeeps{kindNumber}", expression: 1)
     }
@@ -124,37 +93,9 @@ template menagerie(kinds, granted = [], seats = 4, capacity = 16) {
   if first != 0 {
     rule "menagerie-first" {
       forEach: $players
-      when (menagerieAdopted[$each] ?? 0) == 1 and bodyState(each, companionActive) == 0 and bodyState(
-          each,
-          $"menagerieKeeps{first}"
-        ) == 1
+      when bodyState(each, companionActive) == 0 and bodyState(each, $"menagerieKeeps{first}") == 1
       mode: Level
       setBodyState(key: $each, state: "companionActive", expression: first)
     }
-  }
-
-  // A kind newly kept is saved on the character: its fact, and its record claimed into the pool, together or neither.
-  // The active companion is saved as it changes.
-  for k in kinds {
-    rule $"menagerie-save-{k.id}" {
-      forEach: $players
-      when (menagerieAdopted[$each] ?? 0) == 1 and bodyState(each, $"menagerieKeeps{k.kind}") == 1 and identity(
-          each,
-          $"menagerieKeeps{k.kind}"
-        ) == 0
-      mode: Edge
-      setIdentityFact(key: $each, fact: $"menagerieKeeps{k.kind}", expression: 1)
-      claimIdentityRecord(
-        key: $each,
-        pool: "menagerie",
-        fields: [{ field: "kind", value: k.kind }, { field: "name", text: $"{k.name}" }]
-      )
-    }
-  }
-  rule "menagerie-save-active" {
-    forEach: $players
-    when (menagerieAdopted[$each] ?? 0) == 1 and bodyState(each, companionActive) != identity(each, companionActive)
-    mode: Edge
-    setIdentityFact(key: $each, fact: "companionActive", expression: toInt(bodyState(each, companionActive)))
   }
 }

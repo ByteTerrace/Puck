@@ -61,13 +61,13 @@ function wallFraming(distance = 5.4, pitch = -0.12, pivotOffset = [0, 1.8, 0], f
 
 // A chase camera's framing of something a body holds before it to read (a panel on its wrist, a map in its hands), for
 // `chaseCamera(focus:)`: `distance` metres of boom at `pitch` radians of elevation about `pivotOffset` in the body's
-// frame, whose x leans toward the body's left; the same framing mirrored leans toward its right. The camera eases
-// toward it by the `weight` row (keyed by body: 0 the ordinary framing, 1 this one) and leans to the side the `side`
-// row names (0 left, 1 right), both rows the body's own (the journal's `journalFocus` and `journalSide`), each eased by
-// the rows' own dynamics.
-function focusFraming(weight, side, distance = 1.9, pitch = 0.45, pivotOffset = [0.3, 1.35, 0.1]) = {
-  weight: weight
-  side: side
+// frame, whose x leans toward the body's left; the same framing mirrored leans toward its right. The camera eases toward
+// the left framing by the `left` row and toward the right one by the `right` row (keyed by body: 0 the ordinary
+// framing, 1 the focus), each eased by its row's own dynamics; a body holds one thing at a time, so one of them is 0
+// (the journal's `journalRaiseLeft` and `journalRaiseRight`).
+function focusFraming(left, right, distance = 1.9, pitch = 0.45, pivotOffset = [0.3, 1.35, 0.1]) = {
+  left: left
+  right: right
   distance: distance
   pitch: pitch
   pivotOffset: pivotOffset
@@ -261,7 +261,7 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0
 
     // The two cases the seat rig selects between: one orbit, look, lens, ease and first-person eye per framing, and
     // the clearance each trades the room by. With a wall framing a case stands on the blend of its ground and wall
-    // framings, and with a focus it blends what it stands on with its focus, whose two sides blend by the side row.
+    // framings, and with a focus it blends what it stands on toward its left focus and that toward its right focus.
     programs: concat(
       flatMap(cases, case => map(framings, framing => {
         name: $"{rig}-{case.suffix}{framing.suffix}"
@@ -302,21 +302,21 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0
         ? []
         : flatMap(cases, case => [
           {
-            name: $"{rig}-{case.suffix}-focus"
+            name: $"{rig}-{case.suffix}-lean"
             version: "puck.camera.program.v1"
             operations [
-              blend(a: $"{rig}-{case.suffix}-focus-left", b: $"{rig}-{case.suffix}-focus-right", weight: $"state.{focus.side}.$body")
+              blend(
+                a: ((wall == null) ? $"{rig}-{case.suffix}-ground" : $"{rig}-{case.suffix}-stand"),
+                b: $"{rig}-{case.suffix}-focus-left",
+                weight: $"state.{focus.left}.$body"
+              )
             ]
           }
           {
             name: $"{rig}-{case.suffix}"
             version: "puck.camera.program.v1"
             operations [
-              blend(
-                a: ((wall == null) ? $"{rig}-{case.suffix}-ground" : $"{rig}-{case.suffix}-stand"),
-                b: $"{rig}-{case.suffix}-focus",
-                weight: $"state.{focus.weight}.$body"
-              )
+              blend(a: $"{rig}-{case.suffix}-lean", b: $"{rig}-{case.suffix}-focus-right", weight: $"state.{focus.right}.$body")
             ]
           }
         ]))

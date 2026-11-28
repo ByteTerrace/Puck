@@ -30,10 +30,7 @@ test "opened standing still, the journal takes the pause read on her left forear
     journalOpen[0] == 1
     bodyState(body, 0, journal) == 1
     journalRaiseLeft[0] == 1
-    journalFlapLeft[0] == 1
     journalRaiseRight[0] == 0
-    journalFlapRight[0] == 0
-    journalFocus[0] == 1
   }
 }
 
@@ -48,7 +45,6 @@ test "opened while walking, the journal takes the action read, and the walk goes
   expect {
     journalOpen[0] == 1
     journalRaiseLeft[0] == 0.55
-    journalFocus[0] == 0.35
     (absolute(bodyPosition(body, 0, x)) + absolute(bodyPosition(body, 0, z))) > 0.5
   }
 }
@@ -69,7 +65,6 @@ test "a second press of the journal key closes it, and cancel closes it too" {
     journalOpen[0] == 0
     bodyState(body, 0, journal) == 0
     journalRaiseLeft[0] == 0
-    journalFocus[0] == 0
   }
 }
 
@@ -130,9 +125,6 @@ test "asked for her right forearm, the journal opens there and the left stays sh
   expect {
     bodyState(body, 0, journalHand) == 1
     journalRaiseRight[0] == 1
-    journalFlapRight[0] == 1
     journalRaiseLeft[0] == 0
-    journalFlapLeft[0] == 0
-    journalSide[0] == 1
   }
 }

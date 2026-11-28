@@ -1,7 +1,7 @@
 // The journal, worn on the wrist: the menu, the journal and the wrist panel are one thing (docs/decisions/play.md, "The
 // menu is the journal, worn on the wrist"). A library: it hands its importers functions and a template and emits no
-// document. It names no body and no look: which forearm carries the panel, its shape and its pose are the avatar's, and
-// the journal's state, rules, controls and pages are this file's.
+// document. It names no body and no look: the panel that wears it is wrist-panel.puck's and the avatar's or suit's that
+// mounts it, and the journal's state, rules, controls and pages are this file's.
 //
 // A press of the journal key (`journal`: I, or the View page's West) opens it and the next closes it, as `cancel` does.
 // Opening raises the panel's arm and opens its flap, and the camera focuses in on it, in one of two reads the rules
@@ -10,42 +10,38 @@
 //   pause read   the body stands still: the arm comes all the way up and the camera focuses in fully, for working the
 //                panel
 //   action read  the body moves (a movement key held, or it is in the air): the arm comes up part way (`glance`) and the
-//                camera focuses in a little (`glanceFocus`), a glance while moving
+//                camera focuses in as far, a glance while moving
 //
 // The world keeps running either way, and the body keeps every movement control while the journal is open. The step
 // keys (the arrows' up and down, the d-pad's) move the mark on a page and the page keys (the arrows' left and right, the
 // d-pad's) turn the pages; confirm (Enter, the pad's South) acts on the marked line.
 //
-// The panel's arm and its look are presentation: the rules write targets keyed by body, each eased by a dynamics row,
-// which the avatar's rig, flap and camera read. Which forearm carries the panel is the player's: the `journalHand` body
-// register (0 left, the default, 1 right), which crosses worlds with the body and is saved as the character's
-// `journalHand` fact, so the next session adopts it. `journal.hand.left` and `journal.hand.right` ask for a forearm
-// through the body's `journalHandAsk` cell (-1 asks nothing), which a rule carries to the register. A suit that carries
-// the panel reads the same register (wrist-panel.puck).
+// The panel's arm, flap and camera are presentation: the rules write aims keyed by body, each eased by a dynamics row,
+// which the rig and the camera read. Which forearm carries the panel is the player's: the `journalHand` body register (0
+// left, the default, 1 right), which crosses worlds with the body. `journal.hand.left` and `journal.hand.right` ask for
+// a forearm through the body's `journalHandAsk` cell (-1 asks nothing), which a rule carries to the register.
 //
-// The state, keyed by body, for an avatar's rig, a camera and a screen to read:
+// The state, keyed by body, for a rig, a camera and a screen to read:
 //
 //   journalOpen          1 while the journal is open
 //   journal              the body register following it, the input family's selector
+//   journalHand          the body register naming the forearm, 0 left and 1 right
 //   journalPage          the page shown, its place in `pages`
 //   journalMark          the marked line on the menagerie page, 1 for the first kind
-//   journalRaiseLeft     the left arm's raise target: 1 the pause read, `glance` the action read, 0 closed; eased by
-//   journalRaiseRight    `journal-arm`, and the right arm's
-//   journalFlapLeft      1 while the left panel's flap stands open, eased by `journal-flap`, and the right one's
-//   journalFlapRight
-//   journalFocus         the camera's focus: 1 the pause read, `glanceFocus` the action read; eased by `journal-focus`
-//   journalSide          the panel's side for the camera, 0 left and 1 right; eased by `journal-focus`
+//   journalRaiseLeft     the left arm's aim: 1 the pause read, `glance` the action read, 0 closed; eased by `journal-arm`;
+//   journalRaiseRight    and the right arm's. The panel's flap opens as its arm rises, and the camera focuses in toward
+//                        the rising arm's side as far as it rises (wrist-panel.puck).
 //   journalTabs          the page tabs, the shown page lit (markup)
 //   journalHint          the shown page's controls
 //   journalBody          the shown page's lines
-//   journalCardName<i>   on the menagerie page, the i-th kind's name and its state (kept, active, marked)
-//   journalCardState<i>
+//   journalCard<i>       on the menagerie page, the i-th kind's line: its name and whether it is kept, with you or marked
 //
-// Pages are data: { id, title, hint, lines }. The menagerie page is the first and lists the kinds the character can
-// keep (menagerie.puck), the active one marked "with you"; a pick on a kept kind makes it the active companion. Every
-// other page shows its own lines, which the lane that owns the page writes: `journalLines<p>` keyed by body is page p's
-// text (a Text row, seeded with the page's `lines`), and a write to it bumps `journalRevision<p>` for the same body, so
-// the shown copy follows. The quest, marks and notes pages are that way, waiting for their lanes.
+// Pages are data: { id, title, hint, lines }. The menagerie page is the first and lists the kinds the character can keep
+// (menagerie.puck), the active one marked "with you"; a pick on a kept kind makes it the active companion. Every other
+// page shows its own lines, which the lane that owns the page writes: `journalLines<p>` keyed by body is page p's text
+// (a Text row, seeded with the page's `lines`), and a lane that writes it while the page is shown writes
+// `journalShownLines` -1 for that body too, so the screen takes the new text. The quest, marks and notes pages wait for
+// their lanes this way.
 //
 // The text a screen shows is the world's, not one body's: a text paint's template reads a literal key, so the panel
 // shows the journal of the body `key` names (`journalScreenPaints`), the first seat by default.
@@ -55,9 +51,9 @@
 //   // in the avatar's or suit's creation, the wrist panel (wrist-panel.puck), whose glass wears `journalScreenPaints`
 //   // in a world with input modes: families [journalFamily(), ...] and `journal` among a family's channels
 //
-// The state also holds `journalHandAsk` (a forearm asked for, -1 for none), the `journalAdopted` mark of a body that
-// took its character's saved forearm, and the copy marks the screen's texts follow (`journalShown...`,
-// `journalCardCode<i>`, `journalCardShown<i>`).
+// The state also holds `journalHandAsk` and the marks the screen's texts are copied by (`journalShownPage`,
+// `journalShownLines`, `journalCardCode<i>`, `journalCardShown<i>`). Every rule sweeps `$players`, and each carries as
+// few effects as it can: a rule is priced by its effects times the players it may fire for.
 
 // The panel's look: a deep plum field the interface glows on, a mint for the companion with you, an amber for the mark,
 // a cream for what is kept and a muted lilac for the rest, with a mint rule under the tabs. Minimal on purpose; a
@@ -81,9 +77,6 @@ let journalPages = [
   { id: "notes", title: "NOTES", hint: "< >  pages", lines: "No notes written yet." }
 ]
 
-// The most kinds the menagerie page lists, one line each.
-let journalCardLimit = 4
-
 // The tabs line for page `shown`: every page's title, the shown one lit.
 function journalTabsLine(pages, shown, look) = join(
   map(range(0, length(pages)), p => $"[color={(p == shown) ? look.lit : look.dim}]{pages[p].title}[/color]"),
@@ -93,15 +86,9 @@ function journalTabsLine(pages, shown, look) = join(
 // A menagerie line's code: 0 a kind not kept, 2 one kept and resting, 4 the one with you, each plus 1 while marked, and
 // 6 for nothing (another page is shown).
 function journalMarked(code) = contains([1, 3, 5], code)
-// A menagerie line's code, from whether its page is shown and its kind is kept, active and marked.
-function journalCardCodeOf(shown, kept, active, marked) = (shown ? ((active ? 4 : (kept ? 2 : 0)) + (marked ? 1 : 0)) :
-  6)
-function journalCardNameText(kind, code, look) = ((code == 6) ? "" :
-  ((code < 2) ? $"[color={journalMarked(code) ? look.lit : look.dim}]{journalMarked(code) ? "> " : "  "}???[/color]" :
-    $"[color={journalMarked(code) ? look.lit : ((code >= 4) ? look.with : look.kept)}]{journalMarked(code) ? "> " : "  "}{kind.name}[/color]"))
-function journalCardStateText(code, look) = ((code == 6) ? "" : ((code < 2) ? $"[color={look.dim}]not met[/color]" :
-  ((code >= 4) ? $"[color={look.with}]with you[/color]" :
-    $"[color={look.quiet}]{journalMarked(code) ? "call" : "resting"}[/color]")))
+function journalCardText(kind, code, look) = ((code == 6) ? "" :
+  ((code < 2) ? $"[color={journalMarked(code) ? look.lit : look.dim}]{journalMarked(code) ? "> " : "  "}???   not met[/color]" :
+    $"[color={journalMarked(code) ? look.lit : ((code >= 4) ? look.with : look.kept)}]{journalMarked(code) ? "> " : "  "}{kind.name}   {(code >= 4) ? "with you" : (journalMarked(code) ? "call" : "resting")}[/color]"))
 
 // The family that offers the journal's channels while it is open. Opening and closing keep `keep` held, so a body
 // glancing at its wrist while it walks keeps walking.
@@ -130,14 +117,11 @@ function journalFamily(suspendedBy = [], channels = ["journalStep", "journalPage
 // across and up. `key` is the body whose journal it shows; `kinds` the menagerie's (one line each).
 function journalScreenPaints(parent, half, kinds, key = "0", look = journalLook) = concat(
   [
-    // The tabs across the top, a rule under them and the controls along the bottom.
+    // The tabs across the top, a rule under them, the page's lines and the controls along the bottom.
     journalPanelText(
       parent,
       half,
-      -0.94,
-      0.94,
-      0.62,
-      0.94,
+      [-0.94, 0.94, 0.62, 0.94],
       $"{{state.journalTabs.{key}}}",
       look.dim,
       0.2,
@@ -154,10 +138,7 @@ function journalScreenPaints(parent, half, kinds, key = "0", look = journalLook)
     journalPanelText(
       parent,
       half,
-      -0.94,
-      0.94,
-      -0.96,
-      -0.74,
+      [-0.94, 0.94, -0.96, -0.74],
       $"{{state.journalHint.{key}}}",
       look.dim,
       0.14,
@@ -167,10 +148,7 @@ function journalScreenPaints(parent, half, kinds, key = "0", look = journalLook)
     journalPanelText(
       parent,
       half,
-      -0.9,
-      0.9,
-      -0.7,
-      0.5,
+      [-0.9, 0.9, -0.7, 0.5],
       $"{{state.journalBody.{key}}}",
       look.kept,
       0.17,
@@ -179,44 +157,26 @@ function journalScreenPaints(parent, half, kinds, key = "0", look = journalLook)
       true
     )
   ],
-  flatMap(range(0, length(kinds)), i => [
-    journalPanelText(
-      parent,
-      half,
-      -0.9,
-      0.15,
-      journalCardTop(i) - 0.26,
-      journalCardTop(i),
-      $"{{state.journalCardName{i}.{key}}}",
-      look.kept,
-      0.2,
-      "left",
-      true
-    )
-    journalPanelText(
-      parent,
-      half,
-      0.15,
-      0.9,
-      journalCardTop(i) - 0.26,
-      journalCardTop(i),
-      $"{{state.journalCardState{i}.{key}}}",
-      look.quiet,
-      0.16,
-      "right",
-      true
-    )
-  ])
+  map(range(0, length(kinds)), i => journalPanelText(
+    parent,
+    half,
+    [-0.9, 0.9, (journalCardTop(i) - 0.26), journalCardTop(i)],
+    $"{{state.journalCard{i}.{key}}}",
+    look.kept,
+    0.2,
+    "left",
+    true
+  ))
 )
 // The top of the menagerie page's i-th line, as a fraction of the screen's half height.
 function journalCardTop(i) = (0.46 - (i * 0.3))
-// A text in the rectangle from (x0, y0) to (x1, y1) of the screen, in fractions of its half extents: `em` a fraction of
-// its half height, `markup` reading the text's colour tags, `wrap` breaking lines at the rectangle's width.
-function journalPanelText(parent, half, x0, x1, y0, y1, template, ink, em, align, markup, wrap = false) = {
+// A text in the rectangle `box` [x0, x1, y0, y1] of the screen, in fractions of its half extents: `em` a fraction of its
+// half height, `markup` reading the text's colour tags, `wrap` breaking lines at the rectangle's width.
+function journalPanelText(parent, half, box, template, ink, em, align, markup, wrap = false) = {
   parent: parent
   type: "Box"
-  position [(half[0] * ((x0 + x1) / 2)), (half[1] * ((y0 + y1) / 2)), 0]
-  scale [(half[0] * ((x1 - x0) / 2)), (half[1] * ((y1 - y0) / 2)), 0.02]
+  position [(half[0] * ((box[0] + box[1]) / 2)), (half[1] * ((box[2] + box[3]) / 2)), 0]
+  scale [(half[0] * ((box[1] - box[0]) / 2)), (half[1] * ((box[3] - box[2]) / 2)), 0.02]
   color: ink
   text {
     template: template
@@ -229,13 +189,13 @@ function journalPanelText(parent, half, x0, x1, y0, y1, template, ink, em, align
 }
 
 // The journal of every player's body: its state, rules and controls. `kinds` are the menagerie's (menagerie.puck);
-// `pages` the journal's, the menagerie first. `glance` is how far the arm comes up in the action read and `glanceFocus`
-// how far the camera focuses in; `moving` how far a movement key must be held for the body to be moving. `seats` sizes
+// `pages` the journal's, the menagerie first. `glance` is how far the arm comes up (and the camera focuses in) in the
+// action read; `moving` how far a movement key must be held for the body to be moving. `seats` sizes
 // the body cells (bodies 0 to seats - 1 are seeded; a visitor's body takes a cell when its journal first changes, up
 // to `capacity`). The sources are what the controls bind: `openSources` and `padOpenSources` (the View page) open and
 // close it, and while it is open `stepUpSources`, `stepDownSources`, `pageNextSources` and `pagePreviousSources` move
 // the mark and turn the pages, `pickSources` confirm and `backSources` close.
-template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0.35, moving = 0.2, seats = 4, capacity = 16, openSources = [
+template journalPlay(kinds, pages = journalPages, glance = 0.55, moving = 0.2, seats = 4, capacity = 16, openSources = [
   "keyboard.i"
 ], padOpenSources = ["gamepad.buttonWest", "keyboard.j"], stepUpSources = [
   "keyboard.arrowUp"
@@ -263,8 +223,6 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
 
   dynamics [
     { name: "journal-arm", f: 2.2, r: 0, zeta: 1 }
-    { name: "journal-flap", f: 3, r: 0, zeta: 0.75 }
-    { name: "journal-focus", f: 1.4, r: 0, zeta: 1 }
   ]
 
   state {
@@ -273,7 +231,7 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
       { name: "journalHand", kind: "Counter", initial: 0, envelope { $type: "set", values [0, 1] } }
     ]
     world {
-      for name in ["journalOpen", "journalPage", "journalAdopted"] {
+      for name in ["journalOpen", "journalPage"] {
         row {
           name: name
           kind: Int
@@ -287,10 +245,9 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
         capacity: capacity
         cells: map(bodies, body => { key: body, value: 1 })
       }
-      // What the screen shows was last copied for, -1 before the first copy, and the forearm a command asks for, -1
-      // for none.
+      // The forearm a command asks for and what the screen's texts were last copied for, -1 for none.
       for name in concat(
-        ["journalHandAsk", "journalShownPage", "journalShownLines", "journalShownRevision"],
+        ["journalHandAsk", "journalShownPage", "journalShownLines"],
         flatMap(range(0, cardCount), i => [$"journalCardCode{i}", $"journalCardShown{i}"])
       ) {
         row {
@@ -303,10 +260,6 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
       for eased in [
         { name: "journalRaiseLeft", response: "journal-arm" }
         { name: "journalRaiseRight", response: "journal-arm" }
-        { name: "journalFlapLeft", response: "journal-flap" }
-        { name: "journalFlapRight", response: "journal-flap" }
-        { name: "journalFocus", response: "journal-focus" }
-        { name: "journalSide", response: "journal-focus" }
       ] {
         row {
           name: eased.name
@@ -320,7 +273,7 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
       }
       for name in concat(
         ["journalTabs", "journalHint", "journalBody"],
-        flatMap(range(0, cardCount), i => [$"journalCardName{i}", $"journalCardState{i}"])
+        map(range(0, cardCount), i => $"journalCard{i}")
       ) {
         row {
           name: name
@@ -329,19 +282,13 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
           cells: map(bodies, body => { key: body, value: "" })
         }
       }
-      // Each page's lines and their revision, keyed by body: what the page's own lane writes.
+      // Each page's lines, keyed by body: what the page's own lane writes.
       for p in range(0, pageCount) {
         row {
           name: $"journalLines{p}"
           kind: Text
           capacity: capacity
           cells: map(bodies, body => { key: body, value: pages[p].lines })
-        }
-        row {
-          name: $"journalRevision{p}"
-          kind: Int
-          capacity: capacity
-          cells: map(bodies, body => { key: body, value: 0 })
         }
       }
       // Every text a screen can show, by page or by a menagerie line's code.
@@ -359,47 +306,27 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
       }
       for i in range(0, cardCount) {
         row {
-          name: $"journalCardNames{i}"
+          name: $"journalCardTexts{i}"
           kind: Text
           capacity: length(codes)
-          cells: map(codes, code => { key: $"{code}", value: journalCardNameText(kinds[i], code, look) })
+          cells: map(codes, code => { key: $"{code}", value: journalCardText(kinds[i], code, look) })
         }
-      }
-      row {
-        name: "journalCardStates"
-        kind: Text
-        capacity: length(codes)
-        cells: map(codes, code => { key: $"{code}", value: journalCardStateText(code, look) })
       }
     }
   }
 
-  // The journal key opens the journal and closes it, as `cancel` closes it: one answer, written once. `journal-pose`
-  // carries it to the body's register.
+  // The journal key opens the journal and closes it, as `cancel` closes it: one answer, written once, with the body's
+  // register that follows it.
   rule "journal-toggle" {
     forEach: $players
     local open = journalOpen[$each] ?? 0
     when channel(each, journal) >= 1 or (channel(each, cancel) >= 1 and open == 1)
     mode: Edge
     journalOpen[$each] = 1 - open
-  }
-  rule "journal-pose" {
-    forEach: $players
-    local open = journalOpen[$each] ?? 0
-    when toInt(bodyState(each, journal)) != open
-    mode: Level
-    setBodyState(key: $each, state: "journal", expression: open)
+    setBodyState(key: $each, state: "journal", expression: 1 - open)
   }
 
-  // The forearm: a body's first tick adopts its character's choice, a forearm asked for becomes the body's choice, and
-  // a choice that differs from the character's is saved on it (refused, once, for a seat playing under no identity).
-  rule "journal-adopt" {
-    forEach: $players
-    when (journalAdopted[$each] ?? 0) == 0
-    mode: Level
-    journalAdopted[$each] = 1
-    setBodyState(key: $each, state: "journalHand", expression: identity(each, journalHand))
-  }
+  // A forearm asked for becomes the body's choice.
   rule "journal-hand" {
     forEach: $players
     local ask = journalHandAsk[$each] ?? -1
@@ -407,12 +334,6 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
     mode: Level
     setBodyState(key: $each, state: "journalHand", expression: ask)
     journalHandAsk[$each] = -1
-  }
-  rule "journal-hand-save" {
-    forEach: $players
-    when (journalAdopted[$each] ?? 0) == 1 and bodyState(each, journalHand) != identity(each, journalHand)
-    mode: Edge
-    setIdentityFact(key: $each, fact: "journalHand", expression: toInt(bodyState(each, journalHand)))
   }
 
   // The page keys turn the pages, round from the last to the first.
@@ -440,18 +361,25 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
     rule "journal-pick" {
       forEach: $players
       local mark = journalMark[$each] ?? 1
-      when (journalOpen[$each] ?? 0) == 1 and (journalPage[$each] ?? 0) == 0 and channel(each, confirm) >= 1
-      mode: Edge
+      // The marked kind when the body keeps it, else 0: `pick<n>` is the answer over the first n kinds.
+      local pick0 = 0
       for (k, i) in kinds {
-        if mark == (i + 1) and bodyState(each, $"menagerieKeeps{k.kind}") == 1 {
-          setBodyState(key: $each, state: "companionActive", expression: k.kind)
-        }
+        local $"pick{i + 1}" = (
+          ((mark == i + 1) and (bodyState(each, $"menagerieKeeps{k.kind}") == 1)) ? k.kind : $"pick{i}"
+        )
       }
+      local kind = $"pick{cardCount}"
+      when ((journalOpen[$each] ?? 0) == 1 and
+        (journalPage[$each] ?? 0) == 0 and
+        channel(each, confirm) >= 1 and
+        kind > 0)
+      mode: Edge
+      setBodyState(key: $each, state: "companionActive", expression: kind)
     }
   }
 
-  // The read: what the arm, the flaps and the camera aim at, from whether the journal is open, whether the body moves
-  // and which forearm carries the panel. Written only when an aim changes.
+  // The read: what the arms aim at, which the flaps and the camera follow, from whether the journal is open, whether the body moves and which
+  // forearm carries the panel. Written only when an aim changes.
   rule "journal-read" {
     forEach: $players
     local open = journalOpen[$each] ?? 0
@@ -459,45 +387,28 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
       ((absolute(channel(each, forward)) + absolute(channel(each, strafe))) >= moving) or (fact(each, Airborne) == 1)
     )
     local raise = (open == 1) ? (moves ? glance : 1) : 0
-    local focus = (open == 1) ? (moves ? glanceFocus : 1) : 0
     local right = toInt(bodyState(each, journalHand))
-    local left = 1 - right
-    when (journalRaiseLeft[$each] ?? 0) != (raise * left) or (journalRaiseRight[$each] ?? 0) != (raise * right) or (
-        journalFlapLeft[$each] ?? 0
-      ) != (open * left) or (journalFlapRight[$each] ?? 0) != (open * right) or (journalFocus[$each] ?? 0) != focus or (
-        journalSide[$each] ?? 0
-      ) != right
+    when (journalRaiseLeft[$each] ?? 0) != (raise * (1 - right)) or (journalRaiseRight[$each] ?? 0) != (raise * right)
     mode: Level
-    journalRaiseLeft[$each] = raise * left
+    journalRaiseLeft[$each] = raise * (1 - right)
     journalRaiseRight[$each] = raise * right
-    journalFlapLeft[$each] = open * left
-    journalFlapRight[$each] = open * right
-    journalFocus[$each] = focus
-    journalSide[$each] = right
   }
 
   // The screen's texts follow what they show, each written only when that changes: the tabs and controls with the page,
-  // the page's lines with the page and its revision, and each menagerie line with its code.
+  // the page's lines with the page, and each menagerie line with its code.
   rule "journal-show-page" {
     forEach: $players
     local page = journalPage[$each] ?? 0
-    when (journalShownPage[$each] ?? -1) != page
+    when (journalShownPage[$each] ?? -1) != page or (journalShownLines[$each] ?? -1) != page
     mode: Level
     journalShownPage[$each] = page
+    journalShownLines[$each] = page
     setState(state: journalTabs, key: $each, fromState: journalTabTexts, fromKey: journalPage[$each] ?? 0)
     setState(state: journalHint, key: $each, fromState: journalHintTexts, fromKey: journalPage[$each] ?? 0)
-  }
-  for p in range(0, pageCount) {
-    rule $"journal-lines-{pages[p].id}" {
-      forEach: $players
-      local revision = $"journalRevision{p}"[$each] ?? 0
-      when (journalPage[$each] ?? 0) == p and ((journalShownLines[$each] ?? -1) != p or (
-            journalShownRevision[$each] ?? -1
-          ) != revision)
-      mode: Level
-      journalShownLines[$each] = p
-      journalShownRevision[$each] = revision
-      setState(state: journalBody, key: $each, fromState: $"journalLines{p}", fromKey: $each)
+    for p in range(0, pageCount) {
+      if page == p {
+        setState(state: journalBody, key: $each, fromState: $"journalLines{p}", fromKey: $each)
+      }
     }
   }
   for (k, i) in kinds {
@@ -506,8 +417,7 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
       local kept = bodyState(each, $"menagerieKeeps{k.kind}") == 1
       local active = kept and (bodyState(each, companionActive) == k.kind)
       local marked = (journalMark[$each] ?? 1) == i + 1
-      local shown = (journalPage[$each] ?? 0) == 0
-      local code = journalCardCodeOf(shown, kept, active, marked)
+      local code = ((journalPage[$each] ?? 0) == 0) ? ((active ? 4 : (kept ? 2 : 0)) + (marked ? 1 : 0)) : 6
       when ($"journalCardCode{i}"[$each] ?? -1) != code
       mode: Level
       $"journalCardCode{i}"[$each] = code
@@ -518,15 +428,9 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
       mode: Level
       $"journalCardShown{i}"[$each] = $"journalCardCode{i}"[$each]
       setState(
-        state: $"journalCardName{i}",
+        state: $"journalCard{i}",
         key: $each,
-        fromState: $"journalCardNames{i}",
-        fromKey: $"journalCardCode{i}"[$each]
-      )
-      setState(
-        state: $"journalCardState{i}",
-        key: $each,
-        fromState: journalCardStates,
+        fromState: $"journalCardTexts{i}",
         fromKey: $"journalCardCode{i}"[$each]
       )
     }
@@ -535,13 +439,13 @@ template journalPlay(kinds, pages = journalPages, glance = 0.55, glanceFocus = 0
   commands [
     {
       name: "journal.hand.left"
-      help: "Wears the journal on a body's left forearm (the default): asks for it through the body's journalHandAsk cell, which a rule carries to its journalHand register; the character keeps the choice."
+      help: "Wears the journal on a body's left forearm (the default): asks for it through the body's journalHandAsk cell, which a rule carries to its journalHand register."
       parameters [{ name: "body", kind: Body, default: "0" }]
       lines ["world.state.cell.set journalHandAsk {body} 0"]
     }
     {
       name: "journal.hand.right"
-      help: "Wears the journal on a body's right forearm: asks for it through the body's journalHandAsk cell, which a rule carries to its journalHand register; the character keeps the choice."
+      help: "Wears the journal on a body's right forearm: asks for it through the body's journalHandAsk cell, which a rule carries to its journalHand register."
       parameters [{ name: "body", kind: Body, default: "0" }]
       lines ["world.state.cell.set journalHandAsk {body} 1"]
     }

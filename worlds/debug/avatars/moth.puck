@@ -2412,11 +2412,11 @@ looks {
         gaitAmplitude: 0
         replayFrames: false
         secondsPerFrame: 0
-        // Lane 0 is her journal's glass, lit as its flap opens. Lane 1 is the jets: dark out of flight mode, a pilot
+        // Lane 0 is her journal's glass, lit as its arm rises. Lane 1 is the jets: dark out of flight mode, a pilot
         // flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is flight mode itself, the heel and
         // nozzle glows it lights. Lane 3 is the boot jets' flame under the air jump.
         lanes [
-          maximum(journalFlapLeft[$body], journalFlapRight[$body])
+          maximum(journalRaiseLeft[$body], journalRaiseRight[$body])
           maximum(bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body]), dashPose[$body])
           maximum(bodyState($body, flightFuel) / 1000, dashPose[$body])
           bootBoost[$body]
@@ -4257,10 +4257,6 @@ state {
   world {
     // Her look (mothStyles): Plain shades every slot continuously, Cel her painted slots with the standard's celStyle.
     slot mothStyle: MothStyle = 1
-
-    // The identity lane her journal and menagerie save her choices through, as ../../standard/character.puck declares
-    // it: in a world that names no identity template a seat carries no facts, and the saves refuse for it.
-    table identity capacity(1024)
 
     row {
       name: "dashPose"

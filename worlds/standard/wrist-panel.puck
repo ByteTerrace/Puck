@@ -16,7 +16,7 @@
 //
 // lists `wristPanelGlass(...)` as the screen's palette slot (one slot a side), splices `wristPanelSwings(...)` into
 // its upper arm's and forearm's swings, and lists `wristPanelDrivers` among its drivers; its look's lane 0 lights the
-// glass as a flap opens (`maximum(journalFlapLeft[$body], journalFlapRight[$body])`). Its chase camera takes
+// glass as an arm rises (`maximum(journalRaiseLeft[$body], journalRaiseRight[$body])`). Its chase camera takes
 // `focus: wristPanelFocus()`.
 import "camera"
 import "mirror"
@@ -26,7 +26,8 @@ import "journal"
 // The panel's shape, in the left side's frame about the mount's `at`: a bezel `bezel` half extents deep, along the arm
 // and across it; the screen `screen` half extents across and up the glass as its reader sees it, standing `screenOut`
 // out from `at`, a millimetre proud of the bezel; and a flap `flap` half extents standing `flapOut` out, over both,
-// hinged on its front edge and swung `open` radians to stand open.
+// hinged on its front edge and swung `open` radians to stand open. The flap opens with its arm's raise along a quarter
+// turn of sine, so it stands wide open as the arm arrives (three quarters open in the action read).
 let wristPanelShape = {
   bezel { half [0.007, 0.064, 0.08], rounding: 0.004 }
   screen { half [0.07, 0.055], depth: 0.002, out: 0.006 }
@@ -75,7 +76,7 @@ template wristPanel(mount, side, isRight, ids, materials, shape = wristPanelShap
         signed(isRight, [0, 1, 0], [1, -1, -1]),
         shape.flap.open,
         mirrorX(isRight, (mount.at + [(0 - shape.flap.out), 0, (0 - shape.flap.half[2])]))
-      ) with { wave: "linear" }
+      ) with { wave: "sine" }
     ]
   }
 }
@@ -100,18 +101,19 @@ function wristPanelSwings(part, mount, side, isRight, pose = wristPanelPose) = (
   }
 ])
 
-// The drivers the panel's swings ride: each arm's raise and each flap follow the journal's eased aims (journal.puck's
-// `journalRaise<Side>` and `journalFlap<Side>`), 1 the pause read's whole pose. For a creation's `drivers`.
+// The drivers the panel's swings ride: each arm's raise follows the journal's eased aim (journal.puck's
+// `journalRaise<Side>`), 1 the pause read's whole pose, and its flap rides the same aim at a quarter turn a unit. For a
+// creation's `drivers`.
 let wristPanelDrivers = flatMap([["left", "Left"], ["right", "Right"]], s => [
   { name: $"journal-{s[0]}", signal: $"state.journalRaise{s[1]}.$body", cadence: 1, when ["always"] }
-  { name: $"journal-flap-{s[0]}", signal: $"state.journalFlap{s[1]}.$body", cadence: 1, when ["always"] }
+  { name: $"journal-flap-{s[0]}", signal: $"state.journalRaise{s[1]}.$body", cadence: 1.5707963, when ["always"] }
 ])
 
-// The chase camera's focus while the journal is open (camera.puck's `focusFraming`): it eases in by the journal's
-// `journalFocus` and leans to the panel's side by `journalSide`.
+// The chase camera's focus while the journal is open (camera.puck's `focusFraming`): it eases in toward the side whose
+// arm rises, as far as that arm rises (all the way in the pause read, part way in the action read).
 function wristPanelFocus(distance = 1.9, pitch = 0.45, pivotOffset = [0.3, 1.35, 0.1]) = focusFraming(
-  weight: "journalFocus",
-  side: "journalSide",
+  left: "journalRaiseLeft",
+  right: "journalRaiseRight",
   distance: distance,
   pitch: pitch,
   pivotOffset: pivotOffset
