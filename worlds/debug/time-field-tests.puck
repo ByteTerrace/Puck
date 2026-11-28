@@ -1,6 +1,6 @@
 // The play floor's time puzzles (gallery/time-puzzles.puck) and the standard's time field (standard/time-field.puck),
-// booted in the whole debug world: `puck test worlds/debug/time-field-tests.puck --jobs 1 --reproduce`. The debug world
-// steps at 30 ticks a second (stage.puck's `rateHz`), so a second is 30 ticks below.
+// booted in the gallery on its own (gallery-root.puck): `puck test worlds/debug/time-field-tests.puck --jobs 1 --reproduce`.
+// The gallery steps at 30 ticks a second (stage.puck's `rateHz`), so a second is 30 ticks below.
 //
 // Positions are world coordinates with the building at layout.puck's `gallerySite` (9.825, 0, 12.575), on level 1's floor
 // (4.55): the button's middle at (29.5, 13.5) (layout.puck's `timeButtonAt`), a spot off it toward the net at (29.5, 15.5),
@@ -8,14 +8,22 @@
 // (station `cabinet-south-3`, standing at (24.5, 14.75)) at (24.5, 16.25). The net is the south gallery's bay-4 panel,
 // `gallery-lattice-south-4`.
 //
-// The tiles want five bodies: seat 1's (body 0) and four of the Alchemy table's element tokens (bodies 509 to 512), which
-// stand still where they are put.
+// The tiles want five bodies: the five local seats', bodies 0 to 4, each woken at boot (`seatActivation`), which stand
+// still where they are put.
 
 schema: "puck.world.definition.v1"
-basis: "debug"
-documentId: "time-field-tests"
-import "stopped-machines"
+basis: "gallery-root"
+documentId: "gallery"
 import "gallery/layout"
+
+bodies {
+  seatActivation [Eager, Eager, Eager, Eager]
+}
+
+// The fifth body on the tiles is the population's top inhabitant, which seat 1 stands there.
+grants [
+  { budget: 64, capability: Drive, grantee: "seat1", subject: "body:701" }
+]
 
 let timeNet = "gallery-lattice-south-4"
 
@@ -142,10 +150,10 @@ test "five bodies on the tiles unlock Moth Valley, and a field holds a cabinet's
   when {
     ticks 2
     seat1: body.pose 27.996 4.6 45.453 0 0 0 0
-    seat1: body.pose 28.582 4.6 44.689 0 0 0 509
-    seat1: body.pose 29.5 4.6 44.4 0 0 0 510
-    seat1: body.pose 30.418 4.6 44.689 0 0 0 511
-    seat1: body.pose 31.003 4.6 45.453 0 0 0 512
+    seat2: body.pose 28.582 4.6 44.689 0 0 0 1
+    seat3: body.pose 29.5 4.6 44.4 0 0 0 2
+    seat4: body.pose 30.418 4.6 44.689 0 0 0 3
+    seat1: body.pose 31.003 4.6 45.453 0 0 0 701
     ticks 18
     seat1: body.pose 24.5 4.6 16.25 0 0 0 0
     ticks 5
