@@ -259,7 +259,7 @@ public sealed partial class SdfMeshPathBake {
     // so a count never holds a contribution that nothing can take back. On the frame's thread.
     private void CountHoles(Group group, bool listed) {
         var before = ((group.HoleEpoch == m_holeEpoch) ? group.HoleBits : 0);
-        var now = ((listed && OwesFrame(group: group)) ? 1 : 0) | ((listed && !group.Done && !group.Retired && group.HasDemandBox && (group.Shown is null) && (group.Priority > 1f)) ? 2 : 0);
+        var now = ((listed && OwesFrame(group: group)) ? 1 : 0) | ((listed && !group.Done && !group.Retired && !Dormant(group: group) && group.HasDemandBox && (group.Shown is null) && (group.Priority > 1f)) ? 2 : 0);
 
         group.HoleBits = now;
         group.HoleEpoch = m_holeEpoch;

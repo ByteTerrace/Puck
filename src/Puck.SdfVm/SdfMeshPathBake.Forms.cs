@@ -42,10 +42,9 @@ public sealed partial class SdfMeshPathBake {
     private long m_dormantNamed = -1L;
     private long m_dormantNamedProduct = -1L;
 
-    // Takes the frame's forms and places them again where they or a decision moved. Under the gate, on the frame's
-    // thread, before the frame's measure is posted.
-    // A bake no tables observe (an offline bake) lands nothing, so it hands a named form the draws as soon as its groups
-    // show their product, as it draws every product at once.
+    // Takes the frame's forms and places them again where they or a decision moved. A bake no tables observe (an offline
+    // bake) lands nothing, so it hands a named form the draws here, as soon as its groups show their product, as it draws
+    // every product at once. Under the gate, on the frame's thread, before the frame's measure is posted.
     private void TakeForms(SdfFrame frame) {
         var forms = frame.MeshForms;
 
