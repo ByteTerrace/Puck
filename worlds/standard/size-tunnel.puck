@@ -115,12 +115,6 @@ let sizeTunnelDoorDefault = { window: 3, swing: 0.9, trigger: 4.5, angle: 92, le
 let sizeTunnelReachMargin = 0.05
 let sizeTunnelInsetMargin = 0.05
 
-// Directions: a heading in degrees that turns a placement's front (-z) along a direction's horizontal part, its pitch,
-// and the rotation that lays a shape's -z along the direction with its +y as near up as the direction allows.
-function sizeTunnelYaw(d) = (arcTangent2((0 - d[0]), (0 - d[2])) * (180 / pi))
-function sizeTunnelPitch(d) = (arcSine(clamp(d[1], -1, 1)) * (180 / pi))
-function sizeTunnelTurn(d) = compose(rotate([0, 1, 0], sizeTunnelYaw(d)), rotate([1, 0, 0], sizeTunnelPitch(d)))
-
 // A branch's corners' radii, each at the size its corner stands at along the bare polyline: `bore.turn` bore half widths,
 // so the inner wall stands clear of the turn's centre; and no less than its zone's reach, nor so little that a turn
 // barely turning puts its arc's two ends nearer than that reach, so the size field reads a body's progress continuously
@@ -237,9 +231,9 @@ let near = sizeTunnelTurnNear(br, bore, l, s) in
   l: l
   s: s
   at: at
-  turn: sizeTunnelTurn(d)
-  yaw: sizeTunnelYaw(d)
-  inner: sizeTunnelInner(near, at, sizeTunnelTurn(d))
+  turn: directionTurn(d)
+  yaw: directionYaw(d)
+  inner: sizeTunnelInner(near, at, directionTurn(d))
   fore: sizeTunnelFore(near, bore, l, s)
   aft: sizeTunnelAft(near, bore, l, s)
   tile: ((k == (length(ls) - 1)) ? maximum(((0.6 * bore.spacing) * s), (br.total - l)) : ((0.6 * bore.spacing) * s))
@@ -281,7 +275,7 @@ let d = vectorUnit((points[(n - 1)] - points[(n - 2)])) in
 {
   at: points[(n - 1)]
   out: d
-  yaw: sizeTunnelYaw(d)
+  yaw: directionYaw(d)
   s: s
   width: (bore.width * s)
   height: (bore.height * s)
@@ -423,7 +417,7 @@ template sizeTunnelRails(a, b, bore) {
       detail: true
       material: sizeTunnelTrim
       position: ((p + q) * 0.5)
-      rotation: sizeTunnelTurn(vectorUnit((q - p)))
+      rotation: directionTurn(vectorUnit((q - p)))
       scale [(0.016 * a.s), (0.016 * a.s), ((vectorLength((q - p)) / 2) + (0.01 * a.s))]
       rounding: (0.008 * a.s)
     }
@@ -455,6 +449,55 @@ template sizeTunnelChamber(t, laid) {
     let out = [cosine(angle), 0, sine(angle)]
     let j = weylShare(i, 0.6180339887, 0.11)
     if not any(leaves, d => (dot(out, d) > cosine(gap))) {
+      // The exit's false wall: how long it stays open after the last body leaves its bore and how long a swing takes,
+      // seconds; how far into the bore from the mouth a body opens it, metres at the mouth's size; how far its leaves turn,
+      // degrees; and their thickness, metres at the mouth's size.
+      // How much further than the bore's half width a zone holds a body, metres; and how much further still inside a mouth
+      // the size curve ends than its zone reaches.
+
+      // A branch's corners' radii, each at the size its corner stands at along the bare polyline: `bore.turn` bore half widths,
+      // so the inner wall stands clear of the turn's centre; and no less than its zone's reach, nor so little that a turn
+      // barely turning puts its arc's two ends nearer than that reach, so the size field reads a body's progress continuously
+      // round it (size-field.puck's `sizeFieldPath`).
+      // A branch laid out: its rounded path, its length, its sizes at the junction (`from`) and the mouth (`to`), where its
+      // size curve runs (from `begin`, the chamber's wall, where the chamber's own size meets it, to `curve`, `inset` inside the
+      // mouth), and the first and last distances a section stands at (the chamber's wall, and a stride's share short of the
+      // mouth). Every distance is along the rounded path from the junction.
+      // The size a walker takes at a distance `l` along a branch from the junction: the field's own curve.
+
+      // The distances along a branch its sections stand at: from `first`, each a stride at the size halfway to the next
+      // (a midpoint step), to `last`. Round a turn the stride shortens so the outer wall's stones still meet. The count bounds
+      // the march by the stride at the branch's smallest size.
+      // The level turn near a distance `l` along a branch, within the reach of a section's stones there: its arc, or null.
+      // A section's inner side at a level turn (the side the turn's centre stands on, 1 its right, -1 its left, 0 off a turn),
+      // and how much of a stone's half length a stone on that side keeps toward the mouth (`fore`) and toward the junction
+      // (`aft`): on the turn, the share of the inner wall's circle to the bore's middle, so its stones meet round the tighter
+      // circle; on a straight beside it, no further toward the turn than the turn begins, so no stone reaches across the bore
+      // along the straight.
+      // A section: its index along its branch, its distance and size, its point on the branch's floor, its rotation (the
+      // branch's direction there) and heading, how far along its floor tile reaches either way, its inner side at a level turn
+      // and the shares of their half length its stones keep there toward the mouth and the junction, and three shares of a
+      // Weyl sequence salted by its branch, which jitter its stones.
+      // A point of a section's frame, `local` across (x), up its floor's normal (y) and along (-z toward the mouth); and the
+      // same with up the world's up, for what stands upright on a ramp.
+      // The side a section's torch hangs on, alternating torch by torch, and whether it carries a light.
+      // The top of a section's railing post, `share` of the way up it.
+
+      // A mouth: its point, the unit direction out of it, its heading (a placement's front facing out), its size, its bore at
+      // that size (the clear width and height, and the outer half width and height with its walls and crown), and the hole
+      // (`hole`, { width, height } from the mouth's floor point) its host cuts in the wall it stands in: the bore's whole
+      // outline for a hatch, whose end wall closes it round the doorway, and the leaves' opening for an exit.
+      // Every branch's mouth, with its branch's id and kind, for the host that builds the walls they open in.
+      // A point in a mouth's frame (x across, y up, z into the bore), in the group's coordinates.
+
+      // One section of bore: a floor tile, each wall laid in the bore's strata, a stone a stratum, each stone standing proud or back, longer
+      // or shorter and rounder or squarer by its own share; two haunches and a crown; a rib on every `ribEvery`th, a torch on
+      // every `torchEvery`th, and a railing post.
+
+      // The railing's two rails between one post and the next.
+
+      // The junction's chamber: a round pad, a ring of stones broken where each branch leaves (with a lintel over each
+      // opening), a crown, and at its middle a signpost whose arms point down the branches under a lantern.
       // The exit's false wall: how long it stays open after the last body leaves its bore and how long a swing takes,
       // seconds; how far into the bore from the mouth a body opens it, metres at the mouth's size; how far its leaves turn,
       // degrees; and their thickness, metres at the mouth's size.
@@ -521,7 +564,7 @@ template sizeTunnelChamber(t, laid) {
       material: sizeTunnelRockDeep
       exponent: 2.6
       position: (at + (d * (r + (wall / 2))) + [0, ((bore + tall) / 2), 0])
-      rotation: rotate([0, 1, 0], sizeTunnelYaw(d))
+      rotation: rotate([0, 1, 0], directionYaw(d))
       scale [(half + wall), (((tall - bore) / 2) + (0.3 * wall)), ((wall / 2) + rough)]
     }
   }
@@ -542,7 +585,7 @@ template sizeTunnelChamber(t, laid) {
       detail: true
       material: sizeTunnelTrim
       position: (at + (d * (0.36 * s)) + [0, rise, 0])
-      rotation: sizeTunnelTurn(d)
+      rotation: directionTurn(d)
       scale [(0.012 * s), (0.05 * s), (0.32 * s)]
       rounding: (0.006 * s)
     }
@@ -550,7 +593,7 @@ template sizeTunnelChamber(t, laid) {
       detail: true
       material: sizeTunnelAccent
       position: (at + (d * (0.68 * s)) + [0, rise, 0])
-      rotation: compose(sizeTunnelTurn(d), rotate([1, 0, 0], 45))
+      rotation: compose(directionTurn(d), rotate([1, 0, 0], 45))
       scale [(0.014 * s), (0.05 * s), (0.05 * s)]
     }
   }

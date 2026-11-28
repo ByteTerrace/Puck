@@ -10,6 +10,15 @@ function indexed(items) = map(range(0, length(items)), k => (items[k] with { ind
 // Vectors of any dimension: the length and the unit vector (the zero vector stays zero).
 function vectorLength(v) = squareRoot(dot(v, v))
 function vectorUnit(v) = (v * (1 / maximum(vectorLength(v), 0.000000001)))
+// A direction as a placement reads it: the heading in degrees that turns its front (-z) along the direction's horizontal
+// part, the pitch in degrees that tilts it up the direction, and the rotation that lays a shape's -z along the direction
+// with its +y as near up as the direction allows.
+function directionYaw(d) = (arcTangent2((0 - d[0]), (0 - d[2])) * (180 / pi))
+function directionPitch(d) = (arcSine(clamp(d[1], -1, 1)) * (180 / pi))
+function directionTurn(d) = compose(rotate([0, 1, 0], directionYaw(d)), rotate([1, 0, 0], directionPitch(d)))
+// The tangent of half the angle whose cosine is `c`: how far from a corner turning through that angle a circle of unit
+// radius meets its two sides.
+function halfAngleTangent(c) = squareRoot(((1 - c) / (1 + c)))
 // A share in [0, 1) for item `i` of a scatter that never repeats: the fractional part of `i * ratio + salt`, a Weyl
 // sequence. The golden ratio's conjugate (the default) spreads the first items most evenly; the plastic number's
 // reciprocal, 0.7548776662, gives a second sequence that does not line up with the first or with a golden-angle spiral.
@@ -45,12 +54,12 @@ function roundedIn(points, i) = vectorUnit((points[i] - points[(i - 1)]))
 function roundedOut(points, i) = vectorUnit((points[(i + 1)] - points[i]))
 function roundedCosine(points, i) = clamp(dot(roundedIn(points, i), roundedOut(points, i)), -0.999999, 1)
 function roundedReach(points, radii, i) = minimum(
-  (radii[(i - 1)] * squareRoot(((1 - roundedCosine(points, i)) / (1 + roundedCosine(points, i))))),
+  (radii[(i - 1)] * halfAngleTangent(roundedCosine(points, i))),
   (0.5 * minimum(vectorLength((points[i] - points[(i - 1)])), vectorLength((points[(i + 1)] - points[i]))))
 )
 function roundedCorner(points, radii, i) = let reach = roundedReach(points, radii, i) in
 let turns = (roundedCosine(points, i) < 0.999999) in
-let radius = (turns ? (reach / squareRoot(((1 - roundedCosine(points, i)) / (1 + roundedCosine(points, i))))) : 0) in
+let radius = (turns ? (reach / halfAngleTangent(roundedCosine(points, i))) : 0) in
 let inward = vectorUnit((roundedOut(points, i) - (roundedIn(points, i) * roundedCosine(points, i)))) in
 {
   turns: turns
@@ -140,7 +149,7 @@ function cornerIn(points, i) = vectorUnit(loopSegment(points, (i - 1)))
 function cornerOut(points, i) = vectorUnit(loopSegment(points, i))
 function cornerCosine(points, i) = maximum(-0.999, minimum(1, dot(cornerIn(points, i), cornerOut(points, i))))
 function cornerReach(points, i, radius) = minimum(
-  (radius * squareRoot(((1 - cornerCosine(points, i)) / (1 + cornerCosine(points, i))))),
+  (radius * halfAngleTangent(cornerCosine(points, i))),
   (0.5 * minimum(loopSegmentLength(points, (i - 1)), loopSegmentLength(points, i)))
 )
 function cornerStart(points, i, radius) = (loopItem(points, i) -
