@@ -18,7 +18,7 @@ documentId: "moon"
 // with craft-form.puck below.
 import "set-controls"
 import "size"
-import "painting-kit"
+import "../standard/portal"
 import "../standard/place"
 import "moon-frame"
 import "moon-surface"
@@ -275,7 +275,7 @@ placements {
             destination: "debug"
             fallback: "#D8D2C6"
             projection: window
-            attention: windowAttention
+            attention: portalAttention
           }
         }
       ]
@@ -390,7 +390,7 @@ prototypes {
   // and stands open beside it while it has.
   prototype "moon-socket" {
     document {
-      arrivalFrame(color: "#8C6A3F", roughness: 0.4, specular: 0.4, post: 0.12)
+      portalFrame(color: "#8C6A3F", roughness: 0.4, specular: 0.4, post: 0.12)
     }
   }
   for leaf in [
@@ -411,10 +411,10 @@ prototypes {
     }
   }
 
-  // The way back: the shared arrival frame (painting-kit.puck) in pale stone.
+  // The way back: the standard portal module's frame (../standard/portal.puck's portalFrame) in pale stone.
   prototype "frame" {
     document {
-      arrivalFrame(color: "#E9E4D8", roughness: 0.6, specular: 0.1, post: 0.12)
+      portalFrame(color: "#E9E4D8", roughness: 0.6, specular: 0.1, post: 0.12)
     }
   }
 }

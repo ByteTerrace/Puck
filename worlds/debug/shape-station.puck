@@ -113,7 +113,8 @@ template shapeStation(displays = galleryDisplays, terminals = []) {
       terminals
     ),
     near: 2.6,
-    console: galleryConsole
+    console: galleryConsole,
+    consoleTerminals: length(displays)
   )
 
   // A display's terminal mailbox (terminalAction and terminalValue, keyed by its terminal number) carried into the cells

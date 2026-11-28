@@ -18,6 +18,17 @@ leads. Each canvas ripples like an event horizon (see
 | Middle fin east face and stair fin west face, facing each other | `painting-link-west` and `painting-link-east`, brass frames | Two paintings facing each other 12.9 m apart across the east court: step into either and step out of the other, facing out of it. |
 | Floor and ceiling, east court | `painting-fall-floor` and `painting-fall-ceiling`, gilt squares | The endless fall: a body that steps onto the floor glass drops out of the ceiling glass still falling, and falls through the floor again, forever. |
 
+Every painting is the standard's portal module
+([portal.puck](../standard/portal.puck)) hung on a wall, as level 3's portals
+and the lab wing's doors are the same module standing free
+([gallery.md](gallery.md#the-portals)): a row of paintings.puck's
+`wallPaintings` names where it hangs, its frame (the look's rings round the
+canvas) and where it leads, an entry of the gallery's portal library
+([portal-library.puck](portal-library.puck)) or, for the pair across the room,
+this world itself. A painting leads to one world for good, so it stands no
+panel. The floor and ceiling paintings lie flat, so each is a creation of its
+own wearing the module's face.
+
 The wing is level 0's south aisle east of the entrance lobby
 ([gallery.md](gallery.md#the-plan)), open to the nave through the arcade, under
 a "PAINTING WING" board where the lobby meets it. Three fins stand out from its

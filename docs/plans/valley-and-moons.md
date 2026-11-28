@@ -113,7 +113,7 @@ what a federated world is for.
 |---|---|---|
 | The moon's ground | The standard terrain program with a radial mode; eight octant sectors of one description (`moon-surface.puck`) | None |
 | Its pull and a body's up | `WorldGravityArea` (a radial sphere), `WorldBodyUpPolicy`, `WorldUpTurnRates` | None |
-| The portal | The painting wing's `paintingFace` and the shared `arrivalFrame`; references, destinations and sessions | None |
+| The portal | The standard portal module's `portalFace` and `portalFrame` (`worlds/standard/portal.puck`); references, destinations and sessions | None |
 | The moon in the sky | `WorldRenderSkyLayer.View` and the infinity-view machinery (`InfinityViewSpec`, `InfinityViewFit`) | A view that moves with the viewer, bounds itself by a sphere and draws geometry alone |
 | One sun | The standard's day cycle on both worlds from one start and rate (`moon-frame.puck`'s shared day) | None |
 | The air's height | Keyed sky layers and the height fog; `timeline.clocks` | A view clock (`WorldClockView`): a clock whose phase is how far the viewer stands from a point |

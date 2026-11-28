@@ -137,7 +137,8 @@ function terminalConsoleOverlay(count, toggleSources, closeSources, enterSources
   }
 }
 
-// The consoles of a terminalPlay world's `count` terminals: bodies 0 to `seats` - 1 seeded and up to `capacity` keyed,
+// The consoles of a terminalPlay world's first `count` terminals (a terminal past them has no console, so the console key
+// does nothing there): bodies 0 to `seats` - 1 seeded and up to `capacity` keyed,
 // and the local seats 1 to `seats` typing (a step's input events are read for a literal seat). `keysPerStep` bounds the
 // characters a seat's line takes in one step.
 template terminalConsole(console, count, seats = 4, capacity = 16, keysPerStep = 16) {
@@ -256,7 +257,7 @@ template terminalConsole(console, count, seats = 4, capacity = 16, keysPerStep =
     forEach: $players
     local at = terminalAt[$each] ?? 0
     local open = terminalConsoleOpen[at] ?? 0
-    when channel(each, terminalConsole) >= 1 and at > 0
+    when channel(each, terminalConsole) >= 1 and at > 0 and at <= count
     mode: Edge
     terminalConsoleOpen[at] = 1 - open
   }

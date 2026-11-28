@@ -25,8 +25,9 @@
 //   panelNote
 //   panelShownAt  the choice the title, note and inks were last written for
 //
-// and, keyed `<panel>-<entry>`, `panelInk` (each row's ink, the chosen one lit) and `panelCopyTitle` and
-// `panelCopyNote`, each entry's copy, which the detail is written from. A rule or a console write to `panelChoice`
+// and, one row a panel keyed by entry index, `panelInk-<panel>` (each row's ink, the chosen one lit) and
+// `panelTitles-<panel>` and `panelNotes-<panel>`, each entry's copy, which the detail is written from. A rule or a
+// console write to `panelChoice`
 // moves the glass as a tap does.
 import "architecture"
 import "contexts/terminal"
@@ -94,7 +95,7 @@ function panelText(panel, rect, template, ink, em, align, wrap = false, markup =
 // A button's face less a margin, the box its label fits.
 function panelInset(rect) = { x0: (rect.x0 + 0.01), x1: (rect.x1 - 0.01), y0: (rect.y0 + 0.008), y1: (rect.y1 - 0.008) }
 
-// The rows of page `page`: each entry's title in its ink, read from the entry's `panelInk` cell.
+// The rows of page `page`: each entry's title in its ink, read from the entry's cell of the panel's ink row.
 function panelPageEntries(panel, page) = filter(
   map(panel.entries, (entry, i) => { index: i, title: entry.title }),
   entry => ((entry.index >= (page * panelRows)) and (entry.index < ((page + 1) * panelRows)))
@@ -104,7 +105,7 @@ function panelLines(panel, page) = reduce(
   "",
   (text, entry) => ((text == "") ? panelLine(panel, entry) : $"{text}\n{panelLine(panel, entry)}")
 )
-function panelLine(panel, entry) = $"[color={{state.panelInk.{panel.id}-{entry.index}}}]{entry.title}[/color]"
+function panelLine(panel, entry) = $"[color={{state.panelInk-{panel.id}.{entry.index}}}]{entry.title}[/color]"
 
 // What page `page` of a panel's glass shows: the elbow and bar with the panel's title in its cap, PREV and NEXT down the
 // column and the page at its foot, the page's rows, a divider, and the chosen entry's title and note.
@@ -254,8 +255,10 @@ template panelPlacements(panels) {
   }
 }
 
-// One cell per panel of `panels`, keyed by its id and seeded from `values` (a value a panel, in `panels`' order), and
-// one per entry of each, keyed `<panel>-<entry>` and seeded from `values` (a value an entry, panel after panel).
+// One cell per panel of `panels`, keyed by its id and seeded from `values` (a value a panel, in `panels`' order), and a
+// row of a panel's own, `<name>-<panel>`, with a Text cell per entry keyed by its index and seeded from `values` (a value
+// an entry): a choice indexes it directly (`$cell:panelChoice:<panel>`), so a change writes the cells it moves and no
+// others.
 template panelCells(panels, name, values, kind = "Int") {
   row {
     name: name
@@ -264,13 +267,12 @@ template panelCells(panels, name, values, kind = "Int") {
     cells: map(range(0, length(panels)), index => { key: panels[index].id, value: values[index] })
   }
 }
-template panelEntryCells(panels, name, values, kind = "Text") {
-  let keys = flatMap(panels, panel => map(range(0, length(panel.entries)), i => $"{panel.id}-{i}"))
+template panelEntryRow(panel, name, values) {
   row {
-    name: name
-    kind: kind
-    capacity: length(keys)
-    cells: map(range(0, length(keys)), index => { key: keys[index], value: values[index] })
+    name: $"{name}-{panel.id}"
+    kind: Text
+    capacity: length(panel.entries)
+    cells: map(range(0, length(panel.entries)), i => { key: $"{i}", value: values[i] })
   }
 }
 
@@ -282,13 +284,15 @@ template panelState(panels) {
   panelCells(panels: panels, name: "panelPage", values: map(panels, panel => floor((panel.choice / panelRows))))
   panelCells(panels: panels, name: "panelTitle", kind: "Text", values: map(panels, panel => panel.entries[panel.choice].title))
   panelCells(panels: panels, name: "panelNote", kind: "Text", values: map(panels, panel => panel.entries[panel.choice].note))
-  panelEntryCells(
-    panels: panels,
-    name: "panelInk",
-    values: flatMap(panels, panel => map(range(0, length(panel.entries)), i => ((i == panel.choice) ? consoleLook.lit : consoleLook.dim)))
-  )
-  panelEntryCells(panels: panels, name: "panelCopyTitle", values: flatMap(panels, panel => map(panel.entries, entry => entry.title)))
-  panelEntryCells(panels: panels, name: "panelCopyNote", values: flatMap(panels, panel => map(panel.entries, entry => entry.note)))
+  for panel in panels {
+    panelEntryRow(
+      panel: panel,
+      name: "panelInk",
+      values: map(range(0, length(panel.entries)), i => ((i == panel.choice) ? consoleLook.lit : consoleLook.dim))
+    )
+    panelEntryRow(panel: panel, name: "panelTitles", values: map(panel.entries, entry => entry.title))
+    panelEntryRow(panel: panel, name: "panelNotes", values: map(panel.entries, entry => entry.note))
+  }
   row {
     name: "panelInks"
     kind: Text
@@ -299,8 +303,8 @@ template panelState(panels) {
 
 // Each panel's rules. Its glass's rules sweep the contacts on it (a finger, a pen, a click: one door each): a lift on a
 // row chooses that row's entry and posts it to the mailbox, and a lift on PREV or NEXT turns the list a page. However the
-// choice moved (a tap, a rule, a console write), the detail and the inks follow it, written once a change: the rule's
-// write of `panelShownAt` closes its own gate.
+// choice moved (a tap, a rule, a console write), the detail and the inks follow it, written once a change by the choice's
+// own index (the row it was on dimmed, the row it is on lit), and the rule's write of `panelShownAt` closes its gate.
 template panelRules(panels) {
   for panel in panels {
     let key = panel.id
@@ -319,23 +323,16 @@ template panelRules(panels) {
         panelPage[key] = clamp(panelPage[key] + contact(each, region, next) - contact(each, region, prev), 0, last)
       }
     }
+    // A choice that names no entry (a door closed by its cell) moves nothing on the glass until it names one again.
     rule $"panel-{key}-shown" {
-      when panelShownAt[key] != panelChoice[key]
+      when panelShownAt[key] != panelChoice[key] and panelChoice[key] >= 0 and panelChoice[key] < count
       mode: Level
-      for (entry, i) in panel.entries {
-        if panelChoice[key] == i {
-          setState(state: panelTitle, key: $"{key}", fromState: panelCopyTitle, fromKey: $"{key}-{i}")
-          setState(state: panelNote, key: $"{key}", fromState: panelCopyNote, fromKey: $"{key}-{i}")
-          setState(state: panelInk, key: $"{key}-{i}", fromState: panelInks, fromKey: lit)
-        } else {
-          setState(state: panelInk, key: $"{key}-{i}", fromState: panelInks, fromKey: dim)
-        }
-      }
-      for page in range(0, panelPages(panel)) {
-        if panelChoice[key] >= page * panelRows and panelChoice[key] < (page + 1) * panelRows {
-          panelPage[key] = page
-        }
-      }
+      setState(state: $"panelInk-{key}", key: $"$cell:panelShownAt:{key}", fromState: panelInks, fromKey: dim)
+      setState(state: $"panelInk-{key}", key: $"$cell:panelChoice:{key}", fromState: panelInks, fromKey: lit)
+      setState(state: panelTitle, key: $"{key}", fromState: $"panelTitles-{key}", fromKey: $"$cell:panelChoice:{key}")
+      setState(state: panelNote, key: $"{key}", fromState: $"panelNotes-{key}", fromKey: $"$cell:panelChoice:{key}")
+      // The page that holds the choice: its whole part of choice / rows, divided exactly.
+      panelPage[key] = (panelChoice[key] - (panelChoice[key] % panelRows)) / panelRows
       panelShownAt[key] = panelChoice[key]
     }
   }

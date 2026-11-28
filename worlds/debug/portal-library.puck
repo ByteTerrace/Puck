@@ -58,7 +58,7 @@ let galleryLabRoutes = map(filter(labWingPlan, lab => lab.open), lab => {
 })
 let galleryPortalLibrary = concat(galleryShowcase, galleryLabRoutes)
 // The library's entry for a destination.
-function galleryRoute(destination) = filter(galleryPortalLibrary, entry => (entry.destination == destination))[0]
+function galleryRoute(destination) = first(galleryPortalLibrary, entry => (entry.destination == destination), null)
 
 // Level 3's portals wear a freestanding frame in the canyon workshop's teal over a brass lip, and start on the library's
 // first twelve entries, south then north, west to east (gallery/layout.puck's `galleryPortalPlan`).

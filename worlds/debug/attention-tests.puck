@@ -11,7 +11,7 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "attention-tests"
 
-import "painting-kit"
+import "../standard/portal"
 
 references [
   { document: "attention-world", name: "watched" }
@@ -32,7 +32,7 @@ state {
 prototypes {
   prototype "frame" {
     document {
-      arrivalFrame(color: "#C9A43A")
+      portalFrame(color: "#C9A43A")
     }
   }
 }

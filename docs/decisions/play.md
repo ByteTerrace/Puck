@@ -297,6 +297,47 @@ one at will. The first two are Mintstitch and Tangerine
 One companion is active at a time; the roster is owned by the character and
 travels with them across worlds.
 
+## Portals and their panels
+
+**A painting portal is one module (the owner's rulings).** A portal is a module
+an artist places, as the game stations and gaming devices are: one portal is a
+row, and twelve, or any number, is a world placing it from its layout. Every
+portal of the debug world set (the painting wing's canvases, the lab wing's
+doors, level 3's twelve) is the standard's portal module
+(`worlds/standard/portal.puck`), which shares everything it can: the canvas,
+the frame's rings, the plaque, the rippling window face and the library's
+references.
+
+**A portal points at a library through a panel (the owner's rulings).** A
+routed portal stands a control panel at its right, in the shape displays'
+design language (the ochre elbow, cream and teal buttons, the chosen row lit),
+and the panel points it at any entry of a library of destinations, as a shape
+station browses its catalog. The library is authored data (a world's own list
+of worlds, places and the faces a traveller steps out of), any portal can show
+any entry, and a world authors its own library (the debug world set's is
+`worlds/debug/portal-library.puck`). Level 3's portals start on the showcase
+worlds and the labs. The panel is the standard's control panel
+(`worlds/standard/panel.puck`), and it is the panel a lift's car calls use too:
+its choice is a cell its importer reads, whether that importer routes a door or
+calls a car.
+
+**A repoint is seen by everyone (the owner's ruling).** The panel's choice is
+world state the authority writes, and the door reads it, so every player sees
+the gallery's setting. A later upgrade lets a player's worn screen point a
+portal for that player alone while everyone else sees the gallery's setting;
+the door leaves room for it (a second, viewer-keyed cell a presentation reads
+for its own viewer, beside the world's), and nothing assumes it is absent.
+
+**One decision routes a door and its window.** A face's routes
+(`WorldFaceRoutes`) name the destinations a door may lead to and the cell that
+chooses among them. The authority's door scan reads the cell once a tick,
+between ticks, and records the route beside the door's closure; the crossing it
+mints, the session the window observes and the counterpart a presentation maps
+the window through all follow that record (`WorldFaceRouting`), so the glass
+never shows one world while the door leads to another, and no presentation
+reads the cell itself. A cell that names no route closes the door, as an unmet
+`open` does.
+
 ## Creatures and scale
 
 **Creature collectives are authorable local laws**, not a prescribed group

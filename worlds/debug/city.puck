@@ -30,7 +30,7 @@ simulation {
 import "set-controls"
 import "suit"
 import "size"
-import "painting-kit"
+import "../standard/portal"
 import "../standard/place"
 import "walkers"
 import "city-day"
@@ -537,7 +537,7 @@ placements {
           destination: "debug"
           fallback: "#10141B"
           projection: window
-          attention: windowAttention
+          attention: portalAttention
         }
       }
     ]
@@ -668,7 +668,7 @@ prototypes {
 
   prototype "frame" {
     document {
-      arrivalFrame(color: "#2F7F7A", roughness: 0.5, specular: 0.25, post: 0.12)
+      portalFrame(color: "#2F7F7A", roughness: 0.5, specular: 0.25, post: 0.12)
     }
   }
 

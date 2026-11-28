@@ -185,8 +185,9 @@ function terminalPartOf(part, count) = range((part * terminalPart), minimum(((pa
 // while its pointer rests on the terminal's own glass; `restingPage` is the page pointer capture refines. `console` is
 // the terminals' console (terminal-console.puck's `terminalConsole`), or null for none; `consoleSources` open and close
 // it, and the console's own page closes it on `consoleCloseSources` too, runs its line on `consoleEnterSources` and
-// erases on `consoleEraseSources`. `scrollSources` (the wheel) are the terminal's and pointer capture's `scroll`, which a
-// screen's rules read to scroll what it shows.
+// erases on `consoleEraseSources`; `consoleTerminals` says how many of the first terminals carry it (null for all), so a
+// world whose later terminals show no console keeps none for them. `scrollSources` (the wheel) are the terminal's and
+// pointer capture's `scroll`, which a screen's rules read to scroll what it shows.
 template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near = 0, seats = 4, capacity = 16, tapSources = [
   "mouse.button1"
 ], leaveSources = [
@@ -197,17 +198,20 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
   "gamepad.buttonEast"
 ], restingPage = "base", console = null, consoleSources = ["keyboard.backtick"], consoleCloseSources = [], consoleEnterSources = [
   "keyboard.enter"
-], consoleEraseSources = ["keyboard.backspace"], scrollSources = ["mouse.wheel"]) {
+], consoleEraseSources = ["keyboard.backspace"], scrollSources = ["mouse.wheel"], consoleTerminals = null) {
   let count = length(terminals)
+  let consoled = ((consoleTerminals == null) ? count : consoleTerminals)
   let gated = map(terminals, terminal => (({ needs [] } with terminal) with { conditions: terminalConditions(({ needs [] } with terminal)) }))
   let parts = range(0, floor((((count + terminalPart) - 1) / terminalPart)))
+  // The terminals whose `needs` a body must hold, which the reach a body keeps checks besides the spot it stands at.
+  let needy = filter(range(0, count), i => (length(gated[i].needs) > 0))
 
   if console != null {
-    terminalConsole(console: console, count: count, seats: seats, capacity: capacity)
+    terminalConsole(console: console, count: consoled, seats: seats, capacity: capacity)
     // Listed ahead of the terminal's own row, so the console's controls win while it is open.
     bindingOverlays [
       terminalConsoleOverlay(
-        count: count,
+        count: consoled,
         toggleSources: consoleSources,
         closeSources: consoleCloseSources,
         enterSources: consoleEnterSources,
@@ -244,34 +248,59 @@ template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near =
         capacity: capacity
         cells: map(range(0, seats), seat => { key: $"{seat}", value: 0 })
       }
+      // Each terminal's `at`, keyed by its number, so the reach a body keeps reads the one terminal it is near.
+      for (axis, a) in ["X", "Y", "Z"] {
+        row {
+          name: $"terminalSpot{axis}"
+          kind: Fixed
+          capacity: count
+          cells: map(range(0, count), i => { key: $"{i + 1}", value: $"{gated[i].at[a]}" })
+        }
+      }
     }
   }
 
   // Which terminal's reach each player's body stands in: a body leaves a terminal's reach `margin` past its radius, and
-  // takes the first terminal whose reach it then stands in, among those whose `needs` it holds (terminalFits). The answer is computed once (`target`) and written only when it differs, so the rule is
-  // judged as bodies move but fires, and writes, only when a body crosses a reach.
+  // takes the first terminal whose reach it then stands in, among those whose `needs` it holds (terminalIn). The answer
+  // is computed once (`target`) and written only when it differs, so the rule is judged as bodies move but fires, and
+  // writes, only when a body crosses a reach.
   rule "terminal-near" {
     forEach: $players
     local near = terminalNear[$each]
     local px = bodyPosition(each, x)
     local py = bodyPosition(each, y)
     local pz = bodyPosition(each, z)
-    // Whether the body still stands in the reach of the terminal it is near, and the first terminal it would enter, folded
-    // a part of the terminals at a time (terminalPart), so the rule's locals grow by two a part rather than three a
-    // terminal.
-    for part in parts {
-      local $"kept{part}" = any(
-        terminalPartOf(part, count),
-        i => (near == i + 1) and terminalIn(gated[i], each, px, py, pz, radius + margin, height)
-      )
-      local $"first{part}" = first(
-        terminalPartOf(part, count),
-        i => terminalIn(gated[i], each, px, py, pz, radius, height),
-        i => i + 1,
-        0
+    // Whether the body still stands in the reach of the terminal it is near, read at that one terminal's spot (and, where
+    // a terminal needs registers, whether the body still holds those of the one it is near).
+    for none in ((length(needy) == 0) ? [1] : []) {
+      local kept = near > 0 and reachedAt(terminalSpotX[near], terminalSpotY[near], terminalSpotZ[near], px, py, pz, radius + margin, height)
+    }
+    for some in ((length(needy) == 0) ? [] : [1]) {
+      local kept = near > 0 and reachedAt(terminalSpotX[near], terminalSpotY[near], terminalSpotZ[near], px, py, pz, radius + margin, height) and all(
+        needy,
+        i => (near != i + 1) or all(gated[i].needs, need => (bodyState(each, need.register) >= need.atLeast))
       )
     }
-    local kept = any(parts, part => $"kept{part}")
+    // The first terminal it would enter, folded a part of the terminals at a time (terminalPart), so the rule's locals
+    // grow by one a part rather than with every terminal; a part that holds no terminal with needs folds the reach alone.
+    for part in parts {
+      for plain in ((count(terminalPartOf(part, count), i => (length(gated[i].needs) > 0)) == 0) ? [1] : []) {
+        local $"first{part}" = first(
+          terminalPartOf(part, count),
+          i => reachedFrom(gated[i].at, px, py, pz, radius, height),
+          i => i + 1,
+          0
+        )
+      }
+      for gatedPart in ((count(terminalPartOf(part, count), i => (length(gated[i].needs) > 0)) == 0) ? [] : [1]) {
+        local $"first{part}" = first(
+          terminalPartOf(part, count),
+          i => terminalIn(gated[i], each, px, py, pz, radius, height),
+          i => i + 1,
+          0
+        )
+      }
+    }
     local entered = first(parts, part => $"first{part}" > 0, part => $"first{part}", 0)
     local target = kept ? near : entered
     when terminalNear[$each] != target
