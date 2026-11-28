@@ -335,9 +335,15 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             if ((form is { } shapes) && (FormGeometry(form: shapes) != geometry)) { _ = Disk.Write(geometry: FormGeometry(form: shapes), identity: identity, materials: materials, mesh: mesh); }
         }
 
-        var owned = (written
-            ? mesh.NativeCopy(Allocator, Account, restore: (this, identity, geometry, materials), stored: stored)
-            : CopyUnstored(mesh));
+        SdfMesh owned;
+
+        try {
+            owned = (written
+                ? mesh.NativeCopy(Allocator, Account, restore: (this, identity, geometry, materials), stored: stored)
+                : CopyUnstored(mesh));
+        } finally {
+            stored?.Dispose();
+        }
 
         try {
             if (Hold(form: form, geometry: geometry, identity: identity, materials: materials, mesh: owned) && !written) {

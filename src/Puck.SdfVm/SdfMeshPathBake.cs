@@ -2910,26 +2910,32 @@ public sealed partial class SdfMeshPathBake {
 
         var contour = group.Contour!.Finished(allocator: group.Allocator, cell: group.DiagnosticCell, workspace: group.Memory);
         // A group every point of whose field reads its one material samples none: its cut meshes every quad in it.
-        var cut = new SdfMeshMaterialCut(contour: contour, uniform: (((group.MaterialOrder.Length == 1) && group.Geometry.MaterialsClosed) ? group.MaterialOrder[0] : null));
-        var points = cut.Points(into: group.Points);
-        var (decided, walks) = ((points > 0) ? DecideMaterials(group: group, points: points) : (0, 0));
+        var cut = new SdfMeshMaterialCut(allocator: group.Allocator, contour: contour, owner: group.Memory, uniform: (((group.MaterialOrder.Length == 1) && group.Geometry.MaterialsClosed) ? group.MaterialOrder[0] : null));
 
-        points -= decided;
-        // A first round its CPU field decided whole is answered now, and the cut goes on to the round after it.
-        while ((points == 0) && (group.PointDecided.Length > 0)) {
-            cut.Answer(materials: group.PointDecided.GetSpan());
-            group.PointDecided.Resize(length: 0, clear: false, preserve: false);
-            points = cut.Points(into: group.Points);
-        }
+        try {
+            var points = cut.Points(into: group.Points);
+            var (decided, walks) = ((points > 0) ? DecideMaterials(group: group, points: points) : (0, 0));
 
-        Account(group: group, since: started, stage: BakeStage.Split);
-        using (EnterGate(site: BakeGate.Split)) {
-            m_accounts.MaterialsDecided += decided;
-            m_accounts.MaterialWalks += walks;
+            points -= decided;
+            // A first round its CPU field decided whole is answered now, and the cut goes on to the round after it.
+            while ((points == 0) && (group.PointDecided.Length > 0)) {
+                cut.Answer(materials: group.PointDecided.GetSpan());
+                group.PointDecided.Resize(length: 0, clear: false, preserve: false);
+                points = cut.Points(into: group.Points);
+            }
+
+            Account(group: group, since: started, stage: BakeStage.Split);
+            using (EnterGate(site: BakeGate.Split)) {
+                m_accounts.MaterialsDecided += decided;
+                m_accounts.MaterialWalks += walks;
+            }
+            group.Contour = contour;
+            group.Cut = cut;
+            StartRound(gate: BakeGate.Split, group: group, points: points);
+        } catch {
+            cut.Dispose();
+            throw;
         }
-        group.Contour = contour;
-        group.Cut = cut;
-        StartRound(gate: BakeGate.Split, group: group, points: points);
     }
     // Starts a group's next round of material points, or meshes the group once its cut samples none (one material, no
     // boundary left to place): a round of no points would be a lattice of no samples, whose dispatch copies nothing back.
@@ -3064,7 +3070,7 @@ public sealed partial class SdfMeshPathBake {
         var started = Stopwatch.GetTimestamp();
 
         try {
-            mesh = group.Cut!.Build(group.Memory, group.Allocator);
+            mesh = group.Cut!.Build();
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
             SdfMeshBakeReport.Refused(refusal: exception.Message, selector: group.Selector);
         }
@@ -3608,7 +3614,18 @@ public sealed partial class SdfMeshPathBake {
         public (long Walks, long Settled) AffineTrial { get; set; }
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.
         public SdfContour? Contour { get; set; }
-        public SdfMeshMaterialCut? Cut { get; set; }
+        // The cut holds native storage, which letting go of it (a null or another cut) releases.
+        public SdfMeshMaterialCut? Cut {
+            get => m_cut;
+            set {
+                var old = m_cut;
+
+                m_cut = value;
+                if (!ReferenceEquals(objA: old, objB: value)) { old?.Dispose(); }
+            }
+        }
+
+        private SdfMeshMaterialCut? m_cut;
         // While the contour's unpinned vertices are checked against the field, the vertices, the spacing their
         // gradient taps scale by, and the field's typical slope across its surface (SdfSampledLattice.SurfaceSlope).
         public int[]? Creases { get; set; }

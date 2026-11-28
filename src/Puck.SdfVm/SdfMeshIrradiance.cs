@@ -3985,6 +3985,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // less than SdfPhotometry.RangeThreshold of display white at the world's brightest exposure, as a point light's and a
     // screen's range are sized.
     private readonly record struct TracedEmitter(SdfMeshEmitter Patch, Vector3 Radiance, float Range);
+    // Everything a lighting's emitters are computed from: the scene's patches and the program's materials (by array, which a
+    // capture never writes), the gain on the radiance they emit, and the exposure gain their ranges are sized at. Equal
+    // inputs give equal emitters in equal order.
+    private readonly record struct EmitterInputs(SdfMeshEmitter[] Patches, SdfMaterial[] Materials, float Emission, float Range);
     // A tier's volume: its levels (LevelsOf), each measured level's slots after the finer measured levels' in the volume,
     // whether hits reflect the bounce the volume holds about them (any bounce the frame asks for), the reach of its rays
     // (the frame's far distance), and the finest level it measures (SdfFrame.IndirectLevels). A finer level holds no
@@ -4036,6 +4040,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public List<SdfLight> Lights { get; } = [];
         public List<int> Indices { get; } = [];
         public List<TracedLight> Points { get; } = [];
+        public List<TracedEmitter> Emitters { get; } = [];
         public Vector3[] Map { get; } = new Vector3[SdfSkyEnvironment.Texels];
         public SdfSkyLayer[] Layers { get; } = new SdfSkyLayer[SdfSky.MaxLayers];
         public SdfSkyDetails Details { get; } = new();
@@ -4075,6 +4080,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The emitting patches of the scene installed at the capture (SdfMeshIrradianceScene.Emitters) that emit under it,
         // which every relight samples from the probe's centre (AddEmitters); none with the emission source off.
         public required TracedEmitter[] Emitters { get; init; }
+        // What Emitters were made from, which a capture of equal inputs reads Emitters again as.
+        public required EmitterInputs EmitterInputs { get; init; }
         // The appearance the materials were copied from, which a later capture of the same appearance reuses. Never the
         // program: a capture outlives it in pending reads (a camera sample's), and would keep its words alive.
         public required SdfAppearance Appearance { get; init; }
@@ -4173,20 +4180,31 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
 
             var materials = (ReferenceEquals(objA: previous?.Appearance, objB: frame.Program.Appearance) ? previous!.Materials : [.. frame.Program.Appearance.Materials]);
-            var emitters = new List<TracedEmitter>();
+            var emits = (((sources & SdfIndirectSources.Emission) != 0) && (frame.IndirectGains.Emission > 0f));
+            // The emitters are a function of the patches, the materials they read and the two gains, so a capture made from
+            // the same values as the one before (a sun that moved, a sky that changed) has the same emitters: the array the
+            // earlier capture published, which is never written, stands for them.
+            var emitted = new EmitterInputs(Emission: (emits ? frame.IndirectGains.Emission : 0f), Materials: (emits ? materials : []), Patches: (emits ? patches : []), Range: (emits ? frame.Exposure.BrightestGain : 0f));
+            TracedEmitter[] emitters;
 
-            if (((sources & SdfIndirectSources.Emission) != 0) && (frame.IndirectGains.Emission > 0f)) {
-                var gain = frame.Exposure.BrightestGain;
+            if ((previous is not null) && (previous.EmitterInputs == emitted)) {
+                emitters = previous.Emitters;
+            } else {
+                var traced = scratch.Emitters;
 
-                foreach (var patch in patches) {
-                    if (((uint)patch.Material) >= ((uint)materials.Length)) { continue; }
+                traced.Clear();
+                if (emits) {
+                    foreach (var patch in patches) {
+                        if (((uint)patch.Material) >= ((uint)materials.Length)) { continue; }
 
-                    var material = materials[patch.Material];
-                    var radiance = (((material.Albedo * material.Emissive) * (material.Bleed ?? Vector3.One)) * frame.IndirectGains.Emission);
-                    var range = SdfPhotometry.RangeOf(exposure: gain, weight: ((SdfPhotometry.LuminanceOf(color: radiance) * patch.MostProjectedArea) / MathF.PI));
+                        var material = materials[patch.Material];
+                        var radiance = (((material.Albedo * material.Emissive) * (material.Bleed ?? Vector3.One)) * frame.IndirectGains.Emission);
+                        var range = SdfPhotometry.RangeOf(exposure: emitted.Range, weight: ((SdfPhotometry.LuminanceOf(color: radiance) * patch.MostProjectedArea) / MathF.PI));
 
-                    if (range > 0f) { emitters.Add(item: new TracedEmitter(Patch: patch, Radiance: radiance, Range: range)); }
+                        if (range > 0f) { traced.Add(item: new TracedEmitter(Patch: patch, Radiance: radiance, Range: range)); }
+                    }
                 }
+                emitters = [.. traced];
             }
 
             var inputs = new LightInputs([.. lights], roles, skyTexels, frame.IndirectLightingGrid);
@@ -4211,7 +4229,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 Appearance = frame.Program.Appearance,
                 Materials = materials,
                 Points = [.. points],
-                Emitters = [.. emitters],
+                Emitters = emitters,
+                EmitterInputs = emitted,
                 Sky = ((sources & SdfIndirectSources.Sky) != 0),
             };
         }

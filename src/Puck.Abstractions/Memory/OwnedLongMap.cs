@@ -60,6 +60,21 @@ public sealed class OwnedLongMap<TValue> : IDisposable where TValue : unmanaged 
             if (keys[slot] == key) { return false; }
         }
     }
+    /// <summary>Sets a key's value, adding the key when the map does not hold it.</summary>
+    /// <param name="key">The key.</param>
+    /// <param name="value">The value.</param>
+    public void Set(long key, TValue value) {
+        var used = m_used.GetSpan();
+        var keys = m_keys.GetSpan();
+
+        for (var slot = Home(key: key); (used[slot] != 0); slot = ((slot + 1) & m_mask)) {
+            if (keys[slot] == key) {
+                m_values[slot] = value;
+                return;
+            }
+        }
+        _ = TryAdd(key: key, value: value);
+    }
     /// <summary>Adds a key the map does not hold.</summary>
     /// <param name="key">The key.</param>
     /// <param name="value">The value.</param>

@@ -185,7 +185,7 @@ public sealed partial class SdfMeshPathBake {
             }
         }
 
-        var cut = new SdfMeshMaterialCut(contour: contour.Finished(cell: lattice.ContourCell));
+        using var cut = new SdfMeshMaterialCut(contour: contour.Finished(cell: lattice.ContourCell));
 
         using var round = new OwnedBuffer<Vector4>(allocator: null);
 

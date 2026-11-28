@@ -150,6 +150,15 @@ public static class SdfMeshCollapse {
 
         var collapser = new Collapser(clusterOf: clusterOf, cosines: cosines, errors: errors, mesh: mesh, preserveFeatures: preserveFeatures, scope: scope);
 
+        try {
+            return Collapsed(clusterCount: clusterCount, clusterOf: clusterOf, collapser: collapser, levelCount: levelCount, mesh: mesh, preserveFeatures: preserveFeatures);
+        } finally {
+            collapser.Release();
+        }
+    }
+
+    // Runs a collapser's levels and returns the mesh that carries those it kept: the mesh itself when none is kept.
+    private static SdfMesh Collapsed(Collapser collapser, int clusterCount, int[]? clusterOf, int levelCount, SdfMesh mesh, bool preserveFeatures) {
         if (preserveFeatures && !collapser.HasFeatures) { return mesh; }
         var levels = new List<SdfMeshLevel>(capacity: CellShares.Length);
         var kept = mesh.TriangleCount;
@@ -160,10 +169,10 @@ public static class SdfMeshCollapse {
             // Past the clustered runs the seams the clusters share move too: those levels are drawn whole.
             if ((clusterOf is not null) && (level == ClusteredRuns)) { collapser.ReleaseSeams(); }
 
-            var made = collapser.Run(level: level);
+            var made = collapser.Run(kept: kept, level: level);
 
             ProcessWork.Count(kind: Runs);
-            if (made.TriangleCount > (KeptShare * kept)) {
+            if (made is null) {
                 continue;
             }
             ProcessWork.Count(kind: Kept);
@@ -345,7 +354,7 @@ public static class SdfMeshCollapse {
         private readonly OwnedBuffer<Vector3> m_normals;
         private readonly int m_ownVertices;
         private readonly List<(int Place, Vector3 Normal)> m_madeVertices = [];
-        private readonly List<Vector3> m_making = [];
+        private List<Vector3> m_making = null!;
         // Each own vertex's distance along the mesh to the nearest sharp turn of its surface (FeatureDistances).
         private readonly OwnedBuffer<double> m_feature;
         private readonly bool m_waivesNormals;
@@ -355,7 +364,7 @@ public static class SdfMeshCollapse {
         private int m_toFirst;
         private int m_fromSecond;
         private int m_toSecond;
-        private readonly List<(int From, int To)> m_otherCopies = [];
+        private List<(int From, int To)> m_otherCopies = null!;
         private readonly OwnedBuffer<int> m_corners;
         // Each corner's place, m_placeOf of its vertex, which Commit keeps beside m_corners.
         private readonly OwnedBuffer<int> m_cornerPlace;
@@ -402,7 +411,7 @@ public static class SdfMeshCollapse {
         private readonly OwnedBuffer<int> m_revisions;
 
         // Keyed by the directed edge (from, to) and holding the two revisions it was refused at, each packed high then low.
-        private readonly Dictionary<long, long> m_rejected = new(comparer: PackedIntPairComparer.Instance);
+        private readonly OwnedLongMap<long> m_rejected;
 
         private int m_revision;
         private int m_budget;
@@ -415,7 +424,7 @@ public static class SdfMeshCollapse {
 
         // Midpoint searches are shared only while PrepareFrom's source fan is unchanged. A search may stop once its
         // witness cannot raise the current triangle's bound; Next resumes it when another target needs a tighter bound.
-        private readonly Dictionary<(long Edge, uint Material), (double Distance, int Next)> m_reverseEdges = [];
+        private Dictionary<(long Edge, uint Material), (double Distance, int Next)> m_reverseEdges = null!;
 
         private readonly OwnedBuffer<byte> m_kind;
         private readonly OwnedBuffer<int> m_slideTargets;
@@ -450,28 +459,30 @@ public static class SdfMeshCollapse {
 
         private int m_pass;
 
-        // Scratch every collapse reuses. A speculating worker (the sharing constructor) holds its own, so every method that measures a collapse
-        // writes only these and reads the shared tables, which no measure writes.
-        private readonly List<int> m_from = [];
+        // Scratch every collapse reuses, a workspace each collapser takes (Workspace). A speculating worker (the sharing
+        // constructor) holds its own, so every method that measures a collapse writes only these and reads the shared
+        // tables, which no measure writes.
+        private Workspace m_work = null!;
+        private List<int> m_from = null!;
         // The places about the prepared fan, which every neighbour's link test reads (PrepareFrom, Links).
-        private readonly List<int> m_neighbours = [];
+        private List<int> m_neighbours = null!;
         // The edge's two triangles of the collapse TryCollapse took last, which CommitTaken commits.
         private int m_first;
         private int m_second;
-        private readonly List<int> m_to = [];
-        private readonly List<int> m_targetPlaces = [];
-        private readonly List<int> m_features = [];
-        private readonly List<int> m_seams = [];
+        private List<int> m_to = null!;
+        private List<int> m_targetPlaces = null!;
+        private List<int> m_features = null!;
+        private List<int> m_seams = null!;
         // Sorted targets in independent runs. A commit invalidates the old source fan and
         // the old target fan: every edge whose topology or endpoint quadric changed touches one of them.
         private readonly OwnedBuffer<(double Cost, int Place)> m_prices;
         private readonly OwnedBuffer<(int Start, int Capacity, int Count, bool Ready)> m_priceRuns;
-        private readonly List<int> m_samples = [];
-        private readonly List<(int Triangle, double Distance)> m_choices = [];
-        private readonly List<int> m_lineNeighbours = [];
-        private readonly List<(int Sample, int Other, double Distance)> m_lineChoices = [];
-        private readonly List<double> m_strays = [];
-        private readonly List<Source> m_sources = [];
+        private List<int> m_samples = null!;
+        private List<(int Triangle, double Distance)> m_choices = null!;
+        private List<int> m_lineNeighbours = null!;
+        private List<(int Sample, int Other, double Distance)> m_lineChoices = null!;
+        private List<double> m_strays = null!;
+        private List<Source> m_sources = null!;
 
         private int m_source;
         private int m_sourcesListed;
@@ -481,22 +492,105 @@ public static class SdfMeshCollapse {
         private bool m_linesListed;
         private int m_laidCount;
 
-        // Lines' scratch: each fan triangle's corner and the places after it.
-        private int[] m_ringCorner = new int[16];
-        private int[] m_ringNext = new int[16];
-        private int[] m_ringAfter = new int[16];
+        // Lines' scratch: each fan triangle's corner and the places after it. The arrays grow in place of the workspace's,
+        // which takes them back when the collapser gives it up.
+        private int[] m_ringCorner = null!;
+        private int[] m_ringNext = null!;
+        private int[] m_ringAfter = null!;
 
-        private int[] m_fanCorner = new int[16];
-        private int[] m_fanNext = new int[16];
-        private int[] m_fanAfter = new int[16];
-        private int[] m_fanTwin = new int[16];
+        private int[] m_fanCorner = null!;
+        private int[] m_fanNext = null!;
+        private int[] m_fanAfter = null!;
+        private int[] m_fanTwin = null!;
 
         // Scratch for Kind's current fan only; every endpoint it reads is cleared before indexing that fan.
         private readonly OwnedBuffer<(int Outgoing, int Incoming)> m_fanEdges;
 
-        private Candidate[] m_measured = new Candidate[16];
-        private OriginalTriangle[] m_previous = new OriginalTriangle[16];
-        private int[] m_laid = new int[16];
+        private Candidate[] m_measured = null!;
+        private OriginalTriangle[] m_previous = null!;
+        private int[] m_laid = null!;
+
+        // The scratch of one collapser, refilled by each mesh's collapse and kept between them: a collapse takes a
+        // workspace for its collapser and every speculating worker, and gives them back through Release, so the lists'
+        // and arrays' growth is the process's, once, instead of every mesh's. A workspace holds what the last collapse
+        // left in it, which Take empties; no member's contents carry from one collapse to the next.
+        private sealed class Workspace {
+            // The most entries a list may hold for the workspace to be kept: one that grew past it (a fan of many
+            // thousands of samples) is left to the collector instead of held by the pool.
+            private const int MostKept = (1 << 16);
+
+            public readonly List<Vector3> Making = [];
+            public readonly List<(int From, int To)> OtherCopies = [];
+            public readonly Dictionary<(long Edge, uint Material), (double Distance, int Next)> ReverseEdges = [];
+            public readonly List<int> From = [];
+            public readonly List<int> Neighbours = [];
+            public readonly List<int> To = [];
+            public readonly List<int> TargetPlaces = [];
+            public readonly List<int> Features = [];
+            public readonly List<int> Seams = [];
+            public readonly List<int> Samples = [];
+            public readonly List<(int Triangle, double Distance)> Choices = [];
+            public readonly List<int> LineNeighbours = [];
+            public readonly List<(int Sample, int Other, double Distance)> LineChoices = [];
+            public readonly List<double> Strays = [];
+            public readonly List<Source> Sources = [];
+            public int[] RingCorner = new int[16];
+            public int[] RingNext = new int[16];
+            public int[] RingAfter = new int[16];
+            public int[] FanCorner = new int[16];
+            public int[] FanNext = new int[16];
+            public int[] FanAfter = new int[16];
+            public int[] FanTwin = new int[16];
+            public Candidate[] Measured = new Candidate[16];
+            public OriginalTriangle[] Previous = new OriginalTriangle[16];
+            public int[] Laid = new int[16];
+
+            public void Empty() {
+                Making.Clear();
+                OtherCopies.Clear();
+                ReverseEdges.Clear();
+                From.Clear();
+                Neighbours.Clear();
+                To.Clear();
+                TargetPlaces.Clear();
+                Features.Clear();
+                Seams.Clear();
+                Samples.Clear();
+                Choices.Clear();
+                LineNeighbours.Clear();
+                LineChoices.Clear();
+                Strays.Clear();
+                Sources.Clear();
+            }
+            public bool Kept => ((Sources.Capacity <= MostKept) && (Samples.Capacity <= MostKept) && (Choices.Capacity <= MostKept) && (Measured.Length <= MostKept) && (ReverseEdges.Count <= MostKept));
+        }
+
+        private static readonly SharedPool<Workspace> Workspaces = new(create: static () => new Workspace());
+
+        private void Take() {
+            m_work = Workspaces.Rent();
+            m_work.Empty();
+            (m_making, m_otherCopies, m_reverseEdges) = (m_work.Making, m_work.OtherCopies, m_work.ReverseEdges);
+            (m_from, m_neighbours, m_to, m_targetPlaces, m_features, m_seams) = (m_work.From, m_work.Neighbours, m_work.To, m_work.TargetPlaces, m_work.Features, m_work.Seams);
+            (m_samples, m_choices, m_lineNeighbours, m_lineChoices, m_strays, m_sources) = (m_work.Samples, m_work.Choices, m_work.LineNeighbours, m_work.LineChoices, m_work.Strays, m_work.Sources);
+            (m_ringCorner, m_ringNext, m_ringAfter) = (m_work.RingCorner, m_work.RingNext, m_work.RingAfter);
+            (m_fanCorner, m_fanNext, m_fanAfter, m_fanTwin) = (m_work.FanCorner, m_work.FanNext, m_work.FanAfter, m_work.FanTwin);
+            (m_measured, m_previous, m_laid) = (m_work.Measured, m_work.Previous, m_work.Laid);
+        }
+        // Gives this collapser's workspace, and every worker's, back to the pool once the collapse is over.
+        public void Release() {
+            foreach (var worker in m_workers) { worker.Give(); }
+            Give();
+        }
+        private void Give() {
+            var work = m_work;
+
+            m_work = null!;
+            (work.RingCorner, work.RingNext, work.RingAfter) = (m_ringCorner, m_ringNext, m_ringAfter);
+            (work.FanCorner, work.FanNext, work.FanAfter, work.FanTwin) = (m_fanCorner, m_fanNext, m_fanAfter, m_fanTwin);
+            (work.Measured, work.Previous, work.Laid) = (m_measured, m_previous, m_laid);
+            if (work.Kept) { Workspaces.Return(item: work); }
+        }
 
         public bool HasFeatures => (m_kind.GetSpan().Contains(value: Locked) || m_kind.GetSpan().Contains(value: Slides));
 
@@ -532,6 +626,7 @@ public static class SdfMeshCollapse {
         // Every table is rented through the scope, which the caller disposes: a rented array can be longer than asked for, so
         // each read is bounded by the place, triangle or sample count, never the array's length.
         public Collapser(SdfMesh mesh, bool preserveFeatures, RentedScope scope, double[] errors, double[] cosines, int[]? clusterOf) {
+            Take();
             m_errors = errors;
             m_cosines = cosines;
             m_lineLimit = (preserveFeatures ? (Math.Max(val1: mesh.BakeCell.X, val2: Math.Max(val1: mesh.BakeCell.Y, val2: mesh.BakeCell.Z)) / 8.0) : double.PositiveInfinity);
@@ -595,6 +690,7 @@ public static class SdfMeshCollapse {
                 m_seamsHeld = true;
             }
 
+            m_rejected = scope.LongMap<long>(capacity: m_places);
             m_fanStart = scope.Buffer<int>(length: (m_places + 1));
             m_fan = scope.Buffer<int>(length: (3 * m_triangles));
             m_filled = scope.Buffer<int>(length: m_places);
@@ -694,6 +790,7 @@ public static class SdfMeshCollapse {
         // A worker for Speculate: every table is the shared collapser's, read and never written, and every scratch field
         // (the lists and arrays a measure fills) is the worker's own, so workers measure side by side.
         private Collapser(Collapser shared) {
+            Take();
             m_placeOf = shared.m_placeOf;
             m_point = shared.m_point;
             m_normals = shared.m_normals;
@@ -829,9 +926,10 @@ public static class SdfMeshCollapse {
         // Whether two normals part by more than the angle whose cosine is sharp.
         private static bool Parts(Vector3 a, Vector3 b, double sharp) => (Vector3.Dot(vector1: a, vector2: b) < (sharp * a.Length() * b.Length()));
 
-        // Collapses until no pass takes enough within the level's bounds, then returns the level the alive triangles make.
+        // Collapses until no pass takes enough within the level's bounds, then returns the level the alive triangles make,
+        // or null, with no plane laid out, when they are more than KeptShare of `kept`, the triangles of the level before.
         // Levels run in order, each from the state the finer one left: the budget a refusal is keyed by is the level plus one.
-        public SdfMeshLevel Run(int level) {
+        public SdfMeshLevel? Run(int kept, int level) {
             var error = m_errors[level];
             var cosine = m_cosines[level];
 
@@ -852,6 +950,8 @@ public static class SdfMeshCollapse {
 
                 if ((taken == 0) || (taken < (m_aliveTriangles / (2 * TailShare)))) { break; }
             }
+
+            if (m_aliveTriangles > (KeptShare * kept)) { return null; }
 
             var indices = new uint[(3 * m_aliveTriangles)];
             var materials = new uint[(m_carriesMaterials ? m_aliveTriangles : 0)];
@@ -1016,7 +1116,9 @@ public static class SdfMeshCollapse {
             foreach (var (_, target) in Prices(place)) {
                 if (m_touched[target] == m_pass) { quiet = false; continue; }
                 if (Refused(place, target)) {
-                    var low = PackedIntPair.Low(value: m_rejected[PackedIntPair.Pack(high: place, low: target)]);
+                    _ = m_rejected.TryGetValue(key: PackedIntPair.Pack(high: place, low: target), value: out var rejected);
+
+                    var low = PackedIntPair.Low(value: rejected);
 
                     quiet &= (low < 0);
                     through = ((low < AnyRevision) ? Math.Min(val1: through, val2: (AnyRevision - low)) : through);
@@ -1043,11 +1145,11 @@ public static class SdfMeshCollapse {
                 if (outcome == Outcome.RefusedUnkept) { quiet = false; continue; }
                 // Only the link test reads the neighbour's fan; every other refusal reads the place's own fan, its
                 // samples and lines, and the neighbour's fixed position, so it stands until the place's revision moves.
-                m_rejected[PackedIntPair.Pack(high: place, low: target)] = PackedIntPair.Pack(high: m_revisions[place], low: outcome switch {
+                m_rejected.Set(key: PackedIntPair.Pack(high: place, low: target), value: PackedIntPair.Pack(high: m_revisions[place], low: outcome switch {
                     Outcome.RefusedLinks => m_revisions[target],
                     Outcome.RefusedMeasure => MeasuredAt(budget: m_refusedThrough),
                     _ => AnyRevision,
-                });
+                }));
                 quiet &= (outcome != Outcome.RefusedLinks);
                 through = ((outcome == Outcome.RefusedMeasure) ? Math.Min(val1: through, val2: m_refusedThrough) : through);
             }

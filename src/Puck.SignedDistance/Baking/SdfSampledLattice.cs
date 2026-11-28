@@ -66,7 +66,9 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
     /// <summary>Selects each quad's outward-facing diagonal from its current vertex positions and normals. Call again
     /// after changing positions, before <see cref="SplitAtCreases"/> freezes the per-face normals.</summary>
-    public void SelectDiagonals() => SdfSampledLattice.SelectDiagonals(contour: this);
+    /// <param name="workspace">The workspace owner charged for the selection's native scratch, or null for unmetered work.</param>
+    /// <param name="allocator">The native allocator the scratch comes from, or <see langword="null"/> for the process's.</param>
+    public void SelectDiagonals(IAllocationObserver? workspace = null, IAllocator? allocator = null) => SdfSampledLattice.SelectDiagonals(allocator: allocator, contour: this, workspace: workspace);
     /// <summary>Returns the contour its material cut takes, once its vertices stand where they will: welded where two
     /// vertices lie nearer than a cell resolves (<see cref="Weld"/>), each quad split along its outward diagonal
     /// (<see cref="SelectDiagonals"/>), and split at its creases (<see cref="SplitAtCreases"/>).</summary>
@@ -77,7 +79,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     public SdfContour Finished(Vector3 cell, IAllocationObserver? workspace = null, IAllocator? allocator = null) {
         var welded = Weld(allocator: allocator, distance: (WeldCells * MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z))), workspace: workspace);
 
-        welded.SelectDiagonals();
+        welded.SelectDiagonals(allocator: allocator, workspace: workspace);
 
         return welded.SplitAtCreases(allocator: allocator, workspace: workspace);
     }
@@ -612,9 +614,17 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             }
         }
 
-        return (((addedPositions.Length == 0) && !folded)
-            ? this
-            : (this with { Normals = [.. normals, .. addedNormals.GetSpan()], Positions = [.. positions, .. addedPositions.GetSpan()], QuadAxes = axisList.ToArray(), QuadMaterials = materialList.ToArray(), Quads = quads }));
+        if ((addedPositions.Length == 0) && !folded) { return this; }
+
+        // Only a fold changes the quads' own records and only a split adds vertices; an array neither touched stays this
+        // contour's, as the flags and patches do.
+        return this with {
+            Normals = ((addedNormals.Length == 0) ? normals : [.. normals, .. addedNormals.GetSpan()]),
+            Positions = ((addedPositions.Length == 0) ? positions : [.. positions, .. addedPositions.GetSpan()]),
+            QuadAxes = ((!folded && (axisList.Length == QuadAxes.Length)) ? QuadAxes : axisList.ToArray()),
+            QuadMaterials = (folded ? materialList.ToArray() : QuadMaterials),
+            Quads = quads,
+        };
 
         bool Feature(int vertex) => ((vertex < Features.Length) && Features[vertex]);
     }
@@ -3071,12 +3081,12 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             Solved = surface.Solved,
         };
 
-        contour.SelectDiagonals();
+        contour.SelectDiagonals(allocator: m_allocator, workspace: m_observer);
 
         return contour;
     }
 
-    internal static void SelectDiagonals(SdfContour contour) {
+    internal static void SelectDiagonals(SdfContour contour, IAllocationObserver? workspace = null, IAllocator? allocator = null) {
         var quads = contour.Quads;
 
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
@@ -3092,7 +3102,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // split faces out too. Only a vertex no crossing pins (SdfContour.Solved, which every merged vertex is) can be
         // such a corner.
         var solved = contour.Solved;
-        HashSet<long>? taken = null;
+        OwnedLongMap<byte>? taken = null;
         var claimants = 0;
 
         // The set holds at most one entry per quad that can claim a diagonal, so it is sized once, not grown by doubling.
@@ -3102,17 +3112,21 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
             if ((c != d) && (((a < solved.Length) && solved[a]) || ((c < solved.Length) && solved[c]))) { claimants++; }
         }
-        for (var quad = 0; (quad < contour.QuadCount); quad++) {
-            var at = (4 * quad);
-            var (a, b, c, d) = (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]);
+        try {
+            for (var quad = 0; (quad < contour.QuadCount); quad++) {
+                var at = (4 * quad);
+                var (a, b, c, d) = (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]);
 
-            if ((c == d) || !(((a < solved.Length) && solved[a]) || ((c < solved.Length) && solved[c]))) { continue; }
-            taken ??= new HashSet<long>(capacity: (claimants + (claimants >> 2)), comparer: PackedIntPairComparer.Instance);
-            if (taken.Add(item: PackedIntPair.Pack(high: Math.Min(val1: a, val2: c), low: Math.Max(val1: a, val2: c)))) { continue; }
-            if ((quad < contour.QuadAxes.Length) && !SdfContourFacing.Splits(axis: contour.QuadAxes[quad], patches: contour.Patches, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at)).Second) { continue; }
-            if (taken.Add(item: PackedIntPair.Pack(high: Math.Min(val1: b, val2: d), low: Math.Max(val1: b, val2: d)))) {
-                (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (b, c, d, a);
+                if ((c == d) || !(((a < solved.Length) && solved[a]) || ((c < solved.Length) && solved[c]))) { continue; }
+                taken ??= new OwnedLongMap<byte>(allocator: allocator, capacity: (claimants + (claimants >> 2)), observer: workspace);
+                if (taken.TryAdd(key: PackedIntPair.Pack(high: Math.Min(val1: a, val2: c), low: Math.Max(val1: a, val2: c)), value: 0)) { continue; }
+                if ((quad < contour.QuadAxes.Length) && !SdfContourFacing.Splits(axis: contour.QuadAxes[quad], patches: contour.Patches, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at)).Second) { continue; }
+                if (taken.TryAdd(key: PackedIntPair.Pack(high: Math.Min(val1: b, val2: d), low: Math.Max(val1: b, val2: d)), value: 0)) {
+                    (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (b, c, d, a);
+                }
             }
+        } finally {
+            taken?.Dispose();
         }
     }
 
