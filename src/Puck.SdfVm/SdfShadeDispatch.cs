@@ -91,12 +91,13 @@ public sealed class SdfShadeDispatch {
     /// allocating whenever every input in the key still holds. Prices each pixel's walk at the view's light-walk
     /// maximum: the lights its mask holds (<see cref="SdfLightSelection.Select"/>), which every tile's walk narrows and
     /// never widens, rounded up to a multiple of <see cref="WalkStep"/> so camera motion across a light's range replans
-    /// only when the mask crosses a step, plus the active screens.</summary>
+    /// only when the mask crosses a step. The table holds the screens' face lights beside the frame's own
+    /// (<see cref="SdfWorldTables.Lights"/>), so the mask bounds them too.</summary>
     /// <param name="previous">The prior plan to reuse on a key match, or <see langword="null"/>.</param>
     /// <param name="frame">The frame being shaded.</param>
     /// <param name="width">The extent's width, in pixels.</param>
     /// <param name="height">The extent's height, in pixels.</param>
-    /// <param name="screens">The bound screen count.</param>
+    /// <param name="tableLights">The lights the shaded table holds (<see cref="SdfWorldTables.Lights"/>).</param>
     /// <param name="lightMask">The view's light mask (<c>SdfWorldTables.LightMaskOf</c>), which bounds every walk the
     /// pass's pixels take through the lights table.</param>
     /// <param name="glass">Whether the pass shades glass, pricing every interface a pixel shades (<see cref="SdfShadeProgram.GlassInterfaces"/>).</param>
@@ -104,10 +105,10 @@ public sealed class SdfShadeDispatch {
     /// <param name="binned">Whether to produce a binned plan when the tier runs programs.</param>
     /// <returns>The standing or newly built plan.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
-    public static SdfShadeDispatch For(SdfShadeDispatch? previous, SdfFrame frame, uint width, uint height, uint screens, UInt128 lightMask, bool glass, SdfShadeTier tier, bool binned = false) {
+    public static SdfShadeDispatch For(SdfShadeDispatch? previous, SdfFrame frame, uint width, uint height, int tableLights, UInt128 lightMask, bool glass, SdfShadeTier tier, bool binned = false) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
-        var lights = checked(WalkBound(lightMask: lightMask, tableLights: frame.Lights.Count) + (frame.DisableScreenLights ? 0u : screens));
+        var lights = WalkBound(lightMask: lightMask, tableLights: tableLights);
         var key = new PlanKey(
             binned: binned,
             enabled: frame.ShadePrograms,

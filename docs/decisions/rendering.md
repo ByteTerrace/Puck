@@ -854,19 +854,42 @@ already gave no light there (its visibility is the share times the ambient
 occlusion); the light phase's door answers no light before it runs an
 authored program (`SdfLightInputs.none`, tested in the generated
 `sdfShadeLightPhase`), so a program's light phase cannot rely on running for a
-traced light its surface's probes do not see, nor for a point, spot or screen
-light whose `reach` is zero there. On that rule a tile leaves out every traced
+traced light its surface's probes do not see, nor for a ranged light (a point,
+spot, line or face light) whose `reach` is zero there. On that rule a tile leaves out every traced
 light the probes about none of its shaded pixels see (`sdfViewsTileLights`,
-`sdfViewsCellLightsSeen`, `sdfViewsPixelLightsSeen`). A directional, an untraced light (one that rides an
-anchor) and a screen are never left out this way: a directional's visibility is
-its cascades' wherever they hold the point, and the others have no bits.
+`sdfViewsCellLightsSeen`, `sdfViewsPixelLightsSeen`). A directional and an
+untraced light (one that rides an anchor, or a screen a surface transform
+carries) are never left out this way: a directional's visibility is its
+cascades' wherever they hold the point, and the other has no bits.
+
+**Screens and emitter faces are lights of the one list.** A screen walked from a
+mask of its own, which no probe answer narrows, lights through walls within its
+range, and glass and occluder tests each need a second path for it; at the
+gallery's toybox, facing twelve deck screens, such a walk doubled the views
+pass. Each resident screen slot has a face light in the lights table
+(`SdfLightKind.Face`, `SdfWorldTables.Lights`, at the frame's light count plus
+its slot, so it keeps its index while its screen holds the slot), whose
+luminance the screens' emission pass reduces on the GPU (`sdfFaceLight`). It is
+culled by the view's mask, each tile's reach test and the glass wave's, and a
+static one is traced by the volume for its visibility alone: it bounces nothing,
+so its place joins the volume's local key and a face that comes, goes or moves
+owes the probes a relight of their bits without starting a lighting epoch. The
+options weighed were a second set of probe bits for screens (eight light words a
+probe and a slot format twice as wide, for an index space the table already
+has room for) and folding a still screen's light into the volume as an emitting
+patch (its glow at probe spacing, no response on the receiver, and a relight's
+latency every time a screen starts or stops changing). Where it stops: the table
+holds 128 records, so a world whose lights and resident screens together pass
+that gives the slots past it no light (`sdf.screens.face-lights-dropped`), and a
+slot a new screen claims reads the bits the probes measured for its previous
+holder until they are relit.
 
 **The cutoff.** A light's range is where its light falls to
 `SdfPhotometry.RangeThreshold` of display white at the world's darkest exposure,
 so at any brighter exposure most of the range lights nothing a view can show:
 in the gallery's hall at noon a 5,000 lm downlight's range ran past 60 m while
-its light fell under that share of the view's white within 14 m. A point, spot
-or screen light's reach therefore fades to zero where it gives a white surface
+its light fell under that share of the view's white within 14 m. A ranged
+light's reach therefore fades to zero where it gives a white surface
 less than that share of the view's own white, keeping its whole response from
 twice the share (`sdfLightCutoffFade`), and a tile leaves out a light whose bound
 over its boxes, window and cone included, stays under it (`sdfLightReachesBox`).
@@ -874,6 +897,31 @@ The fade keeps the cut continuous, so no tile edge shows; the local adaptation
 can lift what it removed in the darkest pixels by at most its own gain. Hall,
 noon, Direct3D 12: the walk's visits fell from 7.3 to 3.9 a pixel
 (`gpu.lights.visited` on `sdf.world$views`).
+
+**The floor of what a surface already receives.** The view's cutoff is a share
+of display white, so in a lit room every face that reaches the cutoff is
+walked, though its light is a tiny share of what the surface already receives.
+On the 2060 at gallery-root, once screens and emitter faces joined the one list,
+the walk made about 16 visits a pixel in the hall and toybox, 14 to 16 of them
+faces: the gallery's panels (`worlds/standard/panel.puck`: 1.0 by 0.6 m of glass
+at 3,000 nits emissive under dark paint) and marquees reach several metres under
+the view's cutoff while giving a wall there under a percent of its light. So a
+ranged light also fades under `SdfPhotometry.ReceivedShare` of the indirect
+light the surface receives (`sdfLightReceivedFloor`, the volume's light under
+the view's indirect gains and intensity, before occlusion, which scales the
+light's visibility alike), and its cutoff is the greater of the two
+(`sdfLightCutoffNits`). A faded light gives a pixel at most that share of its
+indirect light, and the fade is continuous in both terms, so no tile edge
+shows. A tile bounds every lit pixel's floor from below with the least
+luminance of the received cubes of the cells its pixels blend, or of a pixel's
+extra (`sdfViewsCellLeastReceived`, `sdfViewsPixelLeastReceived`): a pixel's
+cube read weighs the faces by its normal's squared components, which sum to one,
+and its slots by shares that sum to one, so it reads no less than that least.
+A cell no probe answers, or a pixel that reads no slot, bounds it at zero, and
+the view's cutoff alone holds there. The options weighed were sizing a face's
+range at the brighter exposure only (it still keeps every panel across a room
+under a dark exposure), and a per-tile floor the pixel reads too (exact but a
+step at every tile edge wherever a light lies in its fade band).
 
 **Where a tile is decided.** One workgroup decides a tile's masks: the unsplit
 views kernels in their own group and, for a binned view, the filter pass, which
@@ -2328,10 +2376,11 @@ screen reads zero and every table read goes through a slot it holds.
 (`SdfCadenceWork`) count the door's work.
 
 **Every set of resident screens is one `UInt128` mask, walked by its set bits.**
-The bound, emitting, sampled and changed slots and a light tile's lit screens
-are each one 128-bit mask over `BitWords`; the kernels read the same bits as a
-`uint4`, exactly as they read the light mask, and a tile holds four light words
-and four screen words (`SdfWorldPackage.ShadeTileLightWords`). Per-frame work
+The bound, emitting, sampled and changed slots are each one 128-bit mask over
+`BitWords`, which the kernels read as a `uint4`, exactly as they read the light
+mask. A screen lights as a face light of the lights table, so a tile's lit
+screens are bits of its light mask
+([the light walk](#a-pixel-walks-the-lights-that-reach-it-and-that-its-probes-see)). Per-frame work
 follows the members, not the slots: the change watch compares only the slots
 read now or at the last render, the emission reduction dispatches up to the
 highest bound slot, and a light walk or tile visits set bits.

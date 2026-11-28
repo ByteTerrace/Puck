@@ -175,10 +175,10 @@ public sealed class WorkCountingLawTests {
             actual: GpuWork.LifetimeKinds.ToArray().Select(selector: kind => kind.Name)
         );
         Assert.Same(expected: GpuWork.Dispatches, actual: GpuWork.SubmissionKinds[0]);
-        Assert.Same(expected: GpuWork.LightsVisited, actual: GpuWork.SubmissionKinds[^1]);
+        Assert.Same(expected: GpuWork.FaceLightsVisited, actual: GpuWork.SubmissionKinds[^1]);
         Assert.Equal(
             expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten, GpuWork.SkyEvaluations, GpuWork.SkyHashes, GpuWork.SkyTextureLoads,
-                GpuWork.ShapesEvaluated, GpuWork.ShapeGradients, GpuWork.MeshHitsRejected, GpuWork.LightsVisited],
+                GpuWork.ShapesEvaluated, GpuWork.ShapeGradients, GpuWork.MeshHitsRejected, GpuWork.LightsVisited, GpuWork.FaceLightsVisited],
             actual: GpuWork.KernelKinds.ToArray()
         );
     }

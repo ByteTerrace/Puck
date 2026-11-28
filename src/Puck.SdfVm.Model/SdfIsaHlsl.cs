@@ -359,6 +359,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SCREEN_EMISSION_EDGE", value: SdfScreenEmission.Edge);
         declarations.Tuning(name: "SDF_LIGHT_MINIMUM_DISTANCE", value: SdfPhotometry.MinimumDistance);
         declarations.Tuning(name: "SDF_LIGHT_RANGE_THRESHOLD", value: SdfPhotometry.RangeThreshold);
+        declarations.Tuning(name: "SDF_LIGHT_RECEIVED_SHARE", value: SdfPhotometry.ReceivedShare);
         declarations.Count(name: "SDF_MAX_OCCLUDERS", value: SdfOccluders.MaxOccluders);
         declarations.Tuning(name: "SDF_LUMINANCE_CEILING", value: SdfPhotometry.LuminanceCeiling);
         declarations.Real(name: "SDF_WINDOW_ADAPTATION", value: SdfPhotometry.WindowAdaptation);

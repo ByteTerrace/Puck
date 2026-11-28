@@ -19,6 +19,13 @@ public static class SdfPhotometry {
     /// eased the light smoothly to zero, so no edge shows; the share is kept in linear light so that a range costs the
     /// relight what it always has.</summary>
     public const float RangeThreshold = (1f / 256f);
+    /// <summary>The share of the indirect light a surface already receives under which a ranged light's contribution
+    /// leaves the shading walk, beside the view's cutoff (<see cref="RangeThreshold"/> of display white): where a surface
+    /// stands in a lit room, a light adding less than this share of what reaches it from every side changes nothing a
+    /// player sees, so a pixel walks only the lights that add visibly to its own light. A light faded out under it gives a
+    /// pixel at most this share of its indirect light, the fade continuous in both (<c>sdfLightCutoffFade</c>), and a views
+    /// tile bounds it from below by the least light its probes' cells receive (<c>sdfViewsTileLights</c>).</summary>
+    public const float ReceivedShare = (1f / 128f);
     /// <summary>The nearest a point light's distance is taken as, in world units: the radius of a bulb, inside which its
     /// inverse square would grow without bound.</summary>
     public const float MinimumDistance = 0.05f;

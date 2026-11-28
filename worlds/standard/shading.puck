@@ -178,13 +178,15 @@ function celBand(cosine, visibility, threshold, softness, combined) = mix(
 // passes one tone curve.
 shade template cel(threshold, softness, shadowTint, specularSize, combined = 0, restore = 0, bleed = 1, form = 0) {
   light {
-    let direct = (light.kind == uint(0)) + (light.kind == uint(2))
+    // Kinds (SdfLightKind): 0 a directional, 2 a point or spot, 4 a line (tube), 5 a screen's or an emitter face's area
+    // light, which glows without a band.
+    let direct = (light.kind == uint(0)) + (light.kind == uint(2)) + (light.kind == uint(4))
     let cosine = max((light.cosine + surface.wrap) / (1 + surface.wrap), 0)
     let band = celBand(cosine, light.visibility, threshold, softness, combined)
     let shadeSide = shadowTint * ((1 - band) * restore * (0.5 + 0.5 * light.cosine) * light.probeShare)
     let lit = band * mix(1, cosine, form)
     diffuse: direct ? light.color * (light.weight * light.reach) * (shadeSide + [lit, lit, lit]) : (light.kind ==
-      uint(256) ? light.color * (light.weight * light.reach * max(light.cosine, 0)) : [0, 0, 0])
+      uint(5) ? light.color * (light.weight * light.reach * max(light.cosine, 0) * light.visibility) : [0, 0, 0])
     let halfway = light.direction - surface.rayDirection
     let halfway = halfway / sqrt(max(dot(halfway, halfway), 0.00000001))
     let size = specularSize * mix(0.5, 1.5, surface.roughness)

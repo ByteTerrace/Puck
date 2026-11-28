@@ -228,6 +228,11 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             shadeSurface.probes = probes;
             shadeSurface.occluders = lights.occluders;
             shadeSurface.frameSlot = s.frameSlot;
+            // The indirect light the surface receives, read once: the walk's floor is a share of it
+            // (sdfLightReceivedFloor), so a light that adds nothing visible to what the pixel already receives leaves its
+            // walk, and the indirect term below adds it.
+            float3 indirect = sdfViewsIndirectSeen(probes, normal);
+            shadeSurface.lightFloor = sdfLightReceivedFloor(indirect);
 
             float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientLight;
             float3 ambientTerm = radiance;
@@ -268,7 +273,6 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection);
             color = emitted + ((color - emitted) * diffuseShare);
 
-            float3 indirect = sdfViewsIndirectSeen(probes, normal);
             float3 indirectTerm = indirect * passGroup.indirectApply.rgb * (shadeMaterial.receive * passGroup.indirectApply.w
                 * lerp(1.0, ambientOcclusion, passGroup.indirectContact) * analyticOcclusion);
             color += indirectTerm * shadeMaterial.albedo * (1.0 - shadeMaterial.metal) * diffuseShare;

@@ -490,15 +490,16 @@ the penumbra or more, so it falls only inside the hull of the light and that
 sphere grown by the penumbra (`sdfOccluderShadowsBox`). The culling is the
 lights' own on those two rules: each view's pass block carries a mask of the
 occluders whose sphere of reach its frustum may see, or whose shadow toward a
-point, spot or line light the view shades may fall where it sees
-(`SdfLightSelection.SelectOccluders`, `SdfWorldTables.OccluderMaskOf`); each
-views tile, once its lights and screens stand, narrows it to those whose sphere
-meets one of the tile's two boxes or whose shadow toward one of them can
-(`sdfOccluderReachesWalk` in `sdfViewsTileLights`, the third mask of
-`SdfLightMasks`, written into the shade bins for a binned view); and glass
-narrows it the same way by its wave's box (`sdfWaveLightMasks`). The host's
-view mask weighs no screen's or emitter face's shadow: one from an occluder
-whose reach the view does not see is left out. A view whose mask is empty
+ranged light the view shades (a point, spot, line or face light) may fall where
+it sees (`SdfLightSelection.SelectOccluders`, `SdfWorldTables.OccluderMaskOf`);
+each views tile, once its walk stands (the probes' answer included), narrows it
+to those whose sphere meets one of the tile's two boxes or whose shadow toward
+one of the walk's lights can (`sdfOccluderReachesWalk` in `sdfViewsTileLights`,
+the second mask of `SdfLightMasks`, written into the shade bins for a binned
+view); and glass narrows it the same way by its wave's box
+(`sdfWaveLightMasks`). Per pixel, a light whose segment passes an occluder's
+bounding sphere by the widest penumbra or more skips that occluder's gap search,
+since its share is one there. A view whose mask is empty
 reads no occluder record, and a view stands while every occluder its mask keeps
 stands (their records fold into its lighting inputs).
 
@@ -527,9 +528,14 @@ scene is the first thing to look for when a shade reads too dark.
 
 ## Every light answers through one interface
 
-The views pass lights a surface by walking one list of lights: the lights
-table's (directional, point and spot, rim, in authored order) that the view
-shades, then every bound screen. An occluder row's place in the table lights
+The views pass lights a surface by walking one list of lights, the lights table,
+by the set bits of one mask: the frame's own lights (directional, point and
+spot, line, rim, in authored order), then a face light for every resident screen
+slot, a screen showing a source and an emitter face alike
+(`SdfLightKind.Face`, packed by the residency's tables after the screens' slots
+settle, `SdfWorldTables.Lights`). So screens and emitter faces are culled,
+occluded and counted by the same masks, tests and probe answer as every other
+light, and no second list exists for them. An occluder row's place in the table lights
 nothing; its sphere is an analytic occluder
 ([above](#analytic-occlusion-proxy-spheres-capsules-and-boxes)). Each is one
 `SdfLightSource`, and one function, `sdfLightResponse` in
@@ -555,14 +561,24 @@ narrows the mask once more for each 8×8 tile (`sdfViewsTileLights` in
 `passes/sdf-views-lights.hlsli`): it bounds the tile's hit points by two boxes,
 the hits nearer than the middle of the tile's depth range and the rest, and keeps
 a light whose sphere of range meets a box and, for a spot, whose cone meets the
-sphere about it. A screen is kept where a box reaches in front of its
-face and its mean luminance is above zero. Of the lights the irradiance volume
-traces (a static point or spot light), a tile keeps only those the probes about
-one of its shaded pixels see, read from the probe lookup's records: a traced
-light adds nothing where its share of the probes is zero, under the default
-response and an authored light phase alike, so a room's pixels walk the
-fixtures that light the room and not those whose range crosses its walls. A
-pixel then walks only the lights and screens that can reach its tile. A binned
+sphere about it. A face is kept where a box reaches in front of it within its
+range and its reduced luminance, times its own cosine toward the box, reaches
+the cutoff there. The cutoff is the greater of the view's (a share of display
+white) and a floor of the light the surface already receives: a ranged light
+fades out under `SdfPhotometry.ReceivedShare` of the indirect light at the pixel
+(`sdfLightCutoffNits`, `sdfLightReceivedFloor`), so in a lit room a panel or a
+marquee lights the wall beside it and not the far side of the room, and a tile
+holds every light to a floor no greater than any of its pixels'
+([the decision](../../../decisions/rendering.md#a-pixel-walks-the-lights-that-reach-it-and-that-its-probes-see)). Of the lights
+the irradiance volume traces (a static point, spot, line or face light; a face
+is traced for its visibility alone and bounces nothing), a tile keeps only those
+the probes about one of its shaded pixels see, read from the probe lookup's
+records: a traced light adds nothing where its share of the probes is zero,
+under the default response and an authored light phase alike, so a room's
+pixels walk the fixtures, screens and emitter faces that light the room and not
+those whose range crosses its walls. A pixel then walks only the lights that can
+reach its tile, and `gpu.lights.visited` and `gpu.lights.faces` count its visits.
+A binned
 view's filter pass decides each tile's masks and writes them into the shade
 bins, where its views kernels read them
 ([the decision](../../../decisions/rendering.md#a-pixel-walks-the-lights-that-reach-it-and-that-its-probes-see)).
@@ -705,7 +721,12 @@ green field spills green onto the wall beside it. A face of luminance L and area
 A casts `E = L · A · cos / (d² + A/π)` on a surface facing it, the exact
 on-axis illuminance of a disc of that area. A `dot(screenNormal, −L)` gate
 enforces "light through the glass": a screen only lights what sits in front of
-its face, never behind it.
+its face, never behind it. A static screen is occluded as a static fixture is:
+the irradiance volume traces its centre's visibility from each probe, so its
+glow stops at the walls of its room, takes the surface's ambient occlusion, and
+a tile whose probes do not see it never walks it. A screen a surface transform
+carries is not traced and lights through walls within its range, as a moving
+lamp does. A screen's light reaches no probe: it bounces nothing.
 
 ## Shading switches
 
