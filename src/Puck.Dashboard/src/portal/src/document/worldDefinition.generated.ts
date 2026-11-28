@@ -11226,6 +11226,44 @@ export type WorldNestedViewQuality = {
 
 export type WorldNestedViewQualityList = (WorldNestedViewQuality | null)[];
 
+/**
+ * Where a net parts and what opens it (Opening): an ellipse on the net's rest plane whose free nodes the authority drives out to its rim while By reads nonzero, so the ropes splay round a hole a body walks through at its full size, and back while it reads zero (Puck.Physics.FixedNet's opening). The centre is measured in metres, before the row's scale, from the facet's origin along its across edge and along its up edge made square to it; the net moves it to the middle of the grid cell holding it. Presentation plays Effect on the net's strands while it parts and again while it closes.
+ */
+export type WorldNetOpening = {
+  /**
+   * The cell that opens the net: a literal, or state.<row>[.<key>] naming a Fixed or Int cell; nonzero opens it.
+   */
+  by: BindableScalar;
+  /**
+   * The centre's distance along the across edge from the facet's origin, in metres before the row's scale; on the net.
+   */
+  centerAcross: number;
+  /**
+   * The centre's distance along the up edge from the facet's origin, in metres before the row's scale; on the net.
+   */
+  centerUp: number;
+  /**
+   * The ellipse's half axis along the across edge, in metres before the row's scale; positive.
+   */
+  halfWidth: number;
+  /**
+   * The ellipse's half axis along the up edge, in metres before the row's scale; positive.
+   */
+  halfHeight: number;
+  /**
+   * The seconds a closed net takes to open fully; positive.
+   */
+  openSeconds?: number;
+  /**
+   * The seconds an open net takes to close fully; positive.
+   */
+  closeSeconds?: number;
+  /**
+   * The form effect presentation sweeps over the net's strands, out from the opening's centre, as it parts and as it closes (a WorldFormEffect whose edge glows on both sides of its front and whose motes leave the strands it crosses), or null for none.
+   */
+  effect?: WorldFormEffect | null;
+};
+
 export type WorldObserverDisclosure = {
   /**
    * Which bodies an observer is delivered.
@@ -11728,6 +11766,10 @@ export type WorldPlacementNet = {
    * The acceleration every free node falls at along world down, in metres a second squared; non-negative.
    */
   gravity?: number;
+  /**
+   * Where and how the net parts while a state cell says open (WorldNetOpening), or null for a net that never parts.
+   */
+  opening?: WorldNetOpening | null;
 };
 
 export type WorldPlacementPolicyDefaults = {

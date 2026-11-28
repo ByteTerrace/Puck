@@ -392,7 +392,7 @@ public sealed partial class WorldTick {
         );
         // The nets step on the authority alone, after the bodies that hold and lean on them have moved, so the next tick's
         // contact colliders and rides read where this tick's bodies left them (WorldPopulation.StepNets).
-        Host.Population.StepNets(stepTicks: context.StepTicks);
+        Host.Population.StepNets(definition: Host.Document.Definition, engineTick: stepStartEngineTick, stepTicks: context.StepTicks, tick: tick);
         // Kit effects have settled their authoritative cells. Install their input barrier before world rules
         // can observe a released action and accidentally use it to enter the old mode again.
         if (!Host.Input.TrySynchronize(activation: 0, reason: out var inputModeReason)) { throw new InvalidOperationException(message: inputModeReason); }

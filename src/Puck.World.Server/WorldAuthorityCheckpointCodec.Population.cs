@@ -351,6 +351,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             w.WriteArray(items: net.State.Offsets, writeItem: static (v, offset) => v.WriteFixedVector(value: offset));
             w.WriteArray(items: net.State.Velocities, writeItem: static (v, velocity) => v.WriteFixedVector(value: velocity));
             w.WriteArray(items: net.State.SliceVelocities, writeItem: static (v, velocity) => v.WriteFixedVector(value: velocity));
+            w.WriteInt64(value: net.State.Openness.Value);
+            w.WriteBoolean(value: net.State.Opening);
         });
 
         return writer.ToArray();
@@ -393,7 +395,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             var slices = r.ReadArray(field: "net slice velocities", maximum: (WorldPlacementNet.MaxNodesPerEdge * WorldPlacementNet.MaxNodesPerEdge),
                 readItem: static (ref WireReader v) => v.ReadFixedVector());
 
-            return new WorldNetCheckpoint(Placement: placement, State: new FixedNetState(Offsets: offsets, Velocities: velocities, SliceVelocities: slices, Awake: awake, StillTicks: still, Touch: touch));
+            var openness = FixedQ4816.FromRawBits(value: r.ReadInt64());
+            var opening = r.ReadBoolean();
+
+            return new WorldNetCheckpoint(Placement: placement, State: new FixedNetState(Offsets: offsets, Velocities: velocities, SliceVelocities: slices, Awake: awake, StillTicks: still, Touch: touch,
+                Openness: openness, Opening: opening));
         });
 
         return new WorldPopulationCheckpoint(

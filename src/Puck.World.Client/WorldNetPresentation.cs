@@ -41,7 +41,7 @@ public sealed class WorldNetPresentation {
                 across: spec.Across.ToVector3(),
                 columns: spec.Columns,
                 origin: spec.Origin.ToVector3(),
-                reach: (float)spec.Reach,
+                reach: (float)spec.Extent,
                 rows: spec.Rows,
                 up: spec.Up.ToVector3()
             ),

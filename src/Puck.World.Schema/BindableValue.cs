@@ -284,6 +284,32 @@ public readonly record struct BindableScalar {
 
         return true;
     }
+    /// <summary>Returns the scalar's exact value as the authority reads it at a tick: its literal, or its bound cell's
+    /// live number (a Fixed cell's raw bits, an Int cell's whole number). Keys, an unbound or non-numeric cell and a
+    /// non-finite literal read as <paramref name="fallback"/>.</summary>
+    /// <param name="definition">The document whose state the binding reads.</param>
+    /// <param name="tick">The authority tick.</param>
+    /// <param name="engineTick">The engine tick, which an advancing clock row reads.</param>
+    /// <param name="fallback">The value an absent or unreadable member reads as.</param>
+    /// <param name="arena">The live store, or <see langword="null"/> for the one bound to <paramref name="definition"/>.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public FixedQ4816 ExactAt(WorldDefinition definition, ulong tick, ulong engineTick, FixedQ4816 fallback, StateArena? arena = null) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (Literal is { } literal) { return (float.IsFinite(f: literal) ? FixedQ4816.FromDouble(value: literal) : fallback); }
+        if ((State is not { } binding) ||
+            !WorldStateReader.TryRead(arena: arena, definition: definition, engineTick: engineTick, key: binding.Key, rawValue: out var raw, row: out var row, rowName: binding.Row, text: out _, tick: tick) ||
+            (raw is not { } bits)) {
+            return fallback;
+        }
+
+        return row.Kind switch {
+            CellKind.Fixed => FixedQ4816.FromRawBits(value: bits),
+            CellKind.Int => FixedQ4816.FromInteger(value: bits),
+            _ => fallback,
+        };
+    }
     /// <summary>Returns whether this scalar is admissible against a document: a finite literal, a state binding naming
     /// a declared Fixed or Int cell, or keys whose every value is a finite literal or keys of its own.</summary>
     /// <param name="definition">The document to check the binding half against.</param>

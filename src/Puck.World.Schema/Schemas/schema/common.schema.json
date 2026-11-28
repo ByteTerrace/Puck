@@ -10143,6 +10143,205 @@
       "additionalProperties": false,
       "title": "WorldPlacementTurn"
     },
+    "WorldFormEffect": {
+      "description": "One side of a form transition: a band that sweeps over the form\u0027s real surface, building it behind the band as it arrives or dissolving it as it leaves, with an emissive edge and motes that settle onto or rise off the surface the band crosses; and, for a form shed or assembled piece by piece, each moving part of it launched off with a seeded impulse (bouncing off the world\u0027s real surfaces) or flown in from a scattered start to lock into place. Every value has a neutral default, so an author states only what the effect needs; the standard package\u0027s form transition module (worlds/standard/form-transition.puck) chooses the values its effects use.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "seconds": {
+          "description": "How long the band takes to sweep the form, seconds; positive.",
+          "type": "number",
+          "default": 1
+        },
+        "delay": {
+          "description": "How long after the switch the effect starts, seconds; not negative. A leaving form waits drawn whole, an arriving one waits undrawn.",
+          "type": "number",
+          "default": 0
+        },
+        "direction": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The way the band sweeps, in the creation\u0027s own frame, or null for up.",
+          "default": null
+        },
+        "edgeColor": {
+          "description": "The edge\u0027s hex colour (#RRGGBB), or null for white.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "edgeLuminance": {
+          "description": "The edge\u0027s luminance, nits; zero draws no edge.",
+          "type": "number",
+          "default": 0
+        },
+        "edgeWidth": {
+          "description": "How far behind the band the edge glows, metres.",
+          "type": "number",
+          "default": 0.05
+        },
+        "roughness": {
+          "description": "How far the band\u0027s front wanders along its sweep by the lattice noise at each surface point, metres; zero is a flat front.",
+          "type": "number",
+          "default": 0
+        },
+        "roughnessScale": {
+          "description": "The wavelength of that noise, metres; positive.",
+          "type": "number",
+          "default": 0.1
+        },
+        "motes": {
+          "description": "How many motes rise off or settle onto the form; zero for none.",
+          "type": "integer",
+          "default": 0
+        },
+        "moteColor": {
+          "description": "The motes\u0027 hex colour, or null for the edge\u0027s.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "moteLuminance": {
+          "description": "The motes\u0027 luminance at their brightest, nits.",
+          "type": "number",
+          "default": 0
+        },
+        "moteSize": {
+          "description": "A mote\u0027s diameter, metres.",
+          "type": "number",
+          "default": 0.01
+        },
+        "moteSeconds": {
+          "description": "A mote\u0027s life, seconds.",
+          "type": "number",
+          "default": 0.6
+        },
+        "moteSpeed": {
+          "description": "How fast a mote drifts off the surface, metres a second.",
+          "type": "number",
+          "default": 0.3
+        },
+        "moteRise": {
+          "description": "The acceleration a mote takes along world up, metres a second squared; negative falls.",
+          "type": "number",
+          "default": 0
+        },
+        "moteSwirl": {
+          "description": "How fast a mote\u0027s drift turns about the sweep, radians a second.",
+          "type": "number",
+          "default": 0
+        },
+        "pieces": {
+          "description": "Whether the form\u0027s moving parts fly apart (leaving) or fly together (arriving) as separate pieces, each with a band of its own, rather than the whole form under one band.",
+          "type": "boolean",
+          "default": false
+        },
+        "pieceSpeed": {
+          "description": "How fast a shed piece is launched off the body, metres a second; an assembling piece\u0027s flight is timed to PieceSeconds instead.",
+          "type": "number",
+          "default": 2
+        },
+        "pieceLift": {
+          "description": "How much of a shed piece\u0027s launch leans up, from zero (straight out from the body) to one.",
+          "type": "number",
+          "default": 0.5
+        },
+        "pieceSpin": {
+          "description": "How fast a piece tumbles, radians a second.",
+          "type": "number",
+          "default": 4
+        },
+        "pieceGravity": {
+          "description": "The acceleration a shed piece falls by, metres a second squared.",
+          "type": "number",
+          "default": 9.81
+        },
+        "pieceBounce": {
+          "description": "The share of its speed a shed piece keeps off a surface it strikes, from zero to one.",
+          "type": "number",
+          "default": 0.3
+        },
+        "pieceReach": {
+          "description": "How far from its place an assembling piece starts, metres.",
+          "type": "number",
+          "default": 0.5
+        },
+        "pieceSeconds": {
+          "description": "How long a piece flies before its band sweeps it (shed) or how long an assembling piece takes to reach its place, seconds.",
+          "type": "number",
+          "default": 0.5
+        },
+        "pieceStagger": {
+          "description": "The most a piece\u0027s start is delayed past the effect\u0027s, seconds, drawn per piece.",
+          "type": "number",
+          "default": 0
+        },
+        "totalSeconds": {
+          "description": "Gets the longest any part of the effect plays from the switch, seconds: its delay, its staggered pieces\u0027 flights and its sweep, and the last motes\u0027 lives after it; a form is let go once this has passed.",
+          "type": "number"
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldFormEffect"
+    },
+    "WorldNetOpening": {
+      "description": "Where a net parts and what opens it (Opening): an ellipse on the net\u0027s rest plane whose free nodes the authority drives out to its rim while By reads nonzero, so the ropes splay round a hole a body walks through at its full size, and back while it reads zero (Puck.Physics.FixedNet\u0027s opening). The centre is measured in metres, before the row\u0027s scale, from the facet\u0027s origin along its across edge and along its up edge made square to it; the net moves it to the middle of the grid cell holding it. Presentation plays Effect on the net\u0027s strands while it parts and again while it closes.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "by": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The cell that opens the net: a literal, or state.\u003Crow\u003E[.\u003Ckey\u003E] naming a Fixed or Int cell; nonzero opens it."
+        },
+        "centerAcross": {
+          "description": "The centre\u0027s distance along the across edge from the facet\u0027s origin, in metres before the row\u0027s scale; on the net.",
+          "type": "number"
+        },
+        "centerUp": {
+          "description": "The centre\u0027s distance along the up edge from the facet\u0027s origin, in metres before the row\u0027s scale; on the net.",
+          "type": "number"
+        },
+        "halfWidth": {
+          "description": "The ellipse\u0027s half axis along the across edge, in metres before the row\u0027s scale; positive.",
+          "type": "number"
+        },
+        "halfHeight": {
+          "description": "The ellipse\u0027s half axis along the up edge, in metres before the row\u0027s scale; positive.",
+          "type": "number"
+        },
+        "openSeconds": {
+          "description": "The seconds a closed net takes to open fully; positive.",
+          "type": "number",
+          "default": 0.6
+        },
+        "closeSeconds": {
+          "description": "The seconds an open net takes to close fully; positive.",
+          "type": "number",
+          "default": 0.8
+        },
+        "effect": {
+          "$ref": "#/$defs/WorldFormEffect",
+          "description": "The form effect presentation sweeps over the net\u0027s strands, out from the opening\u0027s centre, as it parts and as it closes (a WorldFormEffect whose edge glows on both sides of its front and whose motes leave the strands it crosses), or null for none.",
+          "default": null
+        }
+      },
+      "required": [
+        "by",
+        "centerAcross",
+        "centerUp",
+        "halfWidth",
+        "halfHeight"
+      ],
+      "additionalProperties": false,
+      "title": "WorldNetOpening"
+    },
     "WorldPlacementNet": {
       "description": "A placement\u0027s net facet: the row\u0027s creation is a net of rope strands that gives under the bodies that lean on it and carries the bodies that hold it (a climbing net, a rope bridge, a hammock, a cargo net, a banner, a sail). The authority keeps a coarse grid of nodes over the parallelogram Origin \u002B s\u00B7Across \u002B t\u00B7Up in the row\u0027s frame, steps it in fixed point every tick it is awake (Puck.Physics.FixedNet: its strands\u0027 caps, its pins, its reach), and lets it sleep when nothing touches it. The net collides as a sheet of thin boxes over its node cells, posed every tick, a body holding it rides it and loads it with its weight, and a body leaning on it pushes its nodes out; presentation draws the creation baked once at rest and displaces each vertex by the nodes\u0027 offsets about it, so a net that moves rebuilds no program and keys no mesh.",
       "type": [
@@ -10244,6 +10443,11 @@
           "description": "The acceleration every free node falls at along world down, in metres a second squared; non-negative.",
           "type": "number",
           "default": 9.81
+        },
+        "opening": {
+          "$ref": "#/$defs/WorldNetOpening",
+          "description": "Where and how the net parts while a state cell says open (WorldNetOpening), or null for a net that never parts.",
+          "default": null
         }
       },
       "required": [
@@ -13727,152 +13931,6 @@
       },
       "additionalProperties": false,
       "title": "WorldViewTransition"
-    },
-    "WorldFormEffect": {
-      "description": "One side of a form transition: a band that sweeps over the form\u0027s real surface, building it behind the band as it arrives or dissolving it as it leaves, with an emissive edge and motes that settle onto or rise off the surface the band crosses; and, for a form shed or assembled piece by piece, each moving part of it launched off with a seeded impulse (bouncing off the world\u0027s real surfaces) or flown in from a scattered start to lock into place. Every value has a neutral default, so an author states only what the effect needs; the standard package\u0027s form transition module (worlds/standard/form-transition.puck) chooses the values its effects use.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "seconds": {
-          "description": "How long the band takes to sweep the form, seconds; positive.",
-          "type": "number",
-          "default": 1
-        },
-        "delay": {
-          "description": "How long after the switch the effect starts, seconds; not negative. A leaving form waits drawn whole, an arriving one waits undrawn.",
-          "type": "number",
-          "default": 0
-        },
-        "direction": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "The way the band sweeps, in the creation\u0027s own frame, or null for up.",
-          "default": null
-        },
-        "edgeColor": {
-          "description": "The edge\u0027s hex colour (#RRGGBB), or null for white.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "edgeLuminance": {
-          "description": "The edge\u0027s luminance, nits; zero draws no edge.",
-          "type": "number",
-          "default": 0
-        },
-        "edgeWidth": {
-          "description": "How far behind the band the edge glows, metres.",
-          "type": "number",
-          "default": 0.05
-        },
-        "roughness": {
-          "description": "How far the band\u0027s front wanders along its sweep by the lattice noise at each surface point, metres; zero is a flat front.",
-          "type": "number",
-          "default": 0
-        },
-        "roughnessScale": {
-          "description": "The wavelength of that noise, metres; positive.",
-          "type": "number",
-          "default": 0.1
-        },
-        "motes": {
-          "description": "How many motes rise off or settle onto the form; zero for none.",
-          "type": "integer",
-          "default": 0
-        },
-        "moteColor": {
-          "description": "The motes\u0027 hex colour, or null for the edge\u0027s.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "moteLuminance": {
-          "description": "The motes\u0027 luminance at their brightest, nits.",
-          "type": "number",
-          "default": 0
-        },
-        "moteSize": {
-          "description": "A mote\u0027s diameter, metres.",
-          "type": "number",
-          "default": 0.01
-        },
-        "moteSeconds": {
-          "description": "A mote\u0027s life, seconds.",
-          "type": "number",
-          "default": 0.6
-        },
-        "moteSpeed": {
-          "description": "How fast a mote drifts off the surface, metres a second.",
-          "type": "number",
-          "default": 0.3
-        },
-        "moteRise": {
-          "description": "The acceleration a mote takes along world up, metres a second squared; negative falls.",
-          "type": "number",
-          "default": 0
-        },
-        "moteSwirl": {
-          "description": "How fast a mote\u0027s drift turns about the sweep, radians a second.",
-          "type": "number",
-          "default": 0
-        },
-        "pieces": {
-          "description": "Whether the form\u0027s moving parts fly apart (leaving) or fly together (arriving) as separate pieces, each with a band of its own, rather than the whole form under one band.",
-          "type": "boolean",
-          "default": false
-        },
-        "pieceSpeed": {
-          "description": "How fast a shed piece is launched off the body, metres a second; an assembling piece\u0027s flight is timed to PieceSeconds instead.",
-          "type": "number",
-          "default": 2
-        },
-        "pieceLift": {
-          "description": "How much of a shed piece\u0027s launch leans up, from zero (straight out from the body) to one.",
-          "type": "number",
-          "default": 0.5
-        },
-        "pieceSpin": {
-          "description": "How fast a piece tumbles, radians a second.",
-          "type": "number",
-          "default": 4
-        },
-        "pieceGravity": {
-          "description": "The acceleration a shed piece falls by, metres a second squared.",
-          "type": "number",
-          "default": 9.81
-        },
-        "pieceBounce": {
-          "description": "The share of its speed a shed piece keeps off a surface it strikes, from zero to one.",
-          "type": "number",
-          "default": 0.3
-        },
-        "pieceReach": {
-          "description": "How far from its place an assembling piece starts, metres.",
-          "type": "number",
-          "default": 0.5
-        },
-        "pieceSeconds": {
-          "description": "How long a piece flies before its band sweeps it (shed) or how long an assembling piece takes to reach its place, seconds.",
-          "type": "number",
-          "default": 0.5
-        },
-        "pieceStagger": {
-          "description": "The most a piece\u0027s start is delayed past the effect\u0027s, seconds, drawn per piece.",
-          "type": "number",
-          "default": 0
-        },
-        "totalSeconds": {
-          "description": "Gets the longest any part of the effect plays from the switch, seconds: its delay, its staggered pieces\u0027 flights and its sweep, and the last motes\u0027 lives after it; a form is let go once this has passed.",
-          "type": "number"
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldFormEffect"
     },
     "WorldChannelSelection": {
       "type": [

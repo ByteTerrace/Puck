@@ -2006,6 +2006,9 @@ public static partial class WorldDefinitionValidator {
             // row's one static frame and collide through the row's solid facet, so it needs both.
             if (placement.Net is { } net) {
                 net.Validate(errors: errors, path: $"{path}.net");
+                if ((net.Opening is { } opening) && ((opening.By.Keys is not null) || !opening.By.IsAuthorable(definition: definition))) {
+                    errors.Add(item: $"{path}.net.opening.by {opening.By} must be a finite number or state.<row>[.<key>] naming a Fixed or Int cell; the authority reads it exactly, so it takes no keys.");
+                }
                 if (placement.Solid is null) {
                     errors.Add(item: $"{path}.net: a net collides through the row's solid facet; add `solid` to the row.");
                 }
