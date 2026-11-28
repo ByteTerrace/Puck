@@ -1202,7 +1202,13 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   once a tick and records the route beside the door's closure
   (`WorldPortalClosures.SetRoute`); the crossing, the window's session and the
   counterpart a window fits through all follow that one record
-  (`WorldFaceRouting.On`/`To`), and a cell naming no route closes the door.
+  (`WorldFaceRouting.On`/`To`). A cell naming no entry takes the fallback
+  route: the face itself by default (`WorldFaceRoutes.SelfDestination`, a
+  mirror: the window observes its own world, sharing that world's one image,
+  fits a reflection, and the crossing steps the traveller back out of the
+  face), an authored `fallback`, or `closes`. A destination that does not
+  resolve, cannot start or refuses falls back to the mirror too
+  (`DeclaredSessions`' selves, `ReturnRefusedPortalCrossing`).
   `world.portals` names a routed door's `route=<n>/<count>`. The standard's
   portal module routes a portal by its control panel's `panelChoice`
   (`worlds/standard/portal.puck`, `panel.puck`; gallery.md, "The portals").

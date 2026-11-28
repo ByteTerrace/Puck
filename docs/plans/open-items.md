@@ -3727,17 +3727,34 @@ door frames. Nothing of the plan is built.
 - [medium] A door on a row whose position reads a state cell fires where the
   row first stood: the face catalog caches its frame (`WorldFaceCatalog`).
   Step 1 fixes it, and its lane first writes the scenario that fails today.
-- [high] A way back leads to one fixed door, not the door a traveller came by.
-  A destination's `arrival` frame names one counterpart in one document (the
-  garden's leads to `painting-garden` in `debug`), so a traveller who reached
-  the garden through a routed portal on the gallery's level 3, the portal lab
-  or the gallery booted alone (`gallery-root.puck`) comes home to the debug
-  world's painting wing, and a gallery-root or lab visit starts the whole debug
-  world. Carry the source door with the traveller (the transfer already records
-  its border, `WorldInstanceHost.TransferResolution`'s `Border`) and let a way
-  back whose counterpart names a return route land at that door. Check: a
-  crossing from `portal-south-5` into the garden and back lands before
-  `portal-south-5`, in the instance it left.
+- [high] The way home travels with the traveller (the owner's rulings,
+  [decision](../decisions/play.md#portals-and-their-panels), "Designed, not
+  built"). Today a destination's `arrival` frame names one counterpart in one
+  document (the garden's leads to `painting-garden` in `debug`), so a traveller
+  who reached the garden through the portal lab comes home to the debug world's
+  painting wing. Build the carried origin record (a bounded stack on the
+  mobility identity, in custody and checkpoints), a `$origin` route and a
+  `portal.return [all]` verb beside `$self`, a transfer to an existing named
+  instance with no destinations row, and a fallback to the home world's arrival
+  when the origin is gone; then make the destination worlds' and labs' way-back
+  frames origin routes, so no destination names its caller. Check: a crossing
+  from the portal lab into the garden and back lands before the lab's portal, in
+  the lab's instance; with the lab stopped, it lands at the traveller's home
+  arrival.
+- [medium] A federated portal group as a library entry (the owner's rulings,
+  [decision](../decisions/play.md#portals-and-their-panels)): a hub's membership
+  row that members join by agreement and follow, expanding in place in a
+  library's one list. Missing: routes whose entries come from a row rather than
+  the document (`WorldFaceRoutes.Entries`), and destinations minted at runtime
+  for a member's remote world. Check: a world that joins appears in every
+  member portal's panel at the tick its follow adopts the row, and a portal
+  pointed at a member that leaves shows the mirror.
+- [medium] A mirror's crossing turns the traveller about through the face's
+  centre line (the self pair's half turn, `WorldFrameIsometry.MapVector`), so a
+  body that enters left of centre steps out right of it, while the glass shows
+  a true reflection. A reflected crossing (position and heading mirrored across
+  the glass, the seat's camera mirrored with it) would match the picture; it
+  needs a mirrored arrival in `WorldBody.CrossInPlace` and its replay tap.
 - [medium] A routed door draws no straddle clip (`WorldPortalStraddle` skips a
   face with routes, whose destination is state its per-document derivation
   cannot read). Same-world routes are rare; derive the clip per recorded route

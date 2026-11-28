@@ -142,8 +142,8 @@ admission [
   visitorAdmissionRow(domain: "*")
 ]
 
-// The worlds the gallery's portals lead to are its portal library's references and destinations (gallery/portals.puck,
-// portal-library.puck), declared once for every portal of the building.
+// The worlds the debug world's portals lead to are destinations.puck's entries, which the painting wing
+// (paintings.puck) and the lab wing (lab-wing.puck) wire and declare; the gallery itself wires none.
 
 // The font the shape gallery's plinth labels emboss in.
 text {

@@ -41,8 +41,8 @@ In the debug world, `debug.go lab-wing` stands a body at the aisle's west end
 looking down the doors, and `debug.go lab-<id>` before each door, facing it.
 
 A door is the standard portal module ([portal.puck](../../standard/portal.puck))
-standing free, leading to its lab's entry of the gallery's portal library
-([portal-library.puck](../portal-library.puck)), and its glass is the module's
+standing free, wired by the debug world to its lab
+([destinations.puck](../destinations.puck)), and its glass is the module's
 portal face (`portalFace`): it shows the lab live while you
 stand outside and ripples when a body touches it. A lab's `arrival` frame is
 dark glass instead (a `none` source): a window back onto the gallery would
@@ -230,15 +230,19 @@ lab with a door.
 [portals.puck](portals.puck): one portal of the standard's portal module
 ([portal.puck](../../standard/portal.puck)) and its control panel
 ([panel.puck](../../standard/panel.puck)) on a studio floor under the held
-midday, with a small library of its own: three showcase worlds and two labs.
-Walk into the portal's glass to cross; work the panel at its right (the context
-button, then a tap on a world) and the portal leads there instead, its glass
-showing it at once. The gallery's level 3 stands twelve of the same portal
-([gallery.md](../gallery.md#the-portals)).
+midday, with a small library of its own: three showcase worlds, two labs and
+NOWHERE, a world with no document. Walk into the portal's glass to cross; work
+the panel at its right (the context button, then a tap on a world) and the
+portal leads there instead, its glass showing it at once. MIRROR, the list's
+last row, leaves the portal unconnected: its glass reflects the lab and walking
+in steps you back out, turned about. NOWHERE cannot be reached, so the portal
+falls back to the mirror for it. The gallery's level 3 stands twelve of the
+same portal ([gallery.md](../gallery.md#the-portals)).
 
 Places: `hero` and `portal-panel` at the panel, `portal` 3.2 m before the
 portal's glass; `debug.go <place>` poses a body there. `world.portals` names the
-door's route (`route=<n>/5`), and `world.state.cell.set panelChoice portal <n>`
-points it from the console as a tap does. The way back from a world it leads to
-is that world's own frame, which leads to the debug world's painting or lab
-door rather than back here.
+door's route (`route=<n>/6`; 6 is the mirror), and `world.state.cell.set
+panelChoice portal <n>` points it from the console as a tap does. The way back
+from a world it leads to is that world's own frame, which leads to the debug
+world's painting or lab door rather than back here, until the way home travels
+with the traveller ([the decision](../../../docs/decisions/play.md#portals-and-their-panels)).
