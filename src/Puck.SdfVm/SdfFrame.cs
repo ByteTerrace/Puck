@@ -293,8 +293,11 @@ public sealed record SdfFrame(
     /// <param name="copyChangesSerial">The journal's endpoint captured with <paramref name="meshInstances"/>.</param>
     /// <param name="meshForms">The slots each form of an owner with several forms rides, or <see langword="null"/> for
     /// none.</param>
+    /// <param name="formBands">The form bands every emitter's forms sweep this frame, or <see langword="null"/> for
+    /// none.</param>
     internal void Compose(IReadOnlyList<int> meshAssetSlots, IReadOnlyList<SdfMeshInstance> meshInstances, IReadOnlyList<SdfMeshTemplateRange> meshTemplateRanges, SdfSampledSet sampled,
-        IReadOnlyList<SdfSlotClip> slotClips, GpuRowChanges? copyChanges = null, long copyChangesSerial = 0, IReadOnlyList<SdfMeshFormRange>? meshForms = null) {
+        IReadOnlyList<SdfSlotClip> slotClips, GpuRowChanges? copyChanges = null, long copyChangesSerial = 0, IReadOnlyList<SdfMeshFormRange>? meshForms = null,
+        IReadOnlyList<SdfFormBand>? formBands = null) {
         m_composition.MeshAssetSlots = meshAssetSlots;
         m_composition.MeshInstances = meshInstances;
         m_composition.MeshTemplateRanges = meshTemplateRanges;
@@ -302,7 +305,7 @@ public sealed record SdfFrame(
         m_composition.Sampled = sampled;
         m_composition.MeshCopyChanges = copyChanges;
         m_composition.MeshCopyChangesSerial = copyChangesSerial;
-        m_content = (m_content with { SlotClips = slotClips });
+        m_content = (m_content with { SlotClips = slotClips, FormBands = (formBands ?? []) });
     }
     /// <summary>Gets the producer's journal of the rigid copies that changed in <see cref="MeshInstances"/> (another copy
     /// at an index, the copy at an index moved to another frame slot, or a copy whose <see cref="SdfMeshInstance.Revision"/>
@@ -332,6 +335,11 @@ public sealed record SdfFrame(
     public IReadOnlyList<SdfSlotClip> SlotClips {
         get => m_content.SlotClips;
         init => m_content = (m_content with { SlotClips = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.FormBands"/>
+    public IReadOnlyList<SdfFormBand> FormBands {
+        get => m_content.FormBands;
+        init => m_content = (m_content with { FormBands = value });
     }
     /// <inheritdoc cref="SdfFrameContent.DynamicTransforms"/>
     public IReadOnlyList<DynamicTransform> DynamicTransforms {

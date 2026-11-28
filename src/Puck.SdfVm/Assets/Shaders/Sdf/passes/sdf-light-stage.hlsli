@@ -15,6 +15,7 @@
 #include "../shade/sdf-light.hlsli"
 #include "../isa/sdf-shade.hlsli"
 #include "../shade/sdf-grid.hlsli"
+#include "../frame/sdf-form-band.hlsli"
 #ifdef SDF_VIEWS_PASS
 #include "sdf-views-probes.hlsli"
 #include "sdf-views-reflections.hlsli"
@@ -332,6 +333,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
 
                 color = (applyCurvatureShading((color * passGroup.exposure), s.curvature, lit) / max(passGroup.exposure, 1.0e-12));
             }
+            // A changing form's edge glows over the surface it lies on, after the program and its ink, as scene light
+            // the display pass alone tones (frame/sdf-form-band.hlsli).
+            color += sdfFormBandEdge(s.frameSlot, surfacePoint);
         }
     }
 

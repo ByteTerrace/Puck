@@ -74,6 +74,10 @@ public enum SdfKernel {
     Sky,
     /// <summary>The composite: the sky's runs, the lit image over them by its coverage, the fog and the bounded media.</summary>
     Composite,
+    /// <summary>The mote pass: every mote the frame's form bands generate, one invocation each, its point on its band's
+    /// real surface and its path closed forms of its seed and the band's time, added into the motes' light the composite
+    /// reads. Run by the composite's recorder before the composite, only while a mote flies.</summary>
+    Motes,
     /// <summary>The glass shading pass: the lit image written again with each glass pixel shaded over the opaque image
     /// behind it, run between views and the sky only by a view of a program that holds glass.</summary>
     Glass,

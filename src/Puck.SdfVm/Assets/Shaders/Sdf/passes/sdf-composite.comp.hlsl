@@ -16,6 +16,8 @@
 //   its own evaluation. The sky share then passes through the haze and the medium to the far distance; the fog ends at the
 //   sky, which is its colour at infinity. A wholly covered pixel reads no run. Behind glass the sky share is tinted by
 //   the glass's sky filter (frame/sdf-glass-sky-filter.hlsli), since the coverage carries only its luminance.
+// - The motes of the frame's form bands (passes/sdf-motes.comp.hlsl) add their light, read from the motes' half-extent
+//   grid at the pixel, after the media and before the exposure, while the frame flies any.
 // - The bounded volumes composite last over each share, the surface share's clipped at the transport's distance and the
 //   sky share's at the far distance, from the camera's near plane, so a medium never paints through solid geometry,
 //   even at an edge whose samples it lies behind.
@@ -41,6 +43,8 @@
 #include "sdf-sky-pass.hlsli"
 #include "../shade/shade-volumes.hlsli"
 #include "../frame/sdf-glass-sky-filter.hlsli"
+#include "../frame/sdf-form-band.hlsli"
+#include "../frame/sdf-mote-light.hlsli"
 
 // Whether the view shows a field view: the proximity view, or a slicing plane (passGroup.fieldStyle.z).
 bool sdfFieldShown() {
@@ -205,6 +209,11 @@ bool sdfCompositePixel(uint3 id, uint2 volumes, out float exposed, out float cov
             color = shadeVolumes(volumeSurface, volumeCoverage, ((t > 0.0) ? t : far), sky, origin, direction, worldRayDistanceAt(view, direction, worldNearDistance(view)), far, id.xy, volumes, covered);
             if (geometryOnly) { color *= coverage; }
             else if (fidelity > 0.0) { color = lerp(color, (surface + sky), fidelity); }
+        }
+        // The motes the mote pass found in front of the surface here add their light, over the air and the media, as a
+        // light source the bloom spreads (frame/sdf-mote-light.hlsli); none while the frame's form bands fly none.
+        if (!geometryOnly && (sdfFormBandCount() != 0u) && (sdfFrameSampled[SDF_FRAME_SAMPLED_MOTE_TOTAL_WORD] != 0u) && sdfMoteLightBound()) {
+            color += sdfMoteLightOf(id.xy);
         }
         if (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST) {
             // RGB: layer/atmosphere evaluations / 4, procedural hashes / 64, texture loads / 16.

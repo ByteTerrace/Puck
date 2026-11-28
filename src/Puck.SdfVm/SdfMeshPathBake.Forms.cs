@@ -20,7 +20,9 @@ namespace Puck.SdfVm;
 // dropped it, or a recomposed program no longer holds it) draws its named form as it stands, since nothing is left to
 // hold; a named form with no group in the program yet is never handed the draws; and a piece the region refused beside
 // the meshes the draws read (SdfWorldTables.RefusesAhead) counts as standing, as a refused product takes its draws, so
-// under that pressure the piece lands out of the frame as a first mesh does.
+// under that pressure the piece lands out of the frame as a first mesh does. A form its producer marks lingering
+// (SdfMeshFormRange.Lingers, a form playing its transition out) is neither dormant nor held: it draws beside its owner's
+// drawn form until the producer publishes it without the mark, which re-places the forms (SameForms compares the mark).
 public sealed partial class SdfMeshPathBake {
     // The forms the latest prepared frame listed, by value; the form each owner draws, by its place in m_forms; the slots
     // of every form drawn by none of its owner's rows; and the slots of each named form still held, whose groups bake
@@ -91,6 +93,9 @@ public sealed partial class SdfMeshPathBake {
 
             if (m_formDrawn.TryGetValue(key: range.Form.Owner, value: out var drawn) && (drawn == index)) { continue; }
             range.Form.Drawn = false;
+            // A form the producer keeps while it plays its transition out draws beside the drawn form: not dormant, not
+            // held. Its groups already stood when it last held the draws.
+            if (range.Lingers && !range.Named) { continue; }
             for (var slot = range.FirstSlot; (slot < (range.FirstSlot + range.SlotCount)); slot++) { _ = m_placedDormant.Add(item: slot); }
             if (!range.Named) { continue; }
             m_formsHeld++;

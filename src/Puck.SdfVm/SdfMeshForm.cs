@@ -31,4 +31,7 @@ public sealed class SdfMeshForm(object Owner) {
 /// <param name="SlotCount">The slots it rides from <paramref name="FirstSlot"/>.</param>
 /// <param name="Named">Whether the owner names this form now (the look the body wears): the form the frame draws once its
 /// groups have landed. Exactly one form of an owner is named.</param>
-public readonly record struct SdfMeshFormRange(SdfMeshForm Form, int FirstSlot, int SlotCount, bool Named);
+/// <param name="Lingers">Whether the producer keeps this form drawn after it loses the draws, while it plays a form
+/// transition out (<see cref="SdfFormBand"/>): a lingering form the bake does not draw stays out of the dormant forms,
+/// so its rows keep drawing beside its owner's drawn form until the producer lets it go. A named form never lingers.</param>
+public readonly record struct SdfMeshFormRange(SdfMeshForm Form, int FirstSlot, int SlotCount, bool Named, bool Lingers = false);

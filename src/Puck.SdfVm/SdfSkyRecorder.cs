@@ -35,7 +35,9 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
     private static readonly string[] SampledMembers = [SdfWorldPackage.LitImage, SdfWorldPackage.SkyBaseImage, .. SdfWorldPackage.SkyUpperImages];
     private static readonly string[] StorageMembers = [SdfWorldPackage.SkyBaseWritten, .. SdfWorldPackage.SkyUpperWritten, SdfWorldPackage.Output];
     private static readonly string[] ReadParts = [SdfWorldPackage.Parts.SkyUpper0, SdfWorldPackage.Parts.SkyUpper1, SdfWorldPackage.Parts.SkyUpper2];
-    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.TransportRead, SdfWorldPackage.ExposureMeterWritten, SdfWorldPackage.FieldColors, SdfWorldPackage.GlassSkyFilter];
+    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.TransportRead, SdfWorldPackage.ExposureMeterWritten, SdfWorldPackage.FieldColors, SdfWorldPackage.GlassSkyFilter, SdfWorldPackage.MoteLightWritten];
+    // The recordings a composite makes with no mote before it gives its slots' mote light back.
+    private const int MoteIdleRecordings = 600;
 
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly RenderGraphFragmentPass m_fragmentPass;
@@ -70,6 +72,14 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
     // The composite's image meter, one slot each; empty for the sky.
     private readonly MeterSlot[] m_meters;
     private readonly RenderGraphSlotResults<MeterSlot>? m_meterCopies;
+    // The composite's mote light, one buffer a frame slot, made when a frame first carries motes and sized to half the
+    // output extent, three words a texel; the buffer each slot's pass set binds at the mote member (the tables' dummy
+    // until a mote flies); and the composite's recordings since the last that carried a mote. Like the meter, each slot's
+    // buffer is touched only by that slot's recordings, which the slot's fence orders, so one is replaced or given back
+    // only as its slot records again.
+    private readonly IGpuBuffer?[] m_moteLight;
+    private readonly IGpuBuffer?[] m_moteBound;
+    private int m_moteIdle;
 
     // A frame slot's histogram and readback buffers, and what the recording into it drew with.
     private sealed class MeterSlot(IGpuBuffer histogram, IGpuReadbackBuffer readback) {
@@ -106,6 +116,8 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: m_kernel).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
         m_meters = [];
+        m_moteLight = new IGpuBuffer?[context.InFlightFrames];
+        m_moteBound = new IGpuBuffer?[context.InFlightFrames];
         if (m_kernel == SdfKernel.Composite) {
             var buffers = context.Services.BufferFactory;
 
@@ -141,6 +153,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
             meter.Histogram.Dispose();
             meter.Readback.Dispose();
         }
+        foreach (var light in m_moteLight) { light?.Dispose(); }
         LeaveView();
     }
     // The sky's detail rows: its runs', then every layer label the composition's skies have packed, which only grow.
@@ -190,12 +203,30 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         BindInfinityViews(sky: frame.Sky, view: frame.Views[index], recording: in recording, set: set, tables: tables);
         var pipeline = tables.Pipeline(kernel: m_kernel);
         var meter = ((m_kernel == SdfKernel.Composite) ? m_meters[recording.Slot] : null);
+        var motes = ((m_kernel == SdfKernel.Composite) ? BindMoteLight(recording: in recording, set: set, tables: tables) : null);
 
-        // The clear precedes the bindings, as a Direct3D 12 clear sets descriptor heaps of its own. The slot's histogram
-        // rests shader-readable between recordings, and its previous copy completed with the slot's fence.
+        // The clears precede the bindings, as a Direct3D 12 clear sets descriptor heaps of its own. The slot's histogram
+        // and mote light rest shader-readable between recordings, and their previous use completed with the slot's fence.
         if (meter is not null) {
             recording.Recorder.ClearStorageBuffer(bufferHandle: meter.Histogram.BufferHandle, commandBufferHandle: recording.CommandBuffer, sizeBytes: MeterBytes);
-            ToShader(meter: meter, recorder: recording.Recorder, commandBuffer: recording.CommandBuffer, source: GpuAccess.TransferWrite);
+            ToShader(buffer: meter.Histogram, recorder: recording.Recorder, commandBuffer: recording.CommandBuffer, source: GpuAccess.TransferWrite);
+        }
+        if (motes is not null) {
+            recording.Recorder.ClearStorageBuffer(bufferHandle: motes.BufferHandle, commandBufferHandle: recording.CommandBuffer, sizeBytes: MoteLightBytes(width: recording.Width, height: recording.Height));
+            ToShader(buffer: motes, recorder: recording.Recorder, commandBuffer: recording.CommandBuffer, source: GpuAccess.TransferWrite);
+
+            // The mote pass reads the same pass and World sets as the composite, so its motes see the frame the
+            // composite composes; its writes reach the composite through the barrier after it.
+            var motePipeline = tables.Pipeline(kernel: SdfKernel.Motes);
+
+            recording.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, pipelineHandle: motePipeline.Handle);
+            m_sets.Bind(bindPoint: GpuBindPoint.Compute, commandBuffer: recording.CommandBuffer, pipelineLayout: motePipeline.LayoutHandle, recorder: recording.Recorder, slot: recording.Slot);
+            recording.Recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, descriptorSetHandle: tables.WorldSet(slot: tables.CurrentSlot),
+                group: ((uint)ShaderInterfaceGroup.World), pipelineLayoutHandle: motePipeline.LayoutHandle);
+            recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((uint)tables.FormMoteTotal).CeilingDivide(divisor: 64u), groupCountY: 1, groupCountZ: 1);
+            recording.Recorder.TransitionBuffer(bufferHandle: motes.BufferHandle, commandBufferHandle: recording.CommandBuffer,
+                destinationAccessMask: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite), destinationStageMask: GpuStage.ComputeShader,
+                sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader);
         }
         recording.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, pipelineHandle: pipeline.Handle);
         m_sets.Bind(bindPoint: GpuBindPoint.Compute, commandBuffer: recording.CommandBuffer, pipelineLayout: pipeline.LayoutHandle, recorder: recording.Recorder, slot: recording.Slot);
@@ -216,7 +247,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
 
             GpuReadbackCopy.Record(commandBuffer: commandBuffer, destination: meter.Readback, recorder: recorder, sizeBytes: MeterBytes,
                 source: meter.Histogram, sourceAccess: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
-            ToShader(meter: meter, recorder: recorder, commandBuffer: commandBuffer, source: GpuAccess.TransferRead);
+            ToShader(buffer: meter.Histogram, recorder: recorder, commandBuffer: commandBuffer, source: GpuAccess.TransferRead);
             meter.Exposures = residency.Exposures;
             meter.View = index;
             // Read after the multiplier, whose first read this frame stages the view and so starts its generation.
@@ -237,11 +268,44 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
     }
 
-    // Returns a histogram to the compute stage's read and write after a transfer.
-    private static void ToShader(MeterSlot meter, IGpuRecorder recorder, nint commandBuffer, GpuAccess source) =>
-        recorder.TransitionBuffer(bufferHandle: meter.Histogram.BufferHandle, commandBufferHandle: commandBuffer,
+    // Returns a histogram or the mote light to the compute stage's read and write after a transfer.
+    private static void ToShader(IGpuBuffer buffer, IGpuRecorder recorder, nint commandBuffer, GpuAccess source) =>
+        recorder.TransitionBuffer(bufferHandle: buffer.BufferHandle, commandBufferHandle: commandBuffer,
             destinationAccessMask: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite), destinationStageMask: GpuStage.ComputeShader,
             sourceAccessMask: source, sourceStageMask: GpuStage.Transfer);
+    // The bytes of the mote light at half an output extent, rounded up: the grid the mote pass and the composite agree on
+    // (sdfMoteGrid).
+    private static ulong MoteLightBytes(uint width, uint height) =>
+        ((ulong)(((width + 1u) / 2u) * ((height + 1u) / 2u)) * (ulong)(SdfWorldPackage.MoteLightTexelWords * sizeof(uint)));
+    // Binds the slot's mote light while the frame's form bands generate motes, made or grown to the output's half extent,
+    // and returns it; binds the tables' dummy otherwise, which the kernels read as no motes, and returns null. A slot's
+    // buffer is replaced or given back only as that slot records, after its previous use completed.
+    private IGpuBuffer? BindMoteLight(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
+        var slot = recording.Slot;
+        var bound = tables.DummyBuffer;
+        IGpuBuffer? light = null;
+
+        if (tables.FormMoteTotal > 0) {
+            var bytes = MoteLightBytes(width: recording.Width, height: recording.Height);
+
+            m_moteIdle = 0;
+            if ((m_moteLight[slot] is not { } held) || (held.SizeBytes < bytes)) {
+                m_moteLight[slot]?.Dispose();
+                m_moteLight[slot] = m_context.Services.BufferFactory.CreateDeviceLocal(
+                    name: new GpuObjectName(detail: "mote light", index: slot, owner: m_context.Instance, part: m_context.Part!), sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+            }
+            light = m_moteLight[slot]!;
+            bound = light;
+        } else if ((++m_moteIdle > MoteIdleRecordings) && (m_moteLight[slot] is { } idle)) {
+            idle.Dispose();
+            m_moteLight[slot] = null;
+        }
+        if (!ReferenceEquals(objA: m_moteBound[slot], objB: bound)) {
+            tables.WriteInterfaceBuffer(buffer: bound, layout: SdfWorldInterfaces.SkyParameters.Layout, member: SdfWorldPackage.MoteLightWritten, set: set);
+            m_moteBound[slot] = bound;
+        }
+        return light;
+    }
     // The lit image this recording reads: the glass shading pass's output, or the opaque image it stands for while no
     // glass is in view.
     private nint LitOf(in RenderGraphPackageRecording recording) {
@@ -280,6 +344,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         foreach (var member in BufferMembers) {
             tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: member, set: set);
         }
+        m_moteBound[slot] = tables.DummyBuffer;
         if (m_kernel == SdfKernel.Composite) {
             tables.WriteInterfaceBuffer(buffer: m_meters[slot].Histogram, layout: layout, member: SdfWorldPackage.ExposureMeterWritten, set: set);
         }
