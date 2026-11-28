@@ -140,7 +140,7 @@ public sealed partial class WorldColliderSet {
             return;
         }
         CreationStampEmitter.VisitFixedPrimitiveCopies(document: creation.EngineDocument,
-            transform: new WorldPosedSolid(Creation: creation, Origin: origin, Placement: placement, Rotation: rotation, Scale: (FixedQ4816.FromDouble(value: placement.Scale) * scale), ReflectionNormal: reflection).Transform, visitor: m_attachedVisitor);
+            transform: new WorldPosedSolid(Creation: creation, Origin: origin, Placement: placement, Rotation: rotation, Scale: (m_attachedRows[row].FrameScale * scale), ReflectionNormal: reflection).Transform, visitor: m_attachedVisitor);
     }
     private FixedStaticCollider? PosedAttachedField(int row, FixedVector3 origin, FixedQuaternion rotation, FixedQ4816 scale) {
         if ((m_attachedFields[row] is not { } field) || (scale <= FixedQ4816.Zero)) { return null; }

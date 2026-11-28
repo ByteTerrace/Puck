@@ -191,7 +191,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
         foreach (var placement in definition.Placements) {
             if ((placement?.Id == token) && (placement.Region is { } region) && (placement.Attach is null)) {
                 var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
-                var shape = region.ShapeAt(origin: frame.FixedPosition, yawRadians: frame.FixedYawRadians);
+                var shape = region.ShapeAt(origin: frame.FixedPosition, yawRadians: frame.FixedYawRadians, scale: WorldPlacementRegion.GroupScale(frame: frame, placement: placement));
 
                 point = shape.Center;
                 within = shape;

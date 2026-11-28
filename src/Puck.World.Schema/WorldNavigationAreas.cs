@@ -81,13 +81,13 @@ public sealed class WorldNavigationAreas {
     // An area's world volume: its own region in world space, or the region of the static placement it names.
     private static bool TryVolume(WorldNavigationArea area, WorldDefinition definition, WorldRowIndex<WorldPlacement, string> placements, out FixedSpatialShape shape) {
         if (area.Region is { } region) {
-            shape = region.ShapeAt(origin: FixedVector3.Zero, yawRadians: FixedQ4816.Zero);
+            shape = region.ShapeAt(origin: FixedVector3.Zero, yawRadians: FixedQ4816.Zero, scale: FixedQ4816.One);
             return true;
         }
         if ((area.Placement is { } id) && (placements.GetValueOrDefault(key: id) is { Region: { } placed, Attach: null, Deal: null } placement)) {
             var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
 
-            shape = placed.ShapeAt(origin: frame.FixedPosition, yawRadians: frame.FixedYawRadians);
+            shape = placed.ShapeAt(origin: frame.FixedPosition, yawRadians: frame.FixedYawRadians, scale: WorldPlacementRegion.GroupScale(frame: frame, placement: placement));
             return true;
         }
         shape = default;

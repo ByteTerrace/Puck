@@ -1175,8 +1175,9 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   its bracket of the piece; the world-wide field provider
   (`FixedFieldContactSolver`) carries no partition. The hall builds a doorway, window or stairwell as a union of
   boxes around the opening, and keeps 2.4 m of headroom over every tread and landing (her
-  height plus the 0.3 m step-up raise). `worlds/debug/gallery/gallery.puck` is the
-  worked building: a stair in each corner of 0.25 m risers, finer toward level 1 where a body shrinks (the standard's `switchbackStair` and `spiralStair`
+  height plus the 0.3 m step-up raise). `worlds/debug/gallery/building.puck` is the
+  worked building, its modules composed per floor under one root frame (position, yaw and uniform scale,
+  `worlds/standard/frame.puck`; [gallery.md](../../../worlds/debug/gallery.md#the-modules)): a stair in each corner of 0.25 m risers, finer toward level 1 where a body shrinks (the standard's `switchbackStair` and `spiralStair`
   kit pieces, one copy a storey), slabs holed over each well by `boundsCutAll` (`worlds/standard/bounds.puck`), and
   two glass lifts.
 - Input (channel budgets, modes and their release barrier, timed history,

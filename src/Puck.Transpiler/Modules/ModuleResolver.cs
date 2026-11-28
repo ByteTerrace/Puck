@@ -64,7 +64,9 @@ public static class ModuleResolver {
             return read;
         }
     }
-    private readonly record struct ImportCost(long Declarations, long RewriteWork, long Work, int Depth);
+    // What the loads a walk makes cost: the work charged, and the part of it that rewrote declarations, which an alias
+    // over them rewrites again.
+    private readonly record struct ImportCost(long RewriteWork, long Work);
     private readonly record struct ModuleImportIdentity(string Path, string Namespace);
     private sealed class ModuleImportIdentityComparer : IEqualityComparer<ModuleImportIdentity> {
         public static ModuleImportIdentityComparer Instance { get; } = new();
@@ -331,8 +333,10 @@ public static class ModuleResolver {
             var cost = MeasureImportedModules(
                 context: context,
                 currentDir: rootDir,
+                depths: new(comparer: Puck.Abstractions.PuckPaths.Comparer),
                 document: rootDoc,
-                memo: new(comparer: Puck.Abstractions.PuckPaths.Comparer)
+                loaded: new(comparer: ModuleImportIdentityComparer.Instance),
+                namespacePath: ""
             );
 
             budget.Spend(
@@ -352,10 +356,17 @@ public static class ModuleResolver {
         };
     }
 
+    // Charges the loads CollectModules makes, each once: a library under one namespace (the chain of aliases it was
+    // imported through) is one load however many routes reach it, as CollectModules loads it, so a library many
+    // libraries share costs its declarations once and a graph's charge grows with the libraries it holds, never with the
+    // routes through it. A load costs one plus the source length of a library that declares anything (the rewrite its
+    // declarations take), and an aliased import rewrites the declarations its load brought in once more.
     private static ImportCost MeasureImportedModules(
         DocumentNode document,
         string currentDir,
-        Dictionary<string, ImportCost> memo,
+        string namespacePath,
+        HashSet<ModuleImportIdentity> loaded,
+        Dictionary<string, int> depths,
         ImportContext context,
         int traversalDepth = 1,
         string? currentSourcePath = null
@@ -369,32 +380,13 @@ public static class ModuleResolver {
                 SourcePath = currentSourcePath,
             };
         }
-        var declarations = 0L;
         var rewriteWork = 0L;
         var work = 0L;
-        var depth = 1;
 
         foreach (var import in document.Statements.OfType<ImportNode>()) {
             context.CancellationToken.ThrowIfCancellationRequested();
             if (context.Library(directory: currentDir, import: import) is not { } path) { continue; }
-            if (!memo.TryGetValue(key: path, value: out var child)) {
-                var imported = context.Read(path: path);
-                var ownDeclarations = imported.Statements.LongCount(predicate: static statement => (statement is LetNode or TemplateNode));
-                var descendants = MeasureImportedModules(imported, (Path.GetDirectoryName(path: path) ?? ""), memo, context, (traversalDepth + 1), currentSourcePath: path);
-                var ownRewriteWork = ((ownDeclarations == 0)
-                    ? 0L
-                    : Math.Max(val1: 1, val2: context.SourceLength(path: path))
-                );
-
-                child = new ImportCost(
-                    Declarations: AddBounded(left: ownDeclarations, right: descendants.Declarations),
-                    RewriteWork: AddBounded(left: ownRewriteWork, right: descendants.RewriteWork),
-                    Work: AddBounded(left: AddBounded(left: 1, right: ownRewriteWork), right: descendants.Work),
-                    Depth: descendants.Depth
-                );
-                memo.Add(key: path, value: child);
-            }
-            if (((traversalDepth - 1) + child.Depth) >= DocumentEvaluationBudget.DepthLimit) {
+            if (((traversalDepth - 1) + ImportDepth(context: context, depths: depths, path: path, traversalDepth: (traversalDepth + 1))) >= DocumentEvaluationBudget.DepthLimit) {
                 throw new DocumentEvaluationException(
                     $"An import graph nests at most {DocumentEvaluationBudget.DepthLimit} source documents.",
                     import.Span
@@ -403,13 +395,38 @@ public static class ModuleResolver {
                     SourcePath = currentSourcePath,
                 };
             }
-            declarations = AddBounded(left: declarations, right: child.Declarations);
-            rewriteWork = AddBounded(left: rewriteWork, right: child.RewriteWork);
-            work = AddBounded(left: work, right: child.Work);
-            if (import.Alias is not null) { work = AddBounded(left: work, right: child.RewriteWork); }
-            depth = Math.Max(val1: depth, val2: checked((child.Depth + 1)));
+            var nextNamespace = ((import.Alias is not { } alias) ? namespacePath : ((namespacePath.Length == 0) ? alias : QualifiedName.Parse(text: namespacePath).Append(member: alias).ToString()));
+
+            if (!loaded.Add(item: new ModuleImportIdentity(Namespace: nextNamespace, Path: path))) { continue; }
+            var imported = context.Read(path: path);
+            var ownRewriteWork = (imported.Statements.Any(predicate: static statement => (statement is LetNode or TemplateNode))
+                ? Math.Max(val1: 1, val2: context.SourceLength(path: path))
+                : 0L
+            );
+            var descendants = MeasureImportedModules(imported, (Path.GetDirectoryName(path: path) ?? ""), nextNamespace, loaded, depths, context, (traversalDepth + 1), currentSourcePath: path);
+            var loadRewrite = AddBounded(left: ownRewriteWork, right: descendants.RewriteWork);
+
+            rewriteWork = AddBounded(left: rewriteWork, right: loadRewrite);
+            work = AddBounded(left: work, right: AddBounded(left: AddBounded(left: 1, right: ownRewriteWork), right: descendants.Work));
+            if (import.Alias is not null) { work = AddBounded(left: work, right: loadRewrite); }
         }
-        return new ImportCost(Declarations: declarations, Depth: depth, RewriteWork: rewriteWork, Work: work);
+        return new ImportCost(RewriteWork: rewriteWork, Work: work);
+    }
+    // How many sources deep a library's imports nest, itself included, held once per library: the depth is the graph's,
+    // whatever namespace a load brings it into.
+    private static int ImportDepth(string path, Dictionary<string, int> depths, ImportContext context, int traversalDepth) {
+        if (depths.TryGetValue(key: path, value: out var held)) { return held; }
+        if (traversalDepth > DocumentEvaluationBudget.DepthLimit) { return traversalDepth; }
+        var imported = context.Read(path: path);
+        var directory = (Path.GetDirectoryName(path: path) ?? "");
+        var depth = 1;
+
+        foreach (var import in imported.Statements.OfType<ImportNode>()) {
+            if (context.Library(directory: directory, import: import) is not { } child) { continue; }
+            depth = Math.Max(val1: depth, val2: checked((ImportDepth(context: context, depths: depths, path: child, traversalDepth: (traversalDepth + 1)) + 1)));
+        }
+        depths.Add(key: path, value: depth);
+        return depth;
     }
     /// <summary>Returns the <c>let</c> and template declarations the libraries <paramref name="rootDoc"/> imports hand
     /// it, named as its compile names them: each under the aliases it was imported through, and carrying the path of

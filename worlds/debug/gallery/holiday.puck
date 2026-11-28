@@ -3,7 +3,6 @@
 // (fir-fiber.puck). Each stands on a showcase row in a rest bay, between two displays, so the nave's centre line stays
 // open from the entrance to the climbing wall. Its prototypes and placements join the gallery.
 import "../../standard/conifer"
-import "../fir-fiber"
 import "layout"
 
 // A holiday bulb's glow in nits: the standard's default is a meadow's at dusk, and the gallery is exposed for daylight,
@@ -17,20 +16,30 @@ let holidayTrees = [
   { id: "fiber", bay: 10, row: showcaseRowNorth, prototype: "gallery-fir-fiber", yaw: 200 }
 ]
 
-prototypes {
-  firTree(id: "gallery-fir-lit", lights: true, bulbGlow: holidayBulbGlow)
-  firTree(id: "gallery-fir-tall-lit", lights: true, height: 1.3, spread: 0.9, bulbCount: 64, bulbGlow: holidayBulbGlow)
-  firTree(id: "gallery-fir-fiber", fiber: true, fiberGlow: holidayBulbGlow)
-}
+template galleryHoliday(frame) {
 
-placements {
-  for tree in holidayTrees {
-    placement $"gallery-holiday-{tree.id}" {
-      prototype: tree.prototype
-      parent: "gallery"
-      position [bayX(tree.bay), galleryFloor[0], tileZ(tree.row)]
-      yawDegrees: tree.yaw
-      solid
+  prototypes {
+    firTree(id: "gallery-fir-lit", lights: true, bulbGlow: holidayBulbGlow)
+    firTree(
+      id: "gallery-fir-tall-lit",
+      lights: true,
+      height: 1.3,
+      spread: 0.9,
+      bulbCount: 64,
+      bulbGlow: holidayBulbGlow
+    )
+    firTree(id: "gallery-fir-fiber", fiber: true, fiberGlow: holidayBulbGlow)
+  }
+
+  placements {
+    for tree in holidayTrees {
+      placement $"gallery-holiday-{tree.id}" {
+        prototype: tree.prototype
+        parent: "gallery"
+        position [bayX(tree.bay), galleryFloor[0], tileZ(tree.row)]
+        yawDegrees: tree.yaw
+        solid
+      }
     }
   }
 }

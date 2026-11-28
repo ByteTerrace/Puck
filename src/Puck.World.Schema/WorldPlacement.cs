@@ -445,8 +445,10 @@ public sealed record WorldPlacementFace(
 /// The volume is a sphere of <paramref name="Radius"/> or an oriented box of <paramref name="HalfExtents"/> (exactly
 /// one is authored), so a room or a corridor is one region. Its center is <paramref name="Center"/> in the placement's
 /// resolved frame and a box turns with the placement's resolved yaw plus its own <paramref name="YawDegrees"/>; the
-/// placement's <see cref="WorldPlacement.Scale"/> never sizes it, since a region's size is its own authored extent,
-/// never derived from the creation's visual bounds. Presentation-only in itself (drawing no geometry); sensing reads
+/// placement's own <see cref="WorldPlacement.Scale"/> never sizes it, since a region's size is its own authored extent,
+/// never derived from the creation's visual bounds, but the scale of the frame the row stands in does
+/// (<see cref="GroupScale"/>), so a region under a scaled group shrinks and grows with everything else in it.
+/// Presentation-only in itself (drawing no geometry); sensing reads
 /// the fixed-point shape <see cref="ShapeAt"/> compiles from the placement's resolved frame — unless the row also
 /// carries <see cref="WorldPlacement.Attach"/>, in which case the frame is the resolved live body pose instead
 /// (<c>Server.WorldEventFeed.CollectRegions</c>, the same resolve <c>world.attachments</c> answers): the sensing
@@ -456,7 +458,8 @@ public sealed record WorldPlacementFace(
 /// and positive (validated).</param>
 /// <param name="HalfExtents">The sensing box's half-extents in world units along its own axes, or absent for a
 /// sphere. Each must be finite and positive (validated).</param>
-/// <param name="Center">The volume's center in the placement's frame, world units (yawed with it, never scaled).</param>
+/// <param name="Center">The volume's center in the placement's frame, in the frame's units (yawed with it, and scaled
+/// by its group's scale, <see cref="GroupScale"/>).</param>
 /// <param name="YawDegrees">A box's yaw about +Y in degrees, added to the placement's resolved yaw. Ignored by a sphere.</param>
 /// <param name="Capacity">How many occupants the work sheet prices a rule's <c>forEach: region(...)</c> sweep at: the
 /// bodies the author expects the place to hold at once. Absent for the most bodies that fit the volume
@@ -473,24 +476,39 @@ public sealed record WorldPlacementRegion(
     [JsonIgnore]
     public bool IsBox => HalfExtents.HasValue;
 
+    /// <summary>Returns the scale a region carried by a row stands at: the row's composed frame scale over the row's
+    /// own, which is the scale of the group (its parent chain) the row stands in. A root row's is one.</summary>
+    /// <param name="frame">The row's resolved frame.</param>
+    /// <param name="placement">The row.</param>
+    /// <returns>The group's scale; one when the row's own scale does not quantize to a positive value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="placement"/> is <see langword="null"/>.</exception>
+    public static FixedQ4816 GroupScale(CompiledPlacementFrame frame, WorldPlacement placement) {
+        ArgumentNullException.ThrowIfNull(argument: placement);
+
+        var own = FixedQ4816.FromDouble(value: placement.Scale);
+
+        return ((own > FixedQ4816.Zero) ? (frame.FixedScale / own) : FixedQ4816.One);
+    }
     /// <summary>Compiles the region's fixed-point volume in a frame: the one conversion every sensing reader uses.</summary>
     /// <param name="origin">The frame's world origin: the placement's resolved position, or its carrier's live pose.</param>
     /// <param name="yawRadians">The frame's world yaw about +Y.</param>
+    /// <param name="scale">The frame's scale (<see cref="GroupScale"/>), which multiplies the center's offset, the
+    /// half-extents and the radius; one for a carrier's live pose.</param>
     /// <returns>The sphere or oriented box the region occupies.</returns>
-    public FixedSpatialShape ShapeAt(FixedVector3 origin, FixedQ4816 yawRadians) {
+    public FixedSpatialShape ShapeAt(FixedVector3 origin, FixedQ4816 yawRadians, FixedQ4816 scale) {
         var rotation = FixedQuaternion.FromAxisAngle(angle: yawRadians, axis: FixedVector3.UnitY);
-        var center = (origin + rotation.Rotate(vector: FixedVector3.FromVector3(value: Center)));
+        var center = (origin + rotation.Rotate(vector: (FixedVector3.FromVector3(value: Center) * scale)));
 
         return (HalfExtents is { } halfExtents)
             ? FixedSpatialShape.OfBox(
                 center: center,
-                halfExtents: FixedVector3.FromVector3(value: halfExtents),
+                halfExtents: (FixedVector3.FromVector3(value: halfExtents) * scale),
                 rotation: FixedQuaternion.FromAxisAngle(
                     angle: (yawRadians + FixedQ4816.FromDegrees(degrees: YawDegrees)),
                     axis: FixedVector3.UnitY
                 )
             )
-            : FixedSpatialShape.OfSphere(center: center, radius: FixedQ4816.FromDouble(value: Radius));
+            : FixedSpatialShape.OfSphere(center: center, radius: (FixedQ4816.FromDouble(value: Radius) * scale));
     }
     /// <summary>Gets the region's volume in cubic world units, presentation-side: the order <c>body.place</c> lists
     /// nested regions in, smallest (innermost) first.</summary>
@@ -688,7 +706,12 @@ public interface IWorldInhabitants {
 /// this authored one.</param>
 /// <param name="YawDegrees">The stamp yaw about +Y, degrees — world-space when <paramref name="Parent"/> is null,
 /// added to the parent's own composed yaw otherwise. Same attach caveat as <paramref name="Position"/>.</param>
-/// <param name="Scale">The uniform stamp scale (clamped to the placement policy envelope by validation).</param>
+/// <param name="Scale">The uniform stamp scale in <paramref name="Parent"/>'s frame (clamped to the placement policy
+/// envelope by validation). A parent's scale multiplies it as it multiplies the row's offset, as an SVG group's does
+/// (<see cref="WorldPlacementFrameCompilation.LocalFrame"/>), so the row's size in the world is its composed frame's
+/// <see cref="CompiledPlacementFrame.FixedScale"/> (its stamp's <see cref="CompiledPlacementStamp.Frame"/>): every
+/// consumer that sizes the row's drawn form, colliders, faces, net, region, board or anchored light reads that, never
+/// this local value. An attached or inhabited row has no static frame, so its own scale is its whole one.</param>
 /// <param name="Distribution">The placement distribution, or <see langword="null"/> for a single copy. Static
 /// placements accept a Lattice, Noise, or Scatter region, each with a <c>none</c> fill — Lattice materializes a
 /// regular two-axis grid (<see cref="WorldPlacementStamp.PatternFor"/>); Noise and Scatter materialize a

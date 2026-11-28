@@ -1,51 +1,37 @@
+// The gallery's board game room on level 2 (layout.puck's galleryGameStations: twelve stations in two rows of six), all
+// twelve (`galleryRoomStationsIn`): each the debug world set's station (../game-stations.puck) holding its own games,
+// chess, whose pieces its holodeck stands on the glass as bodies while chess is shown, and Klondike and FreeCell, whose
+// cards it stands the same way. Every station plays one set of rules, each station's game its own, so a move at one
+// station never touches another. The debug world stands only the first (../game-station-deck.puck), so its floors leave
+// this module out. ../game-station.md says how to play and drive them.
+//
+// A module library: `galleryGames(frame)` stands the twelve where the frame stands the building, each turned with it,
+// and building.puck expands it on a floor that enables `gameStations`. A station stands at its own size, since the
+// standard's station takes no scale. The document that expands the building declares the chess game's vocabularies
+// itself (`PieceKind`, `MoveKind`, `TurnColor`, as ../game-stations.puck's header gives them): a template's rules fold an
+// enum's members only when the expanding source declares the enum (gallery-root.puck), and holds room in its
+// `bodies.capacity` for each station's largest game (`gameStationBodies` a station).
+
 import "layout"
 import "../game-stations"
-// The gallery's board game room on level 2 (layout.puck's galleryGameStations: twelve stations in two rows of six), as
-// the gallery booted alone stands it (gallery-root.puck imports this file), all twelve (`galleryRoomStations`): each the
-// debug world set's station (../game-stations.puck) holding its own games, chess, whose pieces its holodeck stands on the
-// glass as bodies while chess is shown, and Klondike and FreeCell, whose cards it stands the same way. Every station
-// plays one set of rules, each station's game its own, so a move at one station never touches another. The debug world
-// stands only the first (../game-station-deck.puck). ../game-station.md says how to play and drive them.
 
-gameStationSet(stations: galleryRoomStations)
+template galleryGames(frame) {
+  let stations = galleryRoomStationsIn(frame)
 
-// At the first station's near chair (a1), 1.5 m from its centre at its -Z edge and facing +Z across the glass, inside
-// the engage radius: the context button sits her down.
-spawnPoints [
-  {
-    id: "cards"
-    position: gameStationChairAt(galleryRoomStations[0], "near")
-    yawDegrees: gameStationChairYaw(galleryRoomStations[0], "near")
-  }
-  {
-    id: "chess"
-    position: gameStationChairAt(galleryRoomStations[0], "near")
-    yawDegrees: gameStationChairYaw(galleryRoomStations[0], "near")
-  }
-]
+  gameStationSet(stations: stations)
 
-state {
-  // The chess game's vocabularies (../game-stations.puck's header).
-  enum PieceKind {
-    None
-    Pawn
-    Knight
-    Bishop
-    Rook
-    Queen
-    King
-  }
-
-  enum MoveKind {
-    Illegal
-    Quiet
-    Capture
-    EnPassant
-    Castle
-  }
-
-  enum TurnColor {
-    White
-    Black
-  }
+  // At the first station's near chair (a1), 1.5 m from its centre at its -Z edge and facing +Z across the glass, inside
+  // the engage radius: the context button sits her down.
+  spawnPoints [
+    {
+      id: "cards"
+      position: gameStationChairAt(stations[0], "near")
+      yawDegrees: gameStationChairYaw(stations[0], "near")
+    }
+    {
+      id: "chess"
+      position: gameStationChairAt(stations[0], "near")
+      yawDegrees: gameStationChairYaw(stations[0], "near")
+    }
+  ]
 }

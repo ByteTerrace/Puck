@@ -54,8 +54,8 @@ import "traversal"
 import "kinematics-scope"
 import "targeting"
 import "companion"
-// The camera's exposure, which the gallery's inspection lever drives (exposure.puck), and the gallery itself, a module
-// under one root placement (gallery/gallery.puck): this world stands it at layout.puck's `gallerySite`.
+// The camera's exposure, which the gallery's inspection lever drives (exposure.puck), and the gallery itself, a building
+// as modules under one root placement (gallery/gallery.puck): this world stands it at layout.puck's `galleryFrame`.
 import "exposure"
 import "gallery/gallery"
 import "firs"
@@ -190,17 +190,12 @@ cameras: concat(
   ]
 )
 
-// Recovery at the hero spawn lands above the studio platform. The gallery adds a spawn point per exhibit
-// (shapes.puck's gallerySpawns) and the gallery.* commands (galleryCommands) that walk, inspect and flag them.
-spawnPoints: concat(
-  [
-    { id: "hero", position [48, 0.33, -48], yawDegrees: 0 }
-    { id: "stage", position [0, 0, 0], yawDegrees: 0 }
-  ],
-  gallerySpawns
-)
-
-commands: galleryCommands
+// Recovery at the hero spawn lands above the studio platform. The gallery's displays add a spawn point per exhibit and
+// the gallery.* commands that walk, inspect and flag them (gallery/displays.puck).
+spawnPoints [
+  { id: "hero", position [48, 0.33, -48], yawDegrees: 0 }
+  { id: "stage", position [0, 0, 0], yawDegrees: 0 }
+]
 
 // The board game room's Go and Reversi bodies take the top slots (go.puck, reversi.puck); below them the development
 // fuzzer and traversal bot take bodies 54 and 53 and the companion takes 52. The gallery hall's bodies keep their
@@ -255,16 +250,7 @@ placements {
   studioPlacements()
 }
 
-// The shape gallery's motion controls (shapes.md): its clock, the per-exhibit motion gates and the cells its
-// state-bound exhibits read.
-state {
-  world {
-    galleryState()
-  }
-}
-
 prototypes {
-  galleryPrototypes()
   studioPrototypes()
 
   prototype "cube-1m" {

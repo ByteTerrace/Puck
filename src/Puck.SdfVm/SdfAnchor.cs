@@ -12,7 +12,13 @@ namespace Puck.SdfVm;
 /// consumer both agree on — an anchor never carries its own space).</param>
 /// <param name="Orientation">The world-space orientation. <see cref="Quaternion.Identity"/> for a pose that only ever
 /// needs a position (many anchors — a room's spawn point, a static console screen — never rotate).</param>
-public readonly record struct SdfAnchor(Vector3 Position, Quaternion Orientation);
+/// <param name="Scale">The uniform scale of the frame the pose stands in: a placed row's composed scale, so a light
+/// anchored to a row under a scaled group scales with it; one for a body, a part or a pose with no frame of its own.
+/// A <see langword="default"/> anchor's zero reads as one.</param>
+public readonly record struct SdfAnchor(Vector3 Position, Quaternion Orientation, float Scale = 1f) {
+    /// <summary>Gets <see cref="Scale"/>, or one where it is not positive (a <see langword="default"/> anchor's).</summary>
+    public float FrameScale => ((Scale > 0f) ? Scale : 1f);
+}
 /// <summary>
 /// Resolves a stable integer anchor id to its current pose — the read half of the anchor contract. A camera rig, a
 /// placed light, or any other consumer that wants to ride "whatever is publishing anchor 7 this tick" takes one of

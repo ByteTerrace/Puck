@@ -773,13 +773,20 @@ A volume whose extents bind a state row is compiled into the index again when
 the row changes (`WorldSpatialQueryCompilation.Resolve`).
 
 **A module under one root placement.** A building, a ship or any place meant to
-be stood by one row places everything relative to a root placement, and four
+be stood by one row places everything relative to a root placement whose frame
+is a position, a yaw and a uniform scale (the standard's `frame.puck`), and four
 mechanisms carry that frame past plain placements
-([the debug world's gallery](../../../../worlds/debug/gallery.md#the-module)
+([the debug world's gallery](../../../../worlds/debug/gallery.md#one-frame)
 uses all four):
 
 - A placement's `parent` names the root, and an `inhabit` row may name one
-  too: the body spawns at the row's pose in the parent's frame.
+  too: the body spawns at the row's pose in the parent's frame. A parent's
+  scale composes into its children's offsets and sizes
+  (`WorldPlacementFrameCompilation.LocalFrame`), so every reader that sizes a
+  row (its drawn form, colliders, faces, net, region, board, anchored lights)
+  reads its composed frame's `FixedScale`, never its own `WorldPlacement.Scale`.
+  An attached or inhabited row has no static frame, so its own scale is its
+  whole one.
 - A row attaches to a carrier by the carrier's placement
   (`attach { placement: "<id>" }`, `WorldPlacementAttach.TryCarrier`), never
   by a body index a neighbouring import can shift. The placement must be
@@ -799,9 +806,12 @@ anchored to its row while the row shows that prototype
 its light and an attached row's light rides its body. `WorldCreationLights.Expand`
 is the one door every reader of the light list goes through (the resolve,
 `world.lighting`, the validator); the gallery's stair pendant and the standard's
-`flashlight.puck` use it. A static creation's
-paints, a state lattice's origin and a board are still placed in the world's
-frame: a module places those from its site when the document compiles.
+`flashlight.puck` use it. A light anchored to a placed row takes the row's
+composed scale: its offset, range and a tube's length and radius by the scale,
+and its intensity so a point as far again takes the same illuminance. A static
+creation's paints, a screen's face and an unanchored lattice's origin are still
+placed in the world's frame: a module places those from its frame
+(`frameAt`) when the document compiles.
 
 `WorldNavigation.cs` owns named finite domains, proved against the static part
 of the contact provider the bodies collide with and baked off the tick

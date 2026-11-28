@@ -1,0 +1,68 @@
+// A frame: where a group of rows stands in the world, as an SVG group's transform places what it holds. A library: it
+// hands its importers the functions below and emits no document.
+//
+// A frame is `{ position, yaw, scale }`: the world point the group's origin stands at, its turn about up in degrees (as a
+// placement's yaw turns it: 0 faces -z, 90 -x, 180 +z) and its uniform scale. A group stands its root placement with the
+// frame's three values (`frameRoot`), so every row parented to that root follows it as the engine composes a parent chain:
+// a child's offset, size, colliders, faces, regions, boards and anchored lights all take the root's scale. What a group
+// writes in the world's own coordinates (a static creation's paints, a screen's face, a speaker's point, a box a rule
+// tests) carries the same frame through these functions, so the group and those pieces move, turn and scale as one:
+//
+//   let site = frameOf(position: [10, 0, 4], yaw: 90, scale: 0.5)
+//   frameAt(site, [2, 0, 0])            a point of the group, in the world
+//   frameLength(site, 1.25)             a length of the group, in world metres
+//   frameYaw(site, 180)                 a heading of the group, in the world
+//   frameBox(site, box)                 a box of the group ({ x0, x1, y0, y1, z0, z1 }), in the world
+//
+// A box stays square to the world's axes, as a paint's box and a rule's bounds are: `frameBox` is the world box about the
+// group's box turned by the frame, exact when the yaw is a whole number of quarter turns. A test that must hold at any
+// yaw carries the body's point into the group instead (`frameLocal`, which a rule writes over `frameAxes`).
+
+// A frame, and the frame that leaves every point where it is.
+function frameOf(position = [0, 0, 0], yaw = 0, scale = 1) = { position: position, yaw: yaw, scale: scale }
+let frameIdentity = frameOf()
+
+// The frame's turn, as a rotation `rotatePoint` and `compose` read.
+function frameTurn(frame) = rotate([0, 1, 0], frame.yaw)
+// A point of the group, in the world: scaled, turned and moved as the group's root is.
+function frameAt(frame, p) = (frame.position + rotatePoint(frameTurn(frame), (p * frame.scale)))
+// A length of the group (a radius, a half extent, a text's height), in world metres.
+function frameLength(frame, metres) = (metres * frame.scale)
+// A heading of the group, in the world, in degrees.
+function frameYaw(frame, yaw) = (frame.yaw + yaw)
+// A rotation of the group, in the world: the frame's turn followed by the rotation.
+function frameRotation(frame, rotation) = compose(frameTurn(frame), rotation)
+// The world box about a box of the group: the eight corners carried into the world and bounded.
+function frameCorners(frame, box) = flatMap(
+  [box.x0, box.x1],
+  x => flatMap([box.y0, box.y1], y => map([box.z0, box.z1], z => frameAt(frame, [x, y, z])))
+)
+function frameBounded(corners) = {
+  x0: minimum(map(corners, c => c[0]))
+  x1: maximum(map(corners, c => c[0]))
+  y0: minimum(map(corners, c => c[1]))
+  y1: maximum(map(corners, c => c[1]))
+  z0: minimum(map(corners, c => c[2]))
+  z1: maximum(map(corners, c => c[2]))
+}
+function frameBox(frame, box) = frameBounded(frameCorners(frame, box))
+// The world directions of the group's x and z axes, unit length: a rule reads a body's point in the group through them,
+// `frameLocal`, its expressions folding to constants.
+function frameAxes(frame) = { x: rotatePoint(frameTurn(frame), [1, 0, 0]), z: rotatePoint(frameTurn(frame), [0, 0, 1]) }
+// A world point `p`, as the group reads it: the inverse of `frameAt`.
+function frameLocal(frame, p) = [
+  (dot((p - frame.position), frameAxes(frame).x) / frame.scale),
+  ((p[1] - frame.position[1]) / frame.scale),
+  (dot((p - frame.position), frameAxes(frame).z) / frame.scale)
+]
+
+// The root placement a frame stands its group under: the frame's position, yaw and scale on one row, which every row of
+// the group names as its `parent`.
+template frameRoot(id, frame, prototype = "place") {
+  placement $"{id}" {
+    prototype: prototype
+    position: frame.position
+    yawDegrees: frame.yaw
+    scale: frame.scale
+  }
+}

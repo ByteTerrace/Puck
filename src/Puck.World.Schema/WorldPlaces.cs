@@ -51,14 +51,15 @@ public sealed class WorldPlaces {
                 continue;
             }
 
-            var frame = ((placement.Attach is null)
-                ? WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement)
-                : default);
+            var attached = (placement.Attach is not null);
+            var frame = (attached
+                ? default
+                : WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement));
 
             rows.Add(item: new Row(
                 Placement: placement,
                 Region: region,
-                StaticShape: region.ShapeAt(origin: frame.FixedPosition, yawRadians: frame.FixedYawRadians)
+                StaticShape: region.ShapeAt(origin: frame.FixedPosition, yawRadians: frame.FixedYawRadians, scale: (attached ? FixedQ4816.One : WorldPlacementRegion.GroupScale(frame: frame, placement: placement)))
             ));
         }
 

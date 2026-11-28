@@ -209,7 +209,7 @@ public sealed class WorldFaceCatalog {
     }
     // The face frame. Origin is the named shape's own stamped center; the plane basis composes the placement's
     // authored yaw with the shape's own orientation; the half-extents are the shape's authored Scale under the
-    // placement's uniform Scale — the MEASURED convention (a Box's drawn face matches its authored Scale, not
+    // placement's composed uniform scale (its own and its parents') — the MEASURED convention (a Box's drawn face matches its authored Scale, not
     // CreationGeometry's canonical reach table, which is a conservative circumscribing bound).
     //
     // ALL THREE AXES come from the one composed rotation. Taking Right and Normal from the quaternion while pinning
@@ -223,7 +223,7 @@ public sealed class WorldFaceCatalog {
             placement: placement
         );
         var origin = FixedVector3.FromVector3(value: frame.Position);
-        var scale = FixedQ4816.FromDouble(value: placement.Scale);
+        var scale = frame.FixedScale;
         var yawDegrees = FixedQ4816.FromDouble(value: frame.YawDegrees);
 
         // Authored cardinal yaw with an unrotated (or half-turned) face has an exact axis-aligned frame. Sending those

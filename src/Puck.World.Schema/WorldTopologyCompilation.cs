@@ -18,10 +18,10 @@ public static class WorldTopologyCompilation {
 
     /// <summary>Finds and compiles a discrete topology by name, anchored: a topology a placement's <c>board</c> facet
     /// names (<see cref="WorldPlacementBoard.Topology"/>) is placed in that placement's own
-    /// <see cref="WorldDefinitionRows.ResolvedFrame"/>: its authored <c>origin</c> is a point of that frame and its own
-    /// axes turn with the frame's yaw (<see cref="CompiledTopology.Heading"/>), so a board, its cells and every
-    /// position resolved against it turn with the placement that carries it. The frame's scale is not applied: a
-    /// cell keeps its authored size. An unanchored topology (no placement's <c>board</c> facet names it) resolves exactly as
+    /// <see cref="WorldDefinitionRows.ResolvedFrame"/>: its authored <c>origin</c> is a point of that frame, its own
+    /// axes turn with the frame's yaw (<see cref="CompiledTopology.Heading"/>) and its lengths take the frame's scale,
+    /// so a board, its cells and every position resolved against it turn and scale with the placement that carries it
+    /// and match the glass it is drawn on. An unanchored topology (no placement's <c>board</c> facet names it) resolves exactly as
     /// authored, identical to <see cref="TopologyCompilation.Find(IReadOnlyList{LatticeTopology}?, string)"/>. Cached
     /// per (topology, anchor placement instance) pair, so a mutation that moves the anchor — a new
     /// <see cref="WorldPlacement"/> instance, since rows are replaced wholesale, never mutated in place — recompiles
@@ -80,7 +80,8 @@ public static class WorldTopologyCompilation {
                     cache.Compiled = TopologyCompilation.Compile(
                         topology: topology,
                         anchorPosition: frame.FixedPosition,
-                        anchorYawRadians: frame.FixedYawRadians
+                        anchorYawRadians: frame.FixedYawRadians,
+                        anchorScale: frame.FixedScale
                     );
                 }
 

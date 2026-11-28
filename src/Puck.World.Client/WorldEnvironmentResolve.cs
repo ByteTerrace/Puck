@@ -314,19 +314,28 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             output.Set(
                 index: index,
                 light: ((pose is { } frame)
-                    ? light with {
+                    ? Scaled(light: light, scale: frame.FrameScale) with {
                         DynamicSlot = SdfProgram.NoDynamicTransformSlot,
                         Direction = (frame.Position + Vector3.Transform(
-                            light.Direction,
+                            (light.Direction * frame.FrameScale),
                             frame.Orientation
                         )),
                         Shadows = (standing ? 1u : light.Shadows),
-                        SpotAxis = Vector3.Transform(light.SpotAxis, frame.Orientation),
+                        SpotAxis = Vector3.Transform((light.Kind == SdfLightKind.Line) ? (light.SpotAxis * frame.FrameScale) : light.SpotAxis, frame.Orientation),
                     }
                     : light with { DynamicSlot = SdfProgram.NoDynamicTransformSlot, Weight = 0f })
             );
         }
     }
+    // A ranged light anchored in a frame of scale s, as the frame scales everything in it: its range and a tube's radius
+    // by s, and its intensity so that a point s times as far takes the illuminance the unscaled light gives, by s² for a
+    // point or spot (E = I / d²) and by s for a tube, whose length grows with it (E ∝ I·L / d²). The ranges RangeOf and
+    // LineRangeOf give the scaled intensities are the scaled ranges, so the light reads the same at every scale.
+    private static SdfLight Scaled(SdfLight light, float scale) => ((scale == 1f) ? light : light.Kind switch {
+        SdfLightKind.Point => light with { Param = (light.Param * scale), Weight = (light.Weight * scale * scale) },
+        SdfLightKind.Line => light with { Param = (light.Param * scale), SpotOffset = (light.SpotOffset * scale), Weight = (light.Weight * scale) },
+        _ => light,
+    });
     // The directional light of a name (a disc's `follows`), or -1 when the section carries none, which draws no disc.
     private int NamedDirectional(string name) {
         if (m_lighting?.Lights is { } lights) {

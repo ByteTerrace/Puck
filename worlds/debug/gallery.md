@@ -3,10 +3,14 @@
 The debug world's gallery is one building in the selected
 [canyon workshop](../../docs/game/art/canyon-workshop-pack/README.md) direction:
 four storeys round a nave, with the exhibits, the portal paintings, the board
-games, four stairs and two glass lifts. It is a module. Every row of it stands
-under one root placement, so a world stands the whole building by placing that
-row, and [`gallery-root.puck`](gallery-root.puck) boots it alone for work on the
-building.
+games, four stairs and two glass lifts. It is built of modules a world composes
+floor by floor, all standing under one root placement whose frame (a position, a
+yaw and a uniform scale) places the whole building ([the modules](#the-modules)).
+[`gallery-root.puck`](gallery-root.puck) boots the whole building alone,
+[`gallery-shell.puck`](gallery-shell.puck) its shell and theme with no module,
+and [`gallery-half.puck`](gallery-half.puck) and
+[`gallery-double.puck`](gallery-double.puck) the building at half and twice its
+size.
 
 ## The owner's rulings on the plan
 
@@ -239,7 +243,7 @@ station stands across the void from its south twin. A station stands with no
 yaw, so its near chair (the menu's) is at its south edge: the wall's side on the
 south gallery, where the player faces the void, and the balcony's on the north.
 
-The gallery booted alone stands all twelve ([gallery/games.puck](gallery/games.puck));
+The gallery booted alone stands all twelve ([gallery/games.puck](gallery/games.puck), on a floor set that enables `gameStations`);
 the debug world stands only `a1` ([game-station-deck.puck](game-station-deck.puck)),
 beside its own older tables. The stations play one set of rules, each station's
 game its own ([game-station.md](game-station.md#how-a-station-is-built)).
@@ -787,7 +791,7 @@ the hero angle every display shares, and while using it the inputs go to the
 display, as a result of Puck code rather than an engine special case. So every
 display is a terminal ([terminal.puck](../standard/contexts/terminal.puck), expanded for
 the displays by [shape-station.puck](shape-station.puck)'s `shapeStation`, which
-[gallery/gallery.puck](gallery/gallery.puck) calls):
+[gallery/displays.puck](gallery/displays.puck) calls):
 
 - Standing before a console (within 1.6 m of the display's spawn point), the
   context button (E, or the pad's RB) uses it: she stands at the display's
@@ -816,7 +820,7 @@ while she uses a display, the backtick turns its screen into a hidden terminal
 (the standard's terminal console,
 [terminal-console.puck](../standard/contexts/terminal-console.puck), with the
 gallery's command set `galleryConsole` in
-[gallery/gallery.puck](gallery/gallery.puck)). The screen placement responds
+[shape-station.puck](shape-station.puck)). The screen placement responds
 to the display's `terminalConsoleOpen` cell with its terminal mode
 (`terminalScreenPaints` in [shapes.puck](shapes.puck)): the same dark glass
 under faint scanlines, ochre rules in the console's palette, the last line run
@@ -876,7 +880,7 @@ Every part of a display is an engine mechanism a world authors:
   `pointer(any, display-<id>-screen, region|row, <region>)` beside
   `pointer(…, press, tap)`, the standard's tap channel, which the left mouse
   button presses and a touchscreen's contact will. The press, drag, release and
-  page rules in [gallery/gallery.puck](gallery/gallery.puck) are the whole
+  page rules in [shape-station.puck](shape-station.puck)'s `shapeStation` are the whole
   interaction.
 - The screen's lettering is text paints bound to the display's cells: the list's
   rows are cells one rule rewrites from the catalog by index (`setState` with a
@@ -898,26 +902,84 @@ changes.
 The in-world editing packet ([open items](../../docs/plans/open-items.md#in-world-editing))
 holds this as open work.
 
-## The module
+## The modules
 
-[`gallery/gallery.puck`](gallery/gallery.puck) is the building's document and
-[`gallery/shell.puck`](gallery/shell.puck) its shell. The root placement is
-`gallery`. Four things make the building follow it:
+The owner's rulings 7 and 8 shape how the building is put together. Every part
+beside its shell and theme is a module, and a floor enables the modules it
+holds. [`gallery/building.puck`](gallery/building.puck)'s
+`galleryBuilding(frame, floors, home)` stands the shell and every module some
+floor enables. A module no floor enables expands to nothing: no rows, rules,
+bodies or bakes. Each module is a library with one template that takes the frame
+the building stands in:
 
-- A placement names `gallery` as its `parent`, so its position and yaw are the
-  building's.
-- A fixture is a light anchored to `gallery`. A light anchored to the root of
-  a row no body carries stands still, so the irradiance volume traces it as it
-  does an unanchored one.
-- A spawn point names `gallery` as its `parent`, and every reader is handed
-  the pose in the world.
-- Each lift's car is the body its own placement, `lift-car-<car>`, spawns. The
-  car's platform, cab, door and buttons attach to that placement by name, and
-  the rule that moves the car poses it at a cell of a topology read in the
-  building's frame. No row holds a body's index.
+| Module | Template | Floor |
+|---|---|---|
+| `lifts` | [`gallery/lifts.puck`](gallery/lifts.puck)'s `galleryLifts` | every level |
+| `displays` | [`gallery/displays.puck`](gallery/displays.puck)'s `galleryDisplayModule` | 0 |
+| `tree` | [`gallery/tree.puck`](gallery/tree.puck)'s `galleryTree` | 0 (it rises through every level) |
+| `climbingWall` | [`gallery/climbing-wall.puck`](gallery/climbing-wall.puck)'s `galleryClimbingWall` | 0 |
+| `stewards` | [`gallery/stewards.puck`](gallery/stewards.puck)'s `galleryStewards` | 0 |
+| `holiday` | [`gallery/holiday.puck`](gallery/holiday.puck)'s `galleryHoliday` | 0 |
+| `toybox` | [`gallery/toybox.puck`](gallery/toybox.puck)'s `galleryToybox` | 1 |
+| `rentals` | [`gallery/rentals.puck`](gallery/rentals.puck)'s `galleryRentals` | 1 |
+| `wonder` | [`gallery/wonder.puck`](gallery/wonder.puck)'s `galleryWonder` and its zones | 1 |
+| `mouseHouse` | [`gallery/mouse-house.puck`](gallery/mouse-house.puck)'s `galleryMouseHouse` | 1 |
+| `nets` | level 1's lattice in [`gallery/shell.puck`](gallery/shell.puck) | 1 |
+| `timePuzzles` | [`gallery/time-puzzles.puck`](gallery/time-puzzles.puck)'s `galleryTimePuzzles` | 1 |
+| `gameStations` | [`gallery/games.puck`](gallery/games.puck)'s `galleryGames` | 2 |
+| `portals` | [`gallery/portals.puck`](gallery/portals.puck)'s `galleryPortals` | 3 |
+| `flaw` | [`gallery/flaw.puck`](gallery/flaw.puck) | none while the owner has it tabled |
 
-What does not follow the root yet is named under
-[what is still open](#what-is-still-open).
+[`gallery/layout.puck`](gallery/layout.puck) holds the floor sets: `galleryFloorsAll`
+(everything, as the owner laid it out), `galleryFloorsDebug` (everything but the
+game stations, since the debug world stands its own station) and
+`galleryFloorsShell` (four empty floors). `galleryModulesOf` reads a floor set
+into one flag a module, and brings with a module what it rests on: the toybox's
+decks with the rentals or the time puzzles, the size field with the little house,
+and the rentals and the nets with the time puzzles. The shell itself follows the
+flags where a module changes it: a level-1 edge with no nets is railed, a bay no
+lift shaft closes is railed, a branch landing with no tree is netted or railed,
+and the level-3 walkway is railed across where no climbing wall tops it.
+
+[`gallery/gallery.puck`](gallery/gallery.puck) is the debug world's composition:
+the building at `galleryFrame` with `galleryFloorsDebug`, imported by
+[`debug.puck`](debug.puck). [`gallery/root.puck`](gallery/root.puck) holds what
+a world booting the gallery alone adds (its seat's spawn, its population, its
+font and its placement policy), which `gallery-root.puck`, `gallery-shell.puck`,
+`gallery-half.puck` and `gallery-double.puck` expand with their own frame and
+floors.
+
+### One frame
+
+The building is placed by one frame, the standard's
+[`frame.puck`](../standard/frame.puck): `{ position, yaw, scale }`, as an SVG
+group's transform places what it holds. Two doors carry it:
+
+- The root placement `gallery` carries the frame's three values, and every row
+  of the building names it as its `parent`. A parent's scale composes into its
+  children's offsets and sizes, so a row's drawn form, colliders, faces, net,
+  region, board and anchored lights all take the building's scale, and its spawn
+  points stand where the root puts them.
+- What stands in the world's own coordinates carries the same frame through
+  `galleryAt(frame, point)` (`frameAt`): a static creation's paints (the floor's
+  tiles and pads, the consoles' and slates' lettering), a screen's face, a speaker,
+  a camera shot's eye and aim, the time fields' targets and the size field's zones.
+
+What rides a lift's car is attached to the car's body, which has no static frame,
+so those rows carry the frame's scale themselves, and so does the lamp anchored to
+the car. A box in world coordinates stays square to the world's axes, so it is
+exact at a whole number of quarter turns; the reaches stand under the root
+instead, so they turn with it at any yaw.
+
+A body in the building takes its scale through the building's one size field
+(`gallerySizeField`, `sizeField-gallery`): its sizes are the building's, scaled
+by the frame, so its collider, speeds, gravity, jump, step height and reach follow
+and moving through a scaled building feels as it does at full size. At any scale
+but one the entrance holds a zone that carries a body from the world's size
+outside to the building's inside across the doorway, and back as it walks out.
+The building's windows show the world outside it at its own size, since the world
+beyond the glass is the importing world's, drawn once at its own scale: a scaled
+building reads as scaled only through its windows.
 
 ## The kit
 
@@ -1015,17 +1077,19 @@ own materials `exhibitSubjects` in [`shapes.puck`](shapes.puck). Edit a value,
 | `board-room`, `portals-south` | Along the board game room, and level 3's south wall where the portals hang |
 | `toybox`, `toybox-across` | Level 1's south stations from level 2's north balcony, and its north stations from level 1's south balcony edge |
 
-A shot's eye and aim are placed from `gallerySite` when the document compiles,
-as the other world-space pieces are.
+A shot's eye and aim are placed in the building's frame (`galleryAt`) when the
+document compiles, as the other world-space pieces are.
 
 ## The size of level 1
 
 The owner's ruling: a body reaches level 1 by the stairs or the lifts, but too
 small to use its devices or rental stalls; a puzzle grants the pass that lets
 it in at full size. The level stays its normal size, so it is giant to her.
-[`gallery/wonder.puck`](gallery/wonder.puck) holds it, one size field (the
-standard's [`size-field.puck`](../standard/size-field.puck)) whose zones are,
-first match winning:
+[`gallery/wonder.puck`](gallery/wonder.puck) holds it: its zones and sizes join
+the building's one size field (the standard's
+[`size-field.puck`](../standard/size-field.puck), `gallerySizeField` in
+[`gallery/building.puck`](gallery/building.puck)), standing in the building's
+frame, whose zones are, first match winning:
 
 - **Each corner stair's well**, two storeys of it: from level 0's floor up to
   level 1's, and from level 2's floor down to it. Her size follows her height
@@ -1104,7 +1168,7 @@ The author's shortcuts:
 | `gallery.wonder pass on [body]`, `gallery.wonder pass off [body]` | Grants or takes back a body's pass |
 | `gallery.wonder size <s> [body]` | Sets a body's size directly; it holds wherever no zone stands, and level 1, its stairs and its lifts size it again |
 | `gallery.wonder small <s>` | Retunes the size level 1 gives a body without the pass, from the next tick |
-| `world.state sizeField-toybox` | Reads the field's `full` and `small` sizes |
+| `world.state sizeField-gallery` | Reads the field's `full` and `small` sizes, the building's scale applied |
 | `body.state 0` | Reads body 0's `size` |
 
 To keep a retuned size, edit `lookWonderSize` in `gallery/look.puck` and let
@@ -1188,13 +1252,30 @@ under the gallery's own ceiling (`WorldBody.SetScaleWithinClearance`).
 - **Dormant pool runtimes.** A gated-off pool machine is not advanced but its
   runtime is created at boot, 24 runtimes for 12 seats. Creating a runtime on
   the first tick its `runsWhen` holds would make an unused pool free.
-- **World-space pieces.** A static creation's paints, a state lattice's origin
-  and a table's board are placed in the world's frame. The floor's tiles and
-  pads, the tables in the board game room and the fixtures that stand by world
-  coordinates (the moon's door, its beacon, the globe's lever) are therefore
-  placed from `gallerySite` when the document compiles. They stand right where
-  the debug world puts the building and would not follow the root if a world
-  moved or turned it at run time.
+- **World-space pieces.** A static creation's paints and a screen's face are
+  placed in the world's frame, so the building places them from its frame when
+  the document compiles (`galleryAt`). They follow the frame a world gives the
+  building, but not the root if a world moved or turned it at run time, and a
+  paint's box stays square to the world's axes, so the floor's tiles and pads lie
+  on the tiles' grid only at a whole number of quarter turns. The fixtures that
+  stand by world coordinates outside the building (the moon's door, its beacon,
+  the globe's lever) are placed from the debug world's `galleryFrame`.
+- **A scaled building's inhabitants.** A body an inhabited placement spawns keeps
+  its own size register, so in a scaled building the game stations' holodeck
+  pieces and cards, and the lift cars' bodies, stand at full size; the stations
+  take no scale at all yet (the standard's `game-station.puck` places its table,
+  glass and boards by world point and yaw), so the scaled roots leave them out.
+  A body an inhabited placement spawns under a scaled frame should start at that
+  frame's scale, through its size register, so its collider and motion follow.
+- **A distribution under a scaled parent.** A distributed row's copies take the
+  composed scale, but the lattice's spacing between them does not
+  (`CreationStampLattice` places the offsets unscaled). No row of the building is
+  distributed.
+- **The placement scale envelope reads rows' own scales.** An unauthored
+  `placements.policy` derives its envelope from each row's own scale, not its
+  composed one, so a child of a scaled parent can stand outside it. The gallery's
+  roots author the debug world's policy, which holds the building at twice its
+  size.
 - **The kit's banner.** Its motif is geometry a few millimetres proud of the
   cloth, because a paint cannot follow each copy of a static piece.
 - **The console's future, recorded and not built** (the owner's ruling):

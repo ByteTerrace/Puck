@@ -58,6 +58,9 @@ public sealed partial class WorldColliderSet : IContactField {
     // Hold queries retain each moving row's authored grip policy beside the sampled colliders.
     private sealed record MovingSolidRow(WorldPlacement Placement, WorldPrototype Creation, FixedVector3 Origin,
         FixedQuaternion Rotation, FixedVector3? ReflectionNormal) {
+        // The row's scale before its live size: a static row's composed frame scale (its own and its parents'), an
+        // attached row's own, since it rides a body and has no static frame.
+        public required FixedQ4816 FrameScale { get; init; }
         public StateBinding? SizeBinding { get; } = StateBinding.Parse(token: Creation.Document.SizeBy);
         public CellName SizeKey { get; } = CellName.Parse(candidate: ((StateBinding.Parse(token: Creation.Document.SizeBy)?.Key is StateBinding.BodyKey)
             ? IndexKeyCache.Get(index: (Placement.Attach!.BodyIndex ?? 0)) : (StateBinding.Parse(token: Creation.Document.SizeBy)?.Key ?? StateRow.SlotKey.Value)));
@@ -255,7 +258,7 @@ public sealed partial class WorldColliderSet : IContactField {
             var (placement, creation, _, rotation, reflection) = attachedRows[row];
             m_fieldContactRows[row] = (movingOnly || CollidesAsField(document: creation.EngineDocument));
             m_attachedFields[row] = ReliefCollider(creation.EngineDocument,
-                new FixedCreationStampTransform(FixedVector3.Zero, FixedQuaternion.Identity, FixedQ4816.FromDouble(value: placement.Scale), ((reflection is { } normal) ? rotation.RotateInverse(vector: normal) : null)),
+                new FixedCreationStampTransform(FixedVector3.Zero, FixedQuaternion.Identity, attachedRows[row].FrameScale, ((reflection is { } normal) ? rotation.RotateInverse(vector: normal) : null)),
                 placement.Solid!.Margin, partitioned: false);
         }
         m_attachedVisitor = RecordAttachedCopy;
@@ -666,12 +669,12 @@ public sealed partial class WorldColliderSet : IContactField {
             // static m_colliders array.
             if (WorldPlacementStamp.CollidesLive(creation: creation, placement: placement)) {
                 if (placement.Attach is not null) {
-                    attachedRows.Add(item: new MovingSolidRow(placement, creation, default, FixedQuaternion.Identity, null));
+                    attachedRows.Add(item: new MovingSolidRow(placement, creation, default, FixedQuaternion.Identity, null) { FrameScale = FixedQ4816.FromDouble(value: placement.Scale) });
                 } else {
                     var movingStamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
 
                     foreach (var instance in movingStamp.Instances) {
-                        attachedRows.Add(item: new MovingSolidRow(placement, creation, instance.Origin, movingStamp.FixedRotation, instance.ReflectionNormal));
+                        attachedRows.Add(item: new MovingSolidRow(placement, creation, instance.Origin, movingStamp.FixedRotation, instance.ReflectionNormal) { FrameScale = movingStamp.Frame.FixedScale });
                     }
                 }
                 continue;
@@ -923,7 +926,7 @@ public sealed partial class WorldColliderSet : IContactField {
             var transform = new FixedCreationStampTransform(
                 Origin: instance.Origin,
                 Rotation: rotation,
-                Scale: FixedQ4816.FromDouble(value: placement.Scale),
+                Scale: stamp.Frame.FixedScale,
                 ReflectionNormal: instance.ReflectionNormal
             );
 
@@ -1144,8 +1147,8 @@ public sealed partial class WorldColliderSet : IContactField {
             return;
         }
         var moving = m_attachedRows[row];
-        var rest = new FixedNet(spec: facet.SpecAt(origin: moving.Origin, rotation: moving.Rotation, scale: (FixedQ4816.FromDouble(value: placement.Scale) * scale)));
-        var radius = ((FixedQ4816.FromDouble(value: facet.Strand) * FixedQ4816.FromDouble(value: placement.Scale)) / FixedQ4816.FromInteger(value: 2));
+        var rest = new FixedNet(spec: facet.SpecAt(origin: moving.Origin, rotation: moving.Rotation, scale: (moving.FrameScale * scale)));
+        var radius = ((FixedQ4816.FromDouble(value: facet.Strand) * moving.FrameScale) / FixedQ4816.FromInteger(value: 2));
         var strands = new FixedStaticCollider[rest.FreeStrandCount];
         var cells = new FixedStaticCollider[rest.CellCount];
 
@@ -1205,7 +1208,7 @@ public sealed partial class WorldColliderSet : IContactField {
             var (placement, creation, _, _, reflection) = m_attachedRows[row];
             var margin = (FixedQ4816.FromDouble(value: placement.Solid!.Margin) * m_attachedScales[row]);
             var colliders = new List<WorldDiagnosticCollider>();
-            var pose = new WorldPosedSolid(Creation: creation, Origin: m_attachedOrigins[row], Placement: placement, Rotation: m_attachedRotations[row], Scale: (FixedQ4816.FromDouble(value: placement.Scale) * m_attachedScales[row]), ReflectionNormal: reflection);
+            var pose = new WorldPosedSolid(Creation: creation, Origin: m_attachedOrigins[row], Placement: placement, Rotation: m_attachedRotations[row], Scale: (m_attachedRows[row].FrameScale * m_attachedScales[row]), ReflectionNormal: reflection);
 
             if (m_fieldContactRows[row]) {
                 if (PosedAttachedField(row, pose.Origin, pose.Rotation, m_attachedScales[row]) is { } field) {
@@ -1270,7 +1273,7 @@ public sealed partial class WorldColliderSet : IContactField {
                     ? WorldCreationSize.Of(value: value) : FixedQ4816.Zero);
                 // The size scales about the creation's pivot, which stays where the unsized creation holds it, as drawn.
                 if ((scale > FixedQ4816.Zero) && (moving.Creation.Document.SizePivot() is var pivot) && (pivot != System.Numerics.Vector3.Zero)) {
-                    origin += rotation.Rotate(vector: (FixedVector3.FromVector3(value: pivot) * (FixedQ4816.FromDouble(value: moving.Placement.Scale) * (FixedQ4816.One - scale))));
+                    origin += rotation.Rotate(vector: (FixedVector3.FromVector3(value: pivot) * (moving.FrameScale * (FixedQ4816.One - scale))));
                 }
             }
 

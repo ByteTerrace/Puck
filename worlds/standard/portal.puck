@@ -33,7 +33,7 @@
 //
 //   id          its placement's and its prototype's id, and its panel's; a crossing names `<id>/glass` as its counterpart
 //   x, y, z     its foot, on the glass's plane, in the frame of `parent` (a placement id, or null for the world), which
-//   site        stands at the world point `site`
+//   site        stands in the world where the frame `site` puts it (frame.puck: the parent's position, yaw and scale)
 //   yaw         the way its glass faces, as a placement's yaw turns it (0 faces -z, 180 faces +z)
 //   look        its frame (`portalStanding`, or a world's own: the canvas's `proud` and its `rings`, below)
 //   library     the entries it may lead to, in the world's order; empty for an unconnected portal
@@ -56,6 +56,7 @@
 // more view of the world's own frame, reflected: the module adds no work of its own that grows with where it leads.
 import "bounds"
 import "panel"
+import "frame"
 
 // The canvas: 2.24 m wide and 2.84 m tall, its foot 0.12 m under the floor so a body's feet cross the glass, and a rim of
 // `portalCanvasRim` round the opening carved out of it, through which the glass shows.
@@ -102,7 +103,7 @@ let portalMirror = { destination: "$self", counterpart: null, fallback: portalFa
 
 // A portal row, with the defaults an unconnected, unlettered portal in the world's own frame takes. `to` wires it to one
 // entry for good, with no panel.
-function portalOf(id, x, z, yaw, look, y = 0, site = [0, 0, 0], parent = null, library = [], route = null, to = null, panel = true, plaque = null) = {
+function portalOf(id, x, z, yaw, look, y = 0, site = frameIdentity, parent = null, library = [], route = null, to = null, panel = true, plaque = null) = {
   id: id
   x: x
   y: y
@@ -326,5 +327,5 @@ template portalPlacements(portals) {
 function portalSpawns(portals) = map(portals, portal => {
   id: portal.id
   position: facingWorld(portal, [0, 0, 3.2])
-  yawDegrees: (portal.yaw + 180)
+  yawDegrees: (facingYaw(portal) + 180)
 })

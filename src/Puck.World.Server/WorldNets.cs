@@ -29,15 +29,14 @@ public sealed class WorldNets {
         private FixedStaticCollider[] m_holdColliders = [];
         private int m_holdCollidersRevision = -1;
 
-        internal Panel(WorldPlacement placement, WorldPlacementNet facet, FixedNet net, FixedQ4816 contactReach) {
+        // Scale is the row's composed frame scale (WorldPlacementNet.TrySpecIn): its strand and its gravity take it, as a
+        // body's size scales its gravity, so a scaled net falls and settles in the time the unscaled one does.
+        internal Panel(WorldPlacement placement, WorldPlacementNet facet, FixedNet net, FixedQ4816 contactReach, FixedQ4816 scale) {
             Id = placement.Id;
             Facet = facet;
             Net = net;
-
-            var scale = FixedQ4816.FromDouble(value: placement.Scale);
-
             Strand = (FixedQ4816.FromDouble(value: facet.Strand) * scale);
-            Gravity = new FixedVector3(X: FixedQ4816.Zero, Y: -FixedQ4816.FromDouble(value: facet.Gravity), Z: FixedQ4816.Zero);
+            Gravity = new FixedVector3(X: FixedQ4816.Zero, Y: -(FixedQ4816.FromDouble(value: facet.Gravity) * scale), Z: FixedQ4816.Zero);
             Near = net.RestBox.Grow(margin: ((net.Spec.Extent + Strand) + contactReach));
             Opening = FixedQ4816.Max(x: FixedQ4816.Zero, y: net.Opening(strand: Strand));
         }
@@ -48,7 +47,7 @@ public sealed class WorldNets {
         public WorldPlacementNet Facet { get; }
         /// <summary>Gets the net.</summary>
         public FixedNet Net { get; }
-        /// <summary>Gets the thickness the net collides at, in metres, the row's scale applied.</summary>
+        /// <summary>Gets the thickness the net collides at, in metres, the row's composed scale applied.</summary>
         public FixedQ4816 Strand { get; }
         /// <summary>Gets the widest a body may be and pass through the net's mesh at rest, in metres
         /// (<see cref="FixedNet.Opening"/>): a body that narrow meets the openings between the strands, and no hold
@@ -175,7 +174,7 @@ public sealed class WorldNets {
         List<Panel>? panels = null;
 
         foreach (var placement in definition.Placements) {
-            if ((placement.Net is not { } facet) || !facet.TrySpecIn(definition: definition, placement: placement, spec: out var spec)) { continue; }
+            if ((placement.Net is not { } facet) || !facet.TrySpecIn(definition: definition, placement: placement, spec: out var spec, scale: out var scale)) { continue; }
 
             var net = new FixedNet(spec: in spec);
 
@@ -185,7 +184,7 @@ public sealed class WorldNets {
                 // A new net starts awake, so it settles into its rest sag under gravity before it first sleeps.
                 net.Wake();
             }
-            (panels ??= []).Add(item: new Panel(contactReach: contactReach, facet: facet, net: net, placement: placement));
+            (panels ??= []).Add(item: new Panel(contactReach: contactReach, facet: facet, net: net, placement: placement, scale: scale));
         }
         return ((panels is null) ? Empty : new WorldNets(panels: [.. panels]));
     }

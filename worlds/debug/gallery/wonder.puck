@@ -3,11 +3,14 @@
 // (layout.puck's `wonderPasses`): the full-size pass, the `wonderPass` body register a puzzle sets, or the wonder key
 // lent on level 3 and carried switched on, the `wonderKey` register (rentals.puck); then the floor keeps it its full
 // size and the games are in its reach, and the magic barrier filling each level-1 branch's arch (shell.puck) lets it
-// through. The gallery module imports this, so the gallery booted alone and the debug world both size their visitors by
-// it.
+// through. A module library: `galleryWonder(frame)` holds the passes' mailboxes and shortcuts, and building.puck expands
+// it on a floor that enables `wonder` and lays this file's zones and sizes (`wonderZones`, `wonderSizes`) into the
+// building's one size field (`gallerySizeField`). The zones are written in the building's frame and the sizes are the
+// building's, so the field stands, turns and scales with the frame (../../standard/size-field.puck's `frame`): in a
+// building stood at half size, Alice's size is half her size in the full-size one.
 //
-// The sizing is one standard size field (standard/size-field.puck), its zones in the order the first that holds a body
-// decides:
+// The sizing is the building's one size field (standard/size-field.puck), its zones in the order the first that holds a
+// body decides:
 //
 //   each stair's well, two storeys: from level 0's floor up to level 1's, and from level 2's floor down to it, a body's
 //     size follows its height over the flight, full at the outer floor and Alice's at level 1, so a body shrinks as it
@@ -35,20 +38,12 @@
 //
 // The author's shortcuts are `gallery.wonder` and `gallery.go toybox` (gallery.md, "The size of level 1").
 import "../../standard/size-field"
-import "../../standard/size-hold"
 import "layout"
 import "look"
 import "../shapes"
 
-// A zone's box and path, from plan positions (the building's frame) to the world's, where the field reads a body.
-function wonderBox(x0, x1, y0, y1, z0, z1) = {
-  x0: (gallerySite[0] + x0)
-  x1: (gallerySite[0] + x1)
-  y0: (gallerySite[1] + y0)
-  y1: (gallerySite[1] + y1)
-  z0: (gallerySite[2] + z0)
-  z1: (gallerySite[2] + z1)
-}
+// A zone's box, in the building's frame, which the field carries into the world's where it reads a body.
+function wonderBox(x0, x1, y0, y1, z0, z1) = { x0: x0, x1: x1, y0: y0, y1: y1, z0: z0, z1: z1 }
 // How far past a storey's outer floor a shaft's zone reaches, so a body standing at the flight's foot or head, a little
 // above or below the floor's top, is held at its full size there rather than left at the size it last took.
 let wonderShaftMargin = 0.25
@@ -59,15 +54,15 @@ let wonderLanding = 0.1
 function wonderShaft(x0, x1, z0, z1) = [
   {
     box: wonderBox(x0, x1, (galleryFloor[0] - wonderShaftMargin), (galleryFloor[toyboxLevel] + wonderLanding), z0, z1)
-    from: galleryWorld(((x0 + x1) / 2), (galleryFloor[0] + wonderLanding), ((z0 + z1) / 2))
-    to: galleryWorld(((x0 + x1) / 2), galleryFloor[toyboxLevel], ((z0 + z1) / 2))
+    from [((x0 + x1) / 2), (galleryFloor[0] + wonderLanding), ((z0 + z1) / 2)]
+    to [((x0 + x1) / 2), galleryFloor[toyboxLevel], ((z0 + z1) / 2)]
     start: "full"
     end: "small"
   }
   {
     box: wonderBox(x0, x1, galleryFloor[toyboxLevel], (galleryFloor[2] + wonderShaftMargin), z0, z1)
-    from: galleryWorld(((x0 + x1) / 2), galleryFloor[2], ((z0 + z1) / 2))
-    to: galleryWorld(((x0 + x1) / 2), galleryFloor[toyboxLevel], ((z0 + z1) / 2))
+    from [((x0 + x1) / 2), galleryFloor[2], ((z0 + z1) / 2)]
+    to [((x0 + x1) / 2), galleryFloor[toyboxLevel], ((z0 + z1) / 2)]
     start: "full"
     end: "small"
   }
@@ -80,7 +75,10 @@ let wonderFloorHigh = (galleryCeiling[toyboxLevel] - 0.5)
 // (shell.puck) whatever its size, so the stairs and the lifts are its only ways in and out.
 let wonderZones = concat(
   flatMap(galleryStairs, stair => wonderShaft(stair.well.x0, stair.well.x1, stair.well.z0, stair.well.z1)),
-  flatMap(galleryLifts, car => wonderShaft(liftShaftBox(car).x0, liftShaftBox(car).x1, liftShaftBox(car).z0, liftShaftBox(car).z1)),
+  flatMap(
+    galleryLifts,
+    car => wonderShaft(liftShaftBox(car).x0, liftShaftBox(car).x1, liftShaftBox(car).z0, liftShaftBox(car).z1)
+  ),
   [
     // The south aisle, from the south wall's outer face to the arcade's plane, where each level-1 tree branch's barrier
     // stands (shell.puck), so the balcony strip a branch lands on outside its barrier, and a lift's landing, change no
@@ -97,106 +95,109 @@ let wonderZones = concat(
   ]
 )
 
-sizeField(
-  name: "toybox",
-  zones: wonderZones,
-  sizes: [{ key: "full", value: 1 }, { key: "small", value: lookWonderSize }],
-  passes: wonderPasses,
-  passSize: "full"
-)
+// The size field's sizes, before the frame's scale: full, and Alice's.
+let wonderSizes = [{ key: "full", value: 1 }, { key: "small", value: lookWonderSize }]
 
 // The shortcuts' mailboxes, keyed by body index: `gallery.wonder` writes its value to the row named for its setting
 // (`wonder` and the setting's name) under the body it acts on, and the rules below apply it and empty the cell. The
 // seats' and visitors' bodies hold a cell each.
 let wonderAskBodies = map(range(0, (seatPopulation + visitorPopulation)), body => $"{body}")
-enum WonderSwitch {
-  idle
-  off
-  on
-}
-// The pass's mailbox is the door every grant of the pass goes through: the shortcut writes it, and so does a puzzle
-// that grants the pass (mouse-house.puck's cake).
-exports {
-  actions [wonderpass]
-}
 
-state {
-  body [
-    {
-      name: "wonderPass"
-      kind: "Counter"
-      initial: 0
-      envelope { $type: "range", minimum: 0, maximum: 1 }
+template galleryWonder(frame) {
+  // The pass's mailbox (`wonderpass`) is the door every grant of the pass goes through: the shortcut writes it, and so
+  // does a puzzle that grants the pass (mouse-house.puck's cake).
+  state {
+    enum WonderSwitch {
+      idle
+      off
+      on
     }
-    // 1 while the body carries a wonder key switched on (rentals.puck's `rental-key-pass` keeps it).
+
+    world {
+      row {
+        name: "wonderpass"
+        kind: Int
+        enum: "WonderSwitch"
+        capacity: length(wonderAskBodies)
+        cells: map(wonderAskBodies, body => { key: body, value: 0 })
+      }
+      row {
+        name: "wondersize"
+        kind: Fixed
+        capacity: length(wonderAskBodies)
+        cells: map(wonderAskBodies, body => { key: body, value: "0" })
+      }
+      row {
+        name: "wondersmall"
+        kind: Fixed
+        capacity: length(wonderAskBodies)
+        cells: map(wonderAskBodies, body => { key: body, value: "0" })
+      }
+    }
+  }
+
+  rule "wonder-pass-ask" {
+    forEach: $players
+    when wonderpass[$each]
+    mode: Level
+    setBodyState(key: $each, state: "wonderPass", expression: (wonderpass[$each] == 2) ? 1.0 : 0.0)
+    wonderpass[$each] = 0
+  }
+  rule "wonder-size-ask" {
+    forEach: $players
+    when wondersize[$each] > 0
+    mode: Level
+    setBodyState(key: $each, state: "size", expression: wondersize[$each])
+    wondersize[$each] = 0
+  }
+  rule "wonder-small-ask" {
+    forEach: $players
+    when wondersmall[$each] > 0
+    mode: Level
+    $"sizeField-gallery".small = wondersmall[$each]
+    wondersmall[$each] = 0
+  }
+
+  commands [
     {
-      name: "wonderKey"
-      kind: "Counter"
-      initial: 0
-      envelope { $type: "set", values [0, 1] }
+      name: "gallery.wonder"
+      help: "The toybox's author shortcuts: pass on|off grants or takes back a body's full-size pass (level 1 keeps its full size, and the tree's barriers let it through, while it holds it); size <s> sets its size directly, which holds wherever no size zone stands (level 1, its stairs and its lifts re-size it); small <s> retunes the size level 1 gives a body without the pass, in the world's measure (the building's scale times Alice's)."
+      parameters [
+        { name: "setting", kind: Choice, values ["pass", "size", "small"] }
+        { name: "value", kind: Text }
+        { name: "body", kind: Body, default: "0" }
+      ]
+      lines [
+        "world.state.cell.set wonder{setting} {body} {value}"
+      ]
     }
   ]
-  world {
-    row {
-      name: "wonderpass"
-      kind: Int
-      enum: "WonderSwitch"
-      capacity: length(wonderAskBodies)
-      cells: map(wonderAskBodies, body => { key: body, value: 0 })
-    }
-    row {
-      name: "wondersize"
-      kind: Fixed
-      capacity: length(wonderAskBodies)
-      cells: map(wonderAskBodies, body => { key: body, value: "0" })
-    }
-    row {
-      name: "wondersmall"
-      kind: Fixed
-      capacity: length(wonderAskBodies)
-      cells: map(wonderAskBodies, body => { key: body, value: "0" })
-    }
-  }
+
+  // In the south aisle's middle rest bay, two tiles in from the wall, facing the void across the toybox.
+  spawnPoints [
+    { id: "toybox", parent: gallery, position [bayX(6), galleryFloor[toyboxLevel], tileZ(2)], yawDegrees: 180 }
+  ]
 }
 
-rule "wonder-pass-ask" {
-  forEach: $players
-  when wonderpass[$each] != 0
-  mode: Level
-  setBodyState(key: $each, state: "wonderPass", expression: (wonderpass[$each] == 2) ? 1.0 : 0.0)
-  wonderpass[$each] = 0
-}
-rule "wonder-size-ask" {
-  forEach: $players
-  when wondersize[$each] > 0
-  mode: Level
-  setBodyState(key: $each, state: "size", expression: wondersize[$each])
-  wondersize[$each] = 0
-}
-rule "wonder-small-ask" {
-  forEach: $players
-  when wondersmall[$each] > 0
-  mode: Level
-  $"sizeField-toybox".small = wondersmall[$each]
-  wondersmall[$each] = 0
-}
-
-commands [
-  {
-    name: "gallery.wonder"
-    help: "The toybox's author shortcuts: pass on|off grants or takes back a body's full-size pass (level 1 keeps its full size, and the tree's barriers let it through, while it holds it); size <s> sets its size directly, which holds wherever no size zone stands (level 1, its stairs and its lifts re-size it); small <s> retunes the size level 1 gives a body without the pass."
-    parameters [
-      { name: "setting", kind: Choice, values ["pass", "size", "small"] }
-      { name: "value", kind: Text }
-      { name: "body", kind: Body, default: "0" }
-    ]
-    lines [
-      "world.state.cell.set wonder{setting} {body} {value}"
+// The wonder passes' registers: the full-size pass a puzzle grants and the carried key's. Level 1's tree barriers
+// (shell.puck) and the rentals' key read and write them as well as the size field, so building.puck declares them
+// whenever any of those stands.
+template galleryWonderRegisters() {
+  state {
+    body [
+      {
+        name: "wonderPass"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "range", minimum: 0, maximum: 1 }
+      }
+      // 1 while the body carries a wonder key switched on (rentals.puck's `rental-key-pass` keeps it).
+      {
+        name: "wonderKey"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "set", values [0, 1] }
+      }
     ]
   }
-]
-
-// In the south aisle's middle rest bay, two tiles in from the wall, facing the void across the toybox.
-spawnPoints [
-  { id: "toybox", parent: gallery, position [bayX(6), galleryFloor[toyboxLevel], tileZ(2)], yawDegrees: 180 }
-]
+}

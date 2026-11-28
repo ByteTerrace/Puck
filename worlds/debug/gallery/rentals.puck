@@ -25,6 +25,10 @@
 // renting interaction is one rule per device over the bodies standing in its reach (../../standard/reach.puck), so its cost is the
 // bodies at the counter.
 //
+// A module library: `galleryRentals(frame, home)` stands the stalls, the rack and the key stand in the frame the building
+// stands in, and building.puck expands it on a floor that enables `rentals`, which needs the toybox's decks for its
+// cartridges; `home` is the path from the expanding document to this folder, which the machines' content paths take.
+//
 // The engage hook: every rent and return gate is `rentalCanRent(each)` and `pressing()`; a size or pass condition
 // (another body state a rule can read) is added to `rentalCanRent` once and gates every stall.
 //
@@ -43,6 +47,7 @@ import "../../standard/pad-kit"
 import "../../standard/reach"
 import "layout"
 import "look"
+import "../../standard/frame"
 
 // The stalls, each by its L's corner in the plan and its turn: 0 for the south-east, whose arms run south and east
 // from the corner, 180 for the north-west, turned half round. `sign` turns the stall's own frame into the plan's. The
@@ -149,12 +154,13 @@ function rentalDeviceAt(d) = rentalPlan(
   rentalSpot(rentalModels[d.model].arm, d.colour)[1]
 )
 
-// A reach in the plan from two corners of a stall's frame, on level 1's floor, in world coordinates.
+// A reach from two corners of a stall's frame, on level 1's floor, in the building's plan (a reach stands under the
+// building's root).
 function rentalReachBox(stall, lx0, lz0, lx1, lz1) = {
-  x0: galleryWorld(minimum(rentalPlan(stall, lx0, lz0)[0], rentalPlan(stall, lx1, lz1)[0]), 0, 0)[0]
-  x1: galleryWorld(maximum(rentalPlan(stall, lx0, lz0)[0], rentalPlan(stall, lx1, lz1)[0]), 0, 0)[0]
-  z0: galleryWorld(0, 0, minimum(rentalPlan(stall, lx0, lz0)[1], rentalPlan(stall, lx1, lz1)[1]))[2]
-  z1: galleryWorld(0, 0, maximum(rentalPlan(stall, lx0, lz0)[1], rentalPlan(stall, lx1, lz1)[1]))[2]
+  x0: minimum(rentalPlan(stall, lx0, lz0)[0], rentalPlan(stall, lx1, lz1)[0])
+  x1: maximum(rentalPlan(stall, lx0, lz0)[0], rentalPlan(stall, lx1, lz1)[0])
+  z0: minimum(rentalPlan(stall, lx0, lz0)[1], rentalPlan(stall, lx1, lz1)[1])
+  z1: maximum(rentalPlan(stall, lx0, lz0)[1], rentalPlan(stall, lx1, lz1)[1])
   y0: (galleryFloor[toyboxLevel] - 0.5)
   y1: (galleryFloor[toyboxLevel] + 1)
 }
@@ -217,10 +223,10 @@ let rentalRackTop = 0.9
 let rentalRackHalfWidth = (((length(rentalCartridgeItems) + 2) * 0.14) / 2)
 function rentalRackX(n) = ((rentalRackAt[0] - rentalRackHalfWidth) + (0.14 * (n + 1)))
 function rentalRackReach(x0, x1) = {
-  x0: galleryWorld(x0, 0, 0)[0]
-  x1: galleryWorld(x1, 0, 0)[0]
-  z0: galleryWorld(0, 0, (rentalRackAt[1] + 0.3))[2]
-  z1: galleryWorld(0, 0, (rentalRackAt[1] + 1.4))[2]
+  x0: x0
+  x1: x1
+  z0: (rentalRackAt[1] + 0.3)
+  z1: (rentalRackAt[1] + 1.4)
   y0: (galleryFloor[toyboxLevel] - 0.5)
   y1: (galleryFloor[toyboxLevel] + 1)
 }
@@ -240,124 +246,25 @@ let rentalKeyTop = 0.9
 let rentalKeyHalfWidth = 0.6
 let rentalKeyPitch = 0.2
 function rentalKeyX(n) = ((rentalKeyAt[0] - 0.45) + (rentalKeyPitch * n))
-// The floor before the stand between two plan x, on level 3, in world coordinates.
+// The floor before the stand between two plan x, on level 3, in the building's plan.
 function rentalKeyReach(x0, x1) = {
-  x0: galleryWorld(x0, 0, 0)[0]
-  x1: galleryWorld(x1, 0, 0)[0]
-  z0: galleryWorld(0, 0, (rentalKeyAt[1] + 0.25))[2]
-  z1: galleryWorld(0, 0, (rentalKeyAt[1] + 1.2))[2]
+  x0: x0
+  x1: x1
+  z0: (rentalKeyAt[1] + 0.25)
+  z1: (rentalKeyAt[1] + 1.2)
   y0: (galleryFloor[3] - 0.5)
   y1: (galleryFloor[3] + 1)
 }
-// Where a lent key may go, in world coordinates: the gallery's whole box, its projecting wing and the canopy over its
-// roof included. A holder outside it, or absent from the world (standing at the origin, outside it), gives it back.
+// Where a lent key may go, in the building's plan: the gallery's whole box, its projecting wing and the canopy over its
+// roof included. A holder outside it in the world (frameBox carries it there), or absent from the world (standing at the
+// origin, outside it), gives it back.
 let rentalKeyBounds = {
-  x0: galleryWorld((galleryWestOut - 1), 0, 0)[0]
-  x1: galleryWorld((galleryWidth + 1), 0, 0)[0]
-  z0: galleryWorld(0, 0, (wingSouth - 1))[2]
-  z1: galleryWorld(0, 0, (galleryDepth + 1))[2]
+  x0: (galleryWestOut - 1)
+  x1: (galleryWidth + 1)
+  z0: (wingSouth - 1)
+  z1: (galleryDepth + 1)
   y0: (galleryFloor[0] - 1)
   y1: (galleryRoof + 4)
-}
-
-// The title each cartridge carries, which the play floor's unlock (time-puzzles.puck) puts back in a station's deck when
-// its tease ends over an inserted cartridge.
-exports {
-  reads [rentalCartridgeTitle]
-}
-
-state {
-  world {
-    // The one loan row: a device's, a cartridge's or a key's ordinal is 0 while it is on its stall, rack or stand, N + 1
-    // while body N holds it, and `rentalStationLoan` plus a station's place while a cartridge sits in that station's deck.
-    row {
-      name: "rentalLoan"
-      kind: Int
-      capacity: ((length(rentalDevices) + length(rentalCartridgeItems)) + length(rentalKeyItems))
-      cells: map(
-        flatMap([rentalDevices, rentalCartridgeItems, rentalKeyItems], items => items),
-        d => { key: $"{d.ordinal}", value: 0 }
-      )
-    }
-    // The key a seat's body holds (its loan ordinal), 0 for none, and how it shows: 0 none, 1 switched on, 2 off.
-    row {
-      name: "rentalKeyHeld"
-      kind: Int
-      capacity: length(rentalBodies)
-      cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
-    }
-    row {
-      name: "rentalKeyShown"
-      kind: Int
-      capacity: length(rentalBodies)
-      cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
-    }
-    // The library title each cartridge carries.
-    row {
-      name: "rentalCartridgeTitle"
-      kind: Int
-      capacity: length(rentalCartridgeItems)
-      cells: map(rentalCartridgeItems, c => { key: $"{c.ordinal}", value: rentalCartridgeSlots[c.slot].title })
-    }
-    // The cartridge a seat's body holds (its loan ordinal), 0 for none; a body holds one cartridge beside a device.
-    row {
-      name: "rentalCartridgeHeld"
-      kind: Int
-      capacity: length(rentalBodies)
-      cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
-    }
-    row {
-      name: "rentalDevice"
-      kind: Text
-      capacity: length(rentalDevices)
-      cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: d.id })
-    }
-    row {
-      name: "rentalOrdinal"
-      kind: Int
-      capacity: length(rentalDevices)
-      cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: d.ordinal })
-    }
-    row {
-      name: "rentalDeviceModel"
-      kind: Int
-      capacity: length(rentalDevices)
-      cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: rentalModels[d.model].model })
-    }
-    row {
-      name: "rentalDeviceColour"
-      kind: Text
-      capacity: length(rentalDevices)
-      cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: rentalColours[d.model][d.colour].name })
-    }
-    row {
-      name: "rentalHeld"
-      kind: Int
-      capacity: length(rentalBodies)
-      cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
-    }
-    row {
-      name: "rentalModel"
-      kind: Int
-      capacity: length(rentalBodies)
-      cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
-    }
-    // Where a body's device shows: its ordinal while it rides the hip, its ordinal plus `rentalPlayed` while the body
-    // plays it in its hands (engaged on its screen), 0 while it holds none.
-    row {
-      name: "rentalShown"
-      kind: Int
-      capacity: length(rentalBodies)
-      cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
-    }
-    // The number a loan names each seat's body by, its index + 1: fixed.
-    row {
-      name: "rentalHolder"
-      kind: Int
-      capacity: length(rentalBodies)
-      cells: map(rentalBodies, b => { key: $"{b}", value: (b + 1) })
-    }
-  }
 }
 
 // A device's creation, standing on its base with its face toward -Z (the side a placement's yaw turns to face): a
@@ -771,381 +678,6 @@ template rentalKioskArm(arm) {
   )
 }
 
-prototypes {
-  prototype "rental-counter" {
-    occlusion: propOcclusion
-    document {
-      name: "rental-counter"
-      schema: "puck.creation.v2"
-      palette: rentalKioskPalette
-      for arm in [0, 1] {
-        rentalKioskArm(arm)
-      }
-      // The corner: the returns tray, lit round its slot, the post both headers meet at, and the blade sign on its own
-      // post over the canopy.
-      shape Box "tray-light" {
-        material: rentalKiosk.neon
-        position [0, (rentalCounterTop + 0.002), 0]
-        scale [0.2, 0.004, 0.2]
-        detail: true
-      }
-      shape Box "tray" {
-        material: rentalKiosk.bezel
-        position [0, (rentalCounterTop + 0.008), 0]
-        scale [0.17, 0.008, 0.17]
-        rounding: 0.006
-        detail: true
-      }
-      rentalKioskBox(
-        label: "mast-corner",
-        arm: 1,
-        material: rentalKiosk.bezel,
-        u: 0.2,
-        y: 1.7,
-        v: -0.2,
-        hu: 0.03,
-        hy: 0.75,
-        hv: 0.03,
-        rounding: 0.01
-      )
-      rentalKioskBox(
-        label: "blade-mast",
-        arm: 1,
-        material: rentalKiosk.bezel,
-        u: 0.05,
-        y: 2.65,
-        v: -0.05,
-        hu: 0.04,
-        hy: 0.2,
-        hv: 0.04,
-        rounding: 0.012
-      )
-      shape Box "blade" {
-        material: rentalKiosk.trim
-        position: rentalBladePoint(0, rentalBladeAt[1])
-        rotation: rotate([0, 1, 0], rentalBladeTurn)
-        scale [0.74, 0.17, 0.03]
-        rounding: 0.02
-        detail: true
-      }
-      shape Box "blade-sign" {
-        material: rentalKiosk.sign
-        position: rentalBladePoint(0.016, rentalBladeAt[1])
-        rotation: rotate([0, 1, 0], rentalBladeTurn)
-        scale [0.7, 0.13, 0.03]
-        lightsAs: Face
-        detail: true
-      }
-      textRuns [
-        for arm in [0, 1] {
-          rentalArmLetters(arm, 1.45, 2.12, 0.118, rentalModels[arm].title, 0.15, 2.05)
-        }
-        for arm in [0, 1] {
-          rentalArmLetters(arm, 0, 0.47, 0.256, "RETURNS", 0.045, 0.38)
-        }
-        for n in flatMap([0, 1], arm => map(range(0, rentalPerModel), n => { arm: arm, n: n })) {
-          rentalArmLetters(n.arm, rentalAlong(n.n), 0.47, 0.256, rentalNumber(n.n + 1), 0.05, 0.09)
-        }
-        {
-          text: "HANDHELD RENTALS"
-          position: rentalBladePoint(0.05, rentalBladeAt[1])
-          rotation: rotate([0, 1, 0], rentalBladeTurn)
-          emHeight: 0.14
-          depth: 0.004
-          mode: "emboss"
-          material: rentalKiosk.ink
-          align: "center"
-          anchor: "capMiddle"
-          maxWidth: 1.34
-        }
-      ]
-    }
-  }
-  // The key stand: a pedestal in the stalls' colours, its top at rentalKeyTop, the returns tray inset at its east end
-  // (+x).
-  prototype "rental-key-stand" {
-    document {
-      name: "rental-key-stand"
-      schema: "puck.creation.v2"
-      palette: rentalCounterPalette
-      shape Box "body" {
-        material: 0
-        position [0, ((rentalKeyTop - 0.04) / 2), 0]
-        scale [rentalKeyHalfWidth, ((rentalKeyTop - 0.04) / 2), 0.18]
-        rounding: 0.03
-      }
-      shape Box "top" {
-        material: 2
-        position [0, (rentalKeyTop - 0.02), 0]
-        scale [(rentalKeyHalfWidth + 0.02), 0.02, 0.2]
-        rounding: 0.015
-      }
-      shape Box "tray" {
-        material: 3
-        position [(rentalKeyHalfWidth - 0.1), (rentalKeyTop + 0.01), 0]
-        scale [0.08, 0.012, 0.12]
-        rounding: 0.01
-      }
-    }
-  }
-  // A wonder key, lit while it is switched on and dull while it is off.
-  for kind in rentalKeyKinds {
-    prototype $"{kind.id}" {
-      document {
-        name: kind.name
-        schema: "puck.creation.v2"
-        palette [rentalKeyBrass, kind.gem]
-        rentalKey()
-      }
-    }
-  }
-  // The cartridge rack: a counter in the stalls' colours, its top at rentalRackTop, the returns tray inset at its east
-  // end (+x). Its front faces -Z, the creation's front.
-  prototype "rental-cartridge-rack" {
-    occlusion: propOcclusion
-    document {
-      name: "rental-cartridge-rack"
-      schema: "puck.creation.v2"
-      palette: rentalCounterPalette
-      shape Box "body" {
-        material: 0
-        position [0, ((rentalRackTop - 0.04) / 2), 0]
-        scale [rentalRackHalfWidth, ((rentalRackTop - 0.04) / 2), 0.2]
-        rounding: 0.03
-      }
-      shape Box "top" {
-        material: 2
-        position [0, (rentalRackTop - 0.02), 0]
-        scale [(rentalRackHalfWidth + 0.02), 0.02, 0.22]
-        rounding: 0.015
-      }
-      shape Box "tray" {
-        material: 3
-        position [(rentalRackHalfWidth - 0.1), (rentalRackTop + 0.01), -0.02]
-        scale [0.08, 0.012, 0.12]
-        rounding: 0.01
-      }
-    }
-  }
-  // A deck cartridge for each rack slot, standing on its base with its label toward +Z: a graphite shell 120 by 135 by
-  // 20 mm, its label the slot's.
-  for (slot, s) in rentalCartridgeSlots {
-    prototype $"rental-cartridge-{s}" {
-      document {
-        name: slot.label
-        schema: "puck.creation.v2"
-        palette [
-          { color: "#2E2E33", roughness: 0.45, specular: 0.04 }
-          { color: "#EDE6D3", roughness: 0.6, specular: 0.03 }
-          { color: "#1C1C1E", roughness: 0.5, specular: 0.04 }
-        ]
-        shape Box "shell" {
-          material: 0
-          position [0, 0.0675, 0]
-          scale [0.06, 0.0675, 0.01]
-          rounding: 0.003
-        }
-        shape Box "label" {
-          material: 1
-          position [0, 0.08, -0.0098]
-          scale [0.048, 0.04, 0.0006]
-        }
-        textRuns [
-          {
-            text: slot.label
-            position [0, 0.08, -0.0106]
-            rotation [0, 1, 0, 0]
-            emHeight: 0.011
-            depth: 0.0006
-            mode: "emboss"
-            material: 2
-            align: "center"
-          }
-        ]
-      }
-    }
-  }
-  prototype "rental-device-empty" {
-    document {
-      name: "rental-device-empty"
-      schema: "puck.creation.v2"
-      palette [rentalBezel]
-    }
-  }
-  for (model, m) in rentalModels {
-    for c in rentalColours[m] {
-      prototype $"rental-{model.id}-{c.name}" {
-        document {
-          name: $"{model.title} ({c.name})"
-          schema: "puck.creation.v2"
-          palette: rentalPalette(c)
-          for k in filter([0], k => (m == 0)) {
-            rentalBrick(c)
-          }
-          for k in filter([0], k => (m == 1)) {
-            rentalAdvanced(c)
-          }
-        }
-      }
-    }
-  }
-}
-
-placements {
-  for stall in rentalStalls {
-    placement $"rental-counter-{stall.id}" {
-      prototype: "rental-counter"
-      parent: "gallery"
-      position [stall.x, galleryFloor[toyboxLevel], stall.z]
-      yawDegrees: stall.yaw
-      solid
-    }
-    reach(id: $"rental-return-{stall.id}", box: rentalReturnReach(stall))
-  }
-  // Each device in its cubby, until it is on loan.
-  for d in rentalDevices {
-    placement $"rental-{d.id}" {
-      prototype: rentalPrototype(d)
-      parent: "gallery"
-      position [rentalDeviceAt(d)[0], (galleryFloor[toyboxLevel] + rentalCounterTop), rentalDeviceAt(d)[1]]
-      yawDegrees: ((rentalStalls[d.stall].yaw + rentalArmYaw(rentalModels[d.model].arm)) % 360)
-      respond [
-        {
-          when: state(state: rentalLoan, key: $"{d.ordinal}", comparison: NotEqual, value: 0)
-          prototypeId: "rental-device-empty"
-        }
-      ]
-    }
-    reach(id: $"rental-reach-{d.ordinal}", box: rentalDeviceReach(d))
-  }
-  // The cartridge rack, each cartridge on it until it is on loan, the floor before each, and the returns tray's floor.
-  placement "rental-cartridge-rack" {
-    prototype: "rental-cartridge-rack"
-    parent: "gallery"
-    position [rentalRackAt[0], galleryFloor[toyboxLevel], rentalRackAt[1]]
-    solid
-  }
-  reach(
-    id: "rental-cartridge-return",
-    box: rentalRackReach((rentalRackAt[0] + rentalRackHalfWidth - 0.2), (rentalRackAt[0] + rentalRackHalfWidth))
-  )
-  for c in rentalCartridgeItems {
-    placement $"rental-cartridge-{c.ordinal}" {
-      prototype: rentalCartridgePrototype(c.slot)
-      parent: "gallery"
-      position [rentalRackX(c.place), (galleryFloor[toyboxLevel] + rentalRackTop), (rentalRackAt[1] + 0.05)]
-      respond [
-        {
-          when: state(state: rentalLoan, key: $"{c.ordinal}", comparison: NotEqual, value: 0)
-          prototypeId: "rental-device-empty"
-        }
-      ]
-    }
-    reach(
-      id: $"rental-cartridge-reach-{c.ordinal}",
-      box: rentalRackReach((rentalRackX(c.place) - 0.07), (rentalRackX(c.place) + 0.07))
-    )
-  }
-  // The cartridge a seat's body holds rides its right hip, its label out.
-  for b in rentalBodies {
-    placement $"rental-cartridge-carried-{b}" {
-      prototype: "rental-device-empty"
-      position [0, 0, 0]
-      attach {
-        bodyIndex: b
-        localOffset [0.3, 0.92, -0.38]
-      }
-      respond: map(
-        rentalCartridgeItems,
-        c => {
-          when: state(state: rentalCartridgeHeld, key: $"{b}", comparison: Equal, value: c.ordinal)
-          prototypeId: rentalCartridgePrototype(c.slot)
-        }
-      )
-    }
-  }
-  // The key stand on level 3, each key on it until it is on loan, the floor before each, and the returns tray's floor.
-  placement "rental-key-stand" {
-    prototype: "rental-key-stand"
-    parent: "gallery"
-    position [rentalKeyAt[0], galleryFloor[3], rentalKeyAt[1]]
-    solid
-  }
-  reach(
-    id: "rental-key-return",
-    box: rentalKeyReach(((rentalKeyAt[0] + rentalKeyHalfWidth) - 0.25), (rentalKeyAt[0] + rentalKeyHalfWidth))
-  )
-  for k in rentalKeyItems {
-    placement $"rental-key-{k.ordinal}" {
-      prototype: "rental-key-lit"
-      parent: "gallery"
-      position [rentalKeyX(k.place), (galleryFloor[3] + rentalKeyTop), (rentalKeyAt[1] + 0.05)]
-      respond [
-        {
-          when: state(state: rentalLoan, key: $"{k.ordinal}", comparison: NotEqual, value: 0)
-          prototypeId: "rental-device-empty"
-        }
-      ]
-    }
-    reach(
-      id: $"rental-key-reach-{k.ordinal}",
-      box: rentalKeyReach((rentalKeyX(k.place) - (rentalKeyPitch / 2)), (rentalKeyX(k.place) + (rentalKeyPitch / 2)))
-    )
-  }
-  // The key a seat's body holds hangs on a cord at its chest, a little right of centre, its face out: lit while it is
-  // switched on, dull while it is off.
-  for b in rentalBodies {
-    placement $"rental-key-carried-{b}" {
-      prototype: "rental-device-empty"
-      position [0, 0, 0]
-      attach {
-        bodyIndex: b
-        localOffset [0.16, 1.3, -0.42]
-        localYawDegrees: 180
-      }
-      respond [
-        { when: state(state: rentalKeyShown, key: $"{b}", comparison: Equal, value: 1), prototypeId: "rental-key-lit" }
-        { when: state(state: rentalKeyShown, key: $"{b}", comparison: Equal, value: 2), prototypeId: "rental-key" }
-      ]
-    }
-  }
-  // The device a seat's body holds rides its left hip (a body faces -Z, so -X is its left), its face out, and while the
-  // body plays it, its hands, its face toward the body. Each row shows the device while `rentalShown` names it there.
-  for b in rentalBodies {
-    placement $"rental-carried-{b}" {
-      prototype: "rental-device-empty"
-      position [0, 0, 0]
-      attach {
-        bodyIndex: b
-        localOffset [-0.3, 0.92, -0.38]
-        localYawDegrees: 180
-      }
-      respond: map(
-        rentalDevices,
-        d => {
-          when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: d.ordinal)
-          prototypeId: rentalPrototype(d)
-        }
-      )
-    }
-    placement $"rental-played-{b}" {
-      prototype: "rental-device-empty"
-      position [0, 0, 0]
-      attach {
-        bodyIndex: b
-        localOffset [0, 1.3, -0.5]
-      }
-      respond: map(
-        rentalDevices,
-        d => {
-          when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: (d.ordinal + rentalPlayed))
-          prototypeId: rentalPrototype(d)
-        }
-      )
-    }
-  }
-}
-
 // Each seat's two handheld screens, one for each pool machine, their pictures carried by the device their body holds:
 // in its hands while it plays, at its hip otherwise (screens' `carry`, the first of the two rows showing the model's
 // picture box). Only the holder engages its own device, wherever it stands, with the context button (the standard's
@@ -1154,185 +686,6 @@ placements {
 let rentalScreen = 40
 function rentalScreenOf(b, model) = (rentalScreen + (2 * b) + (model - 1))
 let rentalScreenRest = rentalPlan(rentalStalls[0], 0, 0)
-screens: flatMap(
-  rentalBodies,
-  b => map(
-    rentalModels,
-    m => {
-      index: rentalScreenOf(b, m.model)
-      origin: galleryWorld(rentalScreenRest[0], (galleryFloor[toyboxLevel] + rentalCounterTop), rentalScreenRest[1])
-      right [1, 0, 0]
-      up [0, 1, 0]
-      halfWidth: ((m.model == 1) ? 0.022 : 0.0306)
-      halfHeight: ((m.model == 1) ? 0.0198 : 0.0204)
-      halfDepth: 0.0008
-      round: 0
-      source: machine(instance: $"rental-{m.id}-{b}", output: "video")
-      luminance: ((m.model == 1) ? 70nit : 90nit)
-      route: deviceRoute
-      carry {
-        shape: $"screen-{m.id}"
-        placements [$"rental-played-{b}", $"rental-carried-{b}"]
-      }
-    }
-  )
-)
-
-// Renting: a seat's body before a device in its cubby, holding none, presses the context button.
-for d in rentalDevices {
-  rule $"rental-rent-{d.ordinal}" {
-    when pressing() and rentalCanRent() and rentalLoan[$"{d.ordinal}"] == 0 and rentalHeld[$each] == 0
-    mode: Edge
-    forEach: region($"rental-reach-{d.ordinal}")
-    rentalLoan[$"{d.ordinal}"] = rentalHolder[$each]
-    rentalHeld[$each] = d.ordinal
-    rentalModel[$each] = rentalModels[d.model].model
-  }
-}
-
-// Returning at a stall's tray: the device goes back to its cubby and the body lets go. A holder's press engages its own
-// device (the context button's first target), so at the tray that engagement returns it, and the authority then
-// releases the engagement on the device nobody holds.
-for stall in rentalStalls {
-  rule $"rental-return-{stall.id}" {
-    when (pressing() or rentalShown[$each] > rentalPlayed) and rentalCanRent() and rentalHeld[$each] > 0
-    mode: Edge
-    forEach: region($"rental-return-{stall.id}")
-    rentalLoan[rentalHeld[$each]] = 0
-    rentalHeld[$each] = 0
-    rentalModel[$each] = 0
-  }
-}
-
-// Renting a cartridge: a seat's body before a cartridge on the rack, holding none, presses the context button. It goes
-// on loan through the same row as a device.
-for c in rentalCartridgeItems {
-  rule $"rental-cartridge-rent-{c.ordinal}" {
-    when pressing() and rentalCanRent() and rentalLoan[$"{c.ordinal}"] == 0 and rentalCartridgeHeld[$each] == 0
-    mode: Edge
-    forEach: region($"rental-cartridge-reach-{c.ordinal}")
-    rentalLoan[$"{c.ordinal}"] = rentalHolder[$each]
-    rentalCartridgeHeld[$each] = c.ordinal
-  }
-}
-
-// Returning a cartridge at the rack's tray: it goes back to its place on the rack.
-rule "rental-cartridge-return" {
-  when pressing() and rentalCanRent() and rentalCartridgeHeld[$each] > 0
-  mode: Edge
-  forEach: region("rental-cartridge-return")
-  rentalLoan[rentalCartridgeHeld[$each]] = 0
-  rentalCartridgeHeld[$each] = 0
-}
-
-// Taking a key: a seat's body before a key on the stand, holding none, presses the context button. It goes on loan
-// through the same row as a device, switched on.
-for k in rentalKeyItems {
-  rule $"rental-key-take-{k.ordinal}" {
-    when pressing() and rentalCanRent() and rentalLoan[$"{k.ordinal}"] == 0 and rentalKeyHeld[$each] == 0
-    mode: Edge
-    forEach: region($"rental-key-reach-{k.ordinal}")
-    rentalLoan[$"{k.ordinal}"] = rentalHolder[$each]
-    rentalKeyHeld[$each] = k.ordinal
-    rentalKeyShown[$each] = 1
-  }
-}
-
-// Returning a key at the stand's tray.
-rule "rental-key-return" {
-  when pressing() and rentalCanRent() and rentalKeyHeld[$each] > 0
-  mode: Edge
-  forEach: region("rental-key-return")
-  rentalLoan[rentalKeyHeld[$each]] = 0
-  rentalKeyHeld[$each] = 0
-  rentalKeyShown[$each] = 0
-}
-
-// The key toggle: a player's keyToggle channel switches the key that player's own body carries off and on, wherever
-// it is.
-rule "rental-key-toggle" {
-  when channel(each, keyToggle) >= 1 and rentalKeyShown[$each] > 0
-  mode: Edge
-  forEach: $players
-  rentalKeyShown[$each] = 3 - rentalKeyShown[$each]
-}
-
-// A key whose holder leaves the gallery, or the world, goes back to its stand.
-rule "rental-key-leave" {
-  when rentalKeyHeld[$each] > 0 and (bodyPosition(each, x) < rentalKeyBounds.x0 or
-      bodyPosition(each, x) > rentalKeyBounds.x1 or
-      bodyPosition(each, y) < rentalKeyBounds.y0 or
-      bodyPosition(each, y) > rentalKeyBounds.y1 or
-      bodyPosition(each, z) < rentalKeyBounds.z0 or
-      bodyPosition(each, z) > rentalKeyBounds.z1)
-  mode: Level
-  forEach: rentalKeyHeld
-  rentalLoan[rentalKeyHeld[$each]] = 0
-  rentalKeyHeld[$each] = 0
-  rentalKeyShown[$each] = 0
-}
-
-// The pass a carried key gives: each player's `wonderKey` register (wonder.puck) is 1 while its key shows switched
-// on, the one fact every key rule above moves. The gate and the write read one local, so a firing closes its own gate.
-rule "rental-key-pass" {
-  local target = (rentalKeyShown[$each] == 1) ? 1.0 : 0.0
-  when bodyState(each, wonderKey) != target
-  mode: Level
-  forEach: $players
-  setBodyState(key: $each, state: "wonderKey", expression: target)
-}
-
-channels [
-  { composition: true, name: "keyToggle", shape: Binary }
-]
-
-// The key toggle's controls: H on the resting page, and the pad's North under the right trigger (I with X held), the
-// Debug page's free plate.
-bindingOverlays [
-  {
-    id: "rental-key-keys"
-    document {
-      version: "puck.input.bindings.v1"
-      modifiers: padModifiers
-      chords [
-        {
-          chord []
-          group: "play"
-          page {
-            id: "base"
-            entries [
-              {
-                channel: "keyToggle"
-                id: "keyToggle"
-                label: "Key on/off"
-                scale: 1
-                sources ["keyboard.h"]
-              }
-            ]
-          }
-        }
-        {
-          chord ["rt"]
-          group: "play"
-          page {
-            id: "pad-rt"
-            inherits: "base"
-            label: "Debug"
-            entries [
-              {
-                channel: "keyToggle"
-                id: "dbgKeyToggle"
-                label: "Key on/off"
-                scale: 1
-                sources: padNorth
-              }
-            ]
-          }
-        }
-      ]
-    }
-  }
-]
 
 // A station's console: the floor beside the station on its +x side, where the deck's cartridge slot is in reach. Engaging
 // the station's screen from there (the context button) swaps the cartridge the body holds with the one in the deck: a
@@ -1341,10 +694,10 @@ bindingOverlays [
 // either way, and engaging from before the screen (the pads, the panels) plays it without touching the cartridge.
 let toyboxConsoleOffset = 0.9
 function toyboxConsoleReach(s) = {
-  x0: galleryWorld((toyboxAt(s)[0] + toyboxConsoleOffset - 0.4), 0, 0)[0]
-  x1: galleryWorld((toyboxAt(s)[0] + toyboxConsoleOffset + 0.4), 0, 0)[0]
-  z0: galleryWorld(0, 0, minimum(toyboxAt(s)[2], (toyboxAt(s)[2] + s.facing)))[2]
-  z1: galleryWorld(0, 0, maximum(toyboxAt(s)[2], (toyboxAt(s)[2] + s.facing)))[2]
+  x0: (toyboxAt(s)[0] + toyboxConsoleOffset - 0.4)
+  x1: (toyboxAt(s)[0] + toyboxConsoleOffset + 0.4)
+  z0: minimum(toyboxAt(s)[2], (toyboxAt(s)[2] + s.facing))
+  z1: maximum(toyboxAt(s)[2], (toyboxAt(s)[2] + s.facing))
   y0: (galleryFloor[toyboxLevel] - 0.5)
   y1: (galleryFloor[toyboxLevel] + 1)
 }
@@ -1355,91 +708,756 @@ function toyboxSlotAt(s) = [
   (toyboxAt(s)[2] + (0.15 * s.facing))
 ]
 
-placements {
-  for s in toyboxStations {
-    reach(id: $"toybox-console-{s.id}", box: toyboxConsoleReach(s))
-    placement $"toybox-slot-{s.id}" {
-      prototype: "rental-device-empty"
-      parent: "gallery"
-      position: toyboxSlotAt(s)
-      yawDegrees: s.yaw
-      respond: map(
-        rentalCartridgeItems,
-        c => {
-          when: state(state: toyboxCartridge, key: s.id, comparison: Equal, value: c.ordinal)
-          prototypeId: rentalCartridgePrototype(c.slot)
-        }
-      )
-    }
-  }
-}
-
-for (s, i) in toyboxStations {
-  rule $"toybox-cartridge-{s.id}" {
-    when engaged(each, $"{(toyboxScreen + i)}") == 1 and rentalCanRent()
-    mode: Edge
-    forEach: region($"toybox-console-{s.id}")
-    toyboxSwap[s.id] = toyboxCartridge[s.id]
-    toyboxCartridge[s.id] = rentalCartridgeHeld[$each]
-    rentalCartridgeHeld[$each] = toyboxSwap[s.id]
-    toyboxTitle[s.id] = 0
-    if toyboxCartridge[s.id] > 0 {
-      rentalLoan[toyboxCartridge[s.id]] = (rentalStationLoan + i)
-      toyboxTitle[s.id] = rentalCartridgeTitle[toyboxCartridge[s.id]]
-    }
-    if rentalCartridgeHeld[$each] > 0 {
-      rentalLoan[rentalCartridgeHeld[$each]] = rentalHolder[$each]
-    }
-  }
-}
-
-// Leaving level 1, or the world (an absent body stands at the origin), returns the device.
-rule "rental-leave" {
-  when rentalHeld[$each] > 0 and (bodyPosition(each, y) < (galleryFloor[toyboxLevel] - 1) or bodyPosition(each, y) > (
-        galleryFloor[toyboxLevel] + 3
-      ))
-  mode: Level
-  forEach: rentalHeld
-  rentalLoan[rentalHeld[$each]] = 0
-  rentalHeld[$each] = 0
-  rentalModel[$each] = 0
-}
-rule "rental-cartridge-leave" {
-  when rentalCartridgeHeld[$each] > 0 and (bodyPosition(each, y) < (galleryFloor[toyboxLevel] - 1) or bodyPosition(
-        each,
-        y
-      ) > (galleryFloor[toyboxLevel] + 3))
-  mode: Level
-  forEach: rentalCartridgeHeld
-  rentalLoan[rentalCartridgeHeld[$each]] = 0
-  rentalCartridgeHeld[$each] = 0
-}
-
 // Playing: while a body is engaged on either of its screens (only one can be, the one its device's model shows) it plays
 // the device it holds, which moves from its hip to its hands; leaving puts it back on the hip. One rule a body, which
 // writes only when where the device shows moves.
 let rentalPlayed = 64
 function rentalShows(b) = (rentalHeld[$"{b}"] +
   (rentalPlayed * (engaged($"body:{b}", $"{rentalScreenOf(b, 1)}") + engaged($"body:{b}", $"{rentalScreenOf(b, 2)}"))))
-for b in rentalBodies {
-  rule $"rental-shown-{b}" {
-    when rentalShown[$"{b}"] != rentalShows(b)
-    mode: Level
-    rentalShown[$"{b}"] = rentalShows(b)
-  }
-}
 
-// Each seat's handheld pool: a brick and an advanced brick, advanced only while the body holds a device of that model.
-// Every brick in the stalls plays the tetromino game and every advanced brick the moth's pip; their paths resolve
-// beside this file.
-machines: flatMap(
-  rentalBodies,
-  b => [
-    (brickMachine($"rental-hgb-{b}", "../cartridges/cgb/tetromino.cgb.puck") with {
-      runsWhen { state: rentalModel, key: $"{b}", comparison: Equal, value: 1 }
-    }),
-    (advancedBrickMachine($"rental-agb-{b}", "../cartridges/agb/pip.agb.puck") with {
-      runsWhen { state: rentalModel, key: $"{b}", comparison: Equal, value: 2 }
-    })
+template galleryRentals(frame, home = "") {
+  // Where a lent key may go, in the world: the plan's bounds carried by the frame.
+  let rentalKeyBoundsWorld = frameBox(frame, rentalKeyBounds)
+
+  // The title each cartridge carries, which the play floor's unlock (time-puzzles.puck) puts back in a station's deck when
+  // its tease ends over an inserted cartridge.
+  state {
+    world {
+      // The one loan row: a device's, a cartridge's or a key's ordinal is 0 while it is on its stall, rack or stand, N + 1
+      // while body N holds it, and `rentalStationLoan` plus a station's place while a cartridge sits in that station's deck.
+      row {
+        name: "rentalLoan"
+        kind: Int
+        capacity: ((length(rentalDevices) + length(rentalCartridgeItems)) + length(rentalKeyItems))
+        cells: map(
+          flatMap([rentalDevices, rentalCartridgeItems, rentalKeyItems], items => items),
+          d => { key: $"{d.ordinal}", value: 0 }
+        )
+      }
+      // The key a seat's body holds (its loan ordinal), 0 for none, and how it shows: 0 none, 1 switched on, 2 off.
+      row {
+        name: "rentalKeyHeld"
+        kind: Int
+        capacity: length(rentalBodies)
+        cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
+      }
+      row {
+        name: "rentalKeyShown"
+        kind: Int
+        capacity: length(rentalBodies)
+        cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
+      }
+      // The library title each cartridge carries.
+      row {
+        name: "rentalCartridgeTitle"
+        kind: Int
+        capacity: length(rentalCartridgeItems)
+        cells: map(rentalCartridgeItems, c => { key: $"{c.ordinal}", value: rentalCartridgeSlots[c.slot].title })
+      }
+      // The cartridge a seat's body holds (its loan ordinal), 0 for none; a body holds one cartridge beside a device.
+      row {
+        name: "rentalCartridgeHeld"
+        kind: Int
+        capacity: length(rentalBodies)
+        cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
+      }
+      row {
+        name: "rentalDevice"
+        kind: Text
+        capacity: length(rentalDevices)
+        cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: d.id })
+      }
+      row {
+        name: "rentalOrdinal"
+        kind: Int
+        capacity: length(rentalDevices)
+        cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: d.ordinal })
+      }
+      row {
+        name: "rentalDeviceModel"
+        kind: Int
+        capacity: length(rentalDevices)
+        cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: rentalModels[d.model].model })
+      }
+      row {
+        name: "rentalDeviceColour"
+        kind: Text
+        capacity: length(rentalDevices)
+        cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: rentalColours[d.model][d.colour].name })
+      }
+      row {
+        name: "rentalHeld"
+        kind: Int
+        capacity: length(rentalBodies)
+        cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
+      }
+      row {
+        name: "rentalModel"
+        kind: Int
+        capacity: length(rentalBodies)
+        cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
+      }
+      // Where a body's device shows: its ordinal while it rides the hip, its ordinal plus `rentalPlayed` while the body
+      // plays it in its hands (engaged on its screen), 0 while it holds none.
+      row {
+        name: "rentalShown"
+        kind: Int
+        capacity: length(rentalBodies)
+        cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
+      }
+      // The number a loan names each seat's body by, its index + 1: fixed.
+      row {
+        name: "rentalHolder"
+        kind: Int
+        capacity: length(rentalBodies)
+        cells: map(rentalBodies, b => { key: $"{b}", value: (b + 1) })
+      }
+    }
+  }
+
+  prototypes {
+    prototype "rental-counter" {
+      occlusion: propOcclusion
+      document {
+        name: "rental-counter"
+        schema: "puck.creation.v2"
+        palette: rentalKioskPalette
+        for arm in [0, 1] {
+          rentalKioskArm(arm)
+        }
+        // The corner: the returns tray, lit round its slot, the post both headers meet at, and the blade sign on its own
+        // post over the canopy.
+        shape Box "tray-light" {
+          material: rentalKiosk.neon
+          position [0, (rentalCounterTop + 0.002), 0]
+          scale [0.2, 0.004, 0.2]
+          detail: true
+        }
+        shape Box "tray" {
+          material: rentalKiosk.bezel
+          position [0, (rentalCounterTop + 0.008), 0]
+          scale [0.17, 0.008, 0.17]
+          rounding: 0.006
+          detail: true
+        }
+        rentalKioskBox(
+          label: "mast-corner",
+          arm: 1,
+          material: rentalKiosk.bezel,
+          u: 0.2,
+          y: 1.7,
+          v: -0.2,
+          hu: 0.03,
+          hy: 0.75,
+          hv: 0.03,
+          rounding: 0.01
+        )
+        rentalKioskBox(
+          label: "blade-mast",
+          arm: 1,
+          material: rentalKiosk.bezel,
+          u: 0.05,
+          y: 2.65,
+          v: -0.05,
+          hu: 0.04,
+          hy: 0.2,
+          hv: 0.04,
+          rounding: 0.012
+        )
+        shape Box "blade" {
+          material: rentalKiosk.trim
+          position: rentalBladePoint(0, rentalBladeAt[1])
+          rotation: rotate([0, 1, 0], rentalBladeTurn)
+          scale [0.74, 0.17, 0.03]
+          rounding: 0.02
+          detail: true
+        }
+        shape Box "blade-sign" {
+          material: rentalKiosk.sign
+          position: rentalBladePoint(0.016, rentalBladeAt[1])
+          rotation: rotate([0, 1, 0], rentalBladeTurn)
+          scale [0.7, 0.13, 0.03]
+          lightsAs: Face
+          detail: true
+        }
+        textRuns [
+          for arm in [0, 1] {
+            rentalArmLetters(arm, 1.45, 2.12, 0.118, rentalModels[arm].title, 0.15, 2.05)
+          }
+          for arm in [0, 1] {
+            rentalArmLetters(arm, 0, 0.47, 0.256, "RETURNS", 0.045, 0.38)
+          }
+          for n in flatMap([0, 1], arm => map(range(0, rentalPerModel), n => { arm: arm, n: n })) {
+            rentalArmLetters(n.arm, rentalAlong(n.n), 0.47, 0.256, rentalNumber(n.n + 1), 0.05, 0.09)
+          }
+          {
+            text: "HANDHELD RENTALS"
+            position: rentalBladePoint(0.05, rentalBladeAt[1])
+            rotation: rotate([0, 1, 0], rentalBladeTurn)
+            emHeight: 0.14
+            depth: 0.004
+            mode: "emboss"
+            material: rentalKiosk.ink
+            align: "center"
+            anchor: "capMiddle"
+            maxWidth: 1.34
+          }
+        ]
+      }
+    }
+    // The key stand: a pedestal in the stalls' colours, its top at rentalKeyTop, the returns tray inset at its east end
+    // (+x).
+    prototype "rental-key-stand" {
+      document {
+        name: "rental-key-stand"
+        schema: "puck.creation.v2"
+        palette: rentalCounterPalette
+        shape Box "body" {
+          material: 0
+          position [0, ((rentalKeyTop - 0.04) / 2), 0]
+          scale [rentalKeyHalfWidth, ((rentalKeyTop - 0.04) / 2), 0.18]
+          rounding: 0.03
+        }
+        shape Box "top" {
+          material: 2
+          position [0, (rentalKeyTop - 0.02), 0]
+          scale [(rentalKeyHalfWidth + 0.02), 0.02, 0.2]
+          rounding: 0.015
+        }
+        shape Box "tray" {
+          material: 3
+          position [(rentalKeyHalfWidth - 0.1), (rentalKeyTop + 0.01), 0]
+          scale [0.08, 0.012, 0.12]
+          rounding: 0.01
+        }
+      }
+    }
+    // A wonder key, lit while it is switched on and dull while it is off.
+    for kind in rentalKeyKinds {
+      prototype $"{kind.id}" {
+        document {
+          name: kind.name
+          schema: "puck.creation.v2"
+          palette [rentalKeyBrass, kind.gem]
+          rentalKey()
+        }
+      }
+    }
+    // The cartridge rack: a counter in the stalls' colours, its top at rentalRackTop, the returns tray inset at its east
+    // end (+x). Its front faces -Z, the creation's front.
+    prototype "rental-cartridge-rack" {
+      occlusion: propOcclusion
+      document {
+        name: "rental-cartridge-rack"
+        schema: "puck.creation.v2"
+        palette: rentalCounterPalette
+        shape Box "body" {
+          material: 0
+          position [0, ((rentalRackTop - 0.04) / 2), 0]
+          scale [rentalRackHalfWidth, ((rentalRackTop - 0.04) / 2), 0.2]
+          rounding: 0.03
+        }
+        shape Box "top" {
+          material: 2
+          position [0, (rentalRackTop - 0.02), 0]
+          scale [(rentalRackHalfWidth + 0.02), 0.02, 0.22]
+          rounding: 0.015
+        }
+        shape Box "tray" {
+          material: 3
+          position [(rentalRackHalfWidth - 0.1), (rentalRackTop + 0.01), -0.02]
+          scale [0.08, 0.012, 0.12]
+          rounding: 0.01
+        }
+      }
+    }
+    // A deck cartridge for each rack slot, standing on its base with its label toward +Z: a graphite shell 120 by 135 by
+    // 20 mm, its label the slot's.
+    for (slot, s) in rentalCartridgeSlots {
+      prototype $"rental-cartridge-{s}" {
+        document {
+          name: slot.label
+          schema: "puck.creation.v2"
+          palette [
+            { color: "#2E2E33", roughness: 0.45, specular: 0.04 }
+            { color: "#EDE6D3", roughness: 0.6, specular: 0.03 }
+            { color: "#1C1C1E", roughness: 0.5, specular: 0.04 }
+          ]
+          shape Box "shell" {
+            material: 0
+            position [0, 0.0675, 0]
+            scale [0.06, 0.0675, 0.01]
+            rounding: 0.003
+          }
+          shape Box "label" {
+            material: 1
+            position [0, 0.08, -0.0098]
+            scale [0.048, 0.04, 0.0006]
+          }
+          textRuns [
+            {
+              text: slot.label
+              position [0, 0.08, -0.0106]
+              rotation [0, 1, 0, 0]
+              emHeight: 0.011
+              depth: 0.0006
+              mode: "emboss"
+              material: 2
+              align: "center"
+            }
+          ]
+        }
+      }
+    }
+    prototype "rental-device-empty" {
+      document {
+        name: "rental-device-empty"
+        schema: "puck.creation.v2"
+        palette [rentalBezel]
+      }
+    }
+    for (model, m) in rentalModels {
+      for c in rentalColours[m] {
+        prototype $"rental-{model.id}-{c.name}" {
+          document {
+            name: $"{model.title} ({c.name})"
+            schema: "puck.creation.v2"
+            palette: rentalPalette(c)
+            for k in filter([0], k => (m == 0)) {
+              rentalBrick(c)
+            }
+            for k in filter([0], k => (m == 1)) {
+              rentalAdvanced(c)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  placements {
+    for stall in rentalStalls {
+      placement $"rental-counter-{stall.id}" {
+        prototype: "rental-counter"
+        parent: "gallery"
+        position [stall.x, galleryFloor[toyboxLevel], stall.z]
+        yawDegrees: stall.yaw
+        solid
+      }
+      reach(parent: "gallery", id: $"rental-return-{stall.id}", box: rentalReturnReach(stall))
+    }
+    // Each device in its cubby, until it is on loan.
+    for d in rentalDevices {
+      placement $"rental-{d.id}" {
+        prototype: rentalPrototype(d)
+        parent: "gallery"
+        position [rentalDeviceAt(d)[0], (galleryFloor[toyboxLevel] + rentalCounterTop), rentalDeviceAt(d)[1]]
+        yawDegrees: ((rentalStalls[d.stall].yaw + rentalArmYaw(rentalModels[d.model].arm)) % 360)
+        respond [
+          {
+            when: state(state: rentalLoan, key: $"{d.ordinal}", comparison: NotEqual, value: 0)
+            prototypeId: "rental-device-empty"
+          }
+        ]
+      }
+      reach(parent: "gallery", id: $"rental-reach-{d.ordinal}", box: rentalDeviceReach(d))
+    }
+    // The cartridge rack, each cartridge on it until it is on loan, the floor before each, and the returns tray's floor.
+    placement "rental-cartridge-rack" {
+      prototype: "rental-cartridge-rack"
+      parent: "gallery"
+      position [rentalRackAt[0], galleryFloor[toyboxLevel], rentalRackAt[1]]
+      solid
+    }
+    reach(
+      parent: "gallery",
+      id: "rental-cartridge-return",
+      box: rentalRackReach((rentalRackAt[0] + rentalRackHalfWidth - 0.2), (rentalRackAt[0] + rentalRackHalfWidth))
+    )
+    for c in rentalCartridgeItems {
+      placement $"rental-cartridge-{c.ordinal}" {
+        prototype: rentalCartridgePrototype(c.slot)
+        parent: "gallery"
+        position [rentalRackX(c.place), (galleryFloor[toyboxLevel] + rentalRackTop), (rentalRackAt[1] + 0.05)]
+        respond [
+          {
+            when: state(state: rentalLoan, key: $"{c.ordinal}", comparison: NotEqual, value: 0)
+            prototypeId: "rental-device-empty"
+          }
+        ]
+      }
+      reach(
+        parent: "gallery",
+        id: $"rental-cartridge-reach-{c.ordinal}",
+        box: rentalRackReach((rentalRackX(c.place) - 0.07), (rentalRackX(c.place) + 0.07))
+      )
+    }
+    // The cartridge a seat's body holds rides its right hip, its label out.
+    for b in rentalBodies {
+      placement $"rental-cartridge-carried-{b}" {
+        prototype: "rental-device-empty"
+        position [0, 0, 0]
+        attach {
+          bodyIndex: b
+          localOffset [0.3, 0.92, -0.38]
+        }
+        respond: map(
+          rentalCartridgeItems,
+          c => {
+            when: state(state: rentalCartridgeHeld, key: $"{b}", comparison: Equal, value: c.ordinal)
+            prototypeId: rentalCartridgePrototype(c.slot)
+          }
+        )
+      }
+    }
+    // The key stand on level 3, each key on it until it is on loan, the floor before each, and the returns tray's floor.
+    placement "rental-key-stand" {
+      prototype: "rental-key-stand"
+      parent: "gallery"
+      position [rentalKeyAt[0], galleryFloor[3], rentalKeyAt[1]]
+      solid
+    }
+    reach(
+      parent: "gallery",
+      id: "rental-key-return",
+      box: rentalKeyReach(((rentalKeyAt[0] + rentalKeyHalfWidth) - 0.25), (rentalKeyAt[0] + rentalKeyHalfWidth))
+    )
+    for k in rentalKeyItems {
+      placement $"rental-key-{k.ordinal}" {
+        prototype: "rental-key-lit"
+        parent: "gallery"
+        position [rentalKeyX(k.place), (galleryFloor[3] + rentalKeyTop), (rentalKeyAt[1] + 0.05)]
+        respond [
+          {
+            when: state(state: rentalLoan, key: $"{k.ordinal}", comparison: NotEqual, value: 0)
+            prototypeId: "rental-device-empty"
+          }
+        ]
+      }
+      reach(
+        parent: "gallery",
+        id: $"rental-key-reach-{k.ordinal}",
+        box: rentalKeyReach((rentalKeyX(k.place) - (rentalKeyPitch / 2)), (rentalKeyX(k.place) + (rentalKeyPitch / 2)))
+      )
+    }
+    // The key a seat's body holds hangs on a cord at its chest, a little right of centre, its face out: lit while it is
+    // switched on, dull while it is off.
+    for b in rentalBodies {
+      placement $"rental-key-carried-{b}" {
+        prototype: "rental-device-empty"
+        position [0, 0, 0]
+        attach {
+          bodyIndex: b
+          localOffset [0.16, 1.3, -0.42]
+          localYawDegrees: 180
+        }
+        respond [
+          {
+            when: state(state: rentalKeyShown, key: $"{b}", comparison: Equal, value: 1)
+            prototypeId: "rental-key-lit"
+          }
+          { when: state(state: rentalKeyShown, key: $"{b}", comparison: Equal, value: 2), prototypeId: "rental-key" }
+        ]
+      }
+    }
+    // The device a seat's body holds rides its left hip (a body faces -Z, so -X is its left), its face out, and while the
+    // body plays it, its hands, its face toward the body. Each row shows the device while `rentalShown` names it there.
+    for b in rentalBodies {
+      placement $"rental-carried-{b}" {
+        prototype: "rental-device-empty"
+        position [0, 0, 0]
+        attach {
+          bodyIndex: b
+          localOffset [-0.3, 0.92, -0.38]
+          localYawDegrees: 180
+        }
+        respond: map(
+          rentalDevices,
+          d => {
+            when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: d.ordinal)
+            prototypeId: rentalPrototype(d)
+          }
+        )
+      }
+      placement $"rental-played-{b}" {
+        prototype: "rental-device-empty"
+        position [0, 0, 0]
+        attach {
+          bodyIndex: b
+          localOffset [0, 1.3, -0.5]
+        }
+        respond: map(
+          rentalDevices,
+          d => {
+            when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: (d.ordinal + rentalPlayed))
+            prototypeId: rentalPrototype(d)
+          }
+        )
+      }
+    }
+  }
+  screens: flatMap(
+    rentalBodies,
+    b => map(
+      rentalModels,
+      m => {
+        index: rentalScreenOf(b, m.model)
+        origin: galleryAt(
+          frame,
+          [rentalScreenRest[0], (galleryFloor[toyboxLevel] + rentalCounterTop), rentalScreenRest[1]]
+        )
+        right: rotatePoint(frameTurn(frame), [1, 0, 0])
+        up [0, 1, 0]
+        halfWidth: ((m.model == 1) ? 0.022 : 0.0306)
+        halfHeight: ((m.model == 1) ? 0.0198 : 0.0204)
+        halfDepth: 0.0008
+        round: 0
+        source: machine(instance: $"rental-{m.id}-{b}", output: "video")
+        luminance: ((m.model == 1) ? 70nit : 90nit)
+        route: deviceRoute
+        carry {
+          shape: $"screen-{m.id}"
+          placements [$"rental-played-{b}", $"rental-carried-{b}"]
+        }
+      }
+    )
+  )
+
+  // Renting: a seat's body before a device in its cubby, holding none, presses the context button.
+  for d in rentalDevices {
+    rule $"rental-rent-{d.ordinal}" {
+      when pressing() and rentalCanRent() and rentalLoan[$"{d.ordinal}"] == 0 and rentalHeld[$each] == 0
+      mode: Edge
+      forEach: region($"rental-reach-{d.ordinal}")
+      rentalLoan[$"{d.ordinal}"] = rentalHolder[$each]
+      rentalHeld[$each] = d.ordinal
+      rentalModel[$each] = rentalModels[d.model].model
+    }
+  }
+
+  // Returning at a stall's tray: the device goes back to its cubby and the body lets go. A holder's press engages its own
+  // device (the context button's first target), so at the tray that engagement returns it, and the authority then
+  // releases the engagement on the device nobody holds.
+  for stall in rentalStalls {
+    rule $"rental-return-{stall.id}" {
+      when (pressing() or rentalShown[$each] > rentalPlayed) and rentalCanRent() and rentalHeld[$each] > 0
+      mode: Edge
+      forEach: region($"rental-return-{stall.id}")
+      rentalLoan[rentalHeld[$each]] = 0
+      rentalHeld[$each] = 0
+      rentalModel[$each] = 0
+    }
+  }
+
+  // Renting a cartridge: a seat's body before a cartridge on the rack, holding none, presses the context button. It goes
+  // on loan through the same row as a device.
+  for c in rentalCartridgeItems {
+    rule $"rental-cartridge-rent-{c.ordinal}" {
+      when pressing() and rentalCanRent() and rentalLoan[$"{c.ordinal}"] == 0 and rentalCartridgeHeld[$each] == 0
+      mode: Edge
+      forEach: region($"rental-cartridge-reach-{c.ordinal}")
+      rentalLoan[$"{c.ordinal}"] = rentalHolder[$each]
+      rentalCartridgeHeld[$each] = c.ordinal
+    }
+  }
+
+  // Returning a cartridge at the rack's tray: it goes back to its place on the rack.
+  rule "rental-cartridge-return" {
+    when pressing() and rentalCanRent() and rentalCartridgeHeld[$each] > 0
+    mode: Edge
+    forEach: region("rental-cartridge-return")
+    rentalLoan[rentalCartridgeHeld[$each]] = 0
+    rentalCartridgeHeld[$each] = 0
+  }
+
+  // Taking a key: a seat's body before a key on the stand, holding none, presses the context button. It goes on loan
+  // through the same row as a device, switched on.
+  for k in rentalKeyItems {
+    rule $"rental-key-take-{k.ordinal}" {
+      when pressing() and rentalCanRent() and rentalLoan[$"{k.ordinal}"] == 0 and rentalKeyHeld[$each] == 0
+      mode: Edge
+      forEach: region($"rental-key-reach-{k.ordinal}")
+      rentalLoan[$"{k.ordinal}"] = rentalHolder[$each]
+      rentalKeyHeld[$each] = k.ordinal
+      rentalKeyShown[$each] = 1
+    }
+  }
+
+  // Returning a key at the stand's tray.
+  rule "rental-key-return" {
+    when pressing() and rentalCanRent() and rentalKeyHeld[$each] > 0
+    mode: Edge
+    forEach: region("rental-key-return")
+    rentalLoan[rentalKeyHeld[$each]] = 0
+    rentalKeyHeld[$each] = 0
+    rentalKeyShown[$each] = 0
+  }
+
+  // The key toggle: a player's keyToggle channel switches the key that player's own body carries off and on, wherever
+  // it is.
+  rule "rental-key-toggle" {
+    when channel(each, keyToggle) >= 1 and rentalKeyShown[$each] > 0
+    mode: Edge
+    forEach: $players
+    rentalKeyShown[$each] = 3 - rentalKeyShown[$each]
+  }
+
+  // A key whose holder leaves the gallery, or the world, goes back to its stand.
+  rule "rental-key-leave" {
+    when rentalKeyHeld[$each] > 0 and (bodyPosition(each, x) < rentalKeyBoundsWorld.x0 or
+        bodyPosition(each, x) > rentalKeyBoundsWorld.x1 or
+        bodyPosition(each, y) < rentalKeyBoundsWorld.y0 or
+        bodyPosition(each, y) > rentalKeyBoundsWorld.y1 or
+        bodyPosition(each, z) < rentalKeyBoundsWorld.z0 or
+        bodyPosition(each, z) > rentalKeyBoundsWorld.z1)
+    mode: Level
+    forEach: rentalKeyHeld
+    rentalLoan[rentalKeyHeld[$each]] = 0
+    rentalKeyHeld[$each] = 0
+    rentalKeyShown[$each] = 0
+  }
+
+  // The pass a carried key gives: each player's `wonderKey` register (wonder.puck) is 1 while its key shows switched
+  // on, the one fact every key rule above moves. The gate and the write read one local, so a firing closes its own gate.
+  rule "rental-key-pass" {
+    local target = (rentalKeyShown[$each] == 1) ? 1.0 : 0.0
+    when bodyState(each, wonderKey) != target
+    mode: Level
+    forEach: $players
+    setBodyState(key: $each, state: "wonderKey", expression: target)
+  }
+
+  channels [
+    { composition: true, name: "keyToggle", shape: Binary }
   ]
-)
+
+  // The key toggle's controls: H on the resting page, and the pad's North under the right trigger (I with X held), the
+  // Debug page's free plate.
+  bindingOverlays [
+    {
+      id: "rental-key-keys"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers: padModifiers
+        chords [
+          {
+            chord []
+            group: "play"
+            page {
+              id: "base"
+              entries [
+                {
+                  channel: "keyToggle"
+                  id: "keyToggle"
+                  label: "Key on/off"
+                  scale: 1
+                  sources ["keyboard.h"]
+                }
+              ]
+            }
+          }
+          {
+            chord ["rt"]
+            group: "play"
+            page {
+              id: "pad-rt"
+              inherits: "base"
+              label: "Debug"
+              entries [
+                {
+                  channel: "keyToggle"
+                  id: "dbgKeyToggle"
+                  label: "Key on/off"
+                  scale: 1
+                  sources: padNorth
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+
+  placements {
+    for s in toyboxStations {
+      reach(parent: "gallery", id: $"toybox-console-{s.id}", box: toyboxConsoleReach(s))
+      placement $"toybox-slot-{s.id}" {
+        prototype: "rental-device-empty"
+        parent: "gallery"
+        position: toyboxSlotAt(s)
+        yawDegrees: s.yaw
+        respond: map(
+          rentalCartridgeItems,
+          c => {
+            when: state(state: toyboxCartridge, key: s.id, comparison: Equal, value: c.ordinal)
+            prototypeId: rentalCartridgePrototype(c.slot)
+          }
+        )
+      }
+    }
+  }
+
+  for (s, i) in toyboxStations {
+    rule $"toybox-cartridge-{s.id}" {
+      when engaged(each, $"{(toyboxScreen + i)}") == 1 and rentalCanRent()
+      mode: Edge
+      forEach: region($"toybox-console-{s.id}")
+      toyboxSwap[s.id] = toyboxCartridge[s.id]
+      toyboxCartridge[s.id] = rentalCartridgeHeld[$each]
+      rentalCartridgeHeld[$each] = toyboxSwap[s.id]
+      toyboxTitle[s.id] = 0
+      if toyboxCartridge[s.id] > 0 {
+        rentalLoan[toyboxCartridge[s.id]] = (rentalStationLoan + i)
+        toyboxTitle[s.id] = rentalCartridgeTitle[toyboxCartridge[s.id]]
+      }
+      if rentalCartridgeHeld[$each] > 0 {
+        rentalLoan[rentalCartridgeHeld[$each]] = rentalHolder[$each]
+      }
+    }
+  }
+
+  // Leaving level 1, or the world (an absent body stands at the origin), returns the device.
+  rule "rental-leave" {
+    when rentalHeld[$each] > 0 and (bodyPosition(each, y) < (galleryFloor[toyboxLevel] - 1) or bodyPosition(each, y) > (
+          galleryFloor[toyboxLevel] + 3
+        ))
+    mode: Level
+    forEach: rentalHeld
+    rentalLoan[rentalHeld[$each]] = 0
+    rentalHeld[$each] = 0
+    rentalModel[$each] = 0
+  }
+  rule "rental-cartridge-leave" {
+    when rentalCartridgeHeld[$each] > 0 and (bodyPosition(each, y) < (galleryFloor[toyboxLevel] - 1) or bodyPosition(
+          each,
+          y
+        ) > (galleryFloor[toyboxLevel] + 3))
+    mode: Level
+    forEach: rentalCartridgeHeld
+    rentalLoan[rentalCartridgeHeld[$each]] = 0
+    rentalCartridgeHeld[$each] = 0
+  }
+  for b in rentalBodies {
+    rule $"rental-shown-{b}" {
+      when rentalShown[$"{b}"] != rentalShows(b)
+      mode: Level
+      rentalShown[$"{b}"] = rentalShows(b)
+    }
+  }
+
+  // Each seat's handheld pool: a brick and an advanced brick, advanced only while the body holds a device of that model.
+  // Every brick in the stalls plays the tetromino game and every advanced brick the moth's pip; their paths are this
+  // folder's, which `home` carries to the document that expands the module.
+  machines: flatMap(
+    rentalBodies,
+    b => [
+      (brickMachine($"rental-hgb-{b}", $"{home}../cartridges/cgb/tetromino.cgb.puck") with {
+        runsWhen { state: rentalModel, key: $"{b}", comparison: Equal, value: 1 }
+      }),
+      (advancedBrickMachine($"rental-agb-{b}", $"{home}../cartridges/agb/pip.agb.puck") with {
+        runsWhen { state: rentalModel, key: $"{b}", comparison: Equal, value: 2 }
+      })
+    ]
+  )
+}

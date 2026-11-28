@@ -20,6 +20,7 @@ import "../set-controls"
 import "../noclip"
 import "../ship-rows"
 import "../shapes"
+import "../../standard/frame"
 import "../shape-station"
 import "lab-kit"
 
@@ -31,8 +32,8 @@ metadata {
 // The way back stands 8 m before the console, facing it, so a body walks out of it toward the station.
 labWayBack(id: "shapes", at: [0, 0, 8], yaw: 0)
 
-// The one station: the display the gallery repeats, standing at the floor's centre in the world's own frame (no parent and
-// no site), its console facing +z. It is home to every exhibit, so the exhibits that stand a paint or a reach at the place
+// The one station: the display the gallery repeats, standing at the floor's centre in the world's own frame (no parent,
+// and the identity frame for its site), its console facing +z. It is home to every exhibit, so the exhibits that stand a paint or a reach at the place
 // they are shown (the paint and IK exhibits) stand them here.
 let station = {
   id: "shapes"
@@ -44,7 +45,7 @@ let station = {
   z: 0
   yaw: 180
   floor: 0
-  site [0, 0, 0]
+  site: frameIdentity
   parent: null
 }
 let stations = [station]

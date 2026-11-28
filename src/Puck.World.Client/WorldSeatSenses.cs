@@ -503,7 +503,8 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
 
         shape = row.Region.ShapeAt(
             origin: (FixedVector3.FromVector3(value: carrier.Position) + orientation.Rotate(vector: FixedVector3.FromVector3(value: attach.LocalOffset))),
-            yawRadians: (new FixedVector3(X: forward.X, Y: FixedQ4816.Zero, Z: forward.Z).Yaw() + FixedQ4816.FromDegrees(degrees: attach.LocalYawDegrees))
+            yawRadians: (new FixedVector3(X: forward.X, Y: FixedQ4816.Zero, Z: forward.Z).Yaw() + FixedQ4816.FromDegrees(degrees: attach.LocalYawDegrees)),
+            scale: FixedQ4816.One
         );
         return true;
     }

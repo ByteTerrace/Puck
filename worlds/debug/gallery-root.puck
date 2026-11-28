@@ -1,6 +1,9 @@
-// The gallery on its own: the building (gallery/gallery.puck) and its exhibits (shapes.puck) under the debug world's
-// day (day-alone.puck, the day with the clocks it reads), booted alone so a change to the gallery bakes and boots only the gallery. The debug world imports the same
-// module; this root exists for iterating on the building. Boot it with `--world worlds/debug/gallery-root.puck`.
+// The gallery on its own: the whole building (gallery/building.puck) with every module the owner laid out on its floors
+// (gallery/layout.puck's `galleryFloorsAll`, the board game room's twelve stations included), at full size, under the
+// debug world's day (day-alone.puck, the day with the clocks it reads), booted alone so a change to the gallery bakes and
+// boots only the gallery. gallery-shell.puck boots the shell and its theme alone, and gallery-half.puck and
+// gallery-double.puck the whole building at half and twice its size. Boot it with
+// `--world worlds/debug/gallery-root.puck`.
 
 schema: "puck.world.definition.v1"
 basis: "stage"
@@ -11,62 +14,45 @@ import "moon-frame"
 import "set-controls"
 import "noclip"
 import "ship-rows"
-import "shapes"
-import "game-stations"
-import "gallery/layout"
 import "exposure"
-import "gallery/gallery"
-// The board game room's twelve stations (gallery/games.puck); the debug world stands only the first.
-import "gallery/games"
+import "../standard/place"
+import "fir-fiber"
 // Every player's hand torch, switched by 6 (the standard's flashlight.puck).
 import "../standard/flashlight"
-// A body's size register, which level 1's size field writes (gallery/wonder.puck).
+// A body's size register, which the building's size field writes (gallery/building.puck).
 import "size"
+import "gallery/layout"
+import "gallery/root"
 
 metadata {
   title: "Gallery"
   description: "The debug world's gallery and its exhibits alone, for iterating on the building."
 }
 
-// The seat boots on the west forecourt facing the entrance, with the hall's length beyond it; the module declares the
-// building's own spawn points.
-spawnPoints: concat(
-  [
-    { id: "hero", position: galleryWorld((galleryWestOut - 9), 0.05, naveMid), yawDegrees: 270 }
-  ],
-  gallerySpawns
-)
+galleryRoot(frame: galleryFrame, floors: galleryFloorsAll)
 
-commands: galleryCommands
-
-// The board game room's stations stand their tokens as holodeck pools, room for each station's largest game.
-bodies {
-  capacity: (galleryPopulation + (gameStationBodies * length(galleryRoomStations)))
-  localSeats: seatPopulation
-  networkPlayers: visitorPopulation
-}
-
-// The font the plinth labels and signs emboss in, as the debug world declares it.
-text {
-  defaultFont: "inter"
-  fonts [
-    {
-      name: "inter"
-      source: "fonts/inter-regular.ttf"
-      hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
-      // ASCII, and the signs the shape stations' learn panels typeset formulas with (middle dot, minus, root, ≤ and ≥).
-      codePointRanges ["U+0020-U+007E", "U+00B7", "U+2212", "U+221A", "U+2264-U+2265"]
-    }
-  ]
-}
-
-
+// The board game room's chess vocabularies (game-stations.puck's header), which the stations' rules fold.
 state {
-  world {
-    galleryState()
+  enum PieceKind {
+    None
+    Pawn
+    Knight
+    Bishop
+    Rook
+    Queen
+    King
   }
-}
 
-prototypes {
-  galleryPrototypes()
+  enum MoveKind {
+    Illegal
+    Quiet
+    Capture
+    EnPassant
+    Castle
+  }
+
+  enum TurnColor {
+    White
+    Black
+  }
 }

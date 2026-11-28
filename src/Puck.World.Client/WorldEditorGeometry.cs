@@ -10,15 +10,6 @@ namespace Puck.World.Client;
 /// policy the presenter writes into each seat's view, and the snap reference both that overlay and the snapping verbs
 /// align to. Pure functions of the seat's grid and snapping and the document.</summary>
 public static class WorldEditorGeometry {
-    /// <summary>Returns the half extents a placement stands for, in its own axes: half its scale on each axis, a unit
-    /// creation's.</summary>
-    /// <param name="placement">The placement.</param>
-    /// <returns>The half extents, in world units.</returns>
-    public static Vector3 HalfExtentsOf(WorldPlacement placement) {
-        ArgumentNullException.ThrowIfNull(argument: placement);
-
-        return new Vector3(value: (0.5f * placement.Scale));
-    }
     /// <summary>Returns the snap reference a placement makes: its resolved world position and yaw, its half extents,
     /// the grid's pitch as its own lattice, and a face capture radius of half the finer horizontal pitch.</summary>
     /// <param name="definition">The document the placement is resolved in.</param>
@@ -34,7 +25,8 @@ public static class WorldEditorGeometry {
         return new SnapReference(
             FaceRadius: (0.5f * MathF.Min(x: pitch.X, y: pitch.Z)),
             Frame: frame.Rotation,
-            LocalHalfExtents: HalfExtentsOf(placement: placement),
+            // Half the placement's composed scale on each axis, a unit creation's.
+            LocalHalfExtents: new Vector3(value: (0.5f * frame.Scale)),
             Origin: frame.Position,
             Pitch: pitch
         );

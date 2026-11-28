@@ -24,10 +24,14 @@ import "bounds"
 // The bodies the work sheet prices a reach's press rule at: two players reaching for one plate at once.
 let reachCapacity = 2
 
-// The reach `id` over a box given its world bounds.
-template reach(id, box, capacity = reachCapacity) {
+// The reach `id` over a box given its bounds in the frame of `parent` (a placement id, or null for the world's own): a
+// reach under a group stands, turns and scales with the group's root as its region does.
+template reach(id, box, capacity = reachCapacity, parent = null) {
   placement id {
     prototype: "place"
+    if parent != null {
+      parent: parent
+    }
     position: boundsCentre(box)
     region {
       halfExtents: boundsHalf(box)

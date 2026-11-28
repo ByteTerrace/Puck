@@ -7,8 +7,10 @@
 // A panel is `{ id, title, entries, choice, site, x, y, z, yaw, parent }`: `id` names its placements (`<id>-panel`, the
 // stand, and `<id>-panel-screen`, its glass) and keys its cells; `entries` is its list, each `{ title, note }`; `choice`
 // the entry it boots on; `[x, y, z]` its foot in the frame of `parent` (a placement id, or null for the world), which
-// stands at the world point `site`; and `yaw` turns its glass's front the way a placement's yaw turns it (0 faces -z, 180
-// faces +z). Its glass's points are given facing +Z, as architecture.puck's pieces are, and placed with `facingWorld`.
+// stands in the world where the frame `site` puts it (frame.puck: the parent's position, yaw and scale); and `yaw` turns
+// its glass's front the way a placement's yaw turns it (0 faces -z, 180 faces +z). Its glass's points are given facing
+// +Z, as architecture.puck's pieces are, and placed with `facingWorld`; its glass's paints stand in the world's frame,
+// so they take the site's turn and scale too.
 //
 // A player uses a panel as a terminal (contexts/terminal.puck): within its reach the context button engages it, the
 // seat's camera eases to the panel's desk view, and a tap on a row of its list chooses that entry. PREV and NEXT turn
@@ -38,6 +40,7 @@
 // glass as a tap does.
 import "architecture"
 import "contexts/terminal"
+import "frame"
 
 // The console's tilt back from vertical, degrees, and the glass's half extents across and up its face, metres.
 let panelTilt = 30
@@ -67,37 +70,39 @@ let panelUp = [0, cosine((panelTilt * 0.017453293)), (0 - sine((panelTilt * 0.01
 // How many pages a panel's list takes.
 function panelPages(panel) = floor((((length(panel.entries) + panelRows) - 1) / panelRows))
 // A point given facing +Z (x to the right of a player before the thing, y up, z toward that player), in the parent frame
-// and in the world of any row standing at `[x, y, z]` turned `yaw` in a frame at the world point `site` (a panel, a
-// portal): a creation faces its front (-Z), so the row's yaw turns a facing-+Z point a half turn more.
+// and in the world of any row standing at `[x, y, z]` turned `yaw` in the frame `site` (a panel, a portal): a creation
+// faces its front (-Z), so the row's yaw turns a facing-+Z point a half turn more.
 function facingPoint(row, p) = ([row.x, row.y, row.z] + rotatePoint(rotate([0, 1, 0], (row.yaw + 180)), p))
-function facingWorld(row, p) = (row.site + facingPoint(row, p))
+function facingWorld(row, p) = frameAt(row.site, facingPoint(row, p))
+// The row's heading in the world: its yaw in the site's frame, turned by the site.
+function facingYaw(row) = frameYaw(row.site, row.yaw)
 // A point on the glass, `across` and `up` its face and `out` along its normal, facing +Z.
 function panelOnGlass(across, up, out = 0) = (panelGlassAt + ([across, 0, 0] + (panelUp * up) + (panelNormal * out)))
 // The turn that carries a paint's +X across the glass to a player's right, its +Y up the face and its +Z out of it, in
 // the world (architecture.puck's faceFill and faceText take it).
-function panelFaceTurn(panel) = compose(rotate([0, 1, 0], (panel.yaw + 180)), rotate([1, 0, 0], (0 - panelTilt)))
+function panelFaceTurn(panel) = compose(rotate([0, 1, 0], (facingYaw(panel) + 180)), rotate([1, 0, 0], (0 - panelTilt)))
 
 // A filled rectangle and a run of lettering on a panel's glass, in the world's frame, as a static creation's paints stand.
 function panelFill(panel, rect, color, round = 0) = faceFill(
   facingWorld(panel, panelOnGlass(faceMid(rect)[0], faceMid(rect)[1], panelGlassDepth)),
   panelFaceTurn(panel),
-  faceHalf(rect),
+  frameLength(panel.site, faceHalf(rect)),
   color,
-  round,
-  0.06
+  frameLength(panel.site, round),
+  frameLength(panel.site, 0.06)
 )
 function panelText(panel, rect, template, ink, em, align, wrap = false, markup = false, spacing = 1) = faceText(
   facingWorld(panel, panelOnGlass(faceMid(rect)[0], faceMid(rect)[1], panelGlassDepth)),
   panelFaceTurn(panel),
-  faceHalf(rect),
+  frameLength(panel.site, faceHalf(rect)),
   template,
   ink,
-  em,
+  frameLength(panel.site, em),
   align,
   wrap,
   markup,
   spacing,
-  0.06
+  frameLength(panel.site, 0.06)
 )
 // A button's face less a margin, the box its label fits.
 function panelInset(rect) = { x0: (rect.x0 + 0.01), x1: (rect.x1 - 0.01), y0: (rect.y0 + 0.008), y1: (rect.y1 - 0.008) }
@@ -395,7 +400,7 @@ function panelCameras(panels) = map(panels, panel => terminalCamera(
 function panelSpawns(panels) = map(panels, panel => {
   id: $"{panel.id}-panel"
   position: facingWorld(panel, panelStandAt)
-  yawDegrees: (panel.yaw + 180)
+  yawDegrees: (facingYaw(panel) + 180)
 })
 function panelTerminals(panels) = map(panels, panel => {
   at: facingWorld(panel, [0, 0, 0.7])

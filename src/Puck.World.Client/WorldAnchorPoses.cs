@@ -143,7 +143,7 @@ public static class WorldAnchorPoses {
         if ((WorldDefinitionRows.FindPlacement(id: placementId, placements: source.Definition.Placements) is { Attach: { } attach } riding) && (riding.Inhabit is null) && (riding.Deal is null)) {
             var (position, orientation) = WorldAttachedPose.Root(attach: attach, source: source);
 
-            pose = AtShape(definition: source.Definition, orientation: orientation, placement: riding, position: position, shapeId: shapeId);
+            pose = AtShape(definition: source.Definition, orientation: orientation, placement: riding, position: position, scale: riding.Scale, shapeId: shapeId);
             return true;
         }
 
@@ -174,7 +174,7 @@ public static class WorldAnchorPoses {
 
         var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
 
-        pose = AtShape(definition: definition, orientation: frame.Rotation, placement: placement, position: frame.Position, shapeId: shapeId);
+        pose = AtShape(definition: definition, orientation: frame.Rotation, placement: placement, position: frame.Position, scale: frame.Scale, shapeId: shapeId);
         return true;
     }
     // Whether the row shows the prototype now: its live holding's, which the response sweep writes into the delivered row.
@@ -182,8 +182,9 @@ public static class WorldAnchorPoses {
         (WorldDefinitionRows.FindPlacement(id: placementId, placements: definition.Placements) is { } placement) &&
         string.Equals(a: placement.ShownPrototypeId, b: prototypeId, comparisonType: StringComparison.Ordinal)
     );
-    // A row's pose at its root, or at the named shape's rest position and facing under the root.
-    private static SdfAnchor AtShape(WorldDefinition definition, WorldPlacement placement, Vector3 position, Quaternion orientation, int? shapeId) {
+    // A row's pose at its root, or at the named shape's rest position and facing under the root, carrying the row's
+    // composed scale, which an anchored light takes (WorldEnvironmentResolve.ApplyAnchors).
+    private static SdfAnchor AtShape(WorldDefinition definition, WorldPlacement placement, Vector3 position, Quaternion orientation, float scale, int? shapeId) {
         if (
             (shapeId is { } target) &&
             (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.ShownPrototypeId) is { } creation)
@@ -192,13 +193,14 @@ public static class WorldAnchorPoses {
                 if (shape.Id == target) {
                     return new SdfAnchor(
                         Orientation: Quaternion.Normalize(value: (orientation * shape.Rotation.Value)),
-                        Position: (position + Vector3.Transform(value: (shape.Position.Value * placement.Scale), rotation: orientation))
+                        Position: (position + Vector3.Transform(value: (shape.Position.Value * scale), rotation: orientation)),
+                        Scale: scale
                     );
                 }
             }
         }
 
-        return new SdfAnchor(Position: position, Orientation: orientation);
+        return new SdfAnchor(Position: position, Orientation: orientation, Scale: scale);
     }
     private static bool TryPart(int body, string partId, in WorldAnchorScope scope, out SdfAnchor pose) {
         if (WorldBodiesLimits.IsBodyIndex(index: body) && (scope.Source is WorldClient client) && (scope.Stamps is { } stamps)) {

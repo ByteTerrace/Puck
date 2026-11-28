@@ -1,6 +1,7 @@
-// The gallery's portal wiring: the library its portals may lead to, and level 3's twelve portals. A module library: it
-// hands its importers lets and emits no document. gallery/portals.puck stands the twelve and declares the library's
-// references and destinations; gallery.puck passes their panels' terminals to the gallery's one `terminalPlay`.
+// The gallery's portal wiring: the library its portals may lead to, and level 3's twelve portals in the frame the
+// building stands in. A module library: it hands its importers lets and functions and emits no document.
+// gallery/portals.puck stands the twelve and declares the library's references and destinations; gallery/building.puck
+// passes their panels' terminals to the gallery's one `terminalPlay`.
 //
 // The gallery wires no destination (the owner's ruling): its library is empty, so every portal is a mirror and the
 // gallery booted alone (gallery-root.puck) starts no other world. An artist wires the gallery here, as the standard's
@@ -34,17 +35,17 @@ let galleryPortalLook = {
   ]
   plaque: "post"
 }
-let galleryPortals = map(galleryPortalBays, place => portalOf(
+function galleryPortalsIn(frame) = map(galleryPortalBays, place => portalOf(
   id: $"portal-{place.side}-{place.bay}",
   x: place.at[0],
   y: place.at[1],
   z: (place.wall + (((place.yaw == 180) ? 1 : -1) * portalStandOff)),
   yaw: place.yaw,
-  site: gallerySite,
+  site: frame,
   parent: "gallery",
   look: galleryPortalLook,
   library: galleryPortalLibrary,
   route: first(galleryPortalWiring, wired => (wired.portal == $"portal-{place.side}-{place.bay}"), wired => wired.route, null)
 ))
 // The gallery's panel set: level 3's portal panels (panel.puck's `panelSet`).
-let galleryPanels = panelSet(portalPanels(galleryPortals))
+function galleryPanelsIn(frame) = panelSet(portalPanels(galleryPortalsIn(frame)))

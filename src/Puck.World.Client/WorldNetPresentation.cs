@@ -98,7 +98,7 @@ public sealed class WorldNetPresentation {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: placement);
 
-        if ((placement.Net is not { } facet) || !facet.TrySpecIn(definition: definition, placement: placement, spec: out var spec)) { return null; }
+        if ((placement.Net is not { } facet) || !facet.TrySpecIn(definition: definition, placement: placement, spec: out var spec, scale: out _)) { return null; }
         if (m_sheets.TryGetValue(key: placement.Id, value: out var held) && (held.Facet == facet) && (held.Spec == spec)) { return held.Displacement; }
 
         var sheet = new Sheet(
