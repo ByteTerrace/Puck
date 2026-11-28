@@ -2,7 +2,7 @@
 // so it lies across world z -40 to 205: a body dropped anywhere over that footprint stands, to its far corner, and one
 // dropped just past its near edge falls. `puck test worlds/debug/large-floor-tests.puck --reproduce`.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "large-floor-tests"
 
 prototypes {

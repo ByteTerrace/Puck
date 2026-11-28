@@ -1,6 +1,7 @@
 // The Moth's suit on and off (suit.puck), each scenario booted in the whole debug world:
 // `puck test worlds/debug/suit-tests.puck --reproduce`. `bodyState(body, 0, suit)` is body 0's own register, which
-// selects her kit (walker in the suit, pilot out of it) and her look (moth, or moth-pilot). Flight mode is the walker's:
+// selects her kit and her look (0 her own body, the pilot; 1 the mech suit she boots in; 2 the scout suit). A suit press
+// steps her mech suit, scout suit, own body in turn, so taking the suit off is two presses. Flight mode is the walker's:
 // pressing flight and holding rise lifts her off the ground in the suit and leaves her standing out of it.
 //
 // The crossing scenarios walk her at the garden painting and back. A headless seat's camera faces -Z, so
@@ -31,9 +32,11 @@ bodies {
   seatSpawns [stage, stage, stage, stage]
 }
 
-test "a press on the ground takes the suit off and refuses flight" {
+test "two presses on the ground take the suit off and refuse flight" {
   when {
     ticks 30
+    seat1: body.press suit 1 0.2 0
+    ticks 15
     seat1: body.press suit 1 0.2 0
     ticks 15
     // Out of the suit flight and rise are not her channels (the pilot form, input-modes.puck).
@@ -80,6 +83,8 @@ test "out of the suit she crosses unsuited, and the garden refuses her flight" {
     ticks 30
     seat1: body.press suit 1 0.2 0
     ticks 15
+    seat1: body.press suit 1 0.2 0
+    ticks 15
     seat1: body.pose spawn:portal-garden 0
     ticks 10
     seat1: body.fly 1 0 0 0 0 0 2
@@ -106,6 +111,8 @@ test "suited up in the garden, she comes home suited and flies" {
     ticks 30
     seat1: body.press suit 1 0.2 0
     ticks 15
+    seat1: body.press suit 1 0.2 0
+    ticks 15
     seat1: body.pose spawn:portal-garden 0
     ticks 10
     seat1: body.fly 1 0 0 0 0 0 2
@@ -130,11 +137,13 @@ test "suited up in the garden, she comes home suited and flies" {
   }
 }
 
-// Each seat toggles its own body: a press on the second seat's suit channel takes off the second body's suit and leaves
+// Each seat steps its own body: two presses on the second seat's suit channel take off the second body's suit and leave
 // the first seat's body in hers.
-test "the second seat's press takes off only its own suit" {
+test "the second seat's presses take off only its own suit" {
   when {
     ticks 30
+    seat2: body.press suit 1 0.2 1
+    ticks 15
     seat2: body.press suit 1 0.2 1
     ticks 15
   }

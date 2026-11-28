@@ -2,7 +2,7 @@
 // follows-leader.puck, whose own rules write them. `puck test worlds/debug/follows-tests.puck --reproduce` shows the
 // adoption, a write entering from another authority at a tick boundary, replays bit for bit.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "follows-tests"
 
 references [

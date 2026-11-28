@@ -293,10 +293,26 @@ public sealed partial class WorldInstanceHost {
         var order = new List<CoalescedPortalGroupKey>();
 
         foreach (var hit in hits) {
+            // A door on its self route steps the traveller back out of itself; a routed door whose destination does not
+            // resolve falls back to that too, so it is never a wall, and so does a door whose destination refused this
+            // traveller, until it stands clear (ScanPortalFace's hold).
+            var routed = (hit.Face.Routes is not null);
+
+            if (hit.Mirrored || string.Equals(a: hit.Portal.Destination, b: WorldFaceRoutes.SelfDestination, comparisonType: StringComparison.Ordinal)) {
+                ApplySelfCrossing(border: $"{hit.Placement.Id}/{hit.Face.Face}", frame: hit.Frame, seat: hit.Seat, source: instance);
+
+                continue;
+            }
+
             if (WorldDefinitionRows.FindDestination(
                 destinations: instance.Server.Definition.Destinations,
                 name: hit.Portal.Destination
             ) is not { } destination) {
+                if (routed) {
+                    ApplySelfCrossing(border: $"{hit.Placement.Id}/{hit.Face.Face}", frame: hit.Frame, seat: hit.Seat, source: instance);
+
+                    continue;
+                }
                 if (instance.Server.Output.HasNarrationSink) {
                     instance.Server.Output.Narrate(
                         channel: "world.portal",

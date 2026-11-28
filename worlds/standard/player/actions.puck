@@ -1,0 +1,470 @@
+// A player's actions: sprint, jump (with air jumps), dash, mantle, climb, jetpack, swim, lock and strafe. A module
+// library: it hands its importers functions and templates and emits no document.
+//
+// Every action is one value of one shape, `noAction` with the parts it uses filled in:
+//
+//   name        what the action is, unique in a kit's list
+//   holds       hold rows it adds to the kit, in the order they outrank one another; the player's kit puts every
+//               action's holds ahead of its own ground and fall rows (player.puck's `playerKit`)
+//   shaping     shaping rows it puts ahead of the kit's own (strafe's, which governs while a lock holds)
+//   speedHeld   the held multiplier on the kit's pace (sprint's), or null
+//   actions     the kit's action programs it authors, keyed by its own channel, so no two actions replace each other
+//   registers   the body registers (state.body) it reads and writes; the player declares each once however many kits
+//               and suits list the action (`playerRegisters`)
+//   restore     what the rows a body rests under refill while it stands (climb's stamina), or null
+//   hook        the register an avatar's rig and rules animate the action by (a timer while it runs, a counter while
+//               it is on), or null: the avatar reads only this, never the action's insides
+//
+// A suit or an avatar's own body lists the actions it grants with their tuning (player.puck's suit contract), so a
+// body's kit is the list read through `playerKit`. The channels the actions key their programs by are the standard's
+// (../inputs.puck): `jump`, `run`, `dash`, `flight`, `climb` and `mantle`; the lock-on context declares `lock`.
+
+import "../kits"
+
+let noAction = {
+  name: ""
+  holds []
+  shaping []
+  speedHeld: null
+  actions {}
+  registers []
+  restore: null
+  hook: null
+}
+
+// A timer and a 0/1 counter register, as every action declares them.
+function timerRegister(name) = { name: name, kind: "Timer", initial: 0 }
+function flagRegister(name, initial = 0) = {
+  name: name
+  kind: "Counter"
+  initial: initial
+  envelope { $type: "range", minimum: 0, maximum: 1 }
+}
+
+// Sprint: the `channel` held multiplies the kit's pace by `multiplier`.
+function sprintAction(multiplier = 2, channel = "run") = noAction with {
+  name: "sprint"
+  speedHeld { channel: channel, multiplier: multiplier }
+}
+
+// Jump: a press on the ground launches at `speed` metres a second, and while `airJumps` more remain, a press in the
+// air launches again. Letting go while still rising keeps `cut` of the rise, so a tap is a hop. Leaving the ground
+// without jumping (walking off a ledge) spends the ground jump. The `jumps` counter holds what is left and refills on
+// landing; every body that jumps shares it, holding `capacity`, so a kit with fewer air jumps reads the same counter
+// against a higher floor. `when` adds predicates every press must also pass (a suit's flight mode turns its jump into
+// thrust). A press on a face is the climb's leap, never a jump.
+function jumpAction(speed, airJumps = 0, cut = 0.45, capacity = 2, when = []) = noAction with {
+  name: "jump"
+  registers [
+    { name: "jumps", kind: "Counter", initial: capacity, resetFact: "Grounded" }
+  ]
+  actions {
+    jump {
+      onPress {
+        gate: all(predicates: concat(
+          [
+            compareState(state: jumps, comparison: Greater, value: (capacity - 1 - airJumps))
+            { $type: "not", predicate: now(fact: HoldingUnwalkable) }
+          ],
+          when
+        ))
+        latchSeconds: 0
+        effects [
+          setVerticalVelocity(velocity: speed)
+          addState(state: jumps, value: -1)
+        ]
+      }
+      onRelease {
+        gate: all(predicates: concat([now(fact: Rising)], when))
+        latchSeconds: 0
+        effects [
+          scaleVerticalVelocity(factor: cut)
+        ]
+      }
+      onFact [
+        {
+          fact: "Airborne"
+          mode: "Edge"
+          gate: compareState(state: jumps, comparison: Equal, value: capacity)
+          effects [
+            addState(state: jumps, value: -1)
+          ]
+        }
+      ]
+    }
+  }
+  hook: "jumps"
+}
+
+// Dash: a timed burst of `speed` metres a second for `duration` along the direction the body is moving (or faces),
+// allowed again after `cooldown`. Its hook, `dashActive`, runs while the burst does.
+function dashAction(speed = 14, duration = 0.2, cooldown = 0.8) = noAction with {
+  name: "dash"
+  registers [timerRegister("dashCooldown"), timerRegister("dashActive")]
+  actions {
+    dash {
+      onPress {
+        gate: timerElapsed(state: "dashCooldown")
+        latchSeconds: 0
+        effects [
+          planarImpulse(bodyDirection: [0, 0, -1], speed: speed, durationSeconds: duration, useMoveDirection: true)
+          startTimer(state: dashCooldown, seconds: cooldown)
+          startTimer(state: dashActive, seconds: duration)
+        ]
+      }
+    }
+  }
+  hook: "dashActive"
+}
+
+// Mantle: on any surface, with no grip needed, a body driven into a ledge pulls itself up over it. In the air it takes
+// any ledge whose top is within `height` of its feet the moment it is driven into the face, so a jump that falls short
+// of a top still lands on it; on the ground it takes one while the `run` channel is held, so walking against a counter
+// is not a climb. The face may stand `reach` ahead, the body arrives `depth` past its top in `seconds`, and it leaves
+// at `carry` of the speed it was commanding, so a run carries on over the edge. Its hook, `mantling`, runs for the
+// pull: the anticipation and the reach are the avatar's pose over it. `when` adds predicates every attempt passes.
+function mantleAction(height = 1.9, depth = 0.45, seconds = 0.3s, reach = 0.5, carry = 1, when = []) = noAction with {
+  name: "mantle"
+  registers [timerRegister("mantling")]
+  actions {
+    mantle {
+      onFact [
+        {
+          fact: "Airborne"
+          mode: "Level"
+          gate: all(predicates: concat([{ $type: "not", predicate: now(fact: HoldingUnwalkable) }], when))
+          effects [
+            mantle(height: height, depth: depth, seconds: seconds, reach: reach, carry: carry)
+            startTimer(state: mantling, seconds: seconds)
+          ]
+        }
+        {
+          fact: "Grounded"
+          mode: "Level"
+          gate: all(predicates: concat([held(channel: "run")], when))
+          effects [
+            mantle(height: height, depth: depth, seconds: seconds, reach: reach, carry: carry)
+            startTimer(state: mantling, seconds: seconds)
+          ]
+        }
+      ]
+    }
+  }
+  hook: "mantling"
+}
+
+// What a row a climber rests under restores: `rate` of stamina a second, while the body stands on ground.
+function staminaRestore(rate = 3) = {
+  state: "stamina"
+  ratePerSecond: rate
+  when: now(fact: Grounded)
+}
+
+// Climb: the body takes a holdable wall by walking or falling into it, climbs it the way the stick points, hangs for
+// free, leaps on it for a chunk of stamina, lets go on the run channel, and pulls itself up over the top. `cone` is
+// the faces that are walls (degrees from gravity-up); `speed` the pace on the face. On the ground it takes a wall only
+// after pushing into it for `driveSeconds`, so brushing one is not a grab; in the air it takes it at once, but not
+// within `airGrabSeconds` of leaving the ground. Stamina is the `stamina` counter, `staminaMax` full: `moveSpend` a
+// second drains while it moves on the face and `restSpend` while it hangs, and a jump on the face costs `jumpCost` and
+// carries it `jumpSpeed` metres a second for `jumpSeconds`. Emptied, the body is `winded`: it lets go, and cannot
+// climb until the wheel has refilled. Letting go starts `climbRest`, `regrabSeconds` long. At the top, where the face
+// ends within `mantleHeight` of its feet, it is carried `mantleDepth` in over the edge in `mantleSeconds` (the climb's
+// own mantle, which `mantling` times as the mantle action's does); where a face ends with nowhere to stand it hangs at
+// its edge. At an outside corner it swings round onto the face past it in `cornerSeconds`. Which surfaces can be
+// climbed is the world's `collision.defaultHold` and a placement's `grip { holdable }`; the mantle action pulls over
+// any ledge, holdable or not.
+function climbAction(speed = 2.2, cone = [60, 120], reach = 0.8, pull = 6, driveAlignment = 0.5, driveSeconds = 0.2, airGrabSeconds = 0.2, staminaMax = 10, moveSpend = 1, restSpend = 0, jumpCost = 2, jumpSpeed = 9, jumpSeconds = 0.2, regrabSeconds = 0.4, mantleHeight = 2.3, mantleDepth = 0.8, mantleSeconds = 0.5, cornerDepth = 0.45, cornerSeconds = 0.4) = noAction with {
+  name: "climb"
+  registers [
+    {
+      name: "stamina"
+      kind: "Counter"
+      initial: staminaMax
+      envelope { $type: "range", minimum: 0, maximum: staminaMax }
+    }
+    flagRegister("winded")
+    timerRegister("climbRest")
+    timerRegister("mantling")
+  ]
+  holds [
+    {
+      name: "climb"
+      bond: Surface
+      hold: Pull
+      cone: cone
+      pull: pull
+      reach: reach
+      speed: speed
+      upLean: 0
+      forward: Surface
+      onDrive: true
+      driveAlignment: driveAlignment
+      driveSeconds: driveSeconds
+      // Standing, already on a face, or in the air for longer than a hop.
+      when: all(predicates: [
+        timerElapsed(state: "climbRest")
+        compareState(state: winded, comparison: Equal, value: 0)
+        any(predicates: [
+          now(fact: Grounded)
+          now(fact: HoldingUnwalkable)
+          { $type: "not", predicate: recently(fact: Grounded, windowSeconds: airGrabSeconds) }
+        ])
+      ])
+      spend {
+        state: "stamina"
+        ratePerSecond: moveSpend
+        restingRatePerSecond: restSpend
+      }
+      mantle {
+        height: mantleHeight
+        depth: mantleDepth
+        seconds: mantleSeconds
+        state: "mantling"
+      }
+      corner {
+        depth: cornerDepth
+        seconds: cornerSeconds
+      }
+    }
+  ]
+  restore: staminaRestore()
+  actions {
+    climb {
+      onFact: concat(
+        [
+          // A jump press on the face is a leap along it: the trigger fires on the edge of "on a face and jump held",
+          // which is the press, and never off a face.
+          {
+            fact: "HoldingUnwalkable"
+            mode: "Edge"
+            gate: all(predicates: [
+              held(channel: "jump")
+              compareState(state: stamina, comparison: GreaterOrEqual, value: jumpCost)
+            ])
+            effects [
+              planarImpulse(
+                bodyDirection: [0, 1, 0],
+                speed: jumpSpeed,
+                durationSeconds: jumpSeconds,
+                useMoveDirection: true
+              )
+              addState(state: stamina, value: -jumpCost)
+            ]
+          }
+          {
+            fact: "HoldingUnwalkable"
+            mode: "Edge"
+            gate: held(channel: "run")
+            effects [
+              startTimer(state: climbRest, seconds: regrabSeconds)
+            ]
+          }
+          {
+            fact: "Grounded"
+            mode: "Level"
+            gate: all(predicates: [
+              compareState(state: winded, comparison: Equal, value: 1)
+              compareState(state: stamina, comparison: GreaterOrEqual, value: staminaMax)
+            ])
+            effects [
+              setState(state: winded, value: 0)
+            ]
+          }
+        ],
+        map(["Grounded", "Airborne"], fact => {
+          fact: fact
+          mode: "Level"
+          gate: all(predicates: [
+            compareState(state: winded, comparison: Equal, value: 0)
+            compareState(state: stamina, comparison: Equal, value: 0)
+          ])
+          effects [
+            setState(state: winded, value: 1)
+          ]
+        })
+      )
+    }
+  }
+  hook: "stamina"
+}
+
+// Jetpack: thrust, hover and boost. The `flight` press switches it on and off from the ground or the air; while it is
+// on, the rise channel lifts the body off the ground and climbs, letting go hovers where it is, the movement channels
+// fly it where it faces at `speed` metres a second, and the kit's held pace (sprint) boosts its travel and climb. Off,
+// the body walks and falls as the kit's own rows say. It is fuel its two holds spend: `flightFuel` holds `capacity`
+// while it is on and drains `spendRate` a second, so the holds are offered only while it is on; an author who wants a
+// jetpack that runs dry raises the rate and refuels by a rule. Its hook, `flightFuel`, is above zero while it is on.
+function jetpackAction(speed = 10, spendRate = 0.001, capacity = 1000) = noAction with {
+  name: "jetpack"
+  registers [
+    {
+      name: "flightFuel"
+      kind: "Counter"
+      initial: 0
+      envelope { $type: "range", minimum: 0, maximum: capacity }
+    }
+    { name: "flightPress", kind: "Counter", initial: 0 }
+  ]
+  holds [
+    // On the ground the rise channel thrusts it up and away at the kit's own pace.
+    groundHold with { name: "groundFlight", thrust: 1, spend { state: "flightFuel", ratePerSecond: spendRate } }
+    // In the air it hovers where it is left and thrusts up and down on the rise channel.
+    {
+      name: "flight"
+      bond: Free
+      hold: Lift
+      forward: Heading
+      lift: 1
+      speed: speed
+      gravity: standardGravity
+      thrust: 1
+      spend { state: "flightFuel", ratePerSecond: spendRate }
+    }
+  ]
+  // A press is counted, then flipped on the next tick whether the body stands or flies: on to `capacity`, or off to 0.
+  actions {
+    flight {
+      onPress {
+        latchSeconds: 0
+        effects [
+          setState(state: flightPress, value: 1)
+        ]
+      }
+      onFact: concat(
+        map(["Grounded", "Airborne"], fact => {
+          fact: fact
+          mode: "Level"
+          gate: all(predicates: [
+            compareState(state: flightPress, comparison: Greater, value: 0)
+            compareState(state: flightFuel, comparison: Equal, value: 0)
+          ])
+          effects [
+            setState(state: flightFuel, value: capacity)
+            setState(state: flightPress, value: 0)
+          ]
+        }),
+        map(["Grounded", "Airborne"], fact => {
+          fact: fact
+          mode: "Level"
+          gate: all(predicates: [
+            compareState(state: flightPress, comparison: Greater, value: 0)
+            compareState(state: flightFuel, comparison: Greater, value: 0)
+          ])
+          effects [
+            setState(state: flightFuel, value: 0)
+            setState(state: flightPress, value: 0)
+          ]
+        })
+      )
+    }
+  }
+  hook: "flightFuel"
+}
+
+// The press that keeps a jetpack's jump from launching while it flies: flight mode's rise is thrust, never a jump.
+let notFlying = compareState(state: flightFuel, comparison: Equal, value: 0)
+
+// Swim: the world's water at the body's cell, taken wherever a medium lattice has water there and never in a world
+// with none, so its row follows every other action's and leads the ground and the fall (../kits.puck's `swimHold`).
+function swimAction(equilibriumOffset = 1.2, settleRate = 2, speed = null) = noAction with {
+  name: "swim"
+  holds [swimHold(equilibriumOffset: equilibriumOffset, settleRate: settleRate, speed: speed)]
+}
+
+// Lock: focusing a target. Its programs are the lock-on context's (../lockon.puck's `lockOn`): the `lock` press, the
+// target query, the cycle, the camera framing and the companion, all world rules over every player, which keep the
+// `lockOn` row the hook names. A form that lists it is one the lock-on context may lock; a form that does not, the
+// context leaves alone.
+function lockAction() = noAction with {
+  name: "lock"
+  hook: "lockOn"
+}
+
+// Strafe: moving round a locked target. The walk program faces a body at the point its `faceAt` counters name
+// (../motion.puck), which the lock keeps on its target, so a sideways push circles it; `shaping` adds rows ahead of the
+// kit's own for a form that wants another feel while it strafes.
+function strafeAction(shaping = []) = noAction with {
+  name: "strafe"
+  shaping: shaping
+  hook: "faceAt"
+}
+
+// The stamina wheel on screen: a gauge low on the view that shows only while the wheel is not full, filled from the
+// `staminaShown` row a rule copies a player's `stamina` into whenever it changes. One row serves the world, so it
+// reads the last player written: a world with several seats keys a row by body and a panel a seat.
+template staminaGauge(staminaMax = 10, x = 0.44, y = 0.86, width = 0.12, height = 0.022) {
+  state {
+    world {
+      row {
+        name: "staminaShown"
+        kind: "Fixed"
+        value: $"{staminaMax}"
+        min: "0"
+        max: $"{staminaMax}"
+      }
+    }
+  }
+
+  rule "stamina-shown" {
+    when bodyState(each, stamina) != staminaShown
+    mode: Level
+    forEach: $players
+    staminaShown = bodyState(each, stamina)
+  }
+
+  hud {
+    panels [
+      {
+        id: "stamina"
+        rect { x: x, y: y, width: width, height: height }
+        layer: Over
+        style: Chip
+        visible { $type: "state", binding: "state.staminaShown", comparison: Less, value: staminaMax }
+        elements [
+          {
+            id: "wheel"
+            kind: Gauge
+            style: Positive
+            rect { x: 0.04, y: 0.2, width: 0.92, height: 0.6 }
+            binding: "state.staminaShown"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+// A wall and ceiling crawl for a body that is not a player (a beetle on a pond's stones): a Pull hold the named kit
+// takes by driving into a face whose normal lies inside `cone` (degrees from gravity-up: 90 a wall, 180 a ceiling),
+// spending its `stamina` counter at `spendRate` a second. `upLean` 0 keeps the body upright, 1 lays it on the face.
+// Expand it in a document of its own that the kit's document imports, so the crawl row composes ahead of the kit's
+// own rows; the importing world declares the `stamina` counter and the `release` channel.
+template crawlHold(kit, name = "crawl", cone = [60, 180], speed = 2, reach = 0.8, upLean = 0, release = "jump", stamina = "stamina", spendRate = 1) {
+  kits [
+    {
+      name: kit
+      motion {
+        holds [
+          {
+            name: name
+            bond: Surface
+            hold: Pull
+            cone: cone
+            pull: 1
+            reach: reach
+            speed: speed
+            upLean: upLean
+            forward: Heading
+            onDrive: true
+            driveAlignment: 0.3
+            release: release
+            spend {
+              state: stamina
+              ratePerSecond: spendRate
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

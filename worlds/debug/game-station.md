@@ -203,8 +203,8 @@ the same sheet live, and `--spent` what it spent):
 | The debug world with its one station | 4,292,342 |
 | The gallery booted alone with twelve stations | 3,201,686 |
 
-The tick admits 4.4 million units (`RuleCapacity.MaxWorkUnitsPerTick`). Every
-station plays one set of rules, so a station past the first adds what every
+The tick admits the rules a quarter of its period on the slowest device the world authors (`WorldRuleTimePricing`;
+`world.budget.rules` prints each device's time). Every station plays one set of rules, so a station past the first adds what every
 line's checks cost for its bindings and nothing for its firings: the sheet
 prices a line at rest plus one change, and one change is one station's. A
 line whose firing does not provably close its own gate (a Level gate that holds

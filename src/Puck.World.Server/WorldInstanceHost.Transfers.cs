@@ -301,6 +301,10 @@ public sealed partial class WorldInstanceHost {
                 reason: destinationReason,
                 transfer: in transfer
             );
+            ReturnRefusedPortalCrossing(
+                members: members,
+                transfer: in transfer
+            );
 
             return;
         }
@@ -644,7 +648,7 @@ public sealed partial class WorldInstanceHost {
                     reason: reserveReason,
                     transfer: in transfer
                 );
-                HoldRefusedPortalCrossing(
+                ReturnRefusedPortalCrossing(
                     members: members,
                     transfer: in transfer
                 );

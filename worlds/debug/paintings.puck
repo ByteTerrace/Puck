@@ -6,8 +6,9 @@
 // Every wall painting is the standard's portal module (../standard/portal.puck) hung on a wall, as level 3's routed
 // portals (gallery/portals.puck) and the lab wing's doors (lab-wing.puck) are the same module standing free: a row of
 // `wallPaintings` names where it hangs, its frame and where it leads, and the module builds its canvas, frame, plaque and
-// face. A painting leads to one world for good, so it stands no panel; its route is an entry of the debug world set's
-// portal library (portal-library.puck), or, for the pair that faces each other, a door into this world itself.
+// face. A painting leads to one world for good, so it stands no panel; its route is an entry of the debug world's
+// destinations (destinations.puck), which this file declares, or, for the pair that faces each other, a door into this
+// world itself.
 //
 // The wing is the south aisle from x 30 to the east wall, in the building's frame (gallery/layout.puck, gallery.md),
 // open to the nave through the arcade. Two fins stand out from the south wall and make it two courts:
@@ -30,7 +31,7 @@
 
 import "../standard/bounds"
 import "../standard/portal"
-import "portal-library"
+import "destinations"
 import "shapes"
 
 // The wing's floor and the slab above it (gallery/layout.puck).
@@ -77,20 +78,20 @@ function selfRoute(counterpart) = {
 // `note` its plaque, the route's own unless the painting says otherwise. The moon painting's door opens only while the
 // moon agrees to it, so moon-door.puck hangs it, on the frame this file builds.
 let wallPaintings = [
-  { name: "garden", x: courtWallDoors[0], z: courtWall, yaw: 180, look: ornate, to: galleryRoute("garden") }
-  { name: "night", x: courtWallDoors[1], z: courtWall, yaw: 180, look: modern, to: galleryRoute("night") }
-  { name: "city", x: courtWallDoors[2], z: courtWall, yaw: 180, look: ornate, to: galleryRoute("city") }
+  { name: "garden", x: courtWallDoors[0], z: courtWall, yaw: 180, look: ornate, to: debugRoute("garden") }
+  { name: "night", x: courtWallDoors[1], z: courtWall, yaw: 180, look: modern, to: debugRoute("night") }
+  { name: "city", x: courtWallDoors[2], z: courtWall, yaw: 180, look: ornate, to: debugRoute("city") }
   {
-    name: "moon", x: courtWallDoors[3], z: courtWall, yaw: 180, look: modern, to: galleryRoute("moon")
+    name: "moon", x: courtWallDoors[3], z: courtWall, yaw: 180, look: modern, to: debugRoute("moon")
     title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on. Knock and wait for the moon to answer; the frame it opens leads back."
   }
-  { name: "galaxy", x: courtWallDoors[4], z: courtWall, yaw: 180, look: brass, to: galleryRoute("galaxy") }
+  { name: "galaxy", x: courtWallDoors[4], z: courtWall, yaw: 180, look: brass, to: debugRoute("galaxy") }
   {
-    name: "sun", x: courtEast, z: 6.6, yaw: 90, look: brass, to: galleryRoute("sun")
+    name: "sun", x: courtEast, z: 6.6, yaw: 90, look: brass, to: debugRoute("sun")
     title: "PERIHELION", note: "A rock the sun passes once a day, the same sun that lights the valley. Step in and watch it come; keep to the rock while it passes, and do not fly to it."
   }
   {
-    name: "globe", x: (courtFins[0] + galleryWall), z: 2.4, yaw: 270, look: ornate, to: galleryRoute("globe")
+    name: "globe", x: (courtFins[0] + galleryWall), z: 2.4, yaw: 270, look: ornate, to: debugRoute("globe")
     title: "THE BOTTLE WORLD", note: "A room whose gravity this gallery owns. Press the lever before it and watch which way the marbles fall; step in and someone out here can turn you over."
   }
   { name: "link-west", x: (courtFins[1] + galleryWall), z: 2.4, yaw: 270, look: brass, to: selfRoute("painting-link-east/glass") }
@@ -140,21 +141,19 @@ let wingPalette = [
   { color: "#1B1F25", roughness: 0.6, specular: 0.15 }
 ]
 
-references [
-  {
-    document: "debug"
-    name: "self"
-  }
-]
+// The showcase worlds the paintings open, and the debug world itself, which the pair across the room leads into.
+references: concat([{ document: "debug", name: "self" }], portalReferences(debugShowcase))
 
-destinations [
-  {
-    durability: persisted
-    name: "self"
-    reference: "self"
-    scope: global
+destinations: concat(
+  [{ durability: persisted, name: "self", reference: "self", scope: global }],
+  portalDestinations(debugShowcase)
+)
+
+state {
+  world {
+    portalState(portals: filter(paintingPortals, portal => (portal.id != "painting-moon")))
   }
-]
+}
 
 prototypes {
   // The wing's three fins, each a wall standing out from the south wall to the slab above.

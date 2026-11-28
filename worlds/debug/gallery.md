@@ -30,6 +30,14 @@ The owner walked the gallery and ruled its shape:
    the south wall and six on the north, one to a bay (`galleryPortalBays`).
 6. **The board game room stays on level 2, with twelve game stations** in place
    of its old tables ([the board game room](#the-board-game-room)).
+7. **Every part of the gallery is a module**: the building shell, the tree, the
+   climbing wall, the lifts, the portals, the game stations, the gaming devices,
+   the shape displays and the play floor's nets. A floor composes the features
+   it enables, so the shell and its theme can be judged alone and each feature
+   judged in place, and an artist can reuse any of them in another building. The
+   aim is a standardized system that pushes the Puck language, finds engine
+   gaps, makes performance follow from composition (a feature left out costs
+   nothing), and leaves artists free to compose.
 
 ## The plan
 
@@ -104,17 +112,16 @@ lab, and walk back into the lab's `arrival` frame to come out of the door.
 [layout.puck](gallery/layout.puck)'s `labWingPlan` holds one row a lab, and
 [the lab book](labs/README.md) lists them. Each door is the standard portal
 module (below, [the portals](#the-portals)) standing free in the labs' teal,
-leading to its lab's entry of the portal library, so a lab that opens joins the
-library level 3's panels list.
+wired by the debug world to its lab ([destinations.puck](destinations.puck));
+a lab that has not opened stands its door unconnected, a mirror.
 
 ## The portals
 
 The owner's rulings: a painting portal is one module an artist places, as the
 game stations and gaming devices are, and the gallery's level 3 holds twelve,
 one against the outer wall of each of six bays on each gallery, facing across
-the nave's void as level 1's deck stations face it. Each stands a control panel
-at its right, in the shape displays' design language, that points it at any
-entry of a library of destinations, and a repoint is seen by everyone
+the nave's void as level 1's deck stations face it. A portal wired to nothing
+is a mirror, and the gallery wires nothing until an artist does
 ([decision](../../docs/decisions/play.md#portals-and-their-panels)).
 
 [gallery/portals.puck](gallery/portals.puck) stands them where
@@ -124,39 +131,42 @@ floor reaches 4 m past the building's south wall from the lift's bay east), the
 north ones against the north wall, each `portalStandOff` in from its wall. A
 portal is the standard's portal module
 ([worlds/standard/portal.puck](../standard/portal.puck)) in a teal frame over
-a brass lip, and its panel the standard's control panel
-([worlds/standard/panel.puck](../standard/panel.puck)). Every portal of the
-building is the same module: the painting wing's canvases hang it on a wall
-([paintings.md](paintings.md)), and the lab wing's doors stand it free.
+a brass lip. Every portal of the building is the same module: the painting
+wing's canvases hang it on a wall ([paintings.md](paintings.md)), and the lab
+wing's doors stand it free.
 
-The library is [portal-library.puck](portal-library.puck)'s
-`galleryPortalLibrary`: the showcase worlds (the garden, the night field, the
-city, the hearth, the moon, the planetoids, Perihelion and the bottle world),
-then every open lab of the lab wing. An entry names the destination it opens,
-the world's document, the face a traveller steps out of there, the colour the
-glass shows past the deepest window inside a window, and the title and note the
-panel shows. [gallery/portals.puck](gallery/portals.puck) declares the
-library's references and destinations once for every portal of the building.
-The twelve start on the library's first twelve entries, south then north, west
-to east.
+Each of the twelve is a mirror: its glass shows the gallery reflected, and
+walking in steps you back out of the same portal, turned about. The gallery
+booted alone ([gallery-root.puck](gallery-root.puck)) starts no other world.
+To wire one, add an entry to [portal-library.puck](portal-library.puck)'s
+`galleryPortalLibrary` (a `portalEntry`: the destination's name, its world
+document, the face a traveller steps out of there, a title and a note) and name
+the entry a portal starts on in `galleryPortalWiring`; the file's header holds
+the worked example. [gallery/portals.puck](gallery/portals.puck) then declares
+the library's references and destinations, and every portal with a library
+stands the standard's control panel
+([worlds/standard/panel.puck](../standard/panel.puck)) at its right.
 
 Walk up to a panel and press the context button (E, or the pad's RB): the
 camera eases to the panel's desk view and the left mouse button taps its glass.
-A tap on a world in its list points the portal there; PREV and NEXT turn the
-list a page. The glass beside it shows the new world at once, and a body that
-walks in arrives there. The same press steps back. The panel's choice is the
-world cell `panelChoice` at the portal's id, which the portal's door reads
-through its routes (the engine's `WorldFaceRoutes`), so
-`world.state.cell.set panelChoice portal-south-5 2` points the first south
-portal at the city from the console, and `world.portals` names each routed
-door's route (`route=2/15`). The panels are terminals too, numbered after the
-display stations in the gallery's one `terminalPlay`; their hidden console
-belongs to the displays alone.
+A tap on a world in its list points the portal there, and MIRROR, the list's
+last row, leaves it unconnected; PREV and NEXT turn the list a page. The glass
+beside it shows the new world at once, and a body that walks in arrives there.
+The same press steps back. The panel's choice is the world cell `panelChoice`
+at the portal's id, which the portal's door reads through its routes (the
+engine's `WorldFaceRoutes`), so `world.state.cell.set panelChoice
+portal-south-5 0` points the first south portal at its first entry from the
+console, and `world.portals` names each door's route (`route=0/1`, and the
+fallback's place, one past the last entry, for a mirror). The panels are
+terminals too, numbered after the display stations in the gallery's one
+`terminalPlay`; their hidden console belongs to the displays alone.
 
 `debug.go portal-south-5` (any portal's id) stands a body before a portal,
-facing it, and `debug.go portal-south-5-panel` at its panel. A portal's glass
-draws at the share of the screen it covers and only while it is seen, and it
-holds a session only while its door is open, one route at a time.
+facing it, and `debug.go portal-south-5-panel` at a wired portal's panel. A
+portal's glass draws at the share of the screen it covers and only while it is
+seen, and it holds a session only while its door is open, one route at a time;
+a mirror's session shares the gallery's own image and draws as one more view of
+the gallery's own frame.
 
 ## The entrance
 
@@ -571,7 +581,7 @@ side of it on levels 2 and 3; a slim pier stands either side of its bay.
 | East walkway | The rest of the ledge's strip along the east wall at level 3, from the south gallery to the north, railed along the void | 1.1 m deep |
 
 **What can be held.** Only the face: its placement alone carries
-`grip { holdable: true }`, so the standard's `climbAbility` takes it and nothing
+`grip { holdable: true }`, so the standard's `climbAction` takes it and nothing
 else of the wall. A climber stops at the face's edges, since the cheeks beside
 them cannot be held, and the climb ends at the coping, where the climb's mantle
 proves the ledge and sets her down on it. The face's plates and every hold are

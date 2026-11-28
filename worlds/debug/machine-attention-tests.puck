@@ -10,7 +10,7 @@
 // tick is derived from where the body stands and what it is engaged on, so two runs suspend and resume it on the same
 // ticks and reach the same state hash.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "machine-attention-tests"
 
 import "../standard/machines"

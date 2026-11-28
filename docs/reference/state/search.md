@@ -449,8 +449,8 @@ Such a job would otherwise stop making progress the first time its scopes ran
 that deep.
 
 In Puck.World, the document compiler derives these prices. A tick's search work
-is a lane of its own, apart from the rules' sheet under
-`RuleCapacity.MaxWorkUnitsPerTick`: each job's allowance is
+is a lane of its own, apart from the rules' sheet and its time budget
+(`WorldRuleTimePricing`): each job's allowance is
 `SearchCapacity.MaxWorkUnitsPerStep` less that job's own worst-case audience
 checks and input-stamp fold (the dependency rows below). Nothing another rule or
 job declares enters it, so adding a rule or a job never refuses an unrelated

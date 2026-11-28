@@ -870,7 +870,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             foreach (var slot in BitWords.Members(mask: tables.ResidentScreens)) {
                 var window = (((residency.ScreenProducerOf(screen: tables.ScreenOfSlot(slot: slot), view: view) is { } producer) && m_imageWindows.TryGetValue(key: producer, value: out var noted)) ? noted : default);
 
-                if ((window.Z > window.X) && (window.W > window.Y)) { windows[slot] = window; }
+                // A window whose left lies past its right is a mirror's, whose image runs the other way across.
+                if ((window.Z != window.X) && (window.W > window.Y)) { windows[slot] = window; }
             }
         }
     }

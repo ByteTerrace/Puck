@@ -58,7 +58,8 @@
             "StartTimer",
             "Designate",
             "Generate",
-            "TimedMove"
+            "TimedMove",
+            "Mantle"
           ],
           "title": "BodyMotionOp"
         }

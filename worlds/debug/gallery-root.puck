@@ -3,7 +3,7 @@
 // module; this root exists for iterating on the building. Boot it with `--world worlds/debug/gallery-root.puck`.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "gallery"
 
 import "day-alone"

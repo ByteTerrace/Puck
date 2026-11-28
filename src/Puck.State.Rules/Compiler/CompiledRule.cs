@@ -351,7 +351,9 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, CompiledGate Gat
                 context: context,
                 rule: this
             )
-        );
+        ) {
+            Doors = RuleWorkBudget.EffectsDoors(context: context, effects: Effects),
+        };
     }
 }
 /// <summary>The orthogonal cost components of one compiled rule.</summary>
@@ -361,6 +363,11 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, CompiledGate Gat
 /// <param name="Setup">What one sweep of the rule costs before its first evaluation, whatever the evaluations
 /// number.</param>
 public readonly record struct RuleCost(RuleWork Check, RuleWork Effects, RuleWork Setup) {
+    /// <summary>Gets the fixed doors (<see cref="RuleWorkBudget.DoorUnits"/> each) one firing's
+    /// <see cref="Effects"/> charges (<see cref="IRuleEffect.Doors"/>).</summary>
+    public long Doors { get; init; }
+    /// <summary>Gets the units of one firing that are not doors: <see cref="Effects"/> less every door's units.</summary>
+    public RuleWork EffectElements => (Effects.IsKnown ? RuleWork.Known(units: Math.Max(val1: 0L, val2: (Effects.Units - BinaryIntegerFunctions.MultiplySaturating(left: Doors, right: RuleWorkBudget.DoorUnits)))) : Effects);
     /// <summary>Gets the sum of the three components.</summary>
     public RuleWork Total => ((Setup + Check) + Effects);
 

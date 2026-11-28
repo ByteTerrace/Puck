@@ -347,7 +347,7 @@ export type WorldDefinition = {
 /**
  * An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns — every one addresses a state row and nothing else; a document project appends its own derived arms (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.
  */
-export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectClaimIdentityRecord | WorldEffectClaimIdentityPair | WorldEffectSetIdentityRecord | WorldEffectReleaseIdentityRecord | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
+export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectMantle | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectClaimIdentityRecord | WorldEffectClaimIdentityPair | WorldEffectSetIdentityRecord | WorldEffectReleaseIdentityRecord | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
 
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -1061,7 +1061,7 @@ export type BodyHoldKind = "None" | "Gravity" | "Pull" | "Lift";
 
 export type BodyMotionCurve = "Linear" | "Smoothstep";
 
-export type BodyMotionOp = "SenseNearestInCone" | "ProduceSteeringIntent" | "FaceSensorTarget" | "ProduceFlockIntent" | "ResolveYawAttitudeAndPlanarFrame" | "IntegrateLocalAttitude" | "ComputePlanarTargetVelocity" | "ComputeLocalTargetVelocity" | "ShapeVelocity" | "SnapYawToPlanarIntent" | "ResolveDriveFrame" | "ResolveHold" | "RunActionTriggers" | "ApplyHold" | "IntegratePlanarAndVerticalVelocity" | "IntegrateScratchVelocity" | "CommitPose" | "SetVerticalVelocity" | "ScaleVerticalVelocity" | "PlanarImpulse" | "SetState" | "AddState" | "StartTimer" | "Designate" | "Generate" | "TimedMove";
+export type BodyMotionOp = "SenseNearestInCone" | "ProduceSteeringIntent" | "FaceSensorTarget" | "ProduceFlockIntent" | "ResolveYawAttitudeAndPlanarFrame" | "IntegrateLocalAttitude" | "ComputePlanarTargetVelocity" | "ComputeLocalTargetVelocity" | "ShapeVelocity" | "SnapYawToPlanarIntent" | "ResolveDriveFrame" | "ResolveHold" | "RunActionTriggers" | "ApplyHold" | "IntegratePlanarAndVerticalVelocity" | "IntegrateScratchVelocity" | "CommitPose" | "SetVerticalVelocity" | "ScaleVerticalVelocity" | "PlanarImpulse" | "SetState" | "AddState" | "StartTimer" | "Designate" | "Generate" | "TimedMove" | "Mantle";
 
 export type BodyMotionProgram = {
   /**
@@ -3490,6 +3490,45 @@ export type PresentMode = "Vsync" | "Mailbox" | "Immediate" | "Adaptive";
 export type Principal = string;
 
 export type QualityTier = "low" | "medium" | "high";
+
+export type RuleCostCalibration = {
+  /**
+   * Picoseconds per setup unit: one key a sweep snapshots, or one distance test an interaction charges before its evaluations.
+   */
+  setup: number;
+  /**
+   * Picoseconds per binding judged, beyond the units its gate prices.
+   */
+  binding: number;
+  /**
+   * Picoseconds per check unit: an operand read, an operation or a comparison of a gate or local.
+   */
+  check: number;
+  /**
+   * Picoseconds per firing, beyond the units its effects price.
+   */
+  firing: number;
+  /**
+   * Picoseconds per door an effect charges (Doors): an arena cell write, an effect arm's dispatch.
+   */
+  door: number;
+  /**
+   * Picoseconds per effect unit that is not a door: a source's operand reads and operations, a transform's element moves, the host's commit work.
+   */
+  effect: number;
+  /**
+   * Picoseconds per unit of the passes a host runs beside the rules (flock affinities, decision perception).
+   */
+  host: number;
+  /**
+   * Picoseconds per arena growth unit (ReservationWork): copying and reindexing a changed reservation, or taking it back.
+   */
+  growth: number;
+  /**
+   * What measured these figures (the device, the build's version and commit, the date), as the bench wrote it; absent for figures an author wrote by hand.
+   */
+  build?: string | null;
+};
 
 export type RuleGroupDeclaration = {
   /**
@@ -7630,6 +7669,10 @@ export type WorldDeviceProfile = {
    * The device's frame bar: the window size its frame time is judged at and the rate it must hold there. A host started with --frame-bar opens its window at this size, and a benchmark run judges its iterations against this rate's period. Absent where the world states no bar for the device.
    */
   frameBar?: WorldFrameBar | null;
+  /**
+   * What the device spends on each quantity the rule work sheet prices, as puck bench rules measured it there. Rule admission converts the sheet to time with each device's figures and holds the slowest device the world authors to the tick's rule budget (WorldRuleTimePricing); a device without figures is priced at the slowest calibrated device's, and says so.
+   */
+  rules?: RuleCostCalibration | null;
 };
 
 export type WorldDisclosureTier = "Frames" | "Presentation" | "Replica";
@@ -8058,6 +8101,33 @@ export type WorldEffectHoldProducer = {
 };
 
 /**
+ * Pulls a kit's own body up over a ledge in front of it, on any surface, with no hold row and no holdable grip: the direction the body is commanded to move must meet a steep face within Reach, and the body's own sweep must prove a place to stand past its top, higher than the kit's step and no higher than Height above the feet. The body travels there over Seconds as an exclusive move (rising beside the face, then in over the edge) and leaves it at Carry of the speed it was commanding, so it runs on the moment it is up. A firing that finds no such ledge is refused whole, so a timer or a spend beside it is not paid. A kit's own action only.
+ */
+export type WorldEffectMantle = {
+  $type?: "mantle";
+  /**
+   * The highest ledge above the body's feet it pulls up over, in body-sized world units. Positive.
+   */
+  height: number;
+  /**
+   * How far past the face the body steps in, in body-sized world units. Positive.
+   */
+  depth: number;
+  /**
+   * How long the pull takes, an exact whole number of engine ticks. Positive.
+   */
+  seconds: number;
+  /**
+   * How far ahead of the body, in body-sized world units, the face may stand. Not negative.
+   */
+  reach?: number;
+  /**
+   * The fraction of the commanded move speed the body keeps when the pull ends, in [0, 1].
+   */
+  carry?: number;
+};
+
+/**
  * Paints one lattice field cell, or the cube of Radius around it.
  */
 export type WorldEffectPaintField = {
@@ -8462,13 +8532,21 @@ export type WorldFaceRoutes = {
    */
   state: string;
   /**
-   * The routes, chosen by their 0-based place in this list. At least one, at most MaxEntries; each names a different destination.
+   * The routes, chosen by their 0-based place in this list. At most MaxEntries; each names a different destination. None leaves the face on its fallback for good: an unconnected door.
    */
   entries: (WorldFaceRoute | null)[];
   /**
    * The cell inside State, or null for its slot cell.
    */
   key?: string | null;
+  /**
+   * The route a cell naming no entry takes, or null for the face itself, a mirror (SelfDestination).
+   */
+  fallback?: WorldFaceRoute | null;
+  /**
+   * Whether a cell naming no entry closes the door instead of taking a fallback route. Refused beside Fallback.
+   */
+  closes?: boolean;
 };
 
 export type WorldFarProduct = {
@@ -15591,6 +15669,10 @@ export type WorldSimulationDefaults = {
    * The least attention the world steps at (WorldAttention). Below it the host that runs the world does not step it: the world lapses, and when attention returns its clocks jump the whole lapsed span in one closed-form move before it steps again, so nothing in it ran while nobody looked and no tick is replayed. Absent is Unobserved: the world steps whoever observes it, and its state never depends on attention. A lapse is authority input, so a world that authors a higher value states that observation may decide what happens in it.
    */
   stepsAt?: WorldAttention;
+  /**
+   * The percent of the tick period the world's rules may take at worst on the slowest device it authors (WorldRuleTimePricing), 1 to 100. Absent is DefaultRulePercent.
+   */
+  rulePercent?: number | null;
 };
 
 export type WorldSkyBlend = "over" | "add" | "multiply" | "screen";

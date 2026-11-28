@@ -17,7 +17,7 @@
 // worlds/debug/labs/board-games-stress.puck --reproduce` plays every station's first turns twice and compares the runs.
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth"
+basis: "../stage"
 documentId: "board-games-stress"
 
 import "../set-controls"

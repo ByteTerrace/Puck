@@ -11,7 +11,7 @@ namespace Puck.State.Rules;
 public static class TransformWork {
     /// <summary>The fixed door every arena effect arm charges once per firing: dispatch, binding resolution, the row
     /// shape checks, and the refusal path.</summary>
-    public const long Call = 512L;
+    public const long Call = RuleWorkBudget.DoorUnits;
     /// <summary>One arena cell door beyond the journal entries it records: the row layout, the admission of the
     /// value, the enum lookup, and the presence read.</summary>
     public const long Door = 4L;

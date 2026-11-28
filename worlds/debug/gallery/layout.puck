@@ -518,7 +518,7 @@ let rentalBodies = range(0, 12)
 let rentalMachines = flatMap(rentalBodies, b => [$"rental-hgb-{b}", $"rental-agb-{b}"])
 
 // The visitor every small door is sized for: the Moth's capsule, 0.35 m round and 2.06 m tall at full size
-// (avatars/moth.puck's kit collider; a change there moves these).
+// (avatars/moth/contract.puck's mech suit capsule; a change there moves these).
 let galleryVisitorRadius = 0.35
 let galleryVisitorHeight = 2.06
 

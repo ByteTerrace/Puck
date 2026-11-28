@@ -1082,7 +1082,7 @@ network side ahead in structure and a generation behind in scale:
   reproducible history, and a crossing is a durable record rather than a
   handoff message.
 - *Deterministic work budgets.* A world's rule work per tick is priced and
-  bounded (`RuleCapacity.MaxWorkUnitsPerTick`) before it runs.
+  bounded in calibrated time (`WorldRuleTimePricing`) before it runs.
 - *A new option that follows from both: tick dilation per world.* A world over its
   allowance steps slower in wall time while its history stays the same, as EVE
   slows a congested system, with no runtime split of the place. It is recorded in

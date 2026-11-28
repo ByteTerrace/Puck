@@ -112,6 +112,14 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         // null deliberately: FindBody keys the one-per-body creation-look registration, and an attached row rides a body
         // WITHOUT owning its look or its part namespace.
         public int? BodyIndex;
+        // A body-rooted registration's form (WorldCreationInstances.Forms): one of the creations its body's look can wear,
+        // drawn by the bake one an owner. FormNamed says the body's look wears it now (m_bodySlots holds it), Rested that
+        // the last pack held it at rest on the root as a form neither named nor drawn, and FormDrawnSeen the drawn flag
+        // the pool last acted on. Null for a row-rooted registration.
+        public SdfMeshForm? Form;
+        public bool FormNamed;
+        public bool Rested;
+        public bool FormDrawnSeen;
 
         private WorldPickTarget? m_pickTarget;
 
@@ -460,15 +468,6 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
     private Registration? FindBody(int bodyIndex) =>
         TryFindBody(bodyIndex, out _, out var live) ? live : null;
-    private static BodyStamp? FindBodyStamp(IReadOnlyList<BodyStamp> bodyStamps, int bodyIndex) {
-        foreach (var stamp in bodyStamps) {
-            if (stamp.BodyIndex == bodyIndex) {
-                return stamp;
-            }
-        }
-
-        return null;
-    }
     private bool TryFindRow(string id, out int poolIndex, out Registration live) {
         if (m_rowSlots.TryGetValue(key: id, value: out poolIndex)) {
             live = m_pool[poolIndex]!;
@@ -951,10 +950,12 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     /// followers against its look's <see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>.</param>
     /// <param name="bodyStamps">The resolved body-rooted stamps (inhabitants + crowd creation-looks) this frame.</param>
     /// <param name="looks">The world's declared looks, whose rigid assets are compiled independently of body membership.</param>
-    public void Reconcile(IReadOnlyDictionary<string, CompiledPlacementFrame> placementFrames, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps, IReadOnlyList<WorldLook>? looks = null) {
+    /// <param name="lookAssignment">The world's look assignment, whose selectors name the looks a body can switch between
+    /// (the forms the pool keeps for a body near a view), or <see langword="null"/> for none.</param>
+    public void Reconcile(IReadOnlyDictionary<string, CompiledPlacementFrame> placementFrames, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps, IReadOnlyList<WorldLook>? looks = null, WorldRowAssignment? lookAssignment = null) {
         Rigid.Reconcile(bodies: bodyStamps, creations: creations, looks: looks, placements: placements);
         bodyStamps = bodyStamps.Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).ToArray();
-        ReconcileSlots(bodyStamps: bodyStamps, creations: creations, dynamics: dynamics, placementFrames: placementFrames, placements: placements);
+        ReconcileSlots(bodyStamps: bodyStamps, creations: creations, dynamics: dynamics, lookAssignment: lookAssignment, looks: (looks ?? []), placementFrames: placementFrames, placements: placements);
         IndexBodyReaders();
         IndexWakes();
         // Any pool index may hold another registration now, so everything kept by index starts again and the next pack
@@ -1034,14 +1035,11 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
     // Zero denotes an empty entry. Live entries store the pool slot plus one.
     private int[] m_bodySlots = [];
-    private void ReconcileSlots(IReadOnlyDictionary<string, CompiledPlacementFrame> placementFrames, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
-        // Diff-by-stable-key, shared by both root kinds a slot can hold (KeyedReconciler.Reconcile): the entry's
-        // current row resolves the fate — gone releases the slot, changed content releases+recreates, otherwise the
-        // entry updates in place (clock preserved, and the refreshed Row/Creation carries any edited offset).
-        BodyStamp? TryFindBodyStamp(Registration entry) => FindBodyStamp(
-            bodyIndex: entry.BodyIndex!.Value,
-            bodyStamps: bodyStamps
-        );
+    private void ReconcileSlots(IReadOnlyDictionary<string, CompiledPlacementFrame> placementFrames, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps, IReadOnlyList<WorldLook> looks, WorldRowAssignment? lookAssignment) {
+        // Diff-by-stable-key (KeyedReconciler.Reconcile): the entry's current row resolves the fate — gone releases the
+        // slot, changed content releases+recreates, otherwise the entry updates in place (clock preserved, and the
+        // refreshed Row/Creation carries any edited offset). A body's registrations are its forms, reconciled apart
+        // (ReconcileBodies), so a look switch never drops the form its body still draws.
         (WorldPlacement Row, WorldPrototype Creation)? TryFindPoolRootedRow(Registration entry) {
             if (
                 (WorldDefinitionRows.FindPlacement(
@@ -1063,48 +1061,15 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
             return (presentRow, presentCreation);
         }
 
-        // Pass 1 — retire: a registration whose backing row/stamp vanished, went static (lost its frames or its attach
+        // Pass 1 — retire: a row-rooted registration whose row vanished, went static (lost its frames or its attach
         // facet), or changed creation content releases its slot here; a same-content edit updates in place.
         for (var index = 0; (index < m_poolCount); index++) {
-            if (m_pool[index] is not { } live) {
+            if ((m_pool[index] is not { } live) || (live.BodyIndex is not null)) {
                 continue;
             }
 
-            var reconciled = ((live.BodyIndex is not null)
-                ? KeyedReconciler.Reconcile(
-                    live: live,
-                    tryFindRow: TryFindBodyStamp,
-                    isRecreateRequired: static (entry, stamp) => !string.Equals(
-                        a: stamp.Creation.Hash,
-                        b: entry.Creation.Hash,
-                        comparisonType: StringComparison.Ordinal
-                    ),
-                    recreate: stamp => {
-                        var fresh = RegisterBody(stamp: stamp);
-
-                        ApplyMotion(
-                            live: fresh,
-                            motion: stamp.Look.Motion,
-                            dynamics: dynamics
-                        );
-
-                        return fresh;
-                    },
-                    update: (entry, stamp) => {
-                        entry.Creation = stamp.Creation;
-                        entry.Scale = stamp.Scale;
-                        LatchLook(
-                            live: entry,
-                            stamp: stamp
-                        );
-                        ApplyMotion(
-                            live: entry,
-                            motion: stamp.Look.Motion,
-                            dynamics: dynamics
-                        );
-                    }
-                )
-                : KeyedReconciler.Reconcile(
+            var reconciled = (
+                KeyedReconciler.Reconcile(
                     live: live,
                     tryFindRow: TryFindPoolRootedRow,
                     isRecreateRequired: static (entry, found) => !string.Equals(
@@ -1135,8 +1100,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
             m_pool[index] = reconciled;
             if (reconciled is null) {
                 m_freeSlots.Push(index);
-                if (live.BodyIndex is int body) { m_bodySlots[body] = 0; }
-                else { m_rowSlots.Remove(live.Row!.Id); }
+                m_rowSlots.Remove(live.Row!.Id);
             }
         }
 
@@ -1168,24 +1132,9 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
             m_rowSlots.Add(placement.Id, slot);
         }
 
-        // Pass 3 — admit new body-rooted stamps into the remaining free slots.
-        foreach (var stamp in bodyStamps) {
-            if (FindBody(bodyIndex: stamp.BodyIndex) is not null) {
-                continue;
-            }
-
-            var fresh = RegisterBody(stamp: stamp);
-
-            var slot = FreeSlot();
-            m_pool[slot] = fresh;
-            ArrayCapacity.EnsureLength(array: ref m_bodySlots, required: (stamp.BodyIndex + 1));
-            m_bodySlots[stamp.BodyIndex] = slot + 1;
-            ApplyMotion(
-                live: fresh,
-                motion: stamp.Look.Motion,
-                dynamics: dynamics
-            );
-        }
+        // Pass 3 — every body's forms: the one its look wears, the ones it may still be drawn in, and, near a view, every
+        // other its look's selectors can choose (ReconcileBodies).
+        ReconcileBodies(bodyStamps: bodyStamps, creations: creations, dynamics: dynamics, lookAssignment: lookAssignment, looks: looks);
 
         RefillRootSlotOffsets();
         var hasVolumes = false;

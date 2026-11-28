@@ -43,6 +43,21 @@ static const float SdfMeshShadowNearTexels = 1.5;
 // occludes in proportion to its excess up to this, so the clearance cone around a caster texel fades out rather than
 // cutting a hard-edged disc, which a jagged silhouette standing a little above its receiver prints as a row of discs.
 static const float SdfMeshShadowSoftTexels = 1.0;
+// The least |n·l| a receiver's plane is extrapolated at (sdfMeshShadow's edgeOn): a face nearer edge-on to the light
+// keeps the slope of one this far toward it.
+static const float SdfMeshShadowEdgeOnFacing = 0.2;
+// The depth, in texels, a filter tap's slope clearance clears at `lateral` texels from the receiver, for a clearance of
+// `clearance` texels per texel (sdfMeshShadowGap, and sdfMeshShadowClass's bound of it). The clearance grows without
+// bound as the receiver's face turns edge-on to the light (1 / |n·l|), and a plane that steep says nothing of the
+// receiver's own surface past its own triangle: unbounded, a grazing receiver (a cheek near the terminator, a helmet rim)
+// would clear a roof metres above it and read lit under it. So it clears at most what the fixed allowance and a plane at the extrapolation's
+// own slope rise across the filter's widest reach. A receiver steeper than that slope can shade itself at the outer taps,
+// where its light is under a fifth of a face's turned to it.
+float sdfMeshShadowCleared(float clearance, float lateral) {
+    float edgeOnSlope = (sqrt(1.0 - (SdfMeshShadowEdgeOnFacing * SdfMeshShadowEdgeOnFacing)) / SdfMeshShadowEdgeOnFacing);
+
+    return min((clearance * lateral), ((SdfMeshShadowSlopeBias + edgeOnSlope) * (SdfMeshShadowMaxTexels + 1.5)));
+}
 #include "Shared/low-discrepancy.hlsli"
 
 // The pixel pattern the occlusion's and the shadows' taps follow: a rotation and a radial offset, each in [0, 1). Each
@@ -206,7 +221,7 @@ float2 sdfMeshShadowGap(uint optical, uint cascade, SdfMeshCascade c, float2 tex
     float caster = sdfMeshShadowDepth(cascade, c, int2(at), exit);
 
     float2 gap = float2(
-        (((receiver + dot(gradient, delta)) - (texelWorld * (near * lateral))) - caster),
+        (((receiver + dot(gradient, delta)) - (texelWorld * sdfMeshShadowCleared(near, lateral))) - caster),
         ((receiver - (texelWorld * max(((lateral - SdfMeshShadowNearTexels) * cone), 0.0))) - caster)
     );
     occlusion = float3(1.0, 1.0, 1.0);
@@ -229,7 +244,7 @@ float2 sdfMeshShadowGap(uint optical, uint cascade, SdfMeshCascade c, float2 tex
     if (any(depths > 0.0)) {
         caster = c.near + asfloat(~entry);
         gap = float2(
-            receiver + dot(gradient, delta) - texelWorld * near * lateral - caster,
+            receiver + dot(gradient, delta) - texelWorld * sdfMeshShadowCleared(near, lateral) - caster,
             receiver - texelWorld * max((lateral - SdfMeshShadowNearTexels) * cone, 0.0) - caster);
         occlusion = (1.0 - exp(-depths));
     }
@@ -350,7 +365,7 @@ uint sdfMeshShadowClass(uint cascade, SdfMeshCascade c, uint side, float2 texel,
     float soft = (SdfMeshShadowSoftTexels * texelWorld);
     // The least any filter tap's caster stands in front of the receiver's plane past its slope clearance, and the least
     // any stands inside the light's cone over the receiver.
-    float blocking = ((((span * block.low) - stand) - (halfSide * leaning)) - ((clearance * texelWorld) * lateral));
+    float blocking = ((((span * block.low) - stand) - (halfSide * leaning)) - (texelWorld * sdfMeshShadowCleared(clearance, lateral)));
     float inCone = ((((span * block.low) - stand) - ((halfSide * span) * (abs(block.plane.y) + abs(block.plane.z))))
         - ((texelWorld * cone) * max((lateral - SdfMeshShadowNearTexels), 0.0)));
 
@@ -463,13 +478,13 @@ float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role, ou
         // at that tap's texel centre rather than the depth at the pixel. A receiver near edge-on to the light keeps its
         // slope at that of a normal a fifth of the way toward the light, or away from it for a side past the terminator.
         float facing = dot(face, c.forward);
-        float edgeOn = ((facing > 0.0) ? max(facing, 0.2) : min(facing, -0.2));
+        float edgeOn = ((facing > 0.0) ? max(facing, SdfMeshShadowEdgeOnFacing) : min(facing, -SdfMeshShadowEdgeOnFacing));
         float3 lightNormal = float3(dot(face, c.right), dot(face, c.up), edgeOn);
         float2 gradient = (float2((-lightNormal.x * c.aspect), lightNormal.y) * (texelWorld / lightNormal.z));
         // The filter's slope clearance, in texels of depth per texel of lateral distance: the fixed allowance, plus the
         // slope the clamp above leaves out of the receiver's plane, so the receiver's own surface, which rises toward
         // the light by its true slope, never stands in front of the clamped plane by more than the clearance: a face
-        // near edge-on to the light does not shadow itself.
+        // near edge-on to the light does not shadow itself. A tap clears no more depth than sdfMeshShadowCleared allows.
         float clearance = (SdfMeshShadowSlopeBias + (length(float2((lightNormal.x * c.aspect), lightNormal.y))
             * max(((1.0 / max(abs(facing), 1.0e-3)) - (1.0 / abs(edgeOn))), 0.0)));
         float searchTexels = SdfMeshShadowMaxTexels;

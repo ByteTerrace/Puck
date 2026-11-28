@@ -5,7 +5,7 @@
 // card's place is depends on the seeded deal, so these claims read only what every deal shares.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "freecell-tests"
 
 import "game-stations"

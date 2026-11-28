@@ -120,7 +120,11 @@ public sealed partial class WorldInstanceHost {
     // same resolver and the owning authority's principal; presentation never opens an observation itself. A face whose
     // door stands closed (WorldPortalClosures) observes nothing: its session closes when the door shuts and opens again
     // when it opens, so a shut door holds no session and its glass shows no picture.
-    private static SortedList<WorldObservationSite, WorldScreenSource.Session> DeclaredSessions(WorldDefinition definition, WorldPortalClosures? closures) {
+    // A routed face's site also names the session its self route observes (`selves`), which the settle opens in place of a
+    // session its destination cannot give it, so a door whose destination is unresolved or refuses shows a mirror.
+    private static SortedList<WorldObservationSite, WorldScreenSource.Session> DeclaredSessions(WorldDefinition definition, WorldPortalClosures? closures) =>
+        DeclaredSessions(closures: closures, definition: definition, selves: null);
+    private static SortedList<WorldObservationSite, WorldScreenSource.Session> DeclaredSessions(WorldDefinition definition, WorldPortalClosures? closures, Dictionary<WorldObservationSite, WorldScreenSource.Session>? selves) {
         var declared = new SortedList<WorldObservationSite, WorldScreenSource.Session>();
 
         foreach (var screen in definition.Screens) {
@@ -135,7 +139,12 @@ public sealed partial class WorldInstanceHost {
                 (row.Source is WorldScreenSource.Session session) &&
                 (closures?.IsClosed(placementId: row.PlacementId, face: row.FaceName) != true)
             ) {
-                declared[new WorldObservationSite.Screen(Index: row.ScreenIndex)] = (RoutedSession(closures: closures, definition: definition, row: in row) ?? session);
+                var site = new WorldObservationSite.Screen(Index: row.ScreenIndex);
+
+                declared[site] = (RoutedSession(closures: closures, definition: definition, row: in row) ?? session);
+                if ((selves is not null) && (RoutedFace(definition: definition, row: in row) is { } routed) && (WorldFaceRouting.Self(face: routed).Source is WorldScreenSource.Session self)) {
+                    selves[site] = self;
+                }
             }
         }
 
@@ -153,14 +162,20 @@ public sealed partial class WorldInstanceHost {
         if (
             (closures is null) ||
             !closures.TryRoute(face: row.FaceName, placementId: row.PlacementId, route: out var route) ||
-            (WorldDefinitionRows.FindPlacement(id: row.PlacementId, placements: definition.Placements) is not { } placement) ||
-            (WorldDefinitionRows.FindPlacementFace(face: row.FaceName, placement: placement) is not { Routes: not null } face)
+            (RoutedFace(definition: definition, row: in row) is not { } face)
         ) {
             return null;
         }
 
         return (WorldFaceRouting.On(face: face, route: route).Source as WorldScreenSource.Session);
     }
+    // The authored face row of a catalog row, when it carries routes.
+    private static WorldPlacementFace? RoutedFace(WorldDefinition definition, in WorldFaceRow row) => (
+        (WorldDefinitionRows.FindPlacement(id: row.PlacementId, placements: definition.Placements) is { } placement) &&
+        (WorldDefinitionRows.FindPlacementFace(face: row.FaceName, placement: placement) is { Routes: not null } face)
+    )
+        ? face
+        : null;
     // A value-only state write publishes a new definition every tick. Observation declarations depend only on
     // these immutable sections, including the effective face catalog (which changes when a bound face changes).
     private static bool SameSessionDeclarations(WorldDefinition before, WorldDefinition after) =>
@@ -301,6 +316,22 @@ public sealed partial class WorldInstanceHost {
             source: source,
             unread: !m_presents
         );
+
+        // A self route observes the world it stands in: no destination resolves and nothing starts. Its mirror shares
+        // the class of every other session onto this authority under the same disclosure (WorldImageClasses), so a
+        // world's mirrors and same-world windows apply one stream between them, and a presentation renders each as a
+        // view of the world's own residency.
+        if (string.Equals(a: source.Destination, b: WorldFaceRoutes.SelfDestination, comparisonType: StringComparison.Ordinal)) {
+            session.InstanceName = owner.Name;
+
+            if (owner.Server.TryObserveAsSession(refusal: out var selfRefusal, sink: session.Mirror, sourceAuthority: owner.Server.AuthorityIdentity) is { } own) {
+                session.Observation = own;
+            } else {
+                session.Refusal = $"its own world refuses a session: {selfRefusal}";
+            }
+
+            return session;
+        }
 
         if (!TryResolveObservedDestination(
             destinationName: source.Destination,
@@ -500,8 +531,11 @@ public sealed partial class WorldInstanceHost {
             var found = false;
             var selected = default(WorldPortalForward);
 
+            // A mirror shows the world it stands in: input pointed through it reaches that world directly, never again
+            // through the glass.
             if (
                 stepped &&
+                !string.Equals(a: session.Source.Destination, b: WorldFaceRoutes.SelfDestination, comparisonType: StringComparison.Ordinal) &&
                 engagement.TryPortalFace(
                 face: out var authored,
                 screenIndex: physical.Index
@@ -583,7 +617,8 @@ public sealed partial class WorldInstanceHost {
         var changed = false;
 
         if ((owned.Reconciled is null) || (closed != owned.Closures) || !SameSessionDeclarations(after: definition, before: owned.Reconciled)) {
-            var declared = DeclaredSessions(closures: closures, definition: definition);
+            var selves = new Dictionary<WorldObservationSite, WorldScreenSource.Session>();
+            var declared = DeclaredSessions(closures: closures, definition: definition, selves: selves);
 
             foreach (var screen in owned.Rows.Keys.ToList()) {
                 if (
@@ -610,6 +645,12 @@ public sealed partial class WorldInstanceHost {
             foreach (var (screen, source) in declared) {
                 if (!owned.Rows.ContainsKey(key: screen)) {
                     if (OpenScreenSession(owner: instance, site: screen, source: source) is { } opened) {
+                        // A routed face whose destination did not resolve or refused it shows its own world instead,
+                        // as its crossing falls back to it: a door is never a wall.
+                        if ((opened.Refusal is not null) && selves.TryGetValue(key: screen, value: out var self) && (OpenScreenSession(owner: instance, site: screen, source: self) is { } mirror)) {
+                            CloseScreenSession(session: opened);
+                            opened = mirror;
+                        }
                         owned.Rows[screen] = opened;
                         changed = true;
                     } else {

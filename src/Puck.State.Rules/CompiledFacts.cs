@@ -244,6 +244,13 @@ public interface IRuleEffect : ICompiledFact, IEffectNeeds {
     /// <param name="context">The context the effect was priced against.</param>
     /// <returns>The work units.</returns>
     RuleWork Cost(IRuleCostContext context);
+    /// <summary>Returns how many fixed doors (<see cref="RuleWorkBudget.DoorUnits"/> each) one firing's
+    /// <see cref="Cost"/> charges: an arena cell write, an effect arm's dispatch. A calibration prices a door at its own
+    /// measured figure and the rest of the units at the element figure; an effect that counts none of its doors has
+    /// every unit priced as an element.</summary>
+    /// <param name="context">The context the effect was priced against.</param>
+    /// <returns>The doors, never more than <see cref="Cost"/> holds.</returns>
+    long Doors(IRuleCostContext context) => 0L;
     /// <summary>Fires an arm the evaluator does not apply itself. The evaluator owns the mutation door for the
     /// library's own cases and never calls this for one; what reaches here is a document project's registered
     /// effect, which bridges to its own facet-typed firing, or a library case whose kernel lives outside this
@@ -290,6 +297,8 @@ public abstract class RuleEffect : IRuleEffect {
     public virtual IReadOnlyList<IRuleEffect[]> Arms => [];
     /// <inheritdoc/>
     public string Describe { get; }
+    /// <inheritdoc/>
+    public virtual long Doors(IRuleCostContext context) => 0L;
     /// <summary>Gets what firing needs beyond reading and writing the arena. An arena write is rewound by the
     /// firing's own journal scope, so the library's own effects declare nothing.</summary>
     public virtual EffectNeeds Needs => EffectNeeds.None;

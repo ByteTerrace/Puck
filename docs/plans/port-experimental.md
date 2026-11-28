@@ -27,12 +27,12 @@ than one sitting at the windowed World). Paths without a prefix are under
 tests` means `experimental/tests/Puck.World.Games.Tests/`.
 
 Two facts bind every lane. The debug document's rule sheet already takes most of
-the work-unit ceiling, `RuleCapacity.MaxWorkUnitsPerTick` (`world.budget` reads
+the tick's rule budget, `WorldRuleTimePricing` (`world.budget` reads
 both; [card tables](open-items.md#card-tables-in-the-board-game-room)),
 so a lane that adds a whole game lands it as a destination document behind a
 painting, as the garden and the night field do, unless the game is priced to fit.
 And the debug world runs one local seat (`bodies { localSeats: 1 }`,
-`worlds/debug/avatars/moth.puck:197`), so a lane that needs a second seat waits
+the stage's `bodies` in `worlds/debug/stage.puck`), so a lane that needs a second seat waits
 for lane 5.
 
 ## What the debug world already has in another form
@@ -130,7 +130,7 @@ debug world itself still boots one seat and has no `embeds` row.
 
 | Feature | Source | Support | Place and why | Size |
 |---|---|---|---|---|
-| Two local seats and a `split` layout | `puck.world.json` `bodies.localSeats: 2`, `views` layout `split`; canary `split-seats`; `worlds/debug/suit-tests.puck:29` already runs two | wire; cost in the entity table and the per-seat rules (`worlds/debug/avatars/moth.puck:4085`) | `debug.puck`'s capacity; the prerequisite for the rest of this lane and for poker and Hearts in lane 12 | medium |
+| Two local seats and a `split` layout | `puck.world.json` `bodies.localSeats: 2`, `views` layout `split`; canary `split-seats`; `worlds/debug/suit-tests.puck:29` already runs two | wire; cost in the entity table and the per-seat rules (the Moth avatar's per-body rules, `worlds/debug/avatars/moth/moth.puck`) | `debug.puck`'s capacity; the prerequisite for the rest of this lane and for poker and Hearts in lane 12 | medium |
 | Lineup: hidden busts, yes-or-no questions, a computer that asks the best splitting question | `experimental/worlds/parlor/lineup.puck`, `parlor.basis.puck`; canary `lineup`; games tests `LineupLawTests`, `LineupDealLawTests` | wire (seat-scoped `visibility`, a `deal` facet) | A board game room table | medium |
 | Hidden ranks: concealed armies, per-side knowledge boards, a reveal by widening the readers | `games/hiddenranks.puck`; `experimental/tests/Puck.World.Fixtures/minimal-hiddenranks-host.puck` | wire (`visibility`, `readersFrom`, `knowledge` boards, `removeStateCell`) | A board game room table | medium |
 | Word spy: a key card only the spymasters read, an aim computed in a vector space | `games/wordspy.puck`, `games/wordspy.embeddings.json` | wire (`Puck.Embeddings`, `embeds(...)`, `puck embed`; the fixture generator has no semantics, so clues are reproducible rather than apt) | The only embeddings consumer; four roles, so addon or computer seats | large |
@@ -158,7 +158,7 @@ left the well and the snake field undrawn and read through the console.
 
 | Feature | Source | Support | Place and why | Size |
 |---|---|---|---|---|
-| Tetromino as rules: a `piece` workflow, a seven-piece bag draw site, `fullRow` pattern clears, lock delay by `schedule`, saturating score, wall kicks | `games/tetromino.puck`; games tests `TetrominoTickLawTests`; canary `tetromino-clear` | wire | An arcade room; priced at about 109,000 work units a tick, against `RuleCapacity.MaxWorkUnitsPerTick` | medium |
+| Tetromino as rules: a `piece` workflow, a seven-piece bag draw site, `fullRow` pattern clears, lock delay by `schedule`, saturating score, wall kicks | `games/tetromino.puck`; games tests `TetrominoTickLawTests`; canary `tetromino-clear` | wire | An arcade room; priced at about 109,000 work units a tick, against the tick's rule budget | medium |
 | Snake: a `ring`-domain body, a tick-indexed beat from two `cycle` cells, an `evicts` meal table | `games/snake.puck`, `experimental/tests/Puck.World.Fixtures/minimal-snake-host.puck` | wire | The same room | small |
 | Rulepush: sentences of word tiles rewrite what objects do; one `stabilize` turn, a 32-turn undo ring, push chains | `experimental/worlds/rulepush/` (`rules.puck`, `room.puck`, `level.puck`); canaries `rulepush-undo`, `rulepush-board`, `push-ray`; games tests `RulePushTurnLawTests` | wire; needs lane 1's pass for the board | The same room; the `stabilize` and undo proof | large |
 

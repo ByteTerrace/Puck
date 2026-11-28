@@ -1,0 +1,126 @@
+// The Moth's avatar contract: what the standard player module (../../../standard/player/player.puck) reads of her. A
+// module library: it hands its importers lets and emits no document. Her own body, the 1.68 m pilot of body.puck, and
+// the two suits she owns, sculpted in suits.puck, each named by the kit and look rows it wears, its capsule, its pace and
+// the actions it grants. The register `suit` holds what she wears: 0 her body, 1 the mech suit she is born in, 2 the
+// scout suit.
+//
+// What each form grants:
+//
+//   her body     sprint, a 3.7 m/s jump (a fit woman's standing jump, 0.56 m), the mantle to 1.5 m, the climb, a swim,
+//                lock and strafe
+//   mech suit    sprint, a 5.1 m/s jump and an air jump the heel jets push, the back pods' dash and jetpack (whose
+//                flight turns the jump into thrust), the mantle to 1.9 m, the climb, a swim, lock and strafe
+//   scout suit   sprint at a quicker pace, a 6 m/s jump with no air jump, a shorter dash, the mantle to 2.2 m, a
+//                faster climb, a swim, lock and strafe: no jetpack, so its pods and heel jets stay dark
+
+import "../../../standard/player/player"
+import "../../../standard/player/actions"
+
+// Where her worn screen (../../../standard/worn-screen.puck) mounts on each suit, in the left side's frame: on each
+// forearm, the middle of its gauntlet's outer face (suits.puck's `bracer-<side>`), raised about her shoulder and elbow;
+// its glass is palette slots 29 (left) and 30 (right). The screen's shape, cover, glass, raise and camera focus are the
+// worn-screen module's.
+let mothWristMount = {
+  part: "forearm"
+  at [-0.513, 0.995, 0]
+  shoulder [-0.295, 1.4515, 0]
+  elbow [-0.336, 1.2201, -0.004]
+}
+let mothWornScreen = wornScreenMount(mount: mothWristMount, screens: { left: 29, right: 30 })
+
+// Her own body's worn screen: on the outer face of each bare forearm's middle (body.puck's `forearm-<side>`), raised
+// about her shoulder and elbow, its glass palette slots 27 (left) and 28 (right). Her forearm is a third the gauntlet's
+// width, so the screen is a slim one: glass 80 mm across and 64 mm along her arm in a bezel a little larger, under a
+// cover over both.
+let mothBodyWristMount = {
+  part: "forearm"
+  at [-0.259, 0.952, 0.022]
+  shoulder [-0.172, 1.355, 0.015]
+  elbow [-0.212, 1.068, 0.032]
+}
+let mothBodyScreenShape = {
+  bezel { half [0.005, 0.04, 0.045], rounding: 0.003 }
+  screen { half [0.04, 0.032], depth: 0.003, out: 0.003 }
+  cover { half [0.003, 0.043, 0.048], rounding: 0.002, out: 0.0095, open: -1.9 }
+}
+let mothBodyWornScreen = wornScreenMount(mount: mothBodyWristMount, screens: { left: 27, right: 28 })
+
+// How long every form's mantle takes, seconds: the move's own length, and the span her mantle pose (moth.puck's
+// `mantlePose`) plays its catch, pull, tuck and step out over.
+let mothMantleSeconds = 0.3
+
+// The suits' chase camera offsets: a waist pivot, close targets at her head (fade) and just below it (cutaway, which
+// keeps her solid), and a first-person eye in her face.
+let mothSuitCamera = {
+  pivot [0, 1, 0]
+  fadeClose [0, 1.74, 0]
+  cutawayClose [0, 1.55, 0]
+  eye [0, 1.75, 0.22]
+}
+
+let mothBody = playerForm(
+  name: "body",
+  kit: "pilot",
+  look: "moth-pilot",
+  height: 1.68,
+  radius: 0.25,
+  value: 0,
+  speed: 5,
+  wornScreen: mothBodyWornScreen,
+  actions: [
+    sprintAction()
+    jumpAction(speed: 3.7)
+    mantleAction(height: 1.5, depth: 0.4, seconds: mothMantleSeconds)
+    climbAction()
+    swimAction(equilibriumOffset: 1, settleRate: 2.5, speed: 2.5)
+    lockAction()
+    strafeAction()
+  ]
+)
+
+let mothMechSuit = playerForm(
+  name: "mech",
+  kit: "walker",
+  look: "moth",
+  height: 2.06,
+  radius: 0.35,
+  value: 1,
+  speed: 5,
+  camera: mothSuitCamera,
+  wornScreen: mothWornScreen,
+  actions: [
+    sprintAction()
+    jumpAction(speed: 5.1, airJumps: 1, when: [notFlying])
+    dashAction(speed: 15, duration: 0.2, cooldown: 0.8)
+    mantleAction(height: 1.9, seconds: mothMantleSeconds, when: [notFlying])
+    jetpackAction(speed: 10)
+    climbAction()
+    swimAction(equilibriumOffset: 1.25, settleRate: 2.5, speed: 2.5)
+    lockAction()
+    strafeAction()
+  ]
+)
+
+let mothScoutSuit = playerForm(
+  name: "scout",
+  kit: "scout",
+  look: "moth-scout",
+  height: 2.06,
+  radius: 0.35,
+  value: 2,
+  speed: 5.5,
+  camera: mothSuitCamera,
+  wornScreen: mothWornScreen,
+  actions: [
+    sprintAction()
+    jumpAction(speed: 6)
+    dashAction(speed: 12, duration: 0.15, cooldown: 0.6)
+    mantleAction(height: 2.2, seconds: mothMantleSeconds)
+    climbAction(speed: 2.8)
+    swimAction(equilibriumOffset: 1.25, settleRate: 2.5, speed: 3)
+    lockAction()
+    strafeAction()
+  ]
+)
+
+let mothAvatar = playerAvatar(name: "moth", body: mothBody, suits: [mothMechSuit, mothScoutSuit], worn: 1)

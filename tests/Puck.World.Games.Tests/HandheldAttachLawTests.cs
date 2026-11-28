@@ -26,8 +26,8 @@ namespace Puck.World.Games.Tests;
 /// alias).
 /// An attach-only placement's <c>upsertPlacement</c> costs <see cref="Puck.World.WorldPlacementEffectCost.DocumentCost"/>
 /// (<see cref="Puck.World.WorldPlacementEffectCost.Of"/> derives from what the row's own facets would rebuild, never
-/// a flat number), so shipping the pair fits comfortably under
-/// <see cref="Puck.State.RuleCapacity.MaxWorkUnitsPerTick"/>.
+/// a flat number), so shipping the pair fits comfortably under the tick's rule budget
+/// (<see cref="Puck.World.WorldRuleTimePricing"/>).
 /// </summary>
 public sealed class HandheldAttachLawTests {
     private const string HandheldRow = "handheldHeld";

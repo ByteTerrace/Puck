@@ -6,7 +6,7 @@
 // Inhabited placements fill the table from the top down in document order once their counts move, so `upper` holds
 // 639..270, `middle` 269..240 and `lower` 239..21; `middle` retires its lowest bodies first and regrows from its top.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "snapshot-partitions-tests"
 import "stand-in"
 

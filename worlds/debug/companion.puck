@@ -4,6 +4,8 @@
 // population slot.
 import "../standard/inputs"
 import "../standard/companion"
+import "../standard/player/player"
+import "avatars/moth/contract"
 import "../standard/lockon"
 import "../standard/marks"
 import "shapes"
@@ -40,8 +42,9 @@ companionDesign(
   population: (galleryPopulation + 2 + boardRoomBodies + cardBodies),
   interests: companionAttractions
 )
-// Her companion wears whichever kind of her roster is active (avatars/moth.puck's companionRoster).
-companion(owner: 0, slot: companionBody, position: [-1.2, 1.52, 1], roster: true)
+// The player module owns the companion slot: it arrives at the Moth's companion offset (avatars/moth/contract.puck)
+// and wears whichever kind of her roster is active (avatars/moth/moth.puck's companionRoster).
+playerCompanion(avatar: mothAvatar, owner: 0, slot: companionBody, roster: true)
 // The garden's obelisk teaches the Moth's companion sight (garden.puck); here it reaches farther once she carries it.
 companionSight(owner: 0)
 // It flies to whatever she locks onto, and to her group's pings (targeting.puck).

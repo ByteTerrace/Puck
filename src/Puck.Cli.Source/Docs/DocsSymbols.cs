@@ -111,7 +111,7 @@ internal sealed class DocsSymbols {
 
     /// <summary>Reduces a code span to the C# name it cites, or <see langword="null"/> when the span is not shaped
     /// like one: a dotted name whose every segment opens with a capital, optionally followed by an argument list, with
-    /// any type arguments dropped (<c>RuleCapacity.MaxWorkUnitsPerTick</c>, <c>DocsCommand.Create()</c>,
+    /// any type arguments dropped (<c>RuleCapacity.MaxEffectsPerRule</c>, <c>DocsCommand.Create()</c>,
     /// <c>List&lt;T&gt;.Count</c>). An argument list before the last segment makes the span an expression
     /// (<c>Matches(...).Count</c>), not a name. A segment with no lowercase letter longer than three characters is a
     /// native or foreign constant (<c>D3D12_RESOURCE_STATES</c>), and a one-letter head is a type parameter

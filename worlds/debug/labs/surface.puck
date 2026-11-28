@@ -16,7 +16,7 @@
 // door `lab-surface`, and the `arrival` frame behind the seat leads back there.
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth"
+basis: "../stage"
 documentId: "lab-surface"
 
 import "../set-controls"

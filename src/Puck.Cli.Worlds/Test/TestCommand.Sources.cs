@@ -81,6 +81,7 @@ public static partial class TestCommand {
                 if (!TryStageTestWorld(
                     foreign: [],
                     generatedDirectory: directory,
+                    judged: out _,
                     name: name,
                     path: out var staged,
                     reason: out var composeReason,
@@ -129,6 +130,7 @@ public static partial class TestCommand {
             if (!TryStageTestWorld(
                 foreign: world.Foreign,
                 generatedDirectory: directory,
+                judged: out var judged,
                 name: world.Name,
                 path: out var path,
                 reason: out var composeReason,
@@ -150,7 +152,7 @@ public static partial class TestCommand {
             }
 
             generated.Add(item: new TestWorld(
-                Foreign: world.Foreign,
+                Foreign: judged,
                 Name: world.Name,
                 Path: path
             ));
@@ -273,9 +275,14 @@ public static partial class TestCommand {
     // the crossing returns to the instance the leg booted rather than starting a second one.
     //
     // `foreign` are the test's expectations about sibling documents: each is lowered into the document of its name as
-    // that document is reached, so the verdict is judged in the world a crossing starts.
-    private static bool TryStageTestWorld(string name, JsonObject world, IReadOnlyList<(string Name, byte[] Json)> siblings, IReadOnlyList<WorldTestForeign> foreign, string sourceDirectory, string generatedDirectory, out string path, out string? reason) {
+    // that document is reached, so the verdict is judged in the world a crossing starts. `judged` names each by the
+    // documentId of the document it was lowered into, which is the world an export of that instance reports, so a
+    // document whose id differs from its file's name (labs/shapes.puck is `lab-shapes`) is found when it ran.
+    private static bool TryStageTestWorld(string name, JsonObject world, IReadOnlyList<(string Name, byte[] Json)> siblings, IReadOnlyList<WorldTestForeign> foreign, string sourceDirectory, string generatedDirectory, out string path, out IReadOnlyList<WorldTestForeign> judged, out string? reason) {
         var catalog = CliWorldVocabulary.EnsureInstalled();
+        var named = foreign.ToArray();
+
+        judged = named;
         var directory = Path.Combine(
             path1: generatedDirectory,
             path2: name
@@ -341,6 +348,13 @@ public static partial class TestCommand {
                 foreach (var expectation in matched) {
                     if (!expectation.TryApply(inheritedState: inheritedState, reason: out reason, world: found)) {
                         return false;
+                    }
+                }
+                if ((found["documentId"]?.GetValue<string>() is { } foundId) && !string.Equals(a: foundId, b: document, comparisonType: StringComparison.Ordinal)) {
+                    for (var index = 0; (index < named.Length); index++) {
+                        if (string.Equals(a: named[index].Document, b: document, comparisonType: StringComparison.Ordinal)) {
+                            named[index] = (named[index] with { Document = foundId });
+                        }
                     }
                 }
             }

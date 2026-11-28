@@ -177,7 +177,7 @@ be baked on demand and cached where a triangle asset cannot.
   so independently chosen levels meet edge for edge". A chunk is a draw with
   its own record, box, levels and history.
 - **The creation triangle floor.** Claude's CPU bake of the Moth
-  (`Puck.Cli.exe mesh audit --world worlds/debug/avatars/moth.puck --prototype
+  (`Puck.Cli.exe mesh audit --world worlds/debug/avatars/moth/suits.puck --prototype
   moth --cpu [--level 1|2]`): the bake's done line reports
   `triangles=1145385 ... level1=393043 level2=238235` over 180 groups, and 38
   groups have no coarser level at all, holding 62,861 triangles **[record]**.
@@ -185,7 +185,7 @@ be baked on demand and cached where a triangle asset cannot.
   "1365 folds, 1701 flipped, 356 slivers, 2061 open edges" are locked places.
   Beyond the distance where two contour cells project to a pixel the Moth draws
   at least that level-2 total, 238,235 triangles, in 174 draws whatever the
-  distance (`puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu --level 2`;
+  distance (`puck mesh audit --world worlds/debug/avatars/moth/suits.puck --prototype moth --cpu --level 2`;
   the evaluator's later correction lowered that floor to about half). The far
   cascade's [high] item
   records the same floor on static content: a chain of two levels "stops at two

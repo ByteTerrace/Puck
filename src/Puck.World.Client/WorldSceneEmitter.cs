@@ -304,7 +304,11 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         Span<int> revision = stackalloc int[WorldClient.RevisionComponentCount];
 
         m_client.WriteRevision(destination: revision);
-        var standing = (m_prepared && revision.SequenceEqual(other: m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove());
+        // Read every frame: it also wakes the forms whose drawn flag the bake moved.
+        var formsMoved = m_animator.TryTakeFormsMove();
+
+        if (formsMoved) { m_formsRevision++; }
+        var standing = (m_prepared && !formsMoved && revision.SequenceEqual(other: m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove());
         var holdingMoved = (m_preparedHolding != m_client.HoldingRevision);
 
         var overlaysMoved = (m_preparedOverlays != m_overlaysRevision);
@@ -324,6 +328,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
     // The holding revision the latest reconcile read (WorldClient.HoldingRevision).
     private int m_preparedHolding;
+    // One more each time the stamp pool asked for its bodies' forms to be reconciled (WorldCreationInstances.TryTakeFormsMove).
+    private int m_formsRevision;
     // The audience overlays the static copies place (SetAudienceOverlays), their revision, and the revision the latest
     // reconcile read.
     private WorldAudienceOverlay[] m_overlays = [];
@@ -371,7 +377,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             placements: definition.Placements,
             creations: definition.Creations,
             dynamics: definition.Dynamics,
-            bodyStamps: m_presentedStamps
+            bodyStamps: m_presentedStamps,
+            lookAssignment: definition.LookAssignment
         );
         m_avatars.Prepare();
     }
@@ -380,6 +387,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     public IReadOnlyList<SdfMeshInstance> MeshInstances => m_animator.Rigid.Copies;
     /// <inheritdoc/>
     public IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges => m_animator.Rigid.TemplateRanges;
+    /// <inheritdoc/>
+    public IReadOnlyList<SdfMeshFormRange> MeshForms => m_animator.MeshForms;
     /// <inheritdoc/>
     public IReadOnlyList<int> MeshInstanceChanges => m_animator.Rigid.ChangedCopies;
     /// <inheritdoc/>
@@ -451,7 +460,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// presentation decisions (<see cref="WorldContinuum.PresentationRevision"/>), the operator's shape isolation
     /// (<see cref="WorldShapeIsolation.Revision"/>), and a counter that moves when the set of screens a body carries
     /// moves (<see cref="WorldCreationInstances.TryCarriedScreen"/>), then the two counters through which a response composes
-    /// again (<see cref="WorldRigidAssets.HoldingComposeRevision"/>, <see cref="WorldRigidAssets.StaticTemplateRevision"/>).
+    /// again (<see cref="WorldRigidAssets.HoldingComposeRevision"/>, <see cref="WorldRigidAssets.StaticTemplateRevision"/>),
+    /// and a counter that moves when the stamp pool's bodies' forms must change (<see cref="WorldCreationInstances.TryTakeFormsMove"/>).
     /// <para>
     /// Separate components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
@@ -506,6 +516,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         destination[(WorldClient.RevisionComponentCount + 5)] = m_carriedRevision;
         destination[(WorldClient.RevisionComponentCount + 6)] = m_animator.Rigid.HoldingComposeRevision;
         destination[(WorldClient.RevisionComponentCount + 7)] = m_animator.Rigid.StaticTemplateRevision;
+        destination[(WorldClient.RevisionComponentCount + 8)] = m_formsRevision;
     }
 
     private void RefreshCarryableScreens() {
@@ -635,7 +646,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 8);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 9);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <summary>Gets a monotonic revision bumped whenever <see cref="StaticVolumes"/> is rebuilt.</summary>

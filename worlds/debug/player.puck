@@ -1,0 +1,18 @@
+// The debug world set's player: the standard player module (../standard/player/player.puck) wearing the Moth
+// (avatars/moth/), born in her mech suit. Every world of the set seats its players through this document, most of them
+// by building on the stage (stage.puck), which imports it. It authors nothing of its own: the kits, the suit switch, the
+// chase camera and the play layout are the module's, read from her contract; her looks and rig are her avatar
+// document's. The set's keys for the suit switch are suit.puck's.
+schema: "puck.world.definition.v1"
+import "../standard/inputs"
+import "../standard/player/player"
+import "../standard/player/actions"
+import "../standard/worn-screen"
+import "avatars/moth/contract"
+import "avatars/moth/moth"
+
+// While her menu is open the camera focuses in on her worn screen, fully when she stands and a little as she moves.
+player(avatar: mothAvatar, rig: "moth-camera", focus: wornScreenFocus())
+
+// The climb's stamina wheel, low on the view while it is not full.
+staminaGauge()

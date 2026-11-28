@@ -5,7 +5,7 @@
 // top. Card `k` is suit `k / 6` (spades, hearts, clubs, diamonds) and rank `k % 6 + 1`.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "shedding-tests"
 import "shedding"
 import "../standard/cards"

@@ -64,6 +64,20 @@ bool sdfMeshDrawUnmoved(uint record) {
     }
     return true;
 }
+// Whether the receiver a history surface names at a pixel (its stored identity) stands where the preceding frame saw it:
+// no surface, or a live mesh draw that has not moved since (sdfMeshDrawUnmoved). A still footprint whose receiver changed
+// keeps its stationary window only while this holds: a receiver that moved away (a body that stood over the pixel long
+// enough to fill its window, then left) uncovers what the window never sampled, and the window would go on showing the
+// body there as a fading copy. A draw past the staged count or absent this frame answers moved.
+bool sdfHistoryReceiverStill(uint identity) {
+    if (identity == 0u) return true;
+    if (sdfVisibilityKind(identity) != SDF_VISIBILITY_KIND_MESH) return false;
+    uint draw = sdfVisibilitySource(identity);
+    if (draw >= passGroup.meshDraws) return false;
+    uint record = sdfMeshRecord(draw);
+    if ((sdfMeshRecordWord(record + SDF_MESH_SELECTION_WORD + 3u) & SDF_MESH_ABSENT_FLAG) != 0u) return false;
+    return sdfMeshDrawUnmoved(record);
+}
 // Where a draw's index `k` stood in the preceding consumed frame: displaced by a height field's previous heights, skinned
 // under its members' previous transforms (sdfMeshSkinPose), then under the draw's previous pose and its carry, as its
 // current position is (sdfMeshWorldVertex).

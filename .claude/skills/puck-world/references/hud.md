@@ -15,7 +15,7 @@ that restriction, so a panel, prompt or menu is added where it serves (the
 [UI decisions](../../../../docs/decisions/ui.md) and the host menu in them).
 A mouse chord stays off the bar and the bar's `modifiers` row stays off. Every
 control the bar shows has a sensible keyboard equivalent bound beside it, for
-example WASD beside the d-pad (`worlds/debug/avatars/moth.puck`, `moth.md`).
+example WASD beside the d-pad (`worlds/debug/avatars/moth/suits.puck`, `moth.md`).
 Addon panels sit behind a separate toggle, off by default, and agents show
 them when they need them (the owner's ruling). The `addonHud` state row
 (`worlds/debug/addon-hud.puck`) gates every addon panel: each panel's `visible`

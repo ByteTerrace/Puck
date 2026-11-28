@@ -206,9 +206,11 @@ template panelStand() {
 // The creations every panel of `panels` needs: the shared stand, and a glass for each page of each panel's list, its paints
 // placed at the panel in the world.
 template panelPrototypes(panels) {
-  prototype "panel-stand" {
-    document {
-      panelStand()
+  if length(panels) > 0 {
+    prototype "panel-stand" {
+      document {
+        panelStand()
+      }
     }
   }
   for panel in panels {
@@ -288,8 +290,14 @@ template panelRunCells(name, values) {
   }
 }
 
-// A set's state, for a world's `state.world`: the cells above, seeded so each glass boots on its panel's choice.
+// A set's state, for a world's `state.world`: the cells above, seeded so each glass boots on its panel's choice. An empty
+// set declares nothing.
 template panelState(panels) {
+  if length(panels) > 0 {
+    panelStateRows(panels: panels)
+  }
+}
+template panelStateRows(panels) {
   panelCells(panels: panels, name: "panelChoice", values: map(panels, panel => panel.choice))
   panelCells(panels: panels, name: "panelShownAt", values: map(panels, panel => panel.choice))
   panelCells(panels: panels, name: "panelPick", values: map(panels, panel => 0))
@@ -321,6 +329,11 @@ template panelState(panels) {
 // own place in the set's run (the row it was on dimmed, the row it is on lit), the write of `panelShownAt` closing the
 // rule's gate. A choice that names no entry (a door closed by its cell) moves nothing on the glass until it names one.
 template panelRules(panels) {
+  if length(panels) > 0 {
+    panelRuleSet(panels: panels)
+  }
+}
+template panelRuleSet(panels) {
   for panel in panels {
     rule $"panel-{panel.id}-touch" {
       forEach: contacts($"{panel.id}-panel-screen")
@@ -353,8 +366,8 @@ template panelRules(panels) {
     local now = panelBase[$each] + panelChoice[$each]
     when panelShownAt[$each] != panelChoice[$each] and panelChoice[$each] >= 0 and panelChoice[$each] < panelCount[$each]
     mode: Level
-    setState(state: panelInk, key: was, fromState: panelInks, fromKey: dim)
-    setState(state: panelInk, key: now, fromState: panelInks, fromKey: lit)
+    setState(state: panelInk, key: (was + 0), fromState: panelInks, fromKey: dim)
+    setState(state: panelInk, key: (now + 0), fromState: panelInks, fromKey: lit)
     setState(state: panelTitle, key: $each, fromState: panelTitles, fromKey: (now + 0))
     setState(state: panelNote, key: $each, fromState: panelNotes, fromKey: (now + 0))
     // The page that holds the choice: its whole part of choice / rows, divided exactly.

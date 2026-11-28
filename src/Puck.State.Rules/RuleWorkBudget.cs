@@ -6,6 +6,26 @@ namespace Puck.State.Rules;
 /// calibrated cycles. A sum no <see cref="long"/> holds is an overflow and an operation nothing prices is
 /// unmodeled; both survive every composition, so neither is ever admitted as a number.</summary>
 public static partial class RuleWorkBudget {
+    /// <summary>The units one fixed door costs on the sheet: an arena cell write's layout, admission and journal entry,
+    /// or an effect arm's dispatch, binding resolution and refusal path. Effects report how many they charge
+    /// (<see cref="IRuleEffect.Doors"/>) so a calibration prices a door apart from the element work around it.</summary>
+    public const long DoorUnits = 512L;
+
+    /// <summary>Returns the doors a list of effects charges (<see cref="IRuleEffect.Doors"/>), saturating.</summary>
+    /// <param name="effects">The compiled effects.</param>
+    /// <param name="context">The context the effects were priced against.</param>
+    /// <returns>The doors.</returns>
+    public static long EffectsDoors(IRuleEffect[] effects, IRuleCostContext context) {
+        ArgumentNullException.ThrowIfNull(argument: effects);
+
+        var doors = 0L;
+
+        foreach (var effect in effects) {
+            doors = BinaryIntegerFunctions.AddSaturating(left: doors, right: effect.Doors(context: context));
+        }
+
+        return doors;
+    }
     /// <summary>Returns the work units a list of effects costs.</summary>
     /// <param name="effects">The compiled effects.</param>
     /// <param name="context">The context the effects were priced against.</param>

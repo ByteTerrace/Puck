@@ -8253,6 +8253,43 @@
       "additionalProperties": false,
       "title": "WorldEffectStartTimer"
     },
+    "WorldEffectMantle": {
+      "description": "Pulls a kit\u0027s own body up over a ledge in front of it, on any surface, with no hold row and no holdable grip: the direction the body is commanded to move must meet a steep face within Reach, and the body\u0027s own sweep must prove a place to stand past its top, higher than the kit\u0027s step and no higher than Height above the feet. The body travels there over Seconds as an exclusive move (rising beside the face, then in over the edge) and leaves it at Carry of the speed it was commanding, so it runs on the moment it is up. A firing that finds no such ledge is refused whole, so a timer or a spend beside it is not paid. A kit\u0027s own action only.",
+      "properties": {
+        "$type": {
+          "const": "mantle"
+        },
+        "height": {
+          "description": "The highest ledge above the body\u0027s feet it pulls up over, in body-sized world units. Positive.",
+          "type": "number"
+        },
+        "depth": {
+          "description": "How far past the face the body steps in, in body-sized world units. Positive.",
+          "type": "number"
+        },
+        "seconds": {
+          "description": "How long the pull takes, an exact whole number of engine ticks. Positive.",
+          "type": "number"
+        },
+        "reach": {
+          "description": "How far ahead of the body, in body-sized world units, the face may stand. Not negative.",
+          "type": "number",
+          "default": 0.5
+        },
+        "carry": {
+          "description": "The fraction of the commanded move speed the body keeps when the pull ends, in [0, 1].",
+          "type": "number",
+          "default": 1
+        }
+      },
+      "required": [
+        "height",
+        "depth",
+        "seconds"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectMantle"
+    },
     "WorldBodyDesignationKind": {
       "description": "How a rule-triggered body designation chooses its target.",
       "enum": [
@@ -9275,7 +9312,7 @@
           "type": "string"
         },
         "entries": {
-          "description": "The routes, chosen by their 0-based place in this list. At least one, at most MaxEntries; each names a different destination.",
+          "description": "The routes, chosen by their 0-based place in this list. At most MaxEntries; each names a different destination. None leaves the face on its fallback for good: an unconnected door.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/WorldFaceRoute"
@@ -9288,6 +9325,16 @@
             "null"
           ],
           "default": null
+        },
+        "fallback": {
+          "$ref": "#/$defs/WorldFaceRoute",
+          "description": "The route a cell naming no entry takes, or null for the face itself, a mirror (SelfDestination).",
+          "default": null
+        },
+        "closes": {
+          "description": "Whether a cell naming no entry closes the door instead of taking a fallback route. Refused beside Fallback.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -10862,6 +10909,9 @@
         },
         {
           "$ref": "#/$defs/WorldEffectStartTimer"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectMantle"
         },
         {
           "$ref": "#/$defs/WorldEffectDesignate"

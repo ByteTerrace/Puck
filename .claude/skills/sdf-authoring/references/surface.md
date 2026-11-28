@@ -299,7 +299,7 @@ frame a shape-riding volume uses (curve points and text runs ride it the same
 way), and rides the shape's own dynamic slot, so it moves with the part whatever
 slot the hit's mesh rides; the parent may not carry a domain fold. Because a
 parented paint colours only the surface near it, two parts can share a slot
-(the Moth's two shins share `shinCream`); a projected paint still colours every surface of
+(the Moth's two greaves share `shinViolet`, each carrying its own bands); a projected paint still colours every surface of
 its slot the projection crosses, so a part takes its own slot when a neighbour of
 the same colour lies in the projection (the shins' rings would paint the boots). A
 paint without a parent, an inset and weathering are in the frame of the slot

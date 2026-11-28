@@ -75,7 +75,7 @@ Before step 3 a shape carried at most 8 swings and 4 slides, and a creation
 32 drivers and 8 effectors. The Moth's thighs and pelvis used all 8 swings,
 her upper arms and torso 7, and she declares 18 drivers and 2 effectors (a
 count of `swing(` calls and list entries in
-[her document](../../../worlds/debug/avatars/moth.puck)). Step 3 removed those
+[her document](../../../worlds/debug/avatars/moth/suits.puck)). Step 3 removed those
 caps. A chain keeps its 8-bone limit (`CreationEffectorDocument.MaxChainBones`).
 
 Her hand has no joints. The palm, the wrist and each finger are separate

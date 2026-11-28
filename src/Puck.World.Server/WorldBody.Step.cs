@@ -111,7 +111,10 @@ public sealed partial class WorldBody {
         if ((m_stateLane?.Input is { } input) && !input.TryValidateEffects(body: scratch.EntityIndex, effects: effects, reason: out _, targets: scratch.EffectTargets)) {
             return false;
         }
-        if (ImpulseStopsAtFaceEdge(effects: effects, scratch: ref scratch)) {
+        if (
+            ImpulseStopsAtFaceEdge(effects: effects, scratch: ref scratch) ||
+            MantleFindsNoLedge(effects: effects, scratch: ref scratch)
+        ) {
             return false;
         }
         var epoch = InputEpoch;
@@ -548,6 +551,9 @@ public sealed partial class WorldBody {
                 if (!TryApplyKinematicEffect(in instruction, in scratch.Intent, scratch.Orientation, scratch.Up, scratch.AttitudeUp)) {
                     NoteSweepRefusal(refusal: ContactRefusal.UnrepresentableSweep);
                 }
+                break;
+            case BodyMotionOp.Mantle:
+                BeginPreparedMantle(scratch: ref scratch);
                 break;
             case BodyMotionOp.SetState:
                 ApplyRawState(
@@ -2044,5 +2050,8 @@ public sealed partial class WorldBody {
         public List<WorldGeneratorInvocation>? GeneratorInvocations;
         public int GoverningShapingRow;
         public BodySupportMemo SupportMemo;
+        // The move a firing's mantle action proved before any of its effects ran (WorldBody.Hold.cs's
+        // MantleFindsNoLedge), which the action's execution starts.
+        public WorldTimedBodyMove PreparedMantle;
     }
 }

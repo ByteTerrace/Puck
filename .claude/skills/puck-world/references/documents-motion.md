@@ -549,8 +549,8 @@ body hangs at the edge. The guard reads an impulse with the command: a leap up
 a face begins the mantle where the edge comes within reach and a landing is
 proven, stops at the edge where none is, and a firing whose `planarImpulse` an
 edge would stop whole is refused, so none of its effects apply
-(`WorldBody.ImpulseStopsAtFaceEdge`). `worlds/standard/abilities.puck`'s
-`climbAbility` is the worked use, and `worlds/debug/climb-tests.puck` its
+(`WorldBody.ImpulseStopsAtFaceEdge`). `worlds/standard/player/actions.puck`'s
+`climbAction` is the worked use, and `worlds/debug/climb-tests.puck` its
 scenarios.
 
 **`corner { depth, seconds }` (a `Pull` row only).** While the body is driven
@@ -765,8 +765,8 @@ ticks and velocity are already part of the body continuation and replay hash.
 `body.where` includes the overlay in `vel` and reports declared body timers in
 seconds as `timers=(name:value,...)`.
 
-The reusable `dashAbility` template is authored in
-`worlds/standard/abilities.puck`. The Moth's avatar import `moth-dash.puck`
+The reusable `dashAction` template is authored in
+`worlds/standard/player/actions.puck`. The Moth's avatar import `moth-dash.puck`
 instantiates it for her walker kit; her binding is West or J on Move, while
 run remains Shift held or N/left-stick press toggled. Her `dashPose` cell drives
 the torso lean and the existing back-pod burn lanes.

@@ -1,6 +1,6 @@
 // The standard semantic input vocabulary. Modules consume names; each shared action is declared here once, and the
 // standard's controls bind them. A world declares its own actions beside these in its own documents (the debug
-// world's suit and noclip channels are its suit.puck's and noclip.puck's).
+// world's noclip channel is its noclip.puck's).
 schema: "puck.world.definition.v1"
 
 // Each owner's retained input, sized for a pad played as a player plays it: both sticks moving every tick are four axis
@@ -13,6 +13,12 @@ inputHistory {
 
 channels [
   { composition: true, name: "dash", shape: Binary }
+  // The keys the player module's climb and mantle actions author their programs under (player/actions.puck): both fire
+  // on the body's state, so nothing binds them.
+  { composition: true, name: "climb", shape: Binary }
+  { composition: true, name: "mantle", shape: Binary }
+  // Pressed, it steps a player to the next suit their avatar owns (player/player.puck).
+  { composition: true, name: "suit", shape: Binary }
   {
     composition: false
     frame: Heading

@@ -40,7 +40,7 @@ Moth walks right up to its face. Every placement turns -90 degrees about up
 | Humble Gaming Deck: a top-loading console (graphite base, aluminium deck, cartridge in the slot on top, two controller ports in front, its pad plugged into port 1) beside a 27-inch flat-faced television (silver bezel, black body, tapered tube housing, a speaker grille under the picture) | console 160 by 168 by 64 mm; television 740 by 621 mm, 505 mm deep | a walnut AV cabinet 1.2 by 0.58 m whose 50 mm top is 0.65 m up | 256 by 240 at 2.143 by 1.875 mm (8:7) pixels: 548.6 by 450 mm, so the 224 lines a set shows are a 548.6 by 420 mm, 4:3 picture |
 
 The plinth puts the Advanced Brick's screen about 0.95 m up, turned up toward
-the Moth's eye at 1.75 m (her eyes in `avatars/moth.puck`; she is 2.06 m tall),
+the Moth's eye at 1.75 m (her eyes in `avatars/moth/suits.puck`; she is 2.06 m tall),
 and twice her height when she is a quarter her size. The cabinet puts the
 television's picture centre 1.06 m up, 0.74 m under her eye standing at full
 size and 0.6 m over it at a quarter. The stands are solid and the devices are
@@ -217,7 +217,7 @@ fade back in around it. The device's pad does not play the context button, so it
 reaches the machine.
 
 Out of her suit and at her full size, the Moth picks the Humble Gaming Brick up
-to play it ([moth-pilot.md](avatars/moth-pilot.md#hold-the-handheld)). While she
+to play it ([moth-pilot.md](avatars/moth/body.md#hold-the-handheld)). While she
 is engaged on screen 0, the `brick-pick-up` rule (it reads the engagement as
 `engaged(each, 0)`) sets her `pilotHold` cell: her arms bring the brick up to
 her eyes, the brick's placement shows nothing on its machined rest (its

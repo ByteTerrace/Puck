@@ -12,7 +12,7 @@
 // reader is shown of the dealt cards (their count, slots and positions) is a door too.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "disclosure-probe"
 
 bodies {

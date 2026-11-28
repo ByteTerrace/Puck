@@ -1,0 +1,2437 @@
+// The Moth's suits: the armoured frames she wears over her body (body.puck), one shape family in two sculpts. The mech
+// suit is the concept pack's dusty lavender over warm ivory, heavy, with the back pods' jetpack and the heel jets' air
+// jump. The scout suit is the same family cut lighter and slimmer in bone and teal: one shoulder plate a side, narrower
+// greaves and gauntlets, a dorsal plate where the pods would hang and plain heels, since its contract (contract.puck)
+// grants no jetpack and no air jump. Each is a prototype of its own, so a world bakes only the ones its bodies wear. Her
+// head (head.puck) sits recessed in the hood; the suits' rig is her skeleton's own, driven by the look rows the avatar
+// document (moth.puck) authors. A document of prototypes and nothing else: no kit, rule, light, air or floor.
+//
+// How the suits stay cheap: every shape that rides one bone without moving on its own joins that bone's bake group, so a
+// limb bakes as one mesh; every trim, band, panel line and vent is a paint on the plate it marks, crisp at any distance
+// and absent from the bake; and no plate carries a point warp (flare, shear), whose scope asks the bake for cells a
+// thirty-second of the plate's thickness. Plates that taper or arch are prisms whose outlines carry the shape.
+schema: "puck.world.definition.v1"
+import "../../../standard/styles"
+import "../../../standard/mirror"
+import "../../../standard/rig"
+import "../../../standard/occlusion"
+import "../../../standard/worn-screen"
+import "../../companion-roster"
+import "head"
+// Her worn screen's mount and glass slots are her contract's (`mothWristMount`, `mothWornScreen`).
+import "contract"
+
+// What an importer binds: the creations its looks wear.
+exports {
+  reads [moth, $"moth-scout"]
+}
+
+// Her real head, about 0.26 m from crown to chin, sits recessed in the hood with dark lining round it.
+let headScale = 0.7
+let headAt = [0, 1.735, -0.207]
+
+// The near-black of a vent slot.
+let ventSlot = "#2B2630"
+
+// Her look, swapped live by `moth.style` for playtesting: each painted slot (the plates, the undersuit, her skin, hair and
+// fittings) shades plain or with the standard's cel look by the mothStyle row, which changes only those materials' style
+// rows and programs and bakes nothing. Her eyes' whites and catchlights, the lights and the bare metals stay continuous in
+// both, as the turnaround's glowing lenses and satin pistons read. She boots Cel, the debug world's treatment.
+let mothStyles = {
+  state: "state.mothStyle"
+  cases [plainLook, celLook(celStyle)]
+}
+
+// The palette, by role. A slot number says nothing; a name says what the surface IS.
+let skin = 0 // ivory: ear mounts, knee guards and hip guards
+let violet = 1 // lavender: hood shell, pelvic plate, boots, toe caps and heel guards
+let charcoal = 2 // #252630 joints, pivots, undersuit and soles
+let rust = 3 // #B76B3C her skin
+let ink = 4 // #171210 hair, lids and brows
+let ivory = 5 // #FFF8E9 the eyes' whites
+let leather = 7 // #754137
+let brass = 8 // #C98F35 ochre collar and belt
+let umber = 9 // #89481D
+let jet = 10 // #120D13
+let pearl = 11 // #FFF8EF
+let violetBandLeft = 12 // lavender left shoulder plates under their ivory bands
+let violetBandRight = 13 // lavender right shoulder plates under their ivory bands
+let violetPodLeft = 14 // lavender left back pod under its painted ivory bands, seams, vent and grey plate
+let violetPodRight = 15 // lavender right back pod under its painted ivory bands, seams, vent and grey plate
+let chestArmor = 16 // ivory chest slab round its lavender centre
+let plainIvory = 17 // ivory with no paints: the scout's dorsal plate
+let shinViolet = 18 // lavender greaves under their painted ivory arch bands, side panels and vents
+let gunmetal = 19 // #43464E heel housing, heel tread and ankle hubs, with the hubs' bezel and lens and the jets' ring painted
+let steel = 20 // #8B9099 piston rods
+let thrusterGlow = 21 // #D8FDFF the back-pod thruster cores, lit by flight mode (lane 2)
+let thrusterCyan = 22 // #1F9BAE the back-pod thruster lenses, lit by flight mode (lane 2)
+let gauntletLeft = 23 // ivory left gauntlet, lavender on its inner half, vents on its outer face
+let gauntletRight = 24 // ivory right gauntlet, lavender on its inner half, vents on its outer face
+let bootCyan = 25 // #1F9BAE the heel lenses' idle pilot light
+let bootGlow = 26 // #D8FDFF the heel lenses' pale cores
+let pistonSteel = 27 // satin steel piston cylinders
+let torsoSuit = 28 // segmented charcoal fabric between the chest and belt
+// The worn screens' glass: their paints are the menu's interface (contract.puck's worn screen slots).
+let wornScreenGlassLeft = mothMechSuit.wornScreen.screens.left
+let wornScreenGlassRight = mothMechSuit.wornScreen.screens.right
+let spineCharcoal = 6 // the spine, its joints painted
+
+// Each bone's bake group, by side: every shape riding that bone without a joint of its own joins it, so the bone bakes as
+// one mesh. Her head's groups are head.puck's (6 to 9).
+let pelvisGroup = 2
+let torsoGroup = 3
+let hoodGroup = 4
+let braidGroup = 5
+function upperArmGroup(isRight) = 40 + isRight * 10
+function forearmGroup(isRight) = 41 + isRight * 10
+function thighGroup(isRight) = 42 + isRight * 10
+function greaveGroup(isRight) = 43 + isRight * 10
+function bootGroup(isRight) = 44 + isRight * 10
+function toeGroup(isRight) = 45 + isRight * 10
+function podGroup(isRight) = 70 + isRight
+
+// Wear is a faint floor on a pristine suit: its coverage stays under the primer's threshold except at the tightest
+// edges, where pale primer shows first, then the dark alloy.
+let plateWear = 0
+let lilacUndercoat = [
+  { threshold: 0.2, surface { color: "#C9B4CB", roughness: 0.6, metal: 0.05 } }
+  { threshold: 0.38, surface { color: "#51525C", roughness: 0.52, metal: 0.55 } }
+]
+let creamUndercoat = [
+  { threshold: 0.2, surface { color: "#C9B9A6", roughness: 0.65, metal: 0.05 } }
+  { threshold: 0.38, surface { color: "#5B5D63", roughness: 0.52, metal: 0.55 } }
+]
+// A plate's weathering: the shared reach, scale and deposit, its undercoat and seed its own.
+function plateWeathering(seed, under) = {
+  edge: 0.55
+  lines: 0
+  settle: 0.025
+  reach: 0.014
+  seed: seed
+  scale: 75
+  floor: plateWear
+  under: under
+  deposit { color: "#807568", roughness: 0.85, metal: 0 }
+}
+// A plate's slot: its colour, the cel switch, its finish and its weathering.
+function plateSlot(color, seed, under, roughness = 0.36, specular = 0.08, coat = 0.28, paints = []) = {
+  color: color
+  toonSelect: mothStyles
+  roughness: roughness
+  specular: specular
+  emissive: 0
+  coat: coat
+  weathering: plateWeathering(seed, under)
+  paints: paints
+}
+
+// The reference's recessed heel jets point 55 degrees below rearward horizontal.
+// The cylinder's -Y cap and the lens's -Z face share (0, -sin(55), -cos(55));
+// the exhaust volume inherits the lens frame, so it leaves along the same axis.
+let bootNozzleRotation = [-0.3007058, 0, 0, 0.9537170]
+let bootLensRotation = [0.4617486, 0, 0, 0.8870108]
+let bootPlanOutline = [[-0.82, -1], [-1, -0.3], [-0.9, 0.72], [-0.64, 1], [0.64, 1], [0.9, 0.72], [1, -0.3], [0.82, -1]]
+
+// Values repeated across the body, named so changing one changes the moth rather than 120 shapes.
+let softness = 2.1 // the superellipsoid exponent every rounded body part shares
+let diagonal = 0.7071068 // sin/cos of 45 degrees, the quarter-turn quaternion component
+let halfTurn = rotate([0, 1, 0], 180)
+
+// The greave: a flared plate from a narrow top under the knee to a wide foot, the intersection of its front outline
+// (extruded front to back) and its side outline (extruded across), both rounded, so its corners stay round with no
+// warp. Outlines are in the greave's own frame about `greaveAt`, the frame its paints are authored in; the side outline's
+// +X runs to her back, so its front flares further over the boot than its back.
+let greaveAt = [-0.2, 0.4265, -0.0125]
+let greaveFront = [[-0.75, -1], [-0.975, -0.622], [-0.825, 0], [-0.5, 0.879], [0.5, 0.879], [0.825, 0], [0.975, -0.622], [0.75, -1]]
+let greaveSide = [[-0.78, -1], [-1, -0.622], [-0.546, 0.879], [0.546, 0.879], [0.878, -0.622], [0.732, -1]]
+// The arch the boot passes through, front and back, and its rounded corners: the cutters carve it, and the painted
+// ivory bands round it follow the same outline at a larger size.
+let archOutline = [[-1, -1], [-1, 0], [-0.809, 0.588], [-0.309, 0.951], [0.309, 0.951], [0.809, 0.588], [1, 0], [1, -1]]
+let archCorner = 0.25
+let archFrontAt = [-0.2, 0.0458, -0.075]
+let archFrontTurn = [0, 0.9397, 0.342, 0]
+let archBackAt = [-0.2, 0.195, 0.25]
+let archBackBandAt = [-0.2, 0.195, 0.2125]
+// The pentagonal side panel on each greave's outer face, in the panel's own XY, standing at `sidePanelAt`.
+let shinPanelOutline = [[-0.5, 1], [0.2692308, 1], [0.5384615, 0.1944444], [-0.1730769, -1], [-1, -0.4166667]]
+let sidePanelAt = [-0.35, 0.4465, -0.0125]
+function sidePanelTurn(isRight) = compose(halfTurn, mirrorRotation(isRight, [0, diagonal, 0, diagonal]))
+
+// One greave's paints, on shinViolet: the ivory band round the front arch and the back arch, each edged by a seam and
+// clipped to its half of the greave, and the ivory side panel with its two vent slots. Each band is the arch's outline at
+// a larger size, posed where the arch is cut (poseIn), so the band hugs the cut; the scout's greave, cut no back arch
+// for a heel jet, wears the back one whole as an ivory heel plate.
+function greavePaints(side, isRight, ivoryPlate, lavenderSeam) = let at = mirrorX(isRight, greaveAt) in let front = poseIn(
+  at,
+  halfTurn,
+  mirrorX(isRight, archFrontAt),
+  archFrontTurn
+) in let frontBand = front with { position: front.position + rotatePoint(front.rotation, [0, 0, 0.15]) } in let back = poseIn(
+  at,
+  halfTurn,
+  mirrorX(isRight, archBackBandAt),
+  halfTurn
+) in let panel = poseIn(
+  at,
+  halfTurn,
+  mirrorX(isRight, sidePanelAt),
+  sidePanelTurn(isRight)
+) in let arch = { kind: "Convex", vertices: archOutline, cornerRadius: archCorner } in [
+  frontBand with { parent: $"shin-{side}", type: "Prism", scale [0.212, 0.159, 0.16], profile: arch, color: ivoryPlate }
+  frontBand with {
+    parent: $"shin-{side}"
+    type: "Prism"
+    scale [0.212, 0.159, 0.16]
+    profile: arch
+    stroke: 0.004
+    color: lavenderSeam
+  }
+  back with { parent: $"shin-{side}", type: "Prism", scale [0.19, 0.205, 0.2], profile: arch, color: ivoryPlate }
+  back with { parent: $"shin-{side}", type: "Prism", scale [0.19, 0.205, 0.2], profile: arch, stroke: 0.004, color: lavenderSeam }
+  panel with {
+    parent: $"shin-{side}"
+    type: "Prism"
+    scale [0.13, 0.18, 0.2]
+    profile { kind: "Convex", vertices: shinPanelOutline, cornerRadius: 0.12 }
+    color: ivoryPlate
+  }
+  panel with {
+    parent: $"shin-{side}"
+    type: "Prism"
+    scale [0.13, 0.18, 0.2]
+    profile { kind: "Convex", vertices: shinPanelOutline, cornerRadius: 0.12 }
+    stroke: 0.003
+    color: lavenderSeam
+  }
+  { parent: $"shin-{side}", type: "Box", position: mirrorX(isRight, [0.16, 0.115, 0.03]), scale [0.08, 0.0075, 0.032], color: ventSlot }
+  { parent: $"shin-{side}", type: "Box", position: mirrorX(isRight, [0.16, 0.08, 0.03]), scale [0.08, 0.0075, 0.032], color: ventSlot }
+]
+
+// The back pod: one lavender shell, cut flat against her back and on its inner face and bevelled over its shoulder, with
+// the nozzle in a well under it. Its segmented look is paint: the ivory bands and the seams between its plates follow
+// the arcs the first sculpt's stacked plates were cut by, posed in the shell's frame.
+function podAt(isRight) = mirrorX(isRight, [-0.2, 1.13, 0.195])
+function podTurn(isRight) = compose(halfTurn, mirrorTurnRotation(isRight, [0, 0, 0.0998, 0.995]))
+function podPlateTurn(isRight, q) = compose(halfTurn, mirrorTurnRotation(isRight, q))
+// Each plate edge, top to bottom: where the cap gives way to the upper band, the upper band to the middle plate, the
+// middle plate to the lower band and the lower band to the skirt. Each is a stadium whose top arc is the edge; a paint of
+// it colours everything below the arc.
+function podEdges(isRight) = [
+  { position: mirrorX(isRight, [-0.4779, -0.9156, 0.195]), rotation: podPlateTurn(isRight, [0, 0, 0.0998, 0.995]) }
+  { position: mirrorX(isRight, [-0.5023, -1.0361, 0.3161]), rotation: podPlateTurn(isRight, [0.0249, 0.0025, 0.0998, 0.9947]) }
+  { position: mirrorX(isRight, [-0.5303, -1.1741, 0.3168]), rotation: podPlateTurn(isRight, [0.0249, 0.0025, 0.0998, 0.9947]) }
+  { position: mirrorX(isRight, [-0.5479, -1.2612, 0.5372]), rotation: podPlateTurn(isRight, [0.0746, 0.0075, 0.0996, 0.9922]) }
+]
+let podEdgeShape = { type: "Prism", scale [0.3386, 2.34, 0.78], profile { kind: "RoundedRectangle", cornerRadius: 1 }, taper: 1 }
+// The vent slot on the pod's upper back, where the first sculpt cut it.
+function podVentPose(isRight) = {
+  position: mirrorX(isRight, [-0.1141, 1.3772, 0.4123])
+  rotation: compose(halfTurn, bySide(isRight, [-0.3605, -0.5774, 0.513, 0.523], [-0.513, -0.523, 0.3605, 0.5774]))
+}
+// One pod's paints, on its violetPod slot: alternating ivory and lavender below each plate edge, a seam on each edge,
+// the vent slot, then the grey plate and its trim strip on the flat inner face (in the inner cut's frame).
+function podPaints(side, isRight, ivoryPlate, lavenderPlate, lavenderSeam) = let at = podAt(isRight) in let turn = podTurn(isRight) in let edges = map(
+  podEdges(isRight),
+  e => poseIn(at, turn, e.position, e.rotation)
+) in let vent = podVentPose(isRight) in concat(
+  [
+    (podEdgeShape with edges[0]) with { parent: $"pod-{side}", color: ivoryPlate }
+    (podEdgeShape with edges[1]) with { parent: $"pod-{side}", color: lavenderPlate }
+    (podEdgeShape with edges[2]) with { parent: $"pod-{side}", color: ivoryPlate }
+    (podEdgeShape with edges[3]) with { parent: $"pod-{side}", color: lavenderPlate }
+  ],
+  map(edges, e => (podEdgeShape with e) with { parent: $"pod-{side}", stroke: 0.004, color: lavenderSeam }),
+  [
+    poseIn(at, turn, vent.position, vent.rotation) with {
+      parent: $"pod-{side}"
+      type: "Box"
+      scale [0.039, 0.0109, 0.0281]
+      color: ventSlot
+    }
+    {
+      parent: $"podCoreCut-{side}"
+      type: "Box"
+      position: mirrorX(isRight, [0.0526, 0.8091, 0.0417])
+      rotation: bySide(isRight, [-0.0451, -0.0937, 0.896, -0.4318], [0.0451, 0.0937, 0.896, -0.4318])
+      scale [0.0312, 0.0094, 0.2]
+      color: "#9DA3B4"
+    }
+    { parent: $"podCoreCut-{side}", type: "Box", position [-0.117, 0.9953, 0], scale [0.22, 0.0109, 0.22], color: "#7A7F8C" }
+  ]
+)
+
+// The shoulder plates: thick slabs arched over the shoulder, their front and back drooping, as a prism whose side
+// outline is the arch (extruded across her shoulder) with rounded edges.
+let shoulderUpperOutline = [
+  [-0.85, -1]
+  [-1, -0.6]
+  [-1, 0.261]
+  [-0.571, 0.496]
+  [0, 0.609]
+  [0.571, 0.496]
+  [1, 0.261]
+  [1, -0.6]
+  [0.85, -1]
+]
+let shoulderLowerOutline = [
+  [-0.85, -1]
+  [-1, -0.6]
+  [-1, 0.425]
+  [-0.54, 0.625]
+  [0, 0.708]
+  [0.54, 0.625]
+  [1, 0.425]
+  [1, -0.6]
+  [0.85, -1]
+]
+// The shoulder plates' paints, on violetBand: an ivory band along the upper plate's lower edge, and the lower plate
+// ivory above its lavender skirt. The scout's single plate carries the upper band alone.
+function shoulderPaints(side, ivoryPlate, scout) = concat(
+  [{ parent: $"shoulderSlab-{side}", type: "Box", position [0, -0.04, 0], scale [0.25, 0.026, 0.2], color: ivoryPlate }],
+  scout ? [] : [
+    { parent: $"shoulderSlabLower-{side}", type: "Box", position [0, 0.035, 0], scale [0.25, 0.034, 0.2], color: ivoryPlate }
+  ]
+)
+
+// The gauntlet's paints, on its own slot: lavender on the inner half facing her body, and two vent slots on its outer
+// face.
+function gauntletPaints(side, isRight, lavenderPlate) = [
+  { parent: $"bracer-{side}", type: "Box", position: mirrorX(isRight, [-0.11, 0, 0]), scale [0.09, 0.25, 0.2], color: lavenderPlate }
+  { parent: $"bracer-{side}", type: "Box", position: mirrorX(isRight, [0.12, 0.075, 0]), scale [0.03, 0.0075, 0.042], color: ventSlot }
+  { parent: $"bracer-{side}", type: "Box", position: mirrorX(isRight, [0.12, 0.04, 0]), scale [0.03, 0.0075, 0.042], color: ventSlot }
+]
+
+// The gunmetal fittings' paints: each ankle hub's lavender bezel round its dark lens on its outer face, and each heel jet's
+// bright steel ring round its mouth. The scout's plain heels carry no jet.
+function fittingPaints(lavenderPlate, scout) = concat(
+  flatMap(
+    ["left", "right"],
+    side => [
+      { parent: $"ankleHub-{side}", type: "Cylinder", scale [0.057, 0.05, 0.057], color: lavenderPlate }
+      { parent: $"ankleHub-{side}", type: "Cylinder", scale [0.036, 0.05, 0.036], color: "#120D13" }
+    ]
+  ),
+  scout ? [] : flatMap(
+    [["left", 0], ["right", 1]],
+    s => [
+      poseIn(
+        mirrorX(s[1], [-0.2, 0.245, 0.16]),
+        compose(bootNozzleRotation, halfTurn),
+        mirrorX(s[1], [-0.2, 0.2089573, 0.1852374]),
+        compose(bootNozzleRotation, halfTurn)
+      ) with { parent: $"heelHousing-{s[0]}", type: "Cylinder", scale [0.099, 0.014, 0.099], color: "#8B9099" }
+    ]
+  )
+)
+
+// The hood's ear mounts' paints, on the ivory: a lavender cover, a brass ring and a lavender button, concentric on each
+// mount's outer face.
+function earPaints(lavenderPlate) = flatMap(
+  ["left", "right"],
+  side => [
+    { parent: $"earMount-{side}", type: "Cylinder", scale [0.07, 0.05, 0.07], color: lavenderPlate }
+    { parent: $"earMount-{side}", type: "Cylinder", scale [0.044, 0.05, 0.044], color: "#C98F35" }
+    { parent: $"earMount-{side}", type: "Cylinder", scale [0.033, 0.05, 0.033], color: lavenderPlate }
+  ]
+)
+
+// Both sides of the body: the left side is written out, and `standard/mirror` gives the right side its values from it.
+// `side` is "left" or "right" and `isRight` 0 or 1; `scout` cuts the scout suit's lighter frame.
+
+template mothLimbs(side, isRight, scout) {
+  // The scout's plates are narrower front to back and across.
+  let slim = scout ? 0.86 : 1
+
+  shape Sweep $"upperArm-{side}" {
+    id: 148 + isRight * 68
+    position: mirrorX(isRight, [-0.295, 1.4515, 0])
+    rotation: compose(halfTurn, mirrorRotation(isRight, [0, 0, -0.078459, 0.996917]))
+    material: charcoal
+    group: upperArmGroup(isRight)
+    parent: "torso"
+    curve {
+      a [0, 0, 0]
+      b: mirrorX(isRight, [0.0363, -0.1009, 0])
+      c: mirrorX(isRight, [0.0727, -0.2059, 0])
+      radiusStart: 0.08
+      radiusEnd: 0.08
+    }
+    swings [
+      swing("swim", [-1, 0, 0], 0.55, mirrorX(isRight, [-0.295, 1.4515, 0])) with {
+        wave: "sine"
+        phase: bySide(isRight, 0, pi)
+      }
+      swing("swim", [0, 0, -1], flip(isRight, -0.85), mirrorX(isRight, [-0.295, 1.4515, 0])) with { wave: "constant" }
+      swing("run", [0, 0, -1], flip(isRight, -0.15), mirrorX(isRight, [-0.295, 1.4515, 0])) with {
+        wave: "constant"
+        phase: 0
+      }
+      swing("gait", signed(isRight, [-0.987688, -0.156434, 0], [1, -1, 1]), 0.42, mirrorX(isRight, [-0.295, 1.4515, 0])) with {
+        wave: "sine"
+        phase: bySide(isRight, pi, 2 * pi)
+      }
+      swing("flight", [0, 0, -1], flip(isRight, -0.1), mirrorX(isRight, [-0.295, 1.4515, 0])) with {
+        wave: "linear"
+        phase: 0
+      }
+      // The arms open 0.45 rad from the sides at the peak, 0.6 on the way up and 0.3 coming down.
+      swing("air", [0, 0, -1], flip(isRight, 0.03), mirrorX(isRight, [-0.295, 1.4515, 0])) with {
+        wave: "linear"
+        phase: 15
+      }
+      // And lift forward 0.12 rad, 0.2 rising.
+      swing(
+        "air",
+        signed(isRight, [-0.987688, -0.156434, 0], [1, -1, 1]),
+        -0.015,
+        mirrorX(isRight, [-0.295, 1.4515, 0])
+      ) with {
+        wave: "linear"
+        phase: 8
+      }
+      // On a wall both arms reach forward and up to it; the hand effectors plant each palm in turn as she climbs.
+      swing("cling", [-1, 0, 0], -2.2, mirrorX(isRight, [-0.295, 1.4515, 0])) with { wave: "constant" }
+      // A mantle throws both arms up for the catch, brings the hands down onto the top, pushes and sweeps them back.
+      swing("mantle", [-1, 0, 0], -2.4, mirrorX(isRight, [-0.295, 1.4515, 0])) with { wave: "curve:mantle-reach" }
+      for s in wornScreenSwings("upper", mothWristMount, side, isRight) { s }
+    ]
+  }
+
+  shape Superellipsoid $"elbow-{side}" {
+    id: 149 + isRight * 68
+    position: mirrorX(isRight, [-0.336, 1.2201, -0.004])
+    rotation: mirrorRotation(isRight, [0, 0, 0.078459, 0.996917])
+    scale [0.07, 0.065, 0.072]
+    material: charcoal
+    group: upperArmGroup(isRight)
+    parent: $"upperArm-{side}"
+    exponent: softness
+  }
+
+  // The shoulder stack: two thick plates on a round charcoal pivot, riding the upper arm (the scout wears the upper one
+  // alone). The upper plate's inner edge stays outboard of the hood as the arm swings.
+  shape Superellipsoid $"shoulderPivot-{side}" {
+    id: 150 + isRight * 68
+    position: mirrorX(isRight, [-0.3, 1.46, 0])
+    scale [0.085, 0.085, 0.085]
+    material: charcoal
+    group: upperArmGroup(isRight)
+    parent: $"upperArm-{side}"
+    exponent: 3
+  }
+
+  shape Prism $"shoulderSlab-{side}" {
+    id: 151 + isRight * 68
+    position: mirrorX(isRight, scout ? [-0.385, 1.545, 0.005] : [-0.395, 1.57, 0.005])
+    rotation: compose(halfTurn, mirrorRotation(isRight, [0, 0, -0.1305, 0.9914]), rotate([0, 1, 0], 90))
+    scale: scout ? [0.165, 0.11, 0.125] : [0.175, 0.115, 0.135]
+    material: bySide(isRight, violetBandLeft, violetBandRight)
+    group: upperArmGroup(isRight)
+    parent: $"upperArm-{side}"
+    profile { kind: "Convex", vertices: shoulderUpperOutline, cornerRadius: 0.15 }
+    rounding: 0.025
+  }
+
+  if scout == false {
+    shape Prism $"shoulderSlabLower-{side}" {
+      id: 152 + isRight * 68
+      position: mirrorX(isRight, [-0.415, 1.43, 0])
+      rotation: compose(halfTurn, mirrorRotation(isRight, [0, 0, -0.0698, 0.9976]), rotate([0, 1, 0], 90))
+      scale [0.185, 0.12, 0.14]
+      material: bySide(isRight, violetBandLeft, violetBandRight)
+      group: upperArmGroup(isRight)
+      parent: $"upperArm-{side}"
+      profile { kind: "Convex", vertices: shoulderLowerOutline, cornerRadius: 0.15 }
+      rounding: 0.025
+    }
+  }
+
+  // The elbow piston, inside the bend: a cylinder on the upper arm and a rod on the forearm, both aimed at the
+  // hinge so they meet inside the joint at any bend.
+  shape Cylinder $"elbowCylinder-{side}" {
+    id: 153 + isRight * 68
+    position: mirrorX(isRight, [-0.3834, 1.3086, -0.0499])
+    rotation: mirrorRotation(isRight, [0.6604, 0, -0.6817, 0.3149])
+    scale [0.022, 0.0594, 0.022]
+    material: pistonSteel
+    group: upperArmGroup(isRight)
+    parent: $"upperArm-{side}"
+    rounding: 0.006
+  }
+
+  shape Superellipsoid $"forearm-{side}" {
+    id: 159 + isRight * 68
+    position: mirrorX(isRight, [-0.3706, 1.0524, -0.0024])
+    rotation: compose(halfTurn, mirrorRotation(isRight, [-0.08495, 0.400689, -0.033242, 0.911661]))
+    scale [0.1, 0.2, 0.105]
+    material: charcoal
+    group: forearmGroup(isRight)
+    parent: $"upperArm-{side}"
+    exponent: 2.6
+    swings [
+      swing(
+        "run",
+        signed(isRight, [-0.660568, -0.349483, 0.664463], [1, -1, -1]),
+        -0.7,
+        mirrorX(isRight, [-0.336, 1.2201, -0.004])
+      ) with { wave: "constant", phase: 0 }
+      // Her elbows stay bent on a wall, so her hands meet it ahead of her face.
+      swing(
+        "cling",
+        signed(isRight, [-0.660568, -0.349483, 0.664463], [1, -1, -1]),
+        -0.6,
+        mirrorX(isRight, [-0.336, 1.2201, -0.004])
+      ) with { wave: "constant", phase: 0 }
+      swing(
+        "gait",
+        signed(isRight, [-0.660568, -0.349483, 0.664463], [1, -1, -1]),
+        0.18,
+        mirrorX(isRight, [-0.336, 1.2201, -0.004])
+      ) with { wave: "sine", phase: bySide(isRight, 3.6416, 0.5) }
+      swing(
+        "flight",
+        signed(isRight, [-0.660568, -0.349483, 0.664463], [1, -1, -1]),
+        -0.25,
+        mirrorX(isRight, [-0.336, 1.2201, -0.004])
+      ) with { wave: "linear", phase: 0 }
+      // The elbows bend 0.36 rad at the peak, 0.51 rising and 0.21 falling.
+      swing(
+        "air",
+        signed(isRight, [-0.660568, -0.349483, 0.664463], [1, -1, -1]),
+        -0.03,
+        mirrorX(isRight, [-0.336, 1.2201, -0.004])
+      ) with { wave: "linear", phase: 12 }
+      // And bend a little further as she lands.
+      swing(
+        "land",
+        signed(isRight, [-0.660568, -0.349483, 0.664463], [1, -1, -1]),
+        0.05,
+        mirrorX(isRight, [-0.336, 1.2201, -0.004])
+      ) with { wave: "linear" }
+      // The elbows bend as she pulls and straighten as she pushes over.
+      swing(
+        "mantle",
+        signed(isRight, [-0.660568, -0.349483, 0.664463], [1, -1, -1]),
+        -1.4,
+        mirrorX(isRight, [-0.336, 1.2201, -0.004])
+      ) with { wave: "curve:mantle-elbow" }
+      for s in wornScreenSwings("fore", mothWristMount, side, isRight) { s }
+    ]
+  }
+
+  // The heavy gauntlet: a squared block from the elbow to the wrist, faced square to the body rather than the
+  // forearm's twist, so its outer face and its vents look straight out. Its open mouth at the wrist is a dark cut.
+  shape Superellipsoid $"bracer-{side}" {
+    id: 160 + isRight * 68
+    position: mirrorX(isRight, [-0.395, 0.995, 0])
+    rotation [0, 0.9958, 0.0915, 0]
+    scale [0.12, 0.13 * slim, 0.135 * slim]
+    material: bySide(isRight, gauntletLeft, gauntletRight)
+    group: forearmGroup(isRight)
+    parent: $"forearm-{side}"
+    exponent: 3.6
+  }
+
+  shape Box $"bracerMouth-{side}" {
+    id: 161 + isRight * 68
+    position: mirrorX(isRight, [-0.379697, 0.474186, -0.104559])
+    rotation: compose(halfTurn, mirrorRotation(isRight, [-0.08495, 0.400689, -0.033242, 0.911661]))
+    scale [0.4, 0.4, 0.4]
+    material: charcoal
+    blend: "Subtraction"
+    group: forearmGroup(isRight)
+    parent: $"forearm-{side}"
+  }
+
+  shape Cylinder $"cuff-{side}" {
+    id: 164 + isRight * 68
+    position: mirrorX(isRight, [-0.380726, 0.872656, -0.026507])
+    rotation: mirrorRotation(isRight, [0.08495, 0.400689, 0.033242, 0.911661])
+    scale [0.09, 0.006, 0.09]
+    material: charcoal
+    group: forearmGroup(isRight)
+    parent: $"forearm-{side}"
+  }
+
+  wornScreen(
+    mount: mothWristMount,
+    side: side,
+    isRight: isRight,
+    ids: [2000 + isRight * 68, 2001 + isRight * 68, 2002 + isRight * 68],
+    materials: { bezel: charcoal, cover: violet, screen: bySide(isRight, wornScreenGlassLeft, wornScreenGlassRight) }
+  )
+
+  shape Capsule $"elbowRod-{side}" {
+    id: 156 + isRight * 68
+    position: mirrorX(isRight, [-0.466, 1.1236, -0.084])
+    rotation: compose(halfTurn, mirrorRotation(isRight, [-0.253, 0, 0.411, 0.8758]))
+    scale [0.013, 0.2612, 0.013]
+    material: steel
+    group: forearmGroup(isRight)
+    parent: $"forearm-{side}"
+  }
+
+  shape Superellipsoid $"palm-{side}" {
+    id: 165 + isRight * 68
+    position: mirrorX(isRight, [-0.3775, 0.7677, -0.0504])
+    rotation: compose(halfTurn, mirrorRotation(isRight, [-0.08495, 0.400689, -0.033242, 0.911661]))
+    scale [0.09045, 0.0729, 0.054]
+    material: charcoal
+    group: forearmGroup(isRight)
+    parent: $"forearm-{side}"
+    exponent: 2.8
+  }
+
+  shape Sweep $"wrist-{side}" {
+    id: 166 + isRight * 68
+    position: mirrorX(isRight, [-0.376562, 0.887196, -0.028315])
+    rotation: compose(halfTurn, mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825]))
+    material: charcoal
+    group: forearmGroup(isRight)
+    parent: $"forearm-{side}"
+    curve {
+      a [0, 0, 0]
+      b: mirrorX(isRight, [0.0107719, -0.0460057, 0])
+      c: mirrorX(isRight, [0.0230827, -0.0985838, 0])
+      radiusStart: 0.0513
+      radiusEnd: 0.0513
+    }
+  }
+
+  // The gloved fingers and thumb, curling a little toward the palm.
+  for (finger, i) in [
+    { at [-0.3382, 0.7431, -0.1047], b [0.0215438, -0.0920114, 0.00675], c [0.0236724, -0.0845806, -0.056025] }
+    { at [-0.3665, 0.7377, -0.0744], b [0.0233905, -0.0998981, 0.00675], c [0.0230741, -0.0930397, -0.056025] }
+    { at [-0.3949, 0.7324, -0.044], b [0.0215438, -0.0920114, 0.00675], c [0.0187826, -0.0857254, -0.056025] }
+    { at [-0.4232, 0.727, -0.0137], b [0.0184662, -0.078867, 0.00675], c [0.01326, -0.0731534, -0.056025] }
+  ] {
+    shape Sweep $"finger-{side}-{i}" {
+      id: 167 + i + isRight * 68
+      position: mirrorX(isRight, finger.at)
+      rotation: compose(halfTurn, mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825]))
+      material: charcoal
+      group: forearmGroup(isRight)
+      parent: $"forearm-{side}"
+      curve {
+        a [0, 0, 0]
+        b: mirrorX(isRight, finger.b)
+        c: mirrorX(isRight, finger.c)
+        radiusStart: 0.01755
+        radiusEnd: 0.01755
+      }
+    }
+  }
+
+  shape Sweep $"thumb-{side}" {
+    id: 171 + isRight * 68
+    position: mirrorX(isRight, [-0.3312, 0.7959, -0.086])
+    rotation: compose(halfTurn, mirrorRotation(isRight, [-0.130367, 0.388295, -0.137633, 0.901825]))
+    material: charcoal
+    group: forearmGroup(isRight)
+    parent: $"forearm-{side}"
+    curve {
+      a [0, 0, 0]
+      b: mirrorX(isRight, [-0.0399434, -0.0869971, -0.0054])
+      c: mirrorX(isRight, [0.020021, -0.1062331, -0.04995])
+      radiusStart: 0.02565
+      radiusEnd: 0.02565
+    }
+  }
+
+  shape Sweep $"thigh-{side}" {
+    id: 174 + isRight * 68
+    position: mirrorX(isRight, [-0.135, 1.0265, 0])
+    rotation: halfTurn
+    material: charcoal
+    group: thighGroup(isRight)
+    parent: "pelvis"
+    curve {
+      a [0, 0, 0]
+      b: mirrorX(isRight, [0.025, -0.135, 0])
+      c: mirrorX(isRight, [0.05, -0.285, 0])
+      radiusStart: 0.095
+      radiusEnd: 0.095
+    }
+    // The stride swings in the plane of travel: the hip's own turn into the travel direction is undone, the plane
+    // is turned to the full travel direction, the leg strides, and both turns are put back. A forward diagonal
+    // strides straight ahead of the turned hips, a pure strafe abducts into a sidestep, and a backpedal strides
+    // backward.
+    swings [
+      swing("heading", [0, 1, 0], 0.7, mirrorX(isRight, [-0.145, 1.0265, 0])) with { wave: "sine" }
+      swing("heading", [0, 1, 0], -0.5, mirrorX(isRight, [-0.145, 1.0265, 0])) with { wave: "linear" }
+      swing("gait", [-1, 0, 0], 0.7, mirrorX(isRight, [-0.145, 1.0265, 0])) with {
+        wave: "sine"
+        phase: bySide(isRight, 0, pi)
+      }
+      swing("heading", [0, 1, 0], 0.5, mirrorX(isRight, [-0.145, 1.0265, 0])) with { wave: "linear" }
+      swing("heading", [0, 1, 0], -0.7, mirrorX(isRight, [-0.145, 1.0265, 0])) with { wave: "sine" }
+      // In flight mode the hip undoes the air tuck the hover would hold at zero vertical speed (0.8 rad) and trails
+      // the leg 0.1 rad back, so she hovers and flies with straight legs.
+      swing("flight", [-1, 0, 0], 0.898, mirrorX(isRight, [-0.145, 1.0265, 0])) with { wave: "linear", phase: 0 }
+      // In the air the thigh lifts 0.8 rad at the peak, 1.1 on the way up and 0.5 reaching for the ground.
+      swing("air", [-1, 0, 0], -0.06, mirrorX(isRight, [-0.145, 1.0265, 0])) with { wave: "linear", phase: 13.3 }
+      // Touching down at about 4 m/s the hip folds 0.4 rad into the crouch, and springs back as the give settles.
+      swing("land", [-1, 0, 0], 0.1, mirrorX(isRight, [-0.145, 1.0265, 0])) with { wave: "linear" }
+      // Over a ledge the knees tuck up under her; her left leg leads onto the top and her right pushes off it.
+      swing("mantle", [-1, 0, 0], -1.5, mirrorX(isRight, [-0.145, 1.0265, 0])) with {
+        wave: bySide(isRight, "curve:mantle-tuck-lead", "curve:mantle-tuck-trail")
+      }
+    ]
+  }
+
+  // The hip pivot: a large charcoal disc on the hip's axis, set on an ivory guard, both riding the thigh.
+  shape Prism $"hipGuard-{side}" {
+    id: 175 + isRight * 68
+    position: mirrorX(isRight, [-0.222, 1.05, 0])
+    rotation: compose(halfTurn, mirrorRotation(isRight, [0, diagonal, 0, diagonal]))
+    scale [0.13, 0.125, 0.016]
+    material: skin
+    group: thighGroup(isRight)
+    parent: $"thigh-{side}"
+    profile {
+      kind: "Convex"
+      vertices [[-0.6, 1], [0.6, 1], [1, 0.2], [0.7, -0.7], [-0.7, -0.7], [-1, 0.2]]
+      cornerRadius: 0.3
+    }
+  }
+
+  shape Cylinder $"hipDisc-{side}" {
+    id: 176 + isRight * 68
+    position: mirrorX(isRight, [-0.25, 1.0265, 0])
+    rotation: mirrorRotation(isRight, [0, 0, -diagonal, diagonal])
+    scale [0.075, 0.022, 0.075]
+    material: charcoal
+    group: thighGroup(isRight)
+    parent: $"thigh-{side}"
+    rounding: 0.01
+  }
+
+  // The knee piston, behind the knee: a cylinder on the thigh and a rod on the shin, both aimed at the hinge.
+  shape Cylinder $"kneeCylinder-{side}" {
+    id: 177 + isRight * 48
+    position: mirrorX(isRight, [-0.171, 0.865, 0.069])
+    rotation: mirrorRotation(isRight, [-0.9286, 0, 0.2563, 0.2684])
+    scale [0.021, 0.0923, 0.021]
+    material: pistonSteel
+    group: thighGroup(isRight)
+    parent: $"thigh-{side}"
+    rounding: 0.006
+  }
+
+  shape Superellipsoid $"knee-{side}" {
+    id: 178 + isRight * 68
+    position: mirrorX(isRight, [-0.19, 0.7465, 0])
+    scale [0.095, 0.085, 0.0975]
+    material: charcoal
+    group: thighGroup(isRight)
+    parent: $"thigh-{side}"
+    exponent: softness
+  }
+
+  shape Prism $"kneeGuard-{side}" {
+    id: 179 + isRight * 68
+    position: mirrorX(isRight, [-0.19, 0.735, -0.118])
+    rotation: halfTurn
+    scale [0.095, 0.105, 0.04]
+    material: skin
+    group: thighGroup(isRight)
+    parent: $"thigh-{side}"
+    profile {
+      kind: "Convex"
+      vertices [
+        bySide(isRight, [-0.8, 0.8888889], [0.7, -0.75])
+        bySide(isRight, [0.7666667, 0.8888889], [-0.4, -1])
+        bySide(isRight, [1, -0.1111111], [-1, -0.1111111])
+        bySide(isRight, [0.4, -1], [-0.7666667, 0.8888889])
+        bySide(isRight, [-0.7, -0.75], [0.8, 0.8888889])
+      ]
+      cornerRadius: 0.3
+    }
+  }
+
+  // The greave (see `greaveFront`): its front outline is the shape, its side outline clips it, and the arches the boot
+  // passes through are cut front and back, their faces the dark of the boot's well. Its ivory bands, side panel and
+  // vents are paint (`greavePaints`).
+  shape Prism $"shin-{side}" {
+    id: 180 + isRight * 68
+    position: mirrorX(isRight, greaveAt)
+    rotation: halfTurn
+    scale [0.2 * slim, 0.3215, 0.23]
+    material: shinViolet
+    group: greaveGroup(isRight)
+    parent: $"thigh-{side}"
+    profile { kind: "Convex", vertices: greaveFront, cornerRadius: 0.1 }
+    rounding: 0.03
+    swings [
+      swing("swim", [-1, 0, 0], 0.45, mirrorX(isRight, [-0.19, 0.7465, 0])) with {
+        wave: "sine"
+        phase: bySide(isRight, 0, pi)
+      }
+      swing("gait", [-1, 0, 0], 1.25, mirrorX(isRight, [-0.19, 0.7465, 0])) with {
+        wave: "halfSine"
+        phase: bySide(isRight, 5.184, 2.0424)
+      }
+      // And the knee undoes its 1.2 rad of air tuck, keeping a 0.2 rad bend.
+      swing("flight", [-1, 0, 0], -1, mirrorX(isRight, [-0.19, 0.7465, 0])) with { wave: "linear", phase: 0 }
+      // The knee folds 1.2 rad at the peak, 1.45 rising and 0.95 falling, the shin a little behind the knee.
+      swing("air", [-1, 0, 0], 0.05, mirrorX(isRight, [-0.19, 0.7465, 0])) with { wave: "linear", phase: 24 }
+      // The knee takes twice the hip's fold.
+      swing("land", [-1, 0, 0], -0.2, mirrorX(isRight, [-0.19, 0.7465, 0])) with { wave: "linear" }
+      swing("mantle", [-1, 0, 0], 1.8, mirrorX(isRight, [-0.19, 0.7465, 0])) with { wave: "curve:mantle-fold" }
+    ]
+  }
+
+  shape Prism $"greaveSide-{side}" {
+    id: 181 + isRight * 68
+    position: mirrorX(isRight, greaveAt)
+    rotation: rotate([0, 1, 0], 270)
+    scale [0.205 * slim, 0.3215, 0.25]
+    material: shinViolet
+    blend: "Intersection"
+    group: greaveGroup(isRight)
+    parent: $"shin-{side}"
+    profile { kind: "Convex", vertices: greaveSide, cornerRadius: 0.1 }
+    rounding: 0.03
+  }
+
+  shape Prism $"shinArch-{side}" {
+    id: 183 + isRight * 68
+    position: mirrorX(isRight, archFrontAt)
+    rotation: archFrontTurn
+    scale [0.17, 0.12, 0.3]
+    material: charcoal
+    blend: "Subtraction"
+    group: greaveGroup(isRight)
+    parent: $"shin-{side}"
+    profile { kind: "Convex", vertices: archOutline, cornerRadius: archCorner }
+  }
+
+  // The back arch clears the heel jet; the scout's plain heel needs none.
+  if scout == false {
+    shape Prism $"shinArchBack-{side}" {
+      id: 964 + isRight * 8
+      position: mirrorX(isRight, archBackAt)
+      rotation: halfTurn
+      scale [0.152, 0.162, 0.19]
+      material: jet
+      blend: "Subtraction"
+      group: greaveGroup(isRight)
+      parent: $"shin-{side}"
+      profile { kind: "Convex", vertices: archOutline, cornerRadius: archCorner }
+    }
+  }
+
+  shape Capsule $"kneeRod-{side}" {
+    id: 157 + isRight * 69
+    position: mirrorX(isRight, [-0.1955, 0.5716, 0.1233])
+    rotation: compose(halfTurn, mirrorRotation(isRight, [0.3021, 0, 0.0134, 0.9532]))
+    scale [0.012, 0.404, 0.012]
+    material: steel
+    group: greaveGroup(isRight)
+    parent: $"shin-{side}"
+  }
+
+  // The ankle hub: the joint the foot turns about, a dark gunmetal drum on the greave's outer face at the heel, its violet
+  // bezel and dark glass lens painted on its face (`fittingPaints`), after the model sheet's side views.
+  shape Cylinder $"ankleHub-{side}" {
+    id: 1000 + isRight * 6
+    position: mirrorX(isRight, [-0.392, 0.175, 0.07])
+    rotation: compose(halfTurn, [0, 0, diagonal, diagonal])
+    scale [0.072, 0.024, 0.072]
+    material: gunmetal
+    group: greaveGroup(isRight)
+    parent: $"shin-{side}"
+    rounding: 0.008
+  }
+
+  // The boot: a sloping lavender instep under the greave's ivory arch on a charcoal ankle and a thick sole, with the heel
+  // jet's housing in its heel (the scout's heel is plain). The raised toe cap is its own plate; the tread and the heel
+  // guards are hinged to open for the jet.
+  shape Prism $"boot-{side}" {
+    id: 195 + isRight * 68
+    position: mirrorX(isRight, [-0.2, 0.1875, -0.0775])
+    rotation: compose(halfTurn, [0, -diagonal, 0, diagonal])
+    scale [0.235, 0.235, 0.2 * slim]
+    material: violet
+    group: bootGroup(isRight)
+    swings [
+      swing("gait", [-1, 0, 0], 0.2, mirrorX(isRight, [-0.2, 0.1715, -0.0075])) with {
+        wave: "sine"
+        phase: bySide(isRight, 0, 3.1416)
+      }
+      swing("gait", [-1, 0, 0], -0.25, mirrorX(isRight, [-0.2, 0.1715, -0.0075])) with {
+        wave: "halfSine"
+        phase: bySide(isRight, 5.184, 2.0424)
+      }
+      swing("flight", [-1, 0, 0], 0.12, mirrorX(isRight, [-0.2, 0.1715, -0.0075])) with { wave: "linear", phase: 0 }
+      swing("air", [-1, 0, 0], 0.02, mirrorX(isRight, [-0.2, 0.1715, -0.0075])) with { wave: "linear", phase: 12.5 }
+      swing("land", [-1, 0, 0], 0.1, mirrorX(isRight, [-0.2, 0.1715, -0.0075])) with { wave: "linear" }
+      swing("mantle", [-1, 0, 0], 0.3, mirrorX(isRight, [-0.2, 0.1715, -0.0075])) with { wave: "curve:mantle-fold" }
+    ]
+    parent: $"shin-{side}"
+    profile {
+      kind: "Convex"
+      cornerRadius: 0.2
+      vertices [
+        [-0.85, -0.34]
+        [-0.85, 0.45]
+        [-0.32, 0.54]
+        [0.18, 0.36]
+        [0.65, 0.08]
+        [0.93, -0.18]
+        [0.96, -0.34]
+      ]
+    }
+  }
+
+  shape Prism $"bootPlan-{side}" {
+    id: 196 + isRight * 68
+    position: mirrorX(isRight, [-0.2, 0.19, -0.085])
+    rotation: compose(halfTurn, [diagonal, 0, 0, diagonal])
+    scale [0.165 * slim, 0.24, 0.25]
+    material: violet
+    blend: "SmoothIntersection"
+    smooth: 0.03
+    group: bootGroup(isRight)
+    parent: $"boot-{side}"
+    profile {
+      kind: "Convex"
+      cornerRadius: 0.25
+      vertices: bootPlanOutline
+    }
+  }
+
+  shape Box $"bootUnderBand-{side}" {
+    id: 1020 + isRight * 1
+    position: mirrorX(isRight, [-0.2, -0.248, -0.3339])
+    rotation [0, 0.9397, 0.342, 0]
+    scale [0.5, 0.5, 0.5]
+    material: violet
+    blend: "SmoothIntersection"
+    smooth: 0.03
+    group: bootGroup(isRight)
+    parent: $"boot-{side}"
+  }
+
+  shape Superellipsoid $"ankle-{side}" {
+    id: 192 + isRight * 68
+    position: mirrorX(isRight, [-0.2, 0.17, -0.06])
+    scale [0.12 * slim, 0.07, 0.1]
+    material: charcoal
+    group: bootGroup(isRight)
+    parent: $"boot-{side}"
+    exponent: 2
+  }
+
+  shape Prism $"sole-{side}" {
+    id: 201 + isRight * 68
+    position: mirrorX(isRight, [-0.2, 0.03, -0.204])
+    rotation: compose(halfTurn, [diagonal, 0, 0, diagonal])
+    scale [0.18 * slim, 0.2, 0.03]
+    material: charcoal
+    group: bootGroup(isRight)
+    parent: $"boot-{side}"
+    profile {
+      kind: "Convex"
+      cornerRadius: 0.25
+      vertices: bootPlanOutline
+    }
+  }
+
+  if scout == false {
+    // Clearance follows the nozzle axis through the instep and the ankle, then the jet's housing, its bore, the dark
+    // inset at the bore's foot and the lens with its pale core.
+    shape Cylinder $"bootJetClearance-{side}" {
+      id: 1340 + isRight * 20
+      position: mirrorX(isRight, [-0.2, 0.169638, 0.212769])
+      rotation: compose(bootNozzleRotation, halfTurn)
+      scale [0.12, 0.24, 0.12]
+      material: charcoal
+      blend: "Subtraction"
+      group: bootGroup(isRight)
+      parent: $"boot-{side}"
+    }
+
+    shape Cylinder $"heelHousing-{side}" {
+      id: 202 + isRight * 68
+      position: mirrorX(isRight, [-0.2, 0.245, 0.16])
+      rotation: compose(bootNozzleRotation, halfTurn)
+      scale [0.106, 0.052, 0.106]
+      material: gunmetal
+      group: bootGroup(isRight)
+      parent: $"boot-{side}"
+      rounding: 0.014
+    }
+
+    shape Cylinder $"heelBore-{side}" {
+      id: 1302 + isRight * 20
+      position: mirrorX(isRight, [-0.2, 0.1917551, 0.1972825])
+      rotation: bootNozzleRotation
+      scale [0.076, 0.043, 0.076]
+      material: jet
+      blend: "Subtraction"
+      group: bootGroup(isRight)
+      parent: $"boot-{side}"
+    }
+
+    shape Cylinder $"heelInset-{side}" {
+      id: 204 + isRight * 68
+      position: mirrorX(isRight, [-0.2, 0.2245212, 0.1743394])
+      rotation: bootNozzleRotation
+      scale [0.074, 0.01, 0.074]
+      material: jet
+      group: bootGroup(isRight)
+      parent: $"boot-{side}"
+    }
+
+    shape Superellipsoid $"heelLight-{side}" {
+      id: 205 + isRight * 68
+      position: mirrorX(isRight, [-0.2, 0.2155105, 0.1806488])
+      rotation: compose(bootLensRotation, halfTurn)
+      scale [0.058, 0.058, 0.013]
+      material: bootCyan
+      group: bootGroup(isRight)
+      parent: $"boot-{side}"
+      exponent: 2
+    }
+
+    shape Superellipsoid $"heelCore-{side}" {
+      id: 980 + isRight * 1
+      position: mirrorX(isRight, [-0.2, 0.2089573, 0.1852374])
+      rotation: bootLensRotation
+      scale [0.028, 0.028, 0.011]
+      material: bootGlow
+      group: bootGroup(isRight)
+      parent: $"boot-{side}"
+      exponent: 2
+    }
+  }
+
+  shape Prism $"toe-{side}" {
+    id: 199 + isRight * 68
+    position: mirrorX(isRight, [-0.2, 0.125, -0.205])
+    rotation: compose(halfTurn, [0, -diagonal, 0, diagonal])
+    scale [0.19, 0.12, 0.215 * slim]
+    material: violet
+    group: toeGroup(isRight)
+    parent: $"boot-{side}"
+    profile {
+      kind: "Convex"
+      cornerRadius: 0.15
+      vertices [
+        [-1, -0.78]
+        [-1, 0.22]
+        [-0.65, 0.64]
+        [0.28, 0.51]
+        [0.82, 0.13]
+        [1, -0.35]
+        [0.86, -0.78]
+      ]
+    }
+  }
+
+  shape Prism $"toePlan-{side}" {
+    id: 200 + isRight * 68
+    position: mirrorX(isRight, [-0.2, 0.1, -0.205])
+    rotation: compose(halfTurn, [diagonal, 0, 0, diagonal])
+    scale [0.18 * slim, 0.2, 0.2]
+    material: violet
+    blend: "SmoothIntersection"
+    smooth: 0.03
+    group: toeGroup(isRight)
+    parent: $"boot-{side}"
+    profile {
+      kind: "Convex"
+      cornerRadius: 0.25
+      vertices: bootPlanOutline
+    }
+  }
+
+  if scout == false {
+    // The air gate opens the heel before a second-jump jet fires: fold the centre tread forward, and splay the two
+    // carved guards at their front hinges.
+    shape Prism $"heelTread-{side}" {
+      id: 956 + isRight * 7
+      position: mirrorX(isRight, [-0.2, 0.035, 0.08])
+      rotation [0, 1, 0, 0]
+      scale [0.055, 0.035, 0.065]
+      material: gunmetal
+      parent: $"boot-{side}"
+      swings [
+        swing("air", [-1, 0, 0], 1.0471976, mirrorX(isRight, [-0.2, 0.09, 0.015])) with { wave: "constant", phase: 0 }
+      ]
+      slides [
+        {
+          driver: "air"
+          axis [0, 0, -1]
+          amplitude: 0.08
+          phase: 0
+          wave: "constant"
+        }
+      ]
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.25
+        sides: 6
+      }
+      rounding: 0.008
+    }
+
+    for (cheek, k) in [
+      { name: "inner", id: 1301, x: -0.085, splay: 0.1, group: 129 }
+      { name: "outer", id: 1300, x: -0.315, splay: -0.28, group: 130 }
+    ] {
+      shape Prism $"heelCheek-{cheek.name}-{side}" {
+        id: cheek.id + isRight * 20
+        position: mirrorX(isRight, [cheek.x, 0.09, 0.135])
+        rotation [0, 0.7071068, 0, 0.7071068]
+        scale [0.115, 0.09, 0.052]
+        material: violet
+        group: cheek.group + isRight * 2
+        parent: $"boot-{side}"
+        swings [
+          swing("air", [0, 1, 0], flip(isRight, cheek.splay), mirrorX(isRight, [cheek.x, 0.09, 0.02])) with {
+            wave: "constant"
+            phase: 0
+          }
+        ]
+        profile {
+          kind: "Convex"
+          cornerRadius: 0.5
+          sides: 6
+          vertices [
+            [-1, -0.8]
+            [-1, 0.22]
+            [-0.3, 0.84]
+            [0.55, 0.55]
+            [1, -0.1]
+            [0.85, -0.8]
+          ]
+        }
+      }
+
+      shape Cylinder $"heelCheekClearance-{cheek.name}-{side}" {
+        id: 1342 + k + isRight * 20
+        position: mirrorX(isRight, [-0.2, 0.169638, 0.212769])
+        rotation: compose(bootNozzleRotation, halfTurn)
+        scale [0.12, 0.24, 0.12]
+        material: violet
+        blend: "SmoothSubtraction"
+        smooth: 0.03
+        group: cheek.group + isRight * 2
+        parent: $"heelCheek-{cheek.name}-{side}"
+      }
+    }
+
+    // The thruster pod (`podAt`): one lavender shell cut flat against her back and on its inner face, bevelled over its
+    // shoulder, with the nozzle in a dark well under it. Its plates' bands, seams and vent are paint (`podPaints`).
+    shape Superellipsoid $"pod-{side}" {
+      id: 1100 + isRight * 100
+      position: podAt(isRight)
+      rotation: podTurn(isRight)
+      scale [0.1841, 0.4446, 0.2387]
+      material: bySide(isRight, violetPodLeft, violetPodRight)
+      group: podGroup(isRight)
+      parent: "torso"
+      exponent: 2.8
+      swings [
+        swing("wings", [0, 0, -1], flip(isRight, 0.105), mirrorX(isRight, [-0.09, 1.6015, 0.185])) with {
+          wave: "linear"
+          phase: 0
+        }
+        swing("wings", [-1, 0, 0], 0.07, mirrorX(isRight, [-0.09, 1.6015, 0.185])) with { wave: "linear", phase: 0 }
+        swing("bank", [0, 1, 0], flip(isRight, 0.05), mirrorX(isRight, [-0.09, 1.6015, 0.185])) with {
+          wave: "linear"
+          phase: 0
+        }
+      ]
+    }
+
+    shape Box $"podCapClip-{side}" {
+      id: 1107 + isRight * 100
+      position: mirrorX(isRight, [-1.04, 1.13, 0.4376])
+      rotation: compose(halfTurn, mirrorTurnRotation(isRight, [0, 0, 0, 1]))
+      scale [1, 1, 0.2254]
+      material: bySide(isRight, violetPodLeft, violetPodRight)
+      blend: "Intersection"
+      group: podGroup(isRight)
+      parent: $"pod-{side}"
+    }
+
+    // The flat inner face, where the grey plate is painted in this cutter's frame.
+    shape Box $"podCoreCut-{side}" {
+      id: 1104 + isRight * 100
+      position: mirrorX(isRight, [-0.7473, 1.6778, -0.0131])
+      rotation: compose(halfTurn, mirrorTurnRotation(isRight, [-0.0356, -0.0977, 0.9346, 0.3402]))
+      scale [1, 1, 1]
+      material: bySide(isRight, violetPodLeft, violetPodRight)
+      blend: "Intersection"
+      group: podGroup(isRight)
+      parent: $"pod-{side}"
+    }
+
+    for (bevel, k) in [{ x: -0.014, y: 1.0923, smooth: 0.03 }, { x: -0.0545, y: 1.1005, smooth: 0.08 }] {
+      shape Box $"podShoulder{k}-{side}" {
+        id: 1110 + k + isRight * 100
+        position: mirrorX(isRight, [bevel.x, bevel.y, 0.195])
+        rotation: compose(halfTurn, mirrorTurnRotation(isRight, [0, 0, -0.633, 0.7742]))
+        scale [0.78, 0.78, 0.78]
+        material: bySide(isRight, violetPodLeft, violetPodRight)
+        blend: "SmoothIntersection"
+        smooth: bevel.smooth
+        group: podGroup(isRight)
+        parent: $"pod-{side}"
+      }
+    }
+
+    // The well under the shell's foot the nozzle sits in, its face the dark of the cut.
+    shape Superellipsoid $"podWell-{side}" {
+      id: 1103 + isRight * 100
+      position: mirrorX(isRight, [-0.215, 0.76, 0.3])
+      scale [0.13, 0.14, 0.16]
+      material: charcoal
+      blend: "Subtraction"
+      group: podGroup(isRight)
+      parent: $"pod-{side}"
+      exponent: 2.5
+    }
+
+    // The strap it hangs from.
+    shape Superellipsoid $"podHanger-{side}" {
+      id: 1105 + isRight * 100
+      position: mirrorX(isRight, [-0.105, 1.5, 0.18])
+      rotation: mirrorTurnRotation(isRight, [0, 0, 0, 1])
+      scale [0.024, 0.12, 0.016]
+      material: charcoal
+      group: podGroup(isRight)
+      parent: $"pod-{side}"
+      exponent: 6
+    }
+
+    // The nozzle's gunmetal lip, then the nozzle in it with its bore, and the lens and core lit in the bore.
+    shape Prism $"nozzleLip-{side}" {
+      id: 1140 + isRight * 100
+      position: mirrorX(isRight, [-0.229, 0.8711, 0.3075])
+      rotation: compose(halfTurn, mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246]))
+      scale [0.154, 0.104, 0.0156]
+      material: gunmetal
+      group: podGroup(isRight)
+      parent: $"pod-{side}"
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 1
+      }
+      taper: 1
+      rounding: 0.006
+    }
+
+    shape Prism $"nozzleLipHole-{side}" {
+      id: 1141 + isRight * 100
+      position: mirrorX(isRight, [-0.229, 0.8711, 0.3075])
+      rotation: compose(halfTurn, mirrorTurnRotation(isRight, [-0.5959, 0.2037, -0.28, 0.7246]))
+      scale [0.1353, 0.0853, 0.0312]
+      material: gunmetal
+      blend: "Subtraction"
+      group: podGroup(isRight)
+      parent: $"pod-{side}"
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 1
+      }
+      taper: 1
+    }
+
+    shape Prism $"nozzle-{side}" {
+      id: 1135 + isRight * 100
+      position: mirrorX(isRight, [-0.232, 0.8746, 0.3066])
+      rotation: mirrorTurnRotation(isRight, [0.5959, 0.2037, 0.28, 0.7246])
+      scale [0.1321, 0.0822, 0.0234]
+      material: charcoal
+      group: podGroup(isRight)
+      parent: $"pod-{side}"
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 1
+      }
+      taper: 1
+      rounding: 0.008
+    }
+
+    shape Prism $"nozzleBore-{side}" {
+      id: 1137 + isRight * 100
+      position: mirrorX(isRight, [-0.2172, 0.8571, 0.3114])
+      rotation: mirrorTurnRotation(isRight, [0.5959, 0.2037, 0.28, 0.7246])
+      scale [0.1181, 0.0682, 0.0125]
+      material: jet
+      blend: "Subtraction"
+      group: podGroup(isRight)
+      parent: $"pod-{side}"
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 1
+      }
+      taper: 1
+    }
+
+    shape Superellipsoid $"nozzleGlow-{side}" {
+      id: 1138 + isRight * 100
+      position: mirrorX(isRight, [-0.2236, 0.8647, 0.3093])
+      rotation: mirrorTurnRotation(isRight, [0.5959, 0.2037, 0.28, 0.7246])
+      scale [0.0595, 0.037, 0.0055]
+      material: thrusterCyan
+      group: podGroup(isRight)
+      parent: $"pod-{side}"
+      exponent: softness
+    }
+
+    shape Superellipsoid $"nozzleCore-{side}" {
+      id: 1139 + isRight * 100
+      position: mirrorX(isRight, [-0.2212, 0.8617, 0.3101])
+      rotation: mirrorTurnRotation(isRight, [0.5959, 0.2037, 0.28, 0.7246])
+      scale [0.0238, 0.0148, 0.0047]
+      material: thrusterGlow
+      group: podGroup(isRight)
+      parent: $"pod-{side}"
+      exponent: softness
+    }
+
+    shape Cylinder $"podHinge-{side}" {
+      id: 212 + isRight * 68
+      position: mirrorX(isRight, [-0.102, 1.6015, 0.185])
+      rotation [-diagonal, 0, 0, diagonal]
+      scale [0.018, 0.008, 0.018]
+      material: charcoal
+      group: torsoGroup
+      parent: "torso"
+    }
+  }
+}
+
+// The mech suit's exhaust: each pod's leaves its nozzle 55 degrees back from straight down and narrows to two and a half
+// times its mouth, so in a straight-legged hover it passes behind the greaves rather than over them (sheet 10), and each
+// heel thruster's lens fires one, dark but for the air jump's boost. Each pod's is posed in its shell's frame.
+let exhaustRamp = [
+  { density: 0, color: "#134D8B" }
+  { density: 0.3, color: "#238EDB" }
+  { density: 0.65, color: "#57DCEE" }
+  { density: 1, color: "#DCFCFF" }
+]
+function podExhaust(side, isRight, seed) = poseIn(
+  podAt(isRight),
+  podTurn(isRight),
+  mirrorX(isRight, [-0.21, 1.0413, 0.1872]) + rotatePoint(halfTurn, mirrorX(isRight, [0.0072, -0.4054, -0.2791])),
+  compose(halfTurn, [0.4617, 0, 0, 0.887])
+) with {
+  kind: "flow"
+  parent: $"pod-{side}"
+  halfExtent [0.2, 0.25, 0.2]
+  axis: 0.5
+  width: 0.0432
+  spread: 2.5
+  fade: 1.5
+  noiseScale: 0.08
+  noiseDepth: 0.4
+  speed: 1.5
+  seed: seed
+  steps: 40
+  intensity: 90000
+  extinction: 1.2
+  pulseAmplitude: 0.04
+  pulseFrequency: 14
+  intensityLane: 1
+  ramp: exhaustRamp
+}
+function heelExhaust(side, seed) = {
+  kind: "flow"
+  parent: $"heelLight-{side}"
+  position [0, 0, -0.19]
+  rotation [0.707107, 0, 0, 0.707107]
+  halfExtent [0.08, 0.18, 0.08]
+  axis: 0.36
+  width: 0.045
+  spread: 1.3
+  fade: 1.1
+  noiseScale: 0.05
+  noiseDepth: 0.4
+  speed: 2.5
+  seed: seed
+  steps: 32
+  intensity: 330000
+  extinction: 1.2
+  pulseAmplitude: 0.06
+  pulseFrequency: 18
+  intensityLane: 3
+  ramp: exhaustRamp
+}
+let mechExhaust = [podExhaust("left", 0, 31), podExhaust("right", 1, 39), heelExhaust("left", 53), heelExhaust("right", 59)]
+
+// One suit: the frame below as the prototype `id`, its ivory plates, lavender plates and the lavender of its grooves in
+// the colours given; `scout` cuts the scout's lighter frame.
+template suitPrototype(id, ivoryPlate = "#F2C49A", lavenderPlate = "#744080", lavenderSeam = "#5E3468", scout = false) {
+prototypes {
+  allow PUCK133 "her wall toes solve after her ground feet on the same legs: on a face the ground feet have let go, and at a wall's foot the toes are meant to win"
+  prototype $"{id}" {
+    // Her capsule darkens the floor at her feet and the wall beside her, and shadows her from a lamp onto them.
+    occlusion: bodyOcclusion
+    document {
+      schema: "puck.creation.v2"
+      name: $"{id}"
+      // At rest her breath re-poses her ten times a second: a breath's few millimetres stay smooth at it, and the views
+      // that show her stand between poses. A stride poses her on the frame it starts.
+      behavior {
+        restRate: 10
+      }
+      // The blink seats each closed lid over its eye and parks the open eye's pieces behind the face, at the head's scale.
+      frames [mothBlinkFrame(headAt, headScale)]
+      // The suit is pristine, as on the sheets: wear reaches only the tightest edges, and faintly.
+      palette [
+        plateSlot(ivoryPlate, 71, creamUndercoat, paints: earPaints(lavenderPlate))
+        // The sole grooves, and the hood's ivory trim in the helmet's frame: a horseshoe round the face opening, its
+        // ellipse projected along the face's forward axis; the throat opening leaves the helmet no surface below it.
+        plateSlot(
+          lavenderPlate,
+          72,
+          lilacUndercoat,
+          roughness: 0.3,
+          specular: 0.12,
+          coat: 0.4,
+          paints: concat(
+            flatMap(
+              ["left", "right"],
+              side => [
+                {
+                  parent: $"sole-{side}"
+                  type: "Prism"
+                  position [0, 0.02, 0.29]
+                  rotation [0, diagonal, 0, diagonal]
+                  scale [0.0065, 0.0065, 0.3]
+                  profile { kind: "Ellipse" }
+                  color: lavenderSeam
+                }
+                {
+                  parent: $"sole-{side}"
+                  type: "Prism"
+                  position [0, 0.022, -0.115]
+                  rotation [0, diagonal, 0, diagonal]
+                  scale [0.0065, 0.0065, 0.3]
+                  profile { kind: "Ellipse" }
+                  color: lavenderSeam
+                }
+              ]
+            ),
+            [
+              {
+                parent: "helmet"
+                type: "Prism"
+                position [0, -0.0198, 0.21575]
+                scale [0.24265, 0.26245, 0.2]
+                profile { kind: "Ellipse" }
+                stroke: 0.0227
+                color: ivoryPlate
+              }
+            ]
+          )
+        )
+        {
+          color: "#252630"
+          toonSelect: mothStyles
+          roughness: 0.62
+          specular: 0.04
+          emissive: 0
+          coat: 0
+        }
+        {
+          color: "#B76B3C"
+          toonSelect: mothStyles
+          roughness: 0.62
+          specular: 0.04
+          emissive: 0
+          coat: 0
+          wrap: 0.35
+          fill: "#8A4A2C"
+          // The mouth and the closed lids' lash lines (head.puck).
+          paints: mothSkinPaints(headScale)
+        }
+        {
+          color: "#171210"
+          toonSelect: mothStyles
+          roughness: 0.32
+          specular: 0.1
+          emissive: 0
+          coat: 0.05
+          sheen: 0.3
+        }
+        {
+          color: "#FFF8E9"
+          roughness: 0.22
+          specular: 0.04
+          emissive: 0
+          coat: 0
+          paints: mothLidPaints(headScale)
+        }
+        // The spine's charcoal, its joints painted as lighter bands down its back, one every 67.5 mm. A slot of its own,
+        // so the paint rides only the spine's group's materials.
+        {
+          color: "#252630"
+          toonSelect: mothStyles
+          roughness: 0.62
+          specular: 0.04
+          emissive: 0
+          coat: 0
+          paints [
+            {
+              parent: "spine"
+              type: "Box"
+              position [0, -0.0075, 0.0175]
+              scale [0.03, 0.006, 0.012]
+              color: "#3A3B47"
+              repeat { cell [0, 0.0675, 0] }
+            }
+          ]
+        }
+        {
+          color: "#754137"
+          toonSelect: mothStyles
+          roughness: 0.6
+          specular: 0.04
+          emissive: 0
+          coat: 0
+        }
+        {
+          color: "#C98F35"
+          toonSelect: mothStyles
+          roughness: 0.42
+          specular: 0.04
+          emissive: 0
+          coat: 0
+          metal: 0.2
+          weathering {
+            edge: 0.5
+            lines: 0
+            settle: 0.015
+            reach: 0.012
+            seed: 79
+            scale: 45
+            floor: plateWear
+            under [{ threshold: 0.22, surface { color: "#D0AF70", roughness: 0.6, metal: 0.5 } }]
+            deposit { color: "#615B53", roughness: 0.85, metal: 0 }
+          }
+        }
+        {
+          color: "#89481D"
+          toonSelect: mothStyles
+          roughness: 0.25
+          specular: 0.04
+          emissive: 0
+          coat: 0
+        }
+        {
+          color: "#120D13"
+          toonSelect: mothStyles
+          roughness: 0.25
+          specular: 0.04
+          emissive: 0
+          coat: 0
+        }
+        {
+          color: "#FFF8EF"
+          roughness: 0.2
+          specular: 0.04
+          emissive: 1200
+          coat: 0
+        }
+        // The shoulder plates, each side's in its plates' own frames.
+        plateSlot(lavenderPlate, 83, lilacUndercoat, roughness: 0.3, specular: 0.12, coat: 0.4, paints: shoulderPaints("left", ivoryPlate, scout))
+        plateSlot(lavenderPlate, 84, lilacUndercoat, roughness: 0.3, specular: 0.12, coat: 0.4, paints: shoulderPaints("right", ivoryPlate, scout))
+        // The back pods, each in its shell's frame.
+        plateSlot(
+          lavenderPlate,
+          85,
+          lilacUndercoat,
+          roughness: 0.3,
+          specular: 0.12,
+          coat: 0.4,
+          paints: scout ? [] : podPaints("left", 0, ivoryPlate, lavenderPlate, lavenderSeam)
+        )
+        plateSlot(
+          lavenderPlate,
+          86,
+          lilacUndercoat,
+          roughness: 0.3,
+          specular: 0.12,
+          coat: 0.4,
+          paints: scout ? [] : podPaints("right", 1, ivoryPlate, lavenderPlate, lavenderSeam)
+        )
+        // The chest slab's lavender centre, in the slab's frame, leaving the ivory border round it.
+        plateSlot(
+          ivoryPlate,
+          87,
+          creamUndercoat,
+          roughness: 0.34,
+          coat: 0.3,
+          paints: [
+            {
+              parent: "chestSlab"
+              type: "Prism"
+              position [0, -0.005, 0.055]
+              scale [0.125, 0.105, 0.06]
+              profile {
+                kind: "Polygon"
+                sides: 6
+              }
+              color: lavenderPlate
+            }
+          ]
+        )
+        plateSlot(ivoryPlate, 88, creamUndercoat)
+        // The greaves, each in its own frame.
+        plateSlot(
+          lavenderPlate,
+          89,
+          lilacUndercoat,
+          paints: concat(greavePaints("left", 0, ivoryPlate, lavenderSeam), greavePaints("right", 1, ivoryPlate, lavenderSeam))
+        )
+        {
+          color: "#43464E"
+          roughness: 0.34
+          specular: 0.35
+          metal: 0.6
+          emissive: 0
+          coat: 0.2
+          weathering {
+            edge: 0.5
+            lines: 0
+            settle: 0.015
+            reach: 0.012
+            seed: 90
+            scale: 45
+            floor: plateWear
+            under [{ threshold: 0.22, surface { color: "#858891", roughness: 0.6, metal: 0.5 } }]
+            deposit { color: "#615B53", roughness: 0.85, metal: 0 }
+          }
+          paints: fittingPaints(lavenderPlate, scout)
+        }
+        {
+          color: "#8B9099"
+          roughness: 0.3
+          specular: 0.4
+          metal: 0.7
+          emissive: 0
+          coat: 0.2
+          weathering {
+            edge: 0.5
+            lines: 0
+            settle: 0.015
+            reach: 0.012
+            seed: 91
+            scale: 45
+            floor: plateWear
+            under [{ threshold: 0.22, surface { color: "#BDC1C5", roughness: 0.6, metal: 0.5 } }]
+            deposit { color: "#615B53", roughness: 0.85, metal: 0 }
+          }
+        }
+        {
+          color: "#D8FDFF"
+          roughness: 0.2
+          specular: 0.04
+          emissive: 4500
+          emissiveLane: 2
+          coat: 0
+        }
+        {
+          color: "#1F9BAE"
+          roughness: 0.25
+          specular: 0.04
+          emissive: 3600
+          emissiveLane: 2
+          coat: 0
+        }
+        // The gauntlets, each in its own frame.
+        plateSlot(ivoryPlate, 94, creamUndercoat, paints: gauntletPaints("left", 0, lavenderPlate))
+        plateSlot(ivoryPlate, 95, creamUndercoat, paints: gauntletPaints("right", 1, lavenderPlate))
+        {
+          color: "#1F9BAE"
+          roughness: 0.25
+          specular: 0.04
+          emissive: 1050
+          coat: 0
+        }
+        {
+          color: "#D8FDFF"
+          roughness: 0.2
+          specular: 0.04
+          emissive: 1950
+          coat: 0
+        }
+        {
+          color: "#7A7E88"
+          roughness: 0.3
+          specular: 0.4
+          metal: 0.6
+          coat: 0.15
+        }
+        {
+          color: "#1C1D24"
+          toonSelect: mothStyles
+          roughness: 0.65
+          specular: 0.05
+          paints [
+            {
+              type: "Box"
+              position [0.12, -0.04, 0.09]
+              rotation [0, 0, 0.1736482, 0.9848078]
+              scale [0.06, 0.003, 0.08]
+              color: "#0D1016"
+            }
+            {
+              type: "Box"
+              position [-0.12, -0.04, 0.09]
+              rotation [0, 0, -0.1736482, 0.9848078]
+              scale [0.06, 0.003, 0.08]
+              color: "#0D1016"
+            }
+            {
+              type: "Box"
+              position [0.12, -0.1, 0.09]
+              rotation [0, 0, 0.1736482, 0.9848078]
+              scale [0.06, 0.003, 0.08]
+              color: "#0D1016"
+            }
+            {
+              type: "Box"
+              position [-0.12, -0.1, 0.09]
+              rotation [0, 0, -0.1736482, 0.9848078]
+              scale [0.06, 0.003, 0.08]
+              color: "#0D1016"
+            }
+          ]
+        }
+        // The worn screens' glass, lettered with the menu's interface and hidden under its cover while the menu is shut.
+        wornScreenGlass("left", rosterKinds)
+        wornScreenGlass("right", rosterKinds)
+      ]
+      shape Superellipsoid "pelvis" {
+        id: 1
+        position [0, 1.0215, 0]
+        scale [0.195, 0.1425, 0.1475]
+        material: charcoal
+        group: pelvisGroup
+        exponent: softness
+        // The whole body rides the pelvis: it turns its hips into a diagonal (0.7 rad at 45 degrees off the facing,
+        // none in a pure strafe or backpedal), trails a turn by 0.12 s of turn rate, and leans about the ground into
+        // its planar acceleration, sideways into a curving run and forward into a start.
+        swings [
+          swing("gait", [0, 1, 0], 0.08, [0, 1.0765, 0]) with { wave: "sine", phase: 0 }
+          // Moving in flight pitches the whole body 0.6 rad about her middle, so the legs trail behind; the cruise gate
+          // eases it in and out. A constant wave: the pitch is a pose, the same at any speed.
+          swing("cruise", [-1, 0, 0], 0.6, [0, 1, 0]) with { wave: "constant", phase: 0 }
+          swing("gait", [0, 0, -1], 0.05, [0, 1.0765, 0]) with { wave: "sine", phase: 0 }
+          swing("heading", [0, 1, 0], 0.7, [0, 1.0765, 0]) with { wave: "sine" }
+          swing("trail", [0, 1, 0], -0.12, [0, 1.0765, 0]) with { wave: "linear" }
+          swing("lean", [0, 0, -1], -0.016, [0, 0, 0]) with { wave: "linear" }
+          swing("surge", [-1, 0, 0], 0.006, [0, 0, 0]) with { wave: "linear" }
+          // Landing pitches her forward about the ground point, 0.08 rad at 4 m/s.
+          swing("land", [-1, 0, 0], -0.02, [0, 0, 0]) with { wave: "linear" }
+          // Over a ledge her hips pitch with her chest as it drives over her hands.
+          swing("mantle", [-1, 0, 0], 0.25, [0, 1, 0]) with { wave: "curve:mantle-chest" }
+        ]
+        slides [
+          {
+            driver: "bob"
+            axis [0, 1, 0]
+            amplitude: 0.022
+            phase: -1.5708
+            wave: "sine"
+          }
+          // And drops her hips 10 cm at 4 m/s; the planted feet fold the legs under them.
+          {
+            driver: "land"
+            axis [0, 1, 0]
+            amplitude: 0.025
+            wave: "linear"
+          }
+          // Over a ledge her hips drop half a metre toward her tucked feet, which ride the move's path, so her
+          // shoulders come low over the lip and her planted hands reach it.
+          {
+            driver: "mantle"
+            axis [0, 1, 0]
+            amplitude: -0.5
+            wave: "curve:mantle-fold"
+          }
+        ]
+      }
+
+      // The lavender plate below the belt, narrowing to a point between the thighs, and the ochre belt and its clasp.
+      shape Prism "pelvicShield" {
+        id: 7
+        position [0, 1.0, -0.13]
+        rotation: halfTurn
+        scale [0.125, 0.11, 0.04]
+        material: violet
+        group: pelvisGroup
+        parent: "pelvis"
+        profile {
+          kind: "Convex"
+          vertices [[-1, 1], [1, 1], [0.85, 0.2], [0.3, -1], [-0.3, -1], [-0.85, 0.2]]
+          cornerRadius: 0.1
+        }
+      }
+
+      shape Superellipsoid "belt" {
+        id: 10
+        position [0, 1.118, 0]
+        rotation: halfTurn
+        scale [0.17, 0.026, 0.1325]
+        material: brass
+        group: pelvisGroup
+        parent: "pelvis"
+        exponent: softness
+      }
+
+      shape Prism "beltClasp" {
+        id: 11
+        position [0, 1.126, -0.133]
+        rotation: halfTurn
+        scale [0.069, 0.027, 0.015]
+        material: brass
+        group: pelvisGroup
+        parent: "pelvis"
+        profile {
+          kind: "Convex"
+          vertices [
+            [-0.72, 1]
+            [0.72, 1]
+            [1, 0.25]
+            [0.72, -1]
+            [-0.72, -1]
+            [-1, 0.25]
+          ]
+          cornerRadius: 0.12
+        }
+      }
+
+      shape Superellipsoid "torso" {
+        id: 2
+        position [0, 1.2915, 0]
+        rotation: halfTurn
+        scale [0.15, 0.285, 0.1225]
+        material: torsoSuit
+        group: torsoGroup
+        parent: "pelvis"
+        exponent: softness
+        // The chest turns most of the way back from the hips toward the facing and leads a turn the hips trail.
+        swings [
+          swing("dash", [-1, 0, 0], 0.4, [0, 1.0765, 0]) with { wave: "linear" }
+          // Over a ledge her chest arches back for the catch, then drives over her hands onto the top.
+          swing("mantle", [-1, 0, 0], 0.55, [0, 1.0765, 0]) with { wave: "curve:mantle-chest" }
+          swing("gait", [0, 1, 0], -0.16, [0, 1.0765, 0]) with { wave: "sine", phase: 0 }
+          swing("bob", [-1, 0, 0], -0.025, [0, 1.0765, 0]) with { wave: "sine", phase: -1.0708 }
+          swing("heading", [0, 1, 0], -0.4, [0, 1.0765, 0]) with { wave: "sine" }
+          swing("trail", [0, 1, 0], 0.08, [0, 1.0765, 0]) with { wave: "linear" }
+          swing("bank", [0, 0, -1], -0.2, [0, 1.0765, 0]) with { wave: "linear", phase: 0 }
+          swing("run", [-1, 0, 0], 0.1, [0, 1.0765, 0]) with { wave: "constant", phase: 0 }
+        ]
+        slides [
+          {
+            driver: "breath"
+            axis [0, 1, 0]
+            amplitude: 0.003
+            phase: 0
+            wave: "sine"
+          }
+        ]
+      }
+
+      // One flat chamfered slab over the chest; its ivory border and lavender centre are paint (chestArmor). The
+      // scout's is smaller.
+      shape Prism "chestSlab" {
+        id: 3
+        position [0, 1.38, -0.1]
+        rotation: halfTurn
+        scale: scout ? [0.15, 0.14, 0.045] : [0.175, 0.165, 0.055]
+        material: chestArmor
+        group: torsoGroup
+        parent: "torso"
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.3
+        }
+        rounding: 0.012
+      }
+
+      shape Superellipsoid "neckYoke" {
+        id: 13
+        position [0, 1.495, -0.0025]
+        scale [0.175, 0.07, 0.115]
+        material: charcoal
+        group: torsoGroup
+        parent: "torso"
+        exponent: softness
+      }
+
+      // The spine down her back; its joints are painted bands (spineCharcoal).
+      shape Superellipsoid "spine" {
+        id: 14
+        position [0, 1.3465, 0.155]
+        scale [0.0225, 0.1775, 0.0175]
+        material: spineCharcoal
+        group: torsoGroup
+        parent: "torso"
+        exponent: 3
+      }
+
+      if scout {
+        // The scout's dorsal plate, where the mech suit's pods hang: a slim bone shield down her back over the spine.
+        shape Prism "dorsalPlate" {
+          id: 30
+          position [0, 1.36, 0.165]
+          rotation: halfTurn
+          scale [0.11, 0.17, 0.022]
+          material: plainIvory
+          group: torsoGroup
+          parent: "torso"
+          profile {
+            kind: "Convex"
+            vertices [[-0.55, -1], [-1, -0.35], [-0.85, 0.75], [-0.4, 1], [0.4, 1], [0.85, 0.75], [1, -0.35], [0.55, -1]]
+            cornerRadius: 0.05
+          }
+          rounding: 0.012
+        }
+      }
+
+      shape Prism "collar" {
+        id: 20
+        position [0, 1.585, -0.09]
+        rotation: compose(halfTurn, [diagonal, 0, 0, diagonal])
+        scale [0.1, 0.095, 0.03]
+        material: brass
+        group: torsoGroup
+        parent: "torso"
+        profile {
+          kind: "Ellipse"
+        }
+        rounding: 0.005
+      }
+
+      shape Prism "collarOpening" {
+        id: 21
+        position [0, 1.585, -0.09]
+        rotation [-diagonal, 0, 0, diagonal]
+        scale [0.066, 0.065, 0.045]
+        material: charcoal
+        blend: "Subtraction"
+        group: torsoGroup
+        parent: "torso"
+        profile {
+          kind: "Ellipse"
+        }
+      }
+
+      shape Cylinder "collarStud" {
+        id: 22
+        position [-0.035, 1.58, -0.185]
+        rotation [-diagonal, 0, 0, diagonal]
+        scale [0.011, 0.0025, 0.011]
+        material: charcoal
+        group: torsoGroup
+        parent: "torso"
+      }
+
+      shape Superellipsoid "helmet" {
+        id: 23
+        position [0, 1.7603, 0.01575]
+        rotation: halfTurn
+        scale [0.2882, 0.3014, 0.2475]
+        material: violet
+        group: hoodGroup
+        parent: "torso"
+        exponent: softness
+        // The head keeps to the facing whatever the hips do, and looks ahead into a turn.
+        swings [
+          swing("gait", [0, 1, 0], 0.08, [0, 1.5715, 0]) with { wave: "sine", phase: 0.3 }
+          swing("heading", [0, 1, 0], -0.3, [0, 1.5715, 0]) with { wave: "sine" }
+          swing("trail", [0, 1, 0], 0.07, [0, 1.5715, 0]) with { wave: "linear" }
+          swing("cruise", [-1, 0, 0], -0.4, [0, 1.5715, 0]) with { wave: "constant", phase: 0 }
+          // Over a ledge she looks up at the lip, then down over the top.
+          swing("mantle", [-1, 0, 0], -0.35, [0, 1.5715, 0]) with { wave: "curve:mantle-look" }
+        ]
+      }
+
+      // The hood's charcoal interior, the headroom round her face reading as its padded lining: the cut takes the
+      // cutter's charcoal, and its rounded seam leaves no knife edge where it meets the face opening.
+      shape Superellipsoid "helmetInner" {
+        id: 24
+        position [0, 1.7559, -0.009]
+        scale [0.21, 0.224, 0.186]
+        material: charcoal
+        blend: "SmoothSubtraction"
+        smooth: 0.02
+        group: hoodGroup
+        parent: "helmet"
+        exponent: softness
+      }
+
+      shape Prism "helmetFaceOpening" {
+        id: 25
+        position [0, 1.7405, -0.2475]
+        scale [0.2222, 0.24112, 0.23175]
+        material: charcoal
+        // A rounded cut, so the rim and the interior meet the opening without a knife edge the bake would tear.
+        blend: "SmoothSubtraction"
+        smooth: 0.02
+        group: hoodGroup
+        parent: "helmet"
+        profile {
+          kind: "Ellipse"
+        }
+      }
+
+      shape Box "helmetThroatOpening" {
+        id: 26
+        position [0, 1.37, 0]
+        scale [0.6, 0.197, 0.6]
+        material: charcoal
+        blend: "Subtraction"
+        group: hoodGroup
+        parent: "helmet"
+      }
+
+      // The ivory ear mounts; each one's lavender cover, brass ring and button are paint (`earPaints`).
+      for (ear, k) in [{ side: "left", id: 51, x: -0.27544 }, { side: "right", id: 67, x: 0.27544 }] {
+        shape Cylinder $"earMount-{ear.side}" {
+          id: ear.id
+          position [ear.x, 1.7295, 0.01575]
+          rotation: compose(halfTurn, [0, 0, diagonal, diagonal])
+          scale [0.09592, 0.01452, 0.09592]
+          material: skin
+          group: hoodGroup
+          parent: "helmet"
+        }
+      }
+
+      mothHead(headScale, headAt, "helmet", rust, leather, ivory, umber, jet, pearl, ink)
+
+      // The braid roots under the lock beside her right cheek as one smooth tapering root, then plaits as three twisted
+      // strands below her jaw and leaves through the hood's front opening to an ochre tie and a short tassel; it keeps its
+      // full thickness whatever the head's scale.
+      shape Sweep "braid-root-0" {
+        id: 119
+        position [0.1232, 1.695, -0.137]
+        rotation: halfTurn
+        material: ink
+        group: braidGroup
+        parent: "helmet"
+        curve {
+          a [0, 0, 0]
+          b [-0.012, -0.095, 0.012]
+          c [-0.1144, -0.1371, -0.02]
+          radiusStart: 0.011
+          radiusEnd: 0.019
+        }
+      }
+
+      for (plait, k) in [
+        { name: "braid-root-1", id: 120, at [0.2376, 1.5579, -0.117], parent: "braid-root-0", b [-0.0044, -0.077, 0.0135], c [-0.0088, -0.154, 0.027] }
+        { name: "braid-root-2", id: 121, at [0.2464, 1.4039, -0.144], parent: "braid-root-1", b [-0.0088, -0.0792, 0.009], c [-0.0176, -0.1584, 0.018] }
+      ] {
+        shape Sweep $"{plait.name}" {
+          id: plait.id
+          position: plait.at
+          rotation: halfTurn
+          material: ink
+          group: braidGroup
+          parent: plait.parent
+          curve {
+            a [0, 0, 0]
+            b: plait.b
+            c: plait.c
+            radiusStart: 0.011
+            radiusEnd: 0.011
+            strands: 3
+            strandOffset: 0.011
+            twist: 2
+          }
+        }
+      }
+
+      shape Cylinder "braidTie" {
+        id: 146
+        position [0.264, 1.2455, -0.162]
+        rotation: halfTurn
+        scale [0.028, 0.009, 0.028]
+        material: brass
+        group: braidGroup
+        parent: "braid-root-2"
+        rounding: 0.003
+      }
+
+      shape Superellipsoid "braidTassel" {
+        id: 147
+        position [0.264, 1.2085, -0.162]
+        rotation [0, 0, 0.0998334, 0.9950042]
+        scale [0.02, 0.035, 0.016]
+        material: ink
+        group: braidGroup
+        parent: "braid-root-2"
+        exponent: softness
+      }
+
+      mothLimbs("left", 0, scout)
+      mothLimbs("right", 1, scout)
+
+      drivers [
+        // A gentle tread while the medium hold carries her shoulders at the surface.
+        { name: "swim", signal: "time", cadence: 3.2, blendInSeconds: 0.3, blendOutSeconds: 0.2, when ["InMedium"] }
+        // On a wall: the reach she holds, and the cycle her hands and feet plant on, one round every metre and a half
+        // of travel along the face.
+        {
+          name: "cling"
+          signal: "time"
+          cadence: 1
+          blendInSeconds: 0.15
+          blendOutSeconds: 0.2
+          when ["HoldingUnwalkable"]
+        }
+        { name: "climb", signal: "travel", cadence: 4.2, when ["HoldingUnwalkable", "moving"] }
+        {
+          name: "dash"
+          signal: "state.dashPose.$body"
+          cadence: 1
+          blendInSeconds: 0
+          blendOutSeconds: 0
+          when ["always"]
+        }
+        // Her worn screen's arm raise and covers.
+        for driver in wornScreenDrivers { driver }
+        // Her pace in metres per second, the X every gait curve reads.
+        {
+          name: "pace"
+          cadence: 1
+          signal: "speed"
+          dynamics: "gait-pace"
+          when [
+            "always"
+          ]
+        }
+        // The one stride cycle her feet plant on and every gait driver below rides; its radians per metre fall as her
+        // pace rises, so her stride lengthens and her step rate climbs more slowly than her speed.
+        {
+          name: "stride"
+          cadence: 1
+          signal: "planarTravel"
+          cadenceBy {
+            driver: "pace"
+            curve: "moth-stride"
+          }
+          when [
+            "Grounded"
+            "moving"
+          ]
+        }
+        // The stride swings, half their amplitude at a walk and whole at a run.
+        {
+          name: "gait"
+          cadence: 1
+          signal: "driver.stride"
+          weightBy {
+            driver: "pace"
+            curve: "moth-gait"
+          }
+          when [
+            "Grounded"
+            "moving"
+          ]
+        }
+        // What only a run has: the forward lean and the bent elbows, and at twice the stride's rate, the bob.
+        {
+          name: "run"
+          cadence: 1
+          signal: "driver.stride"
+          weightBy {
+            driver: "pace"
+            curve: "moth-run"
+          }
+          when [
+            "Grounded"
+            "moving"
+          ]
+        }
+        {
+          name: "bob"
+          cadence: 2
+          signal: "driver.stride"
+          weightBy {
+            driver: "pace"
+            curve: "moth-run"
+          }
+          when [
+            "Grounded"
+            "moving"
+          ]
+        }
+        {
+          name: "breath"
+          cadence: 1.7
+          signal: "time"
+          when [
+            "still"
+          ]
+        }
+        {
+          name: "flight"
+          cadence: 1
+          signal: "state.airPose.$body"
+          when [
+            "always"
+          ]
+        }
+        {
+          name: "wings"
+          cadence: 1
+          signal: "state.airWings.$body"
+          when [
+            "always"
+          ]
+        }
+        {
+          name: "bank"
+          cadence: 0.26
+          signal: "turnRate"
+          when [
+            "state.airPose.$body"
+            "Airborne"
+          ]
+        }
+        {
+          name: "cruise"
+          cadence: 0.18
+          signal: "speed"
+          when [
+            "state.airPose.$body"
+            "Airborne"
+            "moving"
+          ]
+        }
+        // Twice the travel direction off the facing: a sine of it peaks on the diagonals and vanishes on a pure
+        // strafe or backpedal, and half of it, linear, is the direction itself.
+        {
+          name: "heading"
+          cadence: 2
+          signal: "travelDirection"
+          blendInSeconds: 0.12
+          blendOutSeconds: 0.3
+          when [
+            "Grounded"
+            "moving"
+          ]
+        }
+        // The turn rate through an underdamped response: a part swinging against it trails a turn, catches up a
+        // beat after the turn stops and overshoots a little as it settles.
+        {
+          name: "trail"
+          cadence: 1
+          signal: "turnRate"
+          dynamics: "body-turn"
+          when [
+            "always"
+          ]
+        }
+        {
+          name: "lean"
+          cadence: 1
+          signal: "lateralAcceleration"
+          dynamics: "body-lean"
+          when [
+            "Grounded"
+          ]
+        }
+        {
+          name: "surge"
+          cadence: 1
+          signal: "forwardAcceleration"
+          dynamics: "body-lean"
+          when [
+            "Grounded"
+          ]
+        }
+        // Her vertical speed in metres per second, eased so the pose follows the arc without the frame's noise:
+        // positive rising, zero at the peak, negative falling. It poses her only in the air.
+        {
+          name: "air"
+          cadence: 1
+          signal: "verticalSpeed"
+          dynamics: "body-air"
+          blendInSeconds: 0.06
+          blendOutSeconds: 0.04
+          when [
+            "Airborne"
+          ]
+        }
+        // The same speed through an underdamped response that lags it: touching down, it is still the fall's
+        // speed and decays to rest through a small rebound, which is the crouch and the spring back up.
+        {
+          name: "land"
+          cadence: 1
+          signal: "verticalSpeed"
+          dynamics: "body-land"
+          blendInSeconds: 0
+          blendOutSeconds: 0.08
+          when [
+            "Grounded"
+          ]
+        }
+        // The pull over a ledge, keyed over the mantle's progress (moth.puck's `mantlePose` and its mantle curves): it
+        // takes her hips, chest, head, arms and legs from every layer above while she mantles, and hands them back as
+        // she steps out running.
+        progressLayer(name: "mantle", row: "mantlePose")
+      ]
+      volumes: scout ? [] : mechExhaust
+      effectors [
+        {
+          name: "foot-left"
+          chain [
+            "thigh-left"
+            "shin-left"
+          ]
+          tip: "boot-left"
+          // The sole stays flat on the ground however far the planted boot sits from its rest offset, so the boot
+          // centre's rest height is the standoff that puts the whole sole on the surface.
+          align: 1
+          when [
+            "Grounded"
+          ]
+          target {
+            kind: "surface"
+            direction [0, -1, 0]
+            reach: 0.42
+            standoff: 0.1875
+          }
+          plant {
+            driver: "stride"
+            swingWeight: 0
+            window [0, 3.1415925]
+            // At rest the boot holds its spot and steps once its stance point drifts 9 cm: turning in place, or
+            // settling into the stance after a stop.
+            replant {
+              distance: 0.09
+              seconds: 0.2
+              height: 0.07
+            }
+          }
+        }
+        {
+          name: "foot-right"
+          chain [
+            "thigh-right"
+            "shin-right"
+          ]
+          tip: "boot-right"
+          align: 1
+          when [
+            "Grounded"
+          ]
+          target {
+            kind: "surface"
+            direction [0, -1, 0]
+            reach: 0.42
+            standoff: 0.1875
+          }
+          plant {
+            driver: "stride"
+            swingWeight: 0
+            window [3.1415925, 6.28]
+            replant {
+              distance: 0.09
+              seconds: 0.2
+              height: 0.07
+            }
+          }
+        }
+        // On a wall her palms and her toes find the face ahead of her. Each is planted for half of the climb's cycle
+        // and reaches for the next spot in the other half: a hand and the opposite foot hold together, the foot an
+        // eighth of a cycle behind its hand, so she moves one limb at a time. The wall feet solve after the ground
+        // feet on the same legs and hold only on a face, where the ground feet's gate has let them go; standing at
+        // a wall's foot with a hand on it, the wall feet win. A boot stays level with its toe on the face, its centre
+        // the toe's length off it.
+        for limb in [
+          {
+            name: "hand-left"
+            chain ["upperArm-left", "forearm-left"]
+            tip: "palm-left"
+            reach: 0.75
+            standoff: 0.04
+            align: 0
+            window [0, 3.1415925]
+          }
+          {
+            name: "hand-right"
+            chain ["upperArm-right", "forearm-right"]
+            tip: "palm-right"
+            reach: 0.75
+            standoff: 0.04
+            align: 0
+            window [3.1415925, 6.28]
+          }
+          {
+            name: "toe-right"
+            chain ["thigh-right", "shin-right"]
+            tip: "boot-right"
+            reach: 0.7
+            standoff: 0.22
+            align: 1
+            window [0.7853981, 3.9269906]
+          }
+          {
+            name: "toe-left"
+            chain ["thigh-left", "shin-left"]
+            tip: "boot-left"
+            reach: 0.7
+            standoff: 0.22
+            align: 1
+            window [3.9269906, 0.7853981]
+          }
+        ] {
+          {
+            name: limb.name
+            chain: limb.chain
+            tip: limb.tip
+            align: limb.align
+            when [
+              "HoldingUnwalkable"
+            ]
+            target {
+              kind: "surface"
+              direction [0, 0, -1]
+              reach: limb.reach
+              standoff: limb.standoff
+            }
+            plant {
+              driver: "climb"
+              window: limb.window
+            }
+          }
+        }
+        // Over a ledge her palms plant on the top from the catch until her chest is over them (moth.puck's mantle
+        // curves).
+        for side in ["left", "right"] {
+          ledgeHand(
+            name: $"mantle-hand-{side}",
+            chain: [$"upperArm-{side}", $"forearm-{side}"],
+            tip: $"palm-{side}",
+            row: "mantlePose",
+            driver: "mantle",
+            weight: "mantle-plant",
+            window: [0.5, 5.03]
+          )
+        }
+      ]
+    }
+  }
+}
+}
+
+// The mech suit: lavender and ivory, after the concept pack.
+suitPrototype(id: "moth")
+
+// The scout suit: bone plates over teal, the lighter frame with no flight in it.
+suitPrototype(id: "moth-scout", ivoryPlate: "#E6DFCF", lavenderPlate: "#2E7A80", lavenderSeam: "#215C61", scout: true)

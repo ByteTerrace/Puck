@@ -11,7 +11,7 @@
 // Size is the body's `size` register (size.puck), read back with bodyState. The middle of the shrink zone is the
 // geometric mean of its two ends, the square root of `shrinkEnd`, not their average.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "size-field-tests"
 
 import "../standard/bounds"

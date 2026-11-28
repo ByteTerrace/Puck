@@ -41,8 +41,8 @@ In the debug world, `debug.go lab-wing` stands a body at the aisle's west end
 looking down the doors, and `debug.go lab-<id>` before each door, facing it.
 
 A door is the standard portal module ([portal.puck](../../standard/portal.puck))
-standing free, leading to its lab's entry of the gallery's portal library
-([portal-library.puck](../portal-library.puck)), and its glass is the module's
+standing free, wired by the debug world to its lab
+([destinations.puck](../destinations.puck)), and its glass is the module's
 portal face (`portalFace`): it shows the lab live while you
 stand outside and ripples when a body touches it. A lab's `arrival` frame is
 dark glass instead (a `none` source): a window back onto the gallery would
@@ -55,7 +55,8 @@ Start a lab directly with the `puck` server: `puck_world_start` with
 `document: worlds/debug/labs/<lab>.puck` (and `windowed: true` on a granted GPU
 leg). By hand, `--world worlds/debug/labs/<lab>.puck` on the
 [puck-world recipe](../../../.claude/skills/puck-world/SKILL.md#running-it).
-Every lab is the Moth's (`basis: "../avatars/moth"`) and imports the debug world
+Every lab is built on the stage (`basis: "../stage"`, which seats the Moth through
+the standard player module) and imports the debug world
 set's controls, so getting about needs nothing new; the climbing, light,
 surface, shape and Moth labs also import noclip. In those five, `debug.go <place>`
 (lab-kit.puck's `goCommand`, the debug world's own command) poses a body at any
@@ -79,8 +80,8 @@ naming anything in a frame (`world.view.camera`, `world.view.pick`).
 
 ### Climbing
 
-[climbing.puck](climbing.puck): the Moth's climb (`climbAbility`, through her
-own [moth-climb.puck](../avatars/moth-climb.puck)) on a studio floor under a
+[climbing.puck](climbing.puck): the Moth's climb (`climbAction`, granted by her
+[contract](../avatars/moth/contract.puck)) on a studio floor under a
 held midday. Three bays face the seat along one line, which boots before them
 facing +Z ([climbing-plan.puck](climbing-plan.puck) holds the plan):
 
@@ -167,10 +168,10 @@ each row) and `surface-sight` (the sight line's head, facing east along it).
 ### Moth
 
 [moth.puck](moth.puck): where the Moth's look, motion and camera are judged,
-on a grey floor under the held midday. Seven stations stand apart, each course
+on a grey floor under the held midday. Eight stations stand apart, each course
 running north (-Z, the way she faces) from its spawn point, and nothing here
-adds an ability: the walk, run, jump, dash, climb and jetpack are her basis's
-own ([moth.puck](../avatars/moth.puck) and the `moth-*.puck` files beside it).
+adds or re-authors an ability: the walk, run, jump, dash, mantle, climb and jetpack
+are her forms' own ([contract.puck](../avatars/moth/contract.puck), read by the standard player module).
 
 - `look-stage`: a closed grey room round the origin, lit only by its own lamps
   (a key, a fill, a rim light behind her on each side and a wash on the walls,
@@ -190,14 +191,20 @@ own ([moth.puck](../avatars/moth.puck) and the `moth-*.puck` files beside it).
   `terrain-ramps-steep` and `terrain-stairs` stand her beside a group and
   `moth.frame` shows it;
 - `jump`: a run-up and raised platforms with gaps of 1, 2, 3, 4, 6 and 8 m for
-  the jump, air jump and dash, and ledges 0.6 to 2.6 m high to pull up onto;
+  the jump, air jump and dash, and plain ledges 0.6 to 2.6 m high, none
+  holdable, for the mantle: in the mech suit she runs up the 0.6 to 1.8 m ones
+  with the run held and jumps for the 2.2 and 2.6 m ones;
 - `climb`: a holdable face 3.5 m tall over a block to stand on, small beside the
   climbing lab's walls;
 - `flight`: four pylons with decks at 10, 20 and 30 m, bands every 5 m, for the
   jetpack (F);
 - `camera`: a 2 m wide corridor, a low ceiling at 2.4 m and pillars
   (`camera-pillar` stands her with a pillar close behind), for the chase
-  camera's clearance, fade and cutaway (`camera.clearance Cutaway|Fade`).
+  camera's clearance, fade and cutaway (`camera.clearance Cutaway|Fade`);
+- `suits`: three pads, one for each form she owns (her body, the mech suit,
+  the scout suit), each with a board of what it grants, before two plain ledges
+  1.4 m and 2 m high that tell the forms' mantles apart; the suit press (T) or
+  `moth.suit` steps her to the next form where she stands.
 
 `moth.frame <station>` stands her at a station's spawn point and shows it from
 a fixed overview camera, the same every time; `debug.go` hands back the chase
@@ -230,15 +237,19 @@ lab with a door.
 [portals.puck](portals.puck): one portal of the standard's portal module
 ([portal.puck](../../standard/portal.puck)) and its control panel
 ([panel.puck](../../standard/panel.puck)) on a studio floor under the held
-midday, with a small library of its own: three showcase worlds and two labs.
-Walk into the portal's glass to cross; work the panel at its right (the context
-button, then a tap on a world) and the portal leads there instead, its glass
-showing it at once. The gallery's level 3 stands twelve of the same portal
-([gallery.md](../gallery.md#the-portals)).
+midday, with a small library of its own: three showcase worlds, two labs and
+NOWHERE, a world with no document. Walk into the portal's glass to cross; work
+the panel at its right (the context button, then a tap on a world) and the
+portal leads there instead, its glass showing it at once. MIRROR, the list's
+last row, leaves the portal unconnected: its glass reflects the lab and walking
+in steps you back out, turned about. NOWHERE cannot be reached, so the portal
+falls back to the mirror for it. The gallery's level 3 stands twelve of the
+same portal ([gallery.md](../gallery.md#the-portals)).
 
 Places: `hero` and `portal-panel` at the panel, `portal` 3.2 m before the
 portal's glass; `debug.go <place>` poses a body there. `world.portals` names the
-door's route (`route=<n>/5`), and `world.state.cell.set panelChoice portal <n>`
-points it from the console as a tap does. The way back from a world it leads to
-is that world's own frame, which leads to the debug world's painting or lab
-door rather than back here.
+door's route (`route=<n>/6`; 6 is the mirror), and `world.state.cell.set
+panelChoice portal <n>` points it from the console as a tap does. The way back
+from a world it leads to is that world's own frame, which leads to the debug
+world's painting or lab door rather than back here, until the way home travels
+with the traveller ([the decision](../../../docs/decisions/play.md#portals-and-their-panels)).
