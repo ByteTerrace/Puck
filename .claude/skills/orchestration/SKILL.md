@@ -1186,7 +1186,11 @@ rejects the flag ([`verification`](../verification/SKILL.md#build-before-you-tes
 Haiku `scout`) does whatever it can do well, Opus (`specialist`) takes only the tough coding problems and bugs, and
 Codex is used liberally beside them, for diagnosis, second opinions and implementation alike. The owner also gave
 standing approval for continual work on visual quality and performance: the lead keeps lanes on both without asking
-each time, still briefing the owner before a new direction.
+each time, still briefing the owner before a new direction. A Codex lane is started by the lead itself, not through
+the `codex:codex-rescue` subagent (the lane hook refuses a subagent that starts its own Codex session): the lead adds a
+worktree on a `codex/<name>` branch, writes the brief into it, and runs `node <codex plugin>/scripts/codex-companion.mjs
+task --write --effort high --prompt-file <brief>` from that worktree in the background; a read-only diagnosis drops
+`--write` and runs from the main checkout.
 
 All three families implement. Choose the model and effort per lane by the
 factors that matter for it (the owner's ruling in AGENTS.md: "intelligent",
