@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 using Xunit;
@@ -32,8 +31,7 @@ public sealed class TilingTopologyLawTests {
         topology: Tiling(
             family: family,
             radius: radius
-        ),
-        anchorOffset: Vector3.Zero
+        )
     );
     // The half of the turn a centre's angle in [0, 2π) falls in: 0 for [0, π), 1 for [π, 2π), read on the quantum
     // grid the generator sorts on, so a centre on −X sits at exactly π.

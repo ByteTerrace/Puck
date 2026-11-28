@@ -206,7 +206,11 @@ spawnPoints [
   // board, inside its engage radius: the context button sits her down. The board game room's tables have places of
   // their own beside them (go.puck, reversi.puck, alchemy.puck, granaries.puck), and the room's own place is
   // `boardroom` (gallery/gallery.puck).
-  { id: "chess", position: gameStationChairAt(galleryGameStations[0], "near"), yawDegrees: 180 }
+  {
+    id: "chess"
+    position: gameStationChairAt(galleryGameStations[0], "near")
+    yawDegrees: gameStationChairYaw(galleryGameStations[0], "near")
+  }
   // Behind the chair at the desktop computer against the gallery's west wall (desktop.puck), facing its monitor, inside
   // the screen's engage radius.
   { id: "desktop", position [(12.4 + galleryWestShift), 0.05, 23.7], yawDegrees: 90 }

@@ -56,6 +56,7 @@ public sealed class WorldTabletopFraming {
             return false;
         }
 
+        // The footprint is the board's own, so its extents hold whatever way the board is turned.
         var footprint = WorldTabletopFrame.Bounds(topology: topology);
         var low = footprint.Minimum.ToVector3();
         var high = footprint.Maximum.ToVector3();
@@ -63,22 +64,16 @@ public sealed class WorldTabletopFraming {
         var halfZ = ((high.Z - low.Z) * 0.5f);
         var radius = (MathF.Sqrt(x: ((halfX * halfX) + (halfZ * halfZ))) + ((float)engage.Margin));
 
-        target = new Vector3(
-            x: ((low.X + high.X) * 0.5f),
-            y: (low.Y + ((float)engage.Surface)),
-            z: ((low.Z + high.Z) * 0.5f)
-        );
+        target = (WorldTabletopFrame.Centre(topology: topology).ToVector3() + new Vector3(x: 0f, y: ((float)engage.Surface), z: 0f));
 
-        var toward = WorldTabletopFrame.SeatSide(
-            engage: engage,
-            position: FixedVector3.FromVector3(value: seatPosition),
+        var toward = WorldTabletopFrame.Outward(
+            side: WorldTabletopFrame.SeatSide(
+                engage: engage,
+                position: FixedVector3.FromVector3(value: seatPosition),
+                topology: topology
+            ),
             topology: topology
-        ) switch {
-            WorldTabletopFrame.SidePositiveX => Vector3.UnitX,
-            WorldTabletopFrame.SidePositiveZ => Vector3.UnitZ,
-            WorldTabletopFrame.SideNegativeX => -Vector3.UnitX,
-            _ => -Vector3.UnitZ,
-        };
+        ).ToVector3();
         var pitch = MathF.Min(
             x: float.DegreesToRadians(degrees: ((float)engage.Pitch)),
             y: MaximumPitchRadians
