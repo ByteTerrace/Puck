@@ -75,7 +75,7 @@ template galleryRoot(frame, floors) {
     fonts [
       {
         name: "inter"
-        source: "fonts/inter-regular.ttf"
+        source: "../fonts/inter-regular.ttf"
         hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
         // ASCII, and the signs the shape stations' learn panels typeset formulas with (middle dot, minus, root, ≤ and ≥).
         codePointRanges ["U+0020-U+007E", "U+00B7", "U+2212", "U+221A", "U+2264-U+2265"]

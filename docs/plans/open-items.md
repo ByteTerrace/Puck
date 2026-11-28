@@ -6549,6 +6549,13 @@ Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: the agent harness and embeddings as features, then new
 content on the owner's call.
 
+- **The owner's walk-through notes on the gallery:**
+  - The time puzzle's button becomes one of level 1's floor tiles, and it sinks into the floor when stepped on. The
+    net-opening tile is the one at about (32.0, 4.6, 14.7) in level 1's south gallery, not a separate brass button.
+  - The handheld rental kiosk at about (60.1, 4.6, 16.1) on level 1 (`rentals.puck`'s `rental-counter`) is plain and
+    badly placed. It moves closer to the stairs and gets some character.
+  - T is bound to both the suit switch (`worlds/debug/suit.puck`) and the time-field cast
+    (`worlds/standard/time-field.puck`'s `timeFieldControls`), so one press fires both. The cast gets its own key.
 - **The gallery's flaw is tabled** (the owner's call, while simpler work comes
   first). No floor in `worlds/debug/gallery/layout.puck` enables the `flaw`
   module, so the tube, its collars, its slab openings and its lights are not
