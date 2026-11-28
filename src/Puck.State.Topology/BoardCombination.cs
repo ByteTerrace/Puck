@@ -1,14 +1,16 @@
 namespace Puck.State;
 
-/// <summary>The board-combine contract shared by dense frames and sparse document mutations. Storage adapters
-/// resolve source rows and publish the result; this kernel owns operation admission and cell values.</summary>
+/// <summary>The board-combine contract: which sources an operation reads, its admission, and the member cells it
+/// produces, computed on cell sets held as words (one bit per cell, <see cref="CompiledTopology.CellWords"/> words) so
+/// an operation over a 361-cell board is a handful of word operations rather than a pass over its cells. Storage
+/// adapters resolve the source rows to member sets and write the result.</summary>
 public static class BoardCombination {
     /// <summary>Whether the operation reads a left board.</summary>
     /// <param name="operation">The operation.</param>
     public static bool NeedsLeft(BoardCombineOp operation) => (operation is not (BoardCombineOp.Fill or BoardCombineOp.Clear));
     /// <summary>Whether the operation reads a right board.</summary>
     /// <param name="operation">The operation.</param>
-    public static bool NeedsRight(BoardCombineOp operation) => (operation is BoardCombineOp.And or BoardCombineOp.Or or BoardCombineOp.Xor or BoardCombineOp.AndNot);
+    public static bool NeedsRight(BoardCombineOp operation) => (operation is BoardCombineOp.And or BoardCombineOp.Or or BoardCombineOp.Xor or BoardCombineOp.AndNot or BoardCombineOp.Reach);
     /// <summary>Validates operation fields and the member value against an already resolved target board.</summary>
     /// <param name="combine">The authored operation.</param>
     /// <param name="row">The target row.</param>
@@ -37,7 +39,7 @@ public static class BoardCombination {
             ((operation == BoardCombineOp.Shift) != (combine.Direction is not null)) ||
             ((operation == BoardCombineOp.Image) != (combine.Element is not null))
         ) {
-            reason = "boardCombine takes left for every operation but fill and clear, right for and/or/xor/andNot, direction for shift alone, and element for image alone";
+            reason = "boardCombine takes left for every operation but fill and clear, right for and/or/xor/andNot/reach, direction for shift alone, and element for image alone";
             return false;
         }
         if (
@@ -73,80 +75,77 @@ public static class BoardCombination {
         reason = string.Empty;
         return true;
     }
-    /// <summary>Writes a validated operation's dense result. Copy preserves every source value, including its
-    /// empty value; other operations classify membership using each source's own empty value.</summary>
-    /// <param name="combine">An operation admitted by <see cref="TryValidate"/>.</param>
-    /// <param name="topology">The shared topology.</param>
-    /// <param name="left">The left values, one per cell when required.</param>
-    /// <param name="leftEmpty">The left board's empty value.</param>
-    /// <param name="right">The right values, one per cell when required.</param>
-    /// <param name="rightEmpty">The right board's empty value.</param>
-    /// <param name="target">The result span, exactly one per cell, disjoint from both sources.</param>
-    /// <param name="empty">The target's empty value.</param>
-    /// <param name="direction">The validated direction.</param>
-    /// <param name="element">The validated element.</param>
-    /// <param name="value">The admitted member value <see cref="TryValidate"/> resolved.</param>
-    public static void Write(StateTransform.BoardCombine combine, CompiledTopology topology, ReadOnlySpan<long> left, long leftEmpty, ReadOnlySpan<long> right, long rightEmpty, Span<long> target, long empty, int direction, int element, long value) {
-        ArgumentNullException.ThrowIfNull(combine);
-        Write(
-            direction: direction,
-            element: element,
-            empty: empty,
-            left: left,
-            leftEmpty: leftEmpty,
-            operation: combine.Operation,
-            right: right,
-            rightEmpty: rightEmpty,
-            target: target,
-            topology: topology,
-            value: value
-        );
-    }
-    /// <summary>Writes a validated operation's dense result, given the operation alone.</summary>
+    /// <summary>Writes the member cells a validated membership operation produces from its sources' member cells.
+    /// <see cref="BoardCombineOp.Copy"/> carries values rather than membership, so it is the adapter's: this answers its
+    /// left members unchanged.</summary>
     /// <param name="operation">An operation admitted by <see cref="TryValidate"/>.</param>
     /// <param name="topology">The shared topology.</param>
-    /// <param name="left">The left values, one per cell when required.</param>
-    /// <param name="leftEmpty">The left board's empty value.</param>
-    /// <param name="right">The right values, one per cell when required.</param>
-    /// <param name="rightEmpty">The right board's empty value.</param>
-    /// <param name="target">The result span, exactly one per cell, disjoint from both sources.</param>
-    /// <param name="empty">The target's empty value.</param>
+    /// <param name="left">The left board's member cells, <see cref="CompiledTopology.CellWords"/> words, when the
+    /// operation reads it.</param>
+    /// <param name="right">The right board's member cells, when the operation reads it.</param>
     /// <param name="direction">The validated direction.</param>
     /// <param name="element">The validated element.</param>
-    /// <param name="value">The admitted member value <see cref="TryValidate"/> resolved.</param>
-    public static void Write(BoardCombineOp operation, CompiledTopology topology, ReadOnlySpan<long> left, long leftEmpty, ReadOnlySpan<long> right, long rightEmpty, Span<long> target, long empty, int direction, int element, long value) {
+    /// <param name="members">The result's member cells, <see cref="CompiledTopology.CellWords"/> words; must overlap
+    /// neither source.</param>
+    /// <param name="scratch">The working storage a reach borrows its frontier from.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="topology"/> or <paramref name="scratch"/> is
+    /// <see langword="null"/>.</exception>
+    public static void Members(BoardCombineOp operation, CompiledTopology topology, ReadOnlySpan<ulong> left, ReadOnlySpan<ulong> right, int direction, int element, Span<ulong> members, ArenaScratch scratch) {
+        ArgumentNullException.ThrowIfNull(topology);
+        ArgumentNullException.ThrowIfNull(scratch);
+
+        var words = topology.CellWords;
+        var result = members[..words];
+
+        switch (operation) {
+            case BoardCombineOp.Shift:
+                topology.ShiftCells(destination: result, direction: direction, source: left);
+
+                return;
+            case BoardCombineOp.Image:
+                topology.ImageCells(destination: result, element: element, source: left);
+
+                return;
+            case BoardCombineOp.Reach:
+                _ = topology.Reach(passable: right, reach: result, scratch: scratch, seeds: left);
+
+                return;
+        }
+        // Fill and Not are complements (of nothing and of left), so every operation is formed without them first.
+        for (var word = 0; (word < words); word++) {
+            result[word] = operation switch {
+                BoardCombineOp.Copy or BoardCombineOp.Not => left[word],
+                BoardCombineOp.And => (left[word] & right[word]),
+                BoardCombineOp.Or => (left[word] | right[word]),
+                BoardCombineOp.Xor => (left[word] ^ right[word]),
+                BoardCombineOp.AndNot => (left[word] & ~right[word]),
+                _ => 0UL,
+            };
+        }
+        if (operation is BoardCombineOp.Fill or BoardCombineOp.Not) {
+            Puck.Maths.BitWords.Complement(members: topology.CellCount, words: result);
+        }
+    }
+    /// <summary>Returns the most element operations <see cref="Members"/> costs for one operation over a topology,
+    /// read from the topology alone: a word operation per word, a shift or image of the left set, or a whole reach
+    /// (<see cref="CompiledTopology.ReachWork"/>).</summary>
+    /// <param name="operation">The operation.</param>
+    /// <param name="topology">The topology.</param>
+    /// <param name="direction">The validated direction of a shift, or -1.</param>
+    /// <returns>The element operations.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="topology"/> is <see langword="null"/>.</exception>
+    public static long MembersWork(BoardCombineOp operation, CompiledTopology topology, int direction) {
         ArgumentNullException.ThrowIfNull(topology);
 
-        if (operation == BoardCombineOp.Copy) {
-            left.CopyTo(destination: target);
-            return;
-        }
-        target.Fill(value: empty);
-        for (var cell = 0; (cell < topology.CellCount); cell++) {
-            var inLeft = (NeedsLeft(operation: operation) && (left[cell] != leftEmpty));
-            var inRight = (NeedsRight(operation: operation) && (right[cell] != rightEmpty));
-            var destination = cell;
-            var member = operation switch {
-                BoardCombineOp.Fill => true,
-                BoardCombineOp.And => (inLeft && inRight),
-                BoardCombineOp.Or => (inLeft || inRight),
-                BoardCombineOp.Xor => inLeft ^ inRight,
-                BoardCombineOp.AndNot => (inLeft && !inRight),
-                BoardCombineOp.Not => !inLeft,
-                BoardCombineOp.Shift => (inLeft && ((destination = topology.Neighbour(
-                cell: cell,
-                direction: direction
-            )) >= 0)),
-                BoardCombineOp.Image => (inLeft && ((destination = topology.Image(
-                cell: cell,
-                element: element
-            )) >= 0)),
-                _ => false,
-            };
+        var words = (long)topology.CellWords;
+        var perMember = (words + (2L * topology.CellCount));
 
-            if (member) {
-                target[destination] = value;
-            }
-        }
+        return (operation switch {
+            BoardCombineOp.Reach => topology.ReachWork(),
+            // A uniform step is a shift and a mask of every word; any other step, and an image, reads each member's cell.
+            BoardCombineOp.Shift => (topology.TryUniformStepWords(direction: direction, landing: out _, step: out _) ? (2L * words) : perMember),
+            BoardCombineOp.Image => perMember,
+            _ => (2L * words),
+        });
     }
 }

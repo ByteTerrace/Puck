@@ -1045,7 +1045,7 @@ export type BloomQuality = "Off" | "Low" | "High";
 /**
  * What BoardCombine writes into its board, cell by cell. A cell is a member of a board when its value is not the board's declared empty.
  */
-export type BoardCombineOp = "Copy" | "Fill" | "Clear" | "And" | "Or" | "Xor" | "AndNot" | "Not" | "Shift" | "Image";
+export type BoardCombineOp = "Copy" | "Fill" | "Clear" | "And" | "Or" | "Xor" | "AndNot" | "Not" | "Shift" | "Image" | "Reach";
 
 export type BodyFaceSlots = {
   active: string;
@@ -5393,7 +5393,7 @@ export type StateTransformArrange = {
 };
 
 /**
- * Rewrites a board from one or two boards over the same topology, cell by cell, in one journaled mutation: the set algebra $board:mask and the bit operators give a board of at most 64 cells, for a board of any size. A cell is a member when its value is not its board's empty; every member of the result is written as Value and every other cell as the board's empty.
+ * Rewrites a board from one or two boards over the same topology in one journaled mutation: the set algebra $board:mask and the bit operators give a board of at most 64 cells, for a board of any size, computed on the boards' value planes a word at a time. A cell is a member when its value is not its board's empty; every member of the result is written as Value and every other cell as the board's empty, and a cell that already holds what it would be written is left as it stands.
  */
 export type StateTransformBoardCombine = {
   $type?: "boardCombine";
@@ -5410,7 +5410,7 @@ export type StateTransformBoardCombine = {
    */
   left?: StateChannelRefNonNullable;
   /**
-   * The second source board for the two-board operations.
+   * The second source board for the two-board operations, and the cells a Reach passes through.
    */
   right?: StateChannelRefNonNullable;
   /**

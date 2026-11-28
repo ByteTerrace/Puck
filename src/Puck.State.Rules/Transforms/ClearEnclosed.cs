@@ -51,14 +51,18 @@ public static partial class ArenaTransforms {
             );
         }
 
-        using var valuesLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
+        // The groups and their liberties are read from the board's planes as cell sets, and the cleared groups come
+        // back as a cell set, which lands through the arena's set door in one call.
+        var words = topology.CellWords;
+        using var membersLease = arena.Scratch.Rent<ulong>(words);
+        using var boundaryLease = arena.Scratch.Rent<ulong>(words);
+        using var cleared = arena.Scratch.Rent<ulong>(words);
 
-        var values = valuesLease.Span;
-
-        if (!arena.TryReadBoard(
-            rowOrdinal: enclosed.RowOrdinal,
-            values: values
-        )) {
+        if (
+            !arena.TryReadBoardCell(cell: origin, rowOrdinal: enclosed.RowOrdinal, value: out var placed) ||
+            !arena.TryReadBoardRange(lower: enclosed.Lower, mask: membersLease.Span, rowOrdinal: enclosed.RowOrdinal, upper: enclosed.Upper) ||
+            !arena.TryReadBoardRange(lower: enclosed.BoundaryLower, mask: boundaryLease.Span, rowOrdinal: enclosed.RowOrdinal, upper: enclosed.BoundaryUpper)
+        ) {
             return Refuse(
                 code: TransformRefusal.ClearEnclosedBoard,
                 reason: $"row '{RowName(
@@ -68,35 +72,25 @@ public static partial class ArenaTransforms {
                 refusal: out refusal
             );
         }
-        if (values[origin] == layout.Empty) {
+        if (placed == layout.Empty) {
             return Applied(refusal: out refusal);
         }
 
-        // The cleared groups come back as a cell set, so they are written in ascending cell order without a sort.
-        var words = BitWords.WordsFor(members: topology.CellCount);
-        using var cleared = arena.Scratch.Rent<ulong>(words);
-
-        _ = BoardQueries.FindEnclosed(topology, values, origin, enclosed.Lower, enclosed.Upper,
-            enclosed.BoundaryLower, enclosed.BoundaryUpper, cleared.Span[..words], arena.Scratch);
-        foreach (var cell in BitWords.Members(words: cleared.Span[..words])) {
-            if (!arena.TryWriteBoardCell(
-                cell: cell,
-                reason: out var reason,
-                rowOrdinal: enclosed.RowOrdinal,
-                value: layout.Empty,
-                write: StateWriteKind.Set
-            )) {
-                moved = false;
-
-                return Refuse(
-                    code: TransformRefusal.ClearEnclosedBoard,
-                    reason: reason,
-                    refusal: out refusal
-                );
-            }
-
-            moved = true;
+        _ = BoardQueries.FindEnclosed(topology, membersLease.Span[..words], boundaryLease.Span[..words], origin, cleared.Span[..words], arena.Scratch);
+        if (!arena.TryWriteBoardCells(
+            cells: cleared.Span[..words],
+            reason: out var reason,
+            rowOrdinal: enclosed.RowOrdinal,
+            value: layout.Empty
+        )) {
+            return Refuse(
+                code: TransformRefusal.ClearEnclosedBoard,
+                reason: reason,
+                refusal: out refusal
+            );
         }
+
+        moved = (BitWords.Count(words: cleared.Span[..words]) != 0);
 
         return Applied(refusal: out refusal);
     }

@@ -152,7 +152,9 @@ public sealed class BoardComponentQuery : BoardQuery {
     /// <param name="boundaryLower">The inclusive lower bound of a boundary cell's value.</param>
     /// <param name="boundaryUpper">The inclusive upper bound of a boundary cell's value.</param>
     /// <param name="kind">The query kind.</param>
-    public BoardComponentQuery(CompiledTopology topology, long lower, long upper, int maxVisits, long boundaryLower, long boundaryUpper, BoardQueryKind kind)
+    /// <param name="planes">The plane window of the board the query reads, as <see cref="BoardMask.TryPlaneWindow"/>
+    /// answers it for that row, or <see langword="null"/> when the board keeps no planes and is read cell by cell.</param>
+    public BoardComponentQuery(CompiledTopology topology, long lower, long upper, int maxVisits, long boundaryLower, long boundaryUpper, BoardQueryKind kind, (long Lower, int Width)? planes = null)
         : base(
         kind,
         topology
@@ -162,6 +164,7 @@ public sealed class BoardComponentQuery : BoardQuery {
         MaxVisits = maxVisits;
         BoundaryLower = boundaryLower;
         BoundaryUpper = boundaryUpper;
+        Planes = planes;
     }
 
     /// <summary>Gets the inclusive lower bound of a boundary cell's value.</summary>
@@ -172,10 +175,18 @@ public sealed class BoardComponentQuery : BoardQuery {
     public long Lower { get; }
     /// <summary>Gets the most component cells the flood may settle.</summary>
     public int MaxVisits { get; }
+    /// <summary>Gets the plane window the board's planes span, or <see langword="null"/> when it keeps none: the flood
+    /// then reads its member and boundary cells from the planes instead of every cell.</summary>
+    public (long Lower, int Width)? Planes { get; }
+    /// <inheritdoc/>
+    public override bool ReadsWholeBoard => (Planes is null);
     /// <summary>Gets the inclusive upper bound of a member's value.</summary>
     public long Upper { get; }
     /// <inheritdoc/>
-    public override long Visits => ((((long)(MaxVisits + 1)) * Topology.DirectionCount) + Topology.CellCount);
+    public override long Visits => ((((long)(MaxVisits + 1)) * Topology.DirectionCount) + Topology.CellCount + ((Planes is { } planes)
+        ? (Puck.Maths.BitmapIndex.RangeReads(lanes: Topology.CellCount, lower: Lower, upper: Upper, width: planes.Width, windowLower: planes.Lower)
+            + Puck.Maths.BitmapIndex.RangeReads(lanes: Topology.CellCount, lower: BoundaryLower, upper: BoundaryUpper, width: planes.Width, windowLower: planes.Lower))
+        : (2L * Topology.CellCount)));
 }
 /// <summary>The 64-bit cell-set mask of cells whose value lies in an inclusive range (<see cref="BoardQueryKind.Mask"/>).
 /// Over a board whose declarations give it a plane window (<see cref="BoardMask.TryPlaneWindow"/>) the arena answers
@@ -206,7 +217,8 @@ public sealed class BoardMaskQuery : BoardQuery {
     public long Upper { get; }
     /// <inheritdoc/>
     public override long Visits => ((Planes is { } planes)
-        ? Puck.Maths.BitmapIndex64.RangeReads(
+        ? Puck.Maths.BitmapIndex.RangeReads(
+            lanes: Topology.CellCount,
             lower: Lower,
             upper: Upper,
             width: planes.Width,

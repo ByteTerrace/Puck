@@ -19485,7 +19485,8 @@
         "AndNot",
         "Not",
         "Shift",
-        "Image"
+        "Image",
+        "Reach"
       ],
       "title": "BoardCombineOp",
       "x-enumDescriptions": {
@@ -19498,11 +19499,12 @@
         "AndNot": "Members of left that are not members of right.",
         "Not": "Every cell that is not a member of left.",
         "Shift": "Each member of left moved one step along direction; a member with no neighbour that way drops \u2014 the same move boardShift makes on a 64-bit mask.",
-        "Image": "Each member of left carried through the point-group element \u2014 the same move boardImage makes."
+        "Image": "Each member of left carried through the point-group element \u2014 the same move boardImage makes.",
+        "Reach": "The members of left and every member of right a path of members of right joins to one, stepping in every direction of the topology: a flood fill from left through right, finished in the one firing."
       }
     },
     "StateTransformBoardCombine": {
-      "description": "Rewrites a board from one or two boards over the same topology, cell by cell, in one journaled mutation: the set algebra $board:mask and the bit operators give a board of at most 64 cells, for a board of any size. A cell is a member when its value is not its board\u0027s empty; every member of the result is written as Value and every other cell as the board\u0027s empty.",
+      "description": "Rewrites a board from one or two boards over the same topology in one journaled mutation: the set algebra $board:mask and the bit operators give a board of at most 64 cells, for a board of any size, computed on the boards\u0027 value planes a word at a time. A cell is a member when its value is not its board\u0027s empty; every member of the result is written as Value and every other cell as the board\u0027s empty, and a cell that already holds what it would be written is left as it stands.",
       "properties": {
         "$type": {
           "const": "boardCombine"
@@ -19522,7 +19524,7 @@
         },
         "right": {
           "$ref": "#/$defs/StateChannelRefNonNullable",
-          "description": "The second source board for the two-board operations.",
+          "description": "The second source board for the two-board operations, and the cells a Reach passes through.",
           "default": null
         },
         "direction": {

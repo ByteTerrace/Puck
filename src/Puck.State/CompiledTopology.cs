@@ -33,7 +33,6 @@ public sealed partial class CompiledTopology {
     // for the lattice kinds alone: what makes a translation between two cells carriable to a third.
     private readonly (int X, int Y, int Z)[]? m_coordinates;
     private readonly Dictionary<(int, int, int), int>? m_coordinateIndex;
-    private readonly ulong[]? m_directionShiftMasks;
     // Per direction, the one signed bit distance every cell's neighbour lies at, and the cells a step lands on; zero
     // where the neighbours lie at different distances (a wrapped edge, a graph).
     private readonly int[]? m_directionSteps;
@@ -80,60 +79,29 @@ public sealed partial class CompiledTopology {
             m_keys[cell] = cell.ToString(provider: CultureInfo.InvariantCulture);
             m_names[cell] = CellName.Parse(candidate: m_keys[cell]);
         }
-        if (
-            (count <= BoardMask.MaxCells) &&
-            (directions > 0)
-        ) {
-            var shiftMasks = new ulong[(directions * BoardMask.MaxCells)];
+        CellWords = BitWords.WordsFor(members: count);
+        if (directions > 0) {
             var steps = new int[directions];
-            var landings = new ulong[directions];
+            var landings = new ulong[(directions * CellWords)];
 
             for (var d = 0; (d < directions); d++) {
-                var offset = (d * BoardMask.MaxCells);
+                var landing = landings.AsSpan(start: (d * CellWords), length: CellWords);
                 var step = 0;
                 var uniform = true;
 
                 for (var cell = 0; (cell < count); cell++) {
                     var neighbour = neighbours[((cell * directions) + d)];
 
-                    if (
-                        (neighbour >= 0) &&
-                        (neighbour < BoardMask.MaxCells)
-                    ) {
-                        shiftMasks[(offset + cell)] = (1UL << neighbour);
-                        landings[d] |= (1UL << neighbour);
+                    if (neighbour >= 0) {
+                        BitWords.Add(index: neighbour, words: landing);
                         uniform &= ((neighbour != cell) && ((step == 0) || (step == (neighbour - cell))));
                         step = (neighbour - cell);
                     }
                 }
                 steps[d] = (uniform ? step : 0);
             }
-            m_directionShiftMasks = shiftMasks;
             m_directionSteps = steps;
             m_directionLandings = landings;
-        }
-        if (
-            (count <= BoardMask.MaxCells) &&
-            (images is { Length: > 0 })
-        ) {
-            var imageMasks = new ulong[(images.Length * BoardMask.MaxCells)];
-
-            for (var elem = 0; (elem < images.Length); elem++) {
-                var offset = (elem * BoardMask.MaxCells);
-                var elemImages = images[elem];
-
-                for (var cell = 0; ((cell < count) && (cell < elemImages.Length)); cell++) {
-                    var carried = elemImages[cell];
-
-                    if (
-                        (carried >= 0) &&
-                        (carried < BoardMask.MaxCells)
-                    ) {
-                        imageMasks[(offset + cell)] = (1UL << carried);
-                    }
-                }
-            }
-            m_elementImageMasks = imageMasks;
         }
     }
 
@@ -559,21 +527,6 @@ public sealed partial class CompiledTopology {
         ? m_directionNames[direction]
         : null
     );
-    /// <summary>Moves every set bit of a cell mask to its neighbour in a direction through the precomputed shift
-    /// table, dropping a bit whose cell has no neighbour that way. The table exists only for a topology of at most
-    /// 64 cells.</summary>
-    /// <param name="direction">The direction ordinal.</param>
-    /// <param name="mask">The mask, bit c set for cell ordinal c.</param>
-    /// <param name="shifted">The shifted mask, or zero when no table answers.</param>
-    /// <returns><see langword="true"/> when the precomputed table answered; otherwise <see langword="false"/>.</returns>
-    public bool TryShiftMask(int direction, ulong mask, out ulong shifted) => TryGather(
-        mask: mask,
-        ordinal: direction,
-        ordinalCount: DirectionCount,
-        result: out shifted,
-        table: m_directionShiftMasks
-    );
-
     /// <summary>Reads whether every cell's neighbour in a direction lies at one signed bit distance, so a shift of a cell
     /// mask in that direction is a word shift masked by the cells a step lands on.</summary>
     /// <param name="direction">The direction ordinal.</param>
@@ -584,38 +537,180 @@ public sealed partial class CompiledTopology {
     public bool TryUniformStep(int direction, out int step, out ulong landing) {
         step = 0;
         landing = 0UL;
+        if ((CellCount > BoardMask.MaxCells) || !TryUniformStepWords(direction: direction, landing: out var words, step: out step)) {
+            step = 0;
+
+            return false;
+        }
+        landing = words[0];
+
+        return true;
+    }
+    /// <summary>Reads whether every cell's neighbour in a direction lies at one signed bit distance, for a topology of
+    /// any size: a shift of a cell set in that direction is then a shift of its words (<see cref="BitWords.Shift"/>)
+    /// masked by the cells a step lands on.</summary>
+    /// <param name="direction">The direction ordinal.</param>
+    /// <param name="step">The signed bit distance from a cell to its neighbour, or zero when no one distance holds.</param>
+    /// <param name="landing">The cells that are some cell's neighbour that way, <see cref="CellWords"/> words, or empty
+    /// when no one distance holds.</param>
+    /// <returns><see langword="true"/> when the direction steps uniformly; otherwise <see langword="false"/>.</returns>
+    public bool TryUniformStepWords(int direction, out int step, out ReadOnlySpan<ulong> landing) {
+        step = 0;
+        landing = default;
         if ((m_directionSteps is not { } steps) || (((uint)direction) >= ((uint)steps.Length)) || (steps[direction] == 0)) {
             return false;
         }
         step = steps[direction];
-        landing = m_directionLandings![direction];
+        landing = m_directionLandings.AsSpan(start: (direction * CellWords), length: CellWords);
 
         return true;
     }
+    /// <summary>Gets how many 64-bit words hold one bit per cell of this topology.</summary>
+    public int CellWords { get; }
+    /// <summary>Writes the cells a cell set's members step to in one direction, dropping a member whose cell has no
+    /// neighbour that way: a word shift masked by the landing cells for a uniform direction
+    /// (<see cref="TryUniformStepWords"/>), and one neighbour read per member for any other.</summary>
+    /// <param name="direction">The direction ordinal.</param>
+    /// <param name="source">The cell set, <see cref="CellWords"/> words with no bit past the last cell.</param>
+    /// <param name="destination">The stepped set, <see cref="CellWords"/> words; must not overlap
+    /// <paramref name="source"/>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="direction"/> is not a direction of the
+    /// topology.</exception>
+    public void ShiftCells(int direction, ReadOnlySpan<ulong> source, Span<ulong> destination) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: (uint)direction, other: (uint)DirectionCount, paramName: nameof(direction));
 
-    // One row of a precomputed per-cell mask table: 64 destination masks per ordinal, indexed by source cell. The
-    // image of a mask is the union of the rows its set bits select.
-    private static bool TryGather(ulong[]? table, int ordinal, int ordinalCount, ulong mask, out ulong result) {
-        result = 0UL;
+        var words = destination[..CellWords];
 
-        if (
-            (table is null) ||
-            (((uint)ordinal) >= ((uint)ordinalCount))
-        ) {
-            return false;
+        if (TryUniformStepWords(direction: direction, landing: out var landing, step: out var step)) {
+            BitWords.Shift(destination: words, distance: step, source: source[..CellWords]);
+            for (var word = 0; (word < words.Length); word++) {
+                words[word] &= landing[word];
+            }
+
+            return;
         }
 
-        var row = table.AsSpan(
-            length: BoardMask.MaxCells,
-            start: (ordinal * BoardMask.MaxCells)
-        );
+        words.Clear();
+        foreach (var cell in BitWords.Members(words: source[..CellWords])) {
+            var neighbour = Neighbour(cell: cell, direction: direction);
 
-        while (mask != 0UL) {
-            result |= row[System.Numerics.BitOperations.TrailingZeroCount(value: mask)];
-            mask &= (mask - 1UL);
+            if (neighbour >= 0) {
+                BitWords.Add(index: neighbour, words: words);
+            }
+        }
+    }
+    /// <summary>Writes the cells reachable from a set of seeds through a set of passable cells, stepping in every
+    /// direction: the seeds themselves, and every passable cell joined to one by a path of passable cells. The seeds
+    /// need not be passable. The answer is the fixpoint of dilating by one step and keeping the passable cells, so it
+    /// is the same set however it is computed. While the newest cells are many enough that one whole-word dilation step
+    /// costs no more than visiting each of them (<see cref="ReachCellVisit"/> apiece), the walk dilates them a word at a
+    /// time, every direction in turn; once they are fewer, or on a topology a direction of which steps unevenly, it
+    /// visits the rest cell by cell from a queue. A cell is expanded once either way, so the work never exceeds
+    /// <see cref="ReachWork"/>.</summary>
+    /// <param name="seeds">The cells the reach starts from, <see cref="CellWords"/> words with no bit past the last
+    /// cell.</param>
+    /// <param name="passable">The cells a path may pass through, <see cref="CellWords"/> words.</param>
+    /// <param name="reach">The reached cells, <see cref="CellWords"/> words; must overlap neither source.</param>
+    /// <param name="scratch">The working storage the walk borrows its frontier words and cell queue from.</param>
+    /// <returns>How many whole-word dilation steps the walk took.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="scratch"/> is <see langword="null"/>.</exception>
+    public int Reach(ReadOnlySpan<ulong> seeds, ReadOnlySpan<ulong> passable, Span<ulong> reach, ArenaScratch scratch) {
+        ArgumentNullException.ThrowIfNull(argument: scratch);
+
+        var words = CellWords;
+        var reached = reach[..words];
+        using var frontierLease = scratch.Rent<ulong>(length: words);
+        using var stepLease = scratch.Rent<ulong>(length: words);
+        var frontier = frontierLease.Span;
+        var stepped = stepLease.Span;
+        var wordStep = ReachWordStep;
+        var size = (long)BitWords.Count(words: seeds[..words]);
+        var steps = 0;
+
+        seeds[..words].CopyTo(destination: reached);
+        seeds[..words].CopyTo(destination: frontier);
+
+        // A word step expands the whole frontier at once: it is taken only while that costs no more than visiting the
+        // frontier's cells, so the steps together cost at most a visit of every cell they expand.
+        while (StepsUniformly && (size > 0L) && (wordStep <= (size * ReachCellVisit))) {
+            using var nextLease = scratch.Rent<ulong>(length: words);
+            var next = nextLease.Span;
+
+            for (var direction = 0; (direction < DirectionCount); direction++) {
+                ShiftCells(destination: stepped, direction: direction, source: frontier);
+                for (var word = 0; (word < words); word++) {
+                    next[word] |= stepped[word];
+                }
+            }
+            size = 0L;
+            for (var word = 0; (word < words); word++) {
+                next[word] &= (passable[word] & ~reached[word]);
+                reached[word] |= next[word];
+                size += System.Numerics.BitOperations.PopCount(value: next[word]);
+            }
+            next.CopyTo(destination: frontier);
+            steps++;
+        }
+        if (size == 0L) {
+            return steps;
         }
 
-        return true;
+        // The frontier's cells are expanded one at a time, each passable cell entering the queue once.
+        using var queueLease = scratch.Rent<int>(length: CellCount);
+        var queue = queueLease.Span;
+        var tail = 0;
+
+        foreach (var cell in BitWords.Members(words: frontier)) {
+            queue[tail++] = cell;
+        }
+        for (var head = 0; (head < tail); head++) {
+            var cell = queue[head];
+
+            for (var direction = 0; (direction < DirectionCount); direction++) {
+                var neighbour = Neighbour(cell: cell, direction: direction);
+
+                if ((neighbour >= 0) && BitWords.Contains(index: neighbour, words: passable) && !BitWords.Contains(index: neighbour, words: reached)) {
+                    BitWords.Add(index: neighbour, words: reached);
+                    queue[tail++] = neighbour;
+                }
+            }
+        }
+
+        return steps;
+    }
+    /// <summary>Gets the element operations <see cref="Reach"/> spends expanding one cell from its queue: taking the
+    /// cell, then for every direction its neighbour's read and two membership tests, and a mark and a push for a
+    /// neighbour it reaches.</summary>
+    public long ReachCellVisit => (3L + (3L * DirectionCount));
+    /// <summary>Gets the element operations one whole-word dilation step of <see cref="Reach"/> costs: every
+    /// direction's shift, mask and union over every word, and the frontier's mask, union and count.</summary>
+    public long ReachWordStep => (((long)CellWords) * ((3L * DirectionCount) + 4L));
+    /// <summary>Returns the most element operations one <see cref="Reach"/> costs, read from the topology alone: every
+    /// cell expanded once, by a word step that costs no more than visiting the cells it expands or by a visit from the
+    /// queue, and the seeds' words copied and counted.</summary>
+    /// <returns>The element operations.</returns>
+    public long ReachWork() => ((CellCount * ReachCellVisit) + (4L * CellWords));
+    // Whether every direction steps at one bit distance, so a word step is a shift and a mask of each word.
+    private bool StepsUniformly => ((m_directionSteps is { } steps) && !steps.AsSpan().Contains(value: 0));
+    /// <summary>Writes the cells a point-group element carries a cell set's members to.</summary>
+    /// <param name="element">The element ordinal.</param>
+    /// <param name="source">The cell set, <see cref="CellWords"/> words.</param>
+    /// <param name="destination">The carried set, <see cref="CellWords"/> words; must not overlap
+    /// <paramref name="source"/>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="element"/> is not an element of the
+    /// topology's point group.</exception>
+    public void ImageCells(int element, ReadOnlySpan<ulong> source, Span<ulong> destination) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: (uint)element, other: (uint)ElementCount, paramName: nameof(element));
+
+        var words = destination[..CellWords];
+        var images = m_images[element];
+
+        words.Clear();
+        foreach (var cell in BitWords.Members(words: source[..CellWords])) {
+            if ((cell < images.Length) && (images[cell] >= 0)) {
+                BitWords.Add(index: images[cell], words: words);
+            }
+        }
     }
     /// <summary>Returns whether two topologies are one lattice wherever each stands: the same kind, cells, directions
     /// and adjacency, so a query that reads cells and their neighbours (a mask, a ray, a neighbour) answers alike over
@@ -641,22 +736,6 @@ public sealed partial class CompiledTopology {
     private readonly int[][] m_images = [];
     private readonly string[] m_elementNames = [];
     private readonly Dictionary<string, int> m_elementAliases = new(comparer: StringComparer.Ordinal);
-
-    private readonly ulong[]? m_elementImageMasks;
-
-    /// <summary>Carries every set bit of a cell mask through a point-group element by the precomputed image table.
-    /// The table exists only for a topology of at most 64 cells.</summary>
-    /// <param name="element">The element ordinal.</param>
-    /// <param name="mask">The mask, bit c set for cell ordinal c.</param>
-    /// <param name="image">The image mask, or zero when no table answers.</param>
-    /// <returns><see langword="true"/> when the precomputed table answered; otherwise <see langword="false"/>.</returns>
-    public bool TryImageMask(int element, ulong mask, out ulong image) => TryGather(
-        mask: mask,
-        ordinal: element,
-        ordinalCount: ElementCount,
-        result: out image,
-        table: m_elementImageMasks
-    );
 
     /// <summary>Gets the number of elements in the topology's point group, the identity included: 8 for a square
     /// grid, 4 for a rectangle, 12 for a hex board, 1 for a ring.</summary>

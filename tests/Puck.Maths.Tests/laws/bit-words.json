@@ -47,5 +47,25 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "bit-words.span-moves-bit-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.BitWords", "Name": "Shift" },
+      { "Type": "Puck.Maths.BitWords", "Name": "Extract" },
+      { "Type": "Puck.Maths.BitWords", "Name": "Complement" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Shift of seeded spans of one to seven words into destinations up to two words wider, at every signed distance up to two words past the span either way; Extract of every fifth start and seventh length of run, past the span's end included, into a destination one word wider than the run and filled with set bits; Complement of every set width from 0 to 200 positions over seeded words one word longer than the set; and the refusals of a negative start, length or width and a short destination.",
+        "Against": "A bit-by-bit copy of the raw words by index arithmetic, which calls no BitWords member: destination bit b equals source bit b - distance, clear outside the source, run bit b equals source bit start + b below the run's length and is clear from there on, and complement bit b is the flipped source bit below the width, clear up to the end of the set's last word, and untouched past it.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

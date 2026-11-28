@@ -74,13 +74,14 @@ Off-board stone n reads `-1 - n`. Seat 1 may pose every stone; for example,
 | Position and physical board | `world.state goBoard`, `world.state goSeen` |
 | Turn, moves and refusals | `world.state goTurn`, `world.state goMoves`, `world.state goRefusal` |
 | Last group, liberties and atari | `world.state goGroup`, `world.state goLiberties`, `world.state goAtari` |
-| Scoring phase, passes and reach | `world.state goScoring`, `world.state goScorePasses`, `world.state goReached` |
+| Scored, and each side's reach | `world.state goScored`, `world.state goBlackReach`, `world.state goWhiteReach` |
 | Empty area, stones and winner | `world.state goTerritory`, `world.state goStoneCount`, `world.state goWinner` |
 | Return queue and supply | `world.state goReseat`, `world.state goReturn`, `world.state goExhausted` |
 | Opponent progress | `world.search` |
 
-Refusal 1 means occupied, 2 suicide and 3 ko. Scoring phase 1 is flooding,
-one pass per tick, with a board-derived ceiling of 363 passes; phase 2 is done.
+Refusal 1 means occupied, 2 suicide and 3 ko. Scoring floods each side's reach
+from its stones through the empty points in the one firing after the second
+pass, and `goScored` reads 1 once the area and the winner stand.
 
 ## Opponent and scenarios
 
@@ -98,5 +99,5 @@ their own dependency rows and reserves every job's input-stamp upkeep.
 [go-tests.puck](go-tests.puck) covers seated play, atari, captures before
 suicide, group captures, ko and its release, the occupied-point arrangements
 the board projection cannot see, the far corner, one opponent move, reset,
-passes and area scoring, including a serpentine flood longer than 128 ticks. Run
+passes and area scoring, including a serpentine corridor flooded in one firing. Run
 `puck test worlds/debug/go-tests.puck --reproduce --jobs 1`.

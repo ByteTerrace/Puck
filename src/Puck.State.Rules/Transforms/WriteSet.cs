@@ -31,30 +31,12 @@ public static partial class ArenaTransforms {
                 return false;
             }
 
-            for (var position = 0; (position < topology.CellCount); position++) {
-                if (!cells.Contains(index: position)) {
-                    continue;
-                }
-                if (!context.Arena.TryWriteBoardCell(
-                    cell: position,
-                    reason: out var reason,
-                    rowOrdinal: writeSet.RowOrdinal,
-                    value: writeSet.Value,
-                    write: StateWriteKind.Set
-                )) {
-                    moved = false;
+            using var membersLease = context.Arena.Scratch.Rent<ulong>(length: topology.CellWords);
+            var members = membersLease.Span;
 
-                    return Refuse(
-                        code: TransformRefusal.WriteSetValueInadmissible,
-                        reason: reason,
-                        refusal: out refusal
-                    );
-                }
+            cells.CopyTo(destination: members);
 
-                moved = true;
-            }
-
-            return Applied(refusal: out refusal);
+            return TryWriteMembers(context: in context, members: members, moved: out moved, refusal: out refusal, writeSet: writeSet);
         }
         if (topology.CellCount > BoardMask.MaxCells) {
             return Refuse(
@@ -79,33 +61,28 @@ public static partial class ArenaTransforms {
             );
         }
 
-        var bits = ((ulong)cell.AsInt);
+        Span<ulong> mask = [(((ulong)cell.AsInt) & Puck.Maths.BinaryIntegerFunctions.LowMask<ulong>(count: topology.CellCount))];
 
-        while (bits != 0UL) {
-            var member = System.Numerics.BitOperations.TrailingZeroCount(value: bits);
-
-            bits &= (bits - 1UL);
-            if (member >= topology.CellCount) {
-                continue;
-            }
-            if (!context.Arena.TryWriteBoardCell(
-                cell: member,
-                reason: out var reason,
-                rowOrdinal: writeSet.RowOrdinal,
-                value: writeSet.Value,
-                write: StateWriteKind.Set
-            )) {
-                moved = false;
-
-                return Refuse(
-                    code: TransformRefusal.WriteSetValueInadmissible,
-                    reason: reason,
-                    refusal: out refusal
-                );
-            }
-
-            moved = true;
+        return TryWriteMembers(context: in context, members: mask, moved: out moved, refusal: out refusal, writeSet: writeSet);
+    }
+    // The set's cells land through the arena's set door, which admits the value once and writes only the cells that
+    // change.
+    private static bool TryWriteMembers(in ArenaTransformContext context, ArenaTransform.WriteSet writeSet, ReadOnlySpan<ulong> members, out bool moved, out EffectRefusal refusal) {
+        moved = false;
+        if (!context.Arena.TryWriteBoardCells(
+            cells: members,
+            reason: out var reason,
+            rowOrdinal: writeSet.RowOrdinal,
+            value: writeSet.Value
+        )) {
+            return Refuse(
+                code: TransformRefusal.WriteSetValueInadmissible,
+                reason: reason,
+                refusal: out refusal
+            );
         }
+
+        moved = (Puck.Maths.BitWords.Count(words: members) != 0);
 
         return Applied(refusal: out refusal);
     }

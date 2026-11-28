@@ -102,6 +102,10 @@ internal static partial class LawRegistry {
             id: "bit-words.set-and-refusals"
         ),
         ClaimCase(
+            claim: Subjects.BitWordsSpanMovesBitOracle,
+            id: "bit-words.span-moves-bit-oracle"
+        ),
+        ClaimCase(
             claim: Subjects.OccludedFillSlideVsRayWalk,
             id: "occluded-fill.slide-vs-ray-walk"
         ),

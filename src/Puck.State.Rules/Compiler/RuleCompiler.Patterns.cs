@@ -320,6 +320,18 @@ public static partial class RuleCompiler {
                 kind: kind,
                 lower: memberLower,
                 maxVisits: componentVisits,
+                planes: (BoardMask.TryPlaneWindow(
+                    catalog: context.Catalog,
+                    lower: out var componentPlaneLower,
+                    row: row,
+                    rowOrdinal: ResolveRowOrdinal(
+                        context: context,
+                        name: row.Name.Value
+                    ),
+                    width: out var componentPlaneWidth
+                )
+                    ? (componentPlaneLower, componentPlaneWidth)
+                    : null),
                 topology: topology,
                 upper: memberUpper
             );

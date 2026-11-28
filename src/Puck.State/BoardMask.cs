@@ -2,16 +2,16 @@ using Puck.Maths;
 
 namespace Puck.State;
 
-/// <summary>The most cells a board may hold for its occupancy to read as one 64-bit mask, and the value planes the
-/// arena keeps for such a board.</summary>
+/// <summary>The most cells a board may hold for its occupancy to read as one 64-bit expression mask, and the window
+/// of values the arena keeps value planes over for a board of any size.</summary>
 public static class BoardMask {
     /// <summary>Cell ordinals 0..63 map to bits 0..63.</summary>
     public const int MaxCells = 64;
 
     /// <summary>Returns the window of values a board row's planes span, read from its declarations alone: every value
     /// a write to the row can store, and the empty value an absent cell reads as. The arena keeps a
-    /// <see cref="BitmapIndex64"/> over exactly this window for every stored board of at most <see cref="MaxCells"/>
-    /// cells that has one, and the work sheet prices a mask read over the same window, so the two cannot
+    /// <see cref="BitmapIndex"/> over exactly this window for every stored board that has one, whatever its cell
+    /// count, and the work sheet prices a mask or plane read over the same window, so the two cannot
     /// disagree.</summary>
     /// <param name="catalog">The catalog the row is declared in.</param>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
@@ -19,7 +19,7 @@ public static class BoardMask {
     /// <param name="lower">The window's least value, or zero when there is none.</param>
     /// <param name="width">How many values the window spans, or zero when there is none.</param>
     /// <returns><see langword="true"/> when the row is an integer or boolean board in the document lane whose values
-    /// and empty value fit in <see cref="BitmapIndex64.MaxWidth"/> consecutive values.</returns>
+    /// and empty value fit in <see cref="BitmapIndex.MaxWidth"/> consecutive values.</returns>
     public static bool TryPlaneWindow(StateCatalog catalog, int rowOrdinal, StateRowShape row, out long lower, out int width) {
         ArgumentNullException.ThrowIfNull(argument: catalog);
         ArgumentNullException.ThrowIfNull(argument: row);
@@ -41,7 +41,7 @@ public static class BoardMask {
         var to = Math.Max(val1: admittedUpper, val2: board.Empty);
 
         // The span is compared unsigned, so an unbounded row's whole-long span reads as too wide rather than wrapping.
-        if (unchecked((ulong)to - (ulong)from) >= BitmapIndex64.MaxWidth) {
+        if (unchecked((ulong)to - (ulong)from) >= BitmapIndex.MaxWidth) {
             return false;
         }
 

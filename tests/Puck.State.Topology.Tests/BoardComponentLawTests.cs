@@ -51,6 +51,17 @@ public sealed class BoardComponentLawTests {
         0, 0, 0, 0, 0,
     ];
 
+    // The cells whose value lies in an inclusive range, a cell a bit, as a board's planes answer them.
+    private static ulong[] Cells(long[] values, long lower, long upper) {
+        var cells = new ulong[BitWords.WordsFor(members: values.Length)];
+
+        for (var cell = 0; (cell < values.Length); cell++) {
+            if ((values[cell] >= lower) && (values[cell] <= upper)) {
+                BitWords.Add(index: cell, words: cells);
+            }
+        }
+        return cells;
+    }
     private static CompiledTopology Board() => TopologyCompilation.Compile(
         topology: new LatticeTopology.Grid(
             Name: "go",
@@ -384,7 +395,7 @@ public sealed class BoardComponentLawTests {
 
         values[6] = 2L;
         var cleared = new ulong[BitWords.WordsFor(members: values.Length)];
-        var count = BoardQueries.FindEnclosed(topology, values, 6, 1L, 1L, boundaryLower, 0L, cleared, new ArenaScratch());
+        var count = BoardQueries.FindEnclosed(topology, Cells(values, 1L, 1L), Cells(values, boundaryLower, 0L), 6, cleared, new ArenaScratch());
         var members = new List<int>();
 
         foreach (var cell in BitWords.Members(words: cleared)) { members.Add(item: cell); }
@@ -438,7 +449,7 @@ public sealed class BoardComponentLawTests {
         );
         values[placement] = 2L;
         var cleared = new ulong[BitWords.WordsFor(members: values.Length)];
-        Assert.Equal(1, BoardQueries.FindEnclosed(topology, values, placement, 1L, 1L, 0L, 0L, cleared, new ArenaScratch()));
+        Assert.Equal(1, BoardQueries.FindEnclosed(topology, Cells(values, 1L, 1L), Cells(values, 0L, 0L), placement, cleared, new ArenaScratch()));
         Assert.True(BitWords.Contains(words: cleared, index: centre));
         Assert.Equal(1, BitWords.Count(words: cleared));
     }
@@ -483,7 +494,7 @@ public sealed class BoardComponentLawTests {
             )
         );
         Assert.Equal(
-            ((5L * 4L) + 25L),
+            ((5L * 4L) + 25L + (2L * 25L)),
             budgeted.Visits
         );
     }
