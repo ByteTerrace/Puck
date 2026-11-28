@@ -302,8 +302,8 @@ public static partial class SdfWorldPackage {
     public const string MeshPyramidWritten = "sdfMeshPyramidRW";
     /// <summary>The screen sources: one sampled image per screen, indexed by screen index.</summary>
     public const string ScreenSources = "screenSources";
-    /// <summary>The length of <see cref="ScreenSources"/>: the most screen surfaces one program declares, the members of
-    /// one screen mask (<see cref="Puck.Maths.BitWords.MaskBits"/>).</summary>
+    /// <summary>The length of <see cref="ScreenSources"/>: the screen slots a residency holds, the members of one slot mask
+    /// (<see cref="Puck.Maths.BitWords.MaskBits"/>).</summary>
     public const int ScreenSourceCount = Puck.Maths.BitWords.MaskBits;
     /// <summary>The package's samplers, one per filter, indexed by the filter's value (<see cref="GpuSamplerFilter"/>): a
     /// screen samples its source through the one its row chooses, and the glyph atlas through the nearest one.</summary>

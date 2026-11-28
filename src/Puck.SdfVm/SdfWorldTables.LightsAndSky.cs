@@ -42,11 +42,12 @@ public sealed partial class SdfWorldTables {
     /// tier-excluded layers consume no packed row; counter detail identities are composition-wide, not packed ordinals.</summary>
     public ReadOnlySpan<int> SkyAuthoredIndices => m_skyAuthoredIndices;
 
-    // Packs a frame's lights and sky and retains its active controls until the counted upload.
+    // Packs the lights the residency shades (Lights: the frame's and its screens' faces, PackFaceLights) and the frame's
+    // sky, and retains its active controls until the counted upload.
     private void PackLightsAndSky(SdfFrame frame) {
         m_shadowHandoffCount = frame.Lights.ShadowSlots.FadeCount;
         frame.Lights.ShadowSlots.Handoffs.CopyTo(destination: m_shadowHandoffs);
-        frame.Lights.Pack(records: m_lightRecords);
+        m_shadedLights.Pack(records: m_lightRecords);
         frame.Sky.Pack(
             authoredIndices: m_skyAuthoredIndices,
             block: out m_skyRecord[0],

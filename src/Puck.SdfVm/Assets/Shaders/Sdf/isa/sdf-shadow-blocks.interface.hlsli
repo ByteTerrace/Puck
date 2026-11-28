@@ -28,7 +28,7 @@ void puckCountRejectedHit() {
 }
 void puckCountSky(uint evaluations, uint loads) {
 }
-void puckCountLights(uint visits) {
+void puckCountLights(uint visits, uint faces) {
 }
 
 #endif // PUCK_SHADER_INTERFACE_SDF_SHADOW_BLOCKS

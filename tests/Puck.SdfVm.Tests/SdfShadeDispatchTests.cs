@@ -136,7 +136,7 @@ public sealed class SdfShadeDispatchTests {
         Assert.NotEqual(expected: UInt128.PopCount(value: maskMid), actual: UInt128.PopCount(value: maskFar));
 
         SdfShadeDispatch Plan(SdfShadeDispatch? previous, UInt128 mask) =>
-            SdfShadeDispatch.For(previous: previous, frame: frame, width: 1920u, height: 1080u, screens: 2u, lightMask: mask, glass: glass, tier: SdfShadeTier.Interpreted, binned: binned);
+            SdfShadeDispatch.For(previous: previous, frame: frame, width: 1920u, height: 1080u, tableLights: lights.Count, lightMask: mask, glass: glass, tier: SdfShadeTier.Interpreted, binned: binned);
 
         // A mask within the same walk step keeps the plan; one past it prices the walk it bounds.
         var full = Plan(previous: null, mask: ((UInt128.One << 32) - UInt128.One));

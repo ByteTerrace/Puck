@@ -14,8 +14,9 @@ public sealed partial class SdfShadeProgram {
     public const int MaxRegisters = 16;
     /// <summary>The maximum number of runtime slots; slots are data, not simultaneously live registers.</summary>
     public const int MaxParameters = 256;
-    /// <summary>The maximum light walk, including bound screens, admitted by the work model.</summary>
-    public const uint MaxLights = (SdfLights.MaxLights + SdfProgramBuilder.MaxScreenSurfaces);
+    /// <summary>The maximum light walk admitted by the work model: the lights table's records, whose face lights are the
+    /// screens and emitter faces (<see cref="SdfLightKind.Face"/>).</summary>
+    public const uint MaxLights = SdfLights.MaxLights;
     /// <summary>Fixed stage work: filtering, probe gather, output sanitization and composition plumbing.</summary>
     public const uint EngineWork = 4096;
     /// <summary>Work of the default wrapped Lambert and GGX light response.</summary>

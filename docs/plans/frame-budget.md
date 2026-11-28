@@ -311,9 +311,13 @@ disagree on needed.
 The lights table holds `SdfLights.MaxLights` records, and every structure that
 selects lights is a mask of that many bits: a view's (`SdfWorldPackage.LightMask`),
 a tile's (`SdfWorldPackage.ShadeTileLightWords`), a probe's traced lights
-(`SdfMeshIrradianceProbe.LightWords`) and a slot's agreement. Cost follows the
-lights a tile keeps, which is the right shape, but nothing can name a light
-past the table. The replacement, in the order that keeps each step runnable:
+(`SdfMeshIrradianceProbe.LightWords`) and a slot's agreement. The resident
+screens' and emitter faces' face lights share the table after the frame's own
+(`SdfWorldTables.Lights`), so a slot past it lights nothing
+(`sdf.screens.face-lights-dropped`) and this replacement lifts their bound too.
+Cost follows the lights a tile keeps, which is the right shape, but nothing can
+name a light past the table. The replacement, in the order that keeps each step
+runnable:
 
 1. **Lists for the walk.** The filter pass writes each cluster's lights as
    indices into a list buffer (a count and an offset a cluster, the entries

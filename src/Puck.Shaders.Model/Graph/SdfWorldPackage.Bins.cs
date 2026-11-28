@@ -35,12 +35,11 @@ public static partial class SdfWorldPackage {
     /// scatter cursor. <c>SdfIsaHlsl</c> generates it as <c>SDF_SHADE_TILE_HEADER_WORDS</c>.</summary>
     public const uint ShadeTileHeaderWords = (3 * ShadeBins);
     /// <summary>The words of one tile's light masks in the shade bins: a bit for each light of the lights table the tile's
-    /// walks visit (four words, one for every 32 lights of the table's capacity), then a bit for each bound screen (four
-    /// words, one for every 32 screens of <see cref="ScreenSourceCount"/>), then a bit for each analytic occluder of the
-    /// occluders table that reaches the tile (four words, one for every 32 occluders). The filter pass writes them and the
-    /// binned views kernels walk by them (<c>sdf-views-lights.hlsli</c>). <c>SdfIsaHlsl</c> generates it as
-    /// <c>SDF_SHADE_TILE_LIGHT_WORDS</c>.</summary>
-    public const uint ShadeTileLightWords = 12;
+    /// walks visit (four words, one for every 32 lights of the table's capacity, a screen's or an emitter face's area light
+    /// among them), then a bit for each analytic occluder of the occluders table that reaches the tile (four words, one
+    /// for every 32 occluders). The filter pass writes them and the binned views kernels walk by them
+    /// (<c>sdf-views-lights.hlsli</c>). <c>SdfIsaHlsl</c> generates it as <c>SDF_SHADE_TILE_LIGHT_WORDS</c>.</summary>
+    public const uint ShadeTileLightWords = 8;
     /// <summary>The words of one tile's traced-light shares in the shade bins, after every tile's light masks: a light mask
     /// of the traced lights the shares resolve, then for each cell of the four by four the tile's pixels blend, two
     /// UNORM16 shares a word for each of those lights in mask order. The filter pass writes them and the binned views

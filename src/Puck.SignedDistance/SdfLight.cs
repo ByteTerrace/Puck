@@ -40,6 +40,20 @@ public enum SdfLightKind : uint {
     /// the irradiance volume as a point at its midpoint carrying the segment's whole intensity
     /// (<see cref="SdfLight.IsTraced"/>).</summary>
     Line = 4,
+    /// <summary>A screen's or an emitter face's area light (<see cref="SdfScreenSurface"/>): a Lambertian face of area
+    /// <c>A</c> that casts <c>E = L · A · cos / (d² + A / π)</c> on a surface before it, eased to zero at its range as a
+    /// point light is, its luminance <c>L</c> the face's mean in nits, which the screens' emission pass reduces on the GPU
+    /// from what the face shows (<c>sdfScreenLights</c>), so the record holds no colour. A residency's tables append one
+    /// after the frame's lights for every resident screen slot (<c>SdfWorldTables.Lights</c>), so screens, emitter faces
+    /// and every other light are one list, culled by one mask and one tile test and walked by one walk.
+    /// <see cref="SdfLight.Direction"/> carries the face's center, <see cref="SdfLight.SpotAxis"/> its unit facing,
+    /// <see cref="SdfLight.Weight"/> its area over π, <see cref="SdfLight.Param"/> its range (sized from the face's peak
+    /// luminance, infinite for an opening) and <see cref="SdfLight.SpotOffset"/> the screen slot its luminance is read
+    /// from, a whole number (<see cref="SdfLight.Face"/>). A static one (<see cref="SdfLight.Shadows"/> set) is traced by
+    /// the irradiance volume as a point at its center for its visibility alone: it bounces nothing
+    /// (<see cref="SdfLight.Bounce"/> zero), and a view occludes it by the probes' answer as it occludes a traced point
+    /// light.</summary>
+    Face = 5,
 }
 /// <summary>
 /// One light of the lit path, and one record of the lights table the kernels read (<c>sdfLights</c>, a World-group
@@ -81,7 +95,7 @@ public record struct SdfLight {
     /// (<see cref="SdfLightKind.Line"/>).</summary>
     [FieldOffset(48)] public Vector3 SpotAxis;
     /// <summary>A spot's cone offset (<see cref="SpotAxis"/>); one for a point; a line's tube radius, in world
-    /// units.</summary>
+    /// units; a face's screen slot, a whole number (<see cref="SdfLightKind.Face"/>).</summary>
     [FieldOffset(60)] public float SpotOffset;
 
     /// <summary>Creates a light.</summary>
@@ -108,15 +122,46 @@ public record struct SdfLight {
         SpotOffset = 1f;
     }
 
+    /// <summary>Returns a screen's or an emitter face's area light (<see cref="SdfLightKind.Face"/>).</summary>
+    /// <param name="center">The face's center.</param>
+    /// <param name="facing">The face's unit normal, toward the side it lights.</param>
+    /// <param name="area">The face's area, in square world units.</param>
+    /// <param name="range">The distance from its center past which it lights nothing; infinite for an opening.</param>
+    /// <param name="slot">The screen slot the face holds, whose reduction gives its luminance.</param>
+    /// <param name="traced">Whether the face is static, so the irradiance volume traces its visibility.</param>
+    /// <returns>The face's record.</returns>
+    public static SdfLight Face(Vector3 center, Vector3 facing, float area, float range, int slot, bool traced) => new(
+        Bounce: 0f,
+        Color: Vector3.One,
+        Direction: center,
+        Kind: SdfLightKind.Face,
+        Param: range,
+        Shadows: traced,
+        Weight: (area / MathF.PI)
+    ) {
+        SpotAxis = facing,
+        SpotOffset = slot,
+    };
+
     /// <summary>Gets whether the light may cast a shadow: a directional with <see cref="Shadows"/> set.</summary>
     public readonly bool CastsShadow => ((Shadows != 0u) && (Kind == SdfLightKind.Directional));
-    /// <summary>Gets whether the irradiance volume traces the light: a static point or spot light, with
-    /// <see cref="Shadows"/> set, whose light the volume bounces and whose visibility each probe records, so a view
-    /// occludes it by the probes about a surface.</summary>
+    /// <summary>Gets whether the irradiance volume traces the light: a static point, spot, line or face light with
+    /// <see cref="Shadows"/> set, whose visibility each probe records, so a view occludes it by the probes about a surface,
+    /// and whose light the volume bounces by its <see cref="Bounce"/> (none for a face).</summary>
     public readonly bool IsTraced => ((Shadows != 0u) && IsRanged);
-    /// <summary>Gets whether the light reaches only the sphere of its range about its position (a point or a spot), or
-    /// the capsule of its range about its segment (a line). Every other kind may light any surface.</summary>
-    public readonly bool IsRanged => (Kind is SdfLightKind.Point or SdfLightKind.Line);
+    /// <summary>Gets whether the light reaches only the sphere of its range about its position (a point, a spot or a
+    /// face), or the capsule of its range about its segment (a line). Every other kind may light any surface.</summary>
+    public readonly bool IsRanged => (Kind is SdfLightKind.Point or SdfLightKind.Line or SdfLightKind.Face);
+    /// <summary>Gets the disc a light's analytic occluder shadows are taken toward (<c>sdfOccludersShadow</c>): a line's
+    /// half segment or radius, whichever is wider, a face's disc of its area, and no width for every other kind.</summary>
+    public readonly float SourceRadius => (Kind switch {
+        SdfLightKind.Line => MathF.Max(x: SpotAxis.Length(), y: SpotOffset),
+        SdfLightKind.Face => MathF.Sqrt(x: MathF.Max(x: Weight, y: 0f)),
+        _ => 0f,
+    });
+    /// <summary>Gets whether the light's position follows a dynamic transform the host does not hold: a point or a line
+    /// riding its <see cref="DynamicSlot"/>.</summary>
+    public readonly bool RidesSlot => (IsPositional(kind: Kind) && (DynamicSlot != SdfProgram.NoDynamicTransformSlot));
     /// <summary>Gets a line's length, twice its half segment (<see cref="SpotAxis"/>); zero for every other kind.</summary>
     public readonly float LineLength => ((Kind == SdfLightKind.Line) ? (2f * SpotAxis.Length()) : 0f);
 

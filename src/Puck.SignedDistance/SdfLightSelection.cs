@@ -8,7 +8,8 @@ namespace Puck.SignedDistance;
 /// <see cref="SdfLights"/> in a mask the view's pass block carries. A point or spot light reaches only the sphere of its
 /// range (<see cref="SdfPhotometry.RangeOf"/>), where its windowed falloff ends exactly, and within it only as far as its
 /// light stays above the view's cutoff at the view's exposure (<see cref="ReachAt"/>), so a view whose frustum that
-/// sphere misses cannot show any of its light and skips it (a line light the capsule of its range about its segment). A
+/// sphere misses cannot show any of its light and skips it (a line light the capsule of its range about its segment, a
+/// screen's or an emitter face's light, <see cref="SdfLightKind.Face"/>, the sphere of its range about its center). A
 /// directional or rim light reaches every surface and is always kept; a light of no strength, a world occluder row's
 /// place among them included, is never kept. A positional light that rides a dynamic transform, whose position the host
 /// does not hold, is always kept. The views pass narrows this mask again for each tile it shades, by the same reaches
@@ -50,10 +51,9 @@ public static class SdfLightSelection {
     }
     /// <summary>Returns the mask of the analytic occluders a view shades: each whose sphere of reach
     /// (<see cref="SdfOccluder.Reach"/> about its center), past which its ambient term adds nothing, the view's frustum,
-    /// widened by <see cref="Margin"/>, may see, and each whose shadow toward a point, spot or line light the view shades
-    /// may fall where the frustum sees (<see cref="ShadowMaySee"/>). The views pass narrows the mask again for each tile,
-    /// by the same two rules and the screens besides (<c>sdfOccluderReachesWalk</c>); a screen's or an emitter face's
-    /// shadow is kept here only through the occluder's reach.</summary>
+    /// widened by <see cref="Margin"/>, may see, and each whose shadow toward a ranged light the view shades (a point,
+    /// spot, line or face light) may fall where the frustum sees (<see cref="ShadowMaySee"/>). The views pass narrows the
+    /// mask again for each tile, by the same two rules (<c>sdfOccluderReachesWalk</c>).</summary>
     /// <param name="occluders">The frame's occluders table.</param>
     /// <param name="lights">The frame's lights table.</param>
     /// <param name="lightMask">The lights the view shades (<see cref="Select"/>).</param>
@@ -80,8 +80,8 @@ public static class SdfLightSelection {
 
         return mask;
     }
-    /// <summary>Returns whether an occluder's shadow toward a point, spot or line light of a view's light mask may fall
-    /// where the view's frustum sees. <c>sdfOccludersShadow</c> darkens a point only where the segment from it to the
+    /// <summary>Returns whether an occluder's shadow toward a ranged light of a view's light mask (a point, spot, line or
+    /// face light) may fall where the view's frustum sees. <c>sdfOccludersShadow</c> darkens a point only where the segment from it to the
     /// light passes the occluder's bounding sphere by less than the penumbra's half width, the light's radius plus the
     /// segment's length times the occluder's <see cref="SdfOccluder.Softness"/> at most; a point the light reaches lies
     /// within its reach (<see cref="ReachAt"/>) of its segment. So the shadowed points lie in the cone from the light through
@@ -116,7 +116,7 @@ public static class SdfLightSelection {
             if (!light.IsRanged) {
                 continue;
             }
-            if (light.DynamicSlot != SdfProgram.NoDynamicTransformSlot) {
+            if (light.RidesSlot) {
                 return true;
             }
 
@@ -125,11 +125,15 @@ public static class SdfLightSelection {
             if (!(reach > 0f)) {
                 continue;
             }
+            // An opening's face reaches every distance, so its shadow may fall anywhere.
+            if (float.IsPositiveInfinity(f: reach)) {
+                return true;
+            }
 
-            // A line's points lie within its half segment of its midpoint, its disc as wide as the wider of that and its
-            // radius (sdfLightInputs).
+            // A line's points lie within its half segment of its midpoint, and its disc and a face's are as wide as
+            // sdfLightInputs takes them (SourceRadius).
             var extent = ((light.Kind == SdfLightKind.Line) ? light.SpotAxis.Length() : 0f);
-            var radius = ((light.Kind == SdfLightKind.Line) ? MathF.Max(x: extent, y: light.SpotOffset) : 0f);
+            var radius = light.SourceRadius;
             var length = (reach + (2f * extent));
             // The shader's least penumbra half width, 1e-4 m, beside the widest.
             var grown = (((((bound + radius) + (length * occluder.Softness)) + 1.0e-4f) + extent) * (1f + CutoffMargin));
@@ -157,19 +161,18 @@ public static class SdfLightSelection {
 
         return false;
     }
-    /// <summary>Returns the distance from its position past which a light lights nothing: a point's or a line's range,
-    /// and infinity for a light that reaches every surface.</summary>
+    /// <summary>Returns the distance from its position past which a light lights nothing: a point's, a line's or a face's
+    /// range, and infinity for a light that reaches every surface.</summary>
     /// <param name="light">The light.</param>
     /// <returns>The reach, in world units.</returns>
-    public static float ReachOf(in SdfLight light) => (light.Kind switch {
-        SdfLightKind.Point or SdfLightKind.Line => light.Param,
-        _ => float.PositiveInfinity,
-    });
+    public static float ReachOf(in SdfLight light) => (light.IsRanged ? light.Param : float.PositiveInfinity);
     /// <summary>Returns the distance from its position past which a light adds nothing a view at an exposure shows:
     /// <see cref="ReachOf"/>, and for a point or spot light no farther than where it gives a white surface facing it the
     /// view's cutoff (<see cref="SdfPhotometry.RangeOf"/> at the view's exposure, widened by <see cref="CutoffMargin"/>).
     /// Its window and cone are at most one, so its light at a distance <c>d</c> is at most its weight over
-    /// <c>d²</c>, and the shading fades it to nothing under the cutoff (<c>sdfLightCutoffFade</c>).</summary>
+    /// <c>d²</c>, and the shading fades it to nothing under the cutoff (<c>sdfLightCutoffFade</c>). A face's luminance is
+    /// the GPU's reduction, which the host does not hold, so its range alone bounds it here and each tile holds it to the
+    /// cutoff (<c>sdfLightReachesBox</c>).</summary>
     /// <param name="light">The light.</param>
     /// <param name="exposure">The view's exposure multiplier; a value that is not positive cuts nothing.</param>
     /// <returns>The reach, in world units.</returns>
@@ -200,7 +203,7 @@ public static class SdfLightSelection {
 
         var reach = ReachAt(exposure: exposure, light: in light);
 
-        if (float.IsPositiveInfinity(f: reach) || (light.DynamicSlot != SdfProgram.NoDynamicTransformSlot)) {
+        if (float.IsPositiveInfinity(f: reach) || light.RidesSlot) {
             return true;
         }
         if (!(reach > 0f)) {

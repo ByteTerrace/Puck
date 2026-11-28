@@ -505,6 +505,7 @@ public sealed partial class SdfWorldTables {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is negative or past <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</exception>
     public void SetScreenSurface(int screenIndex, Vector3 origin, Vector3 right, Vector3 up, float halfWidth, float halfHeight) {
         if (!TryScreenSlot(screen: screenIndex, slot: out var slot)) { return; }
+        m_screenCarried |= BitWords.Bit(index: slot);
         WriteSurfaceRow(halfHeight: halfHeight, halfWidth: halfWidth, origin: origin, right: Vector3.Normalize(value: right), slot: slot, up: Vector3.Normalize(value: up));
     }
     // Writes a slot's surface row: 3 float4 (right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+range), the slot keeping

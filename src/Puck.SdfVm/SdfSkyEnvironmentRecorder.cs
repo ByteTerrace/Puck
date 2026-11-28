@@ -88,9 +88,8 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
             pipelineLayout: pipeline.LayoutHandle, slot: recording.Slot);
         var groups = (Reduces ? 1u : (SdfSkyEnvironment.Size / 8u));
 
-        // The screen reduction runs a group a slot up to the highest bound screen, the screens shading reads
-        // (sdfScreenLightCount), so a bound slot with no acquired image this frame writes zero rather than keeping an old
-        // record.
+        // The screen reduction runs a group a slot up to the highest bound screen, so a bound slot with no acquired image
+        // this frame writes zero rather than keeping an old record, which its face light reads (sdfFaceLight).
         var screenGroups = (uint)Math.Max(val1: 1, val2: Math.Max(val1: BitWords.Span(mask: emissionMask), val2: (int)tables.BoundScreenCount()));
 
         recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: (Screens ? screenGroups : groups),
