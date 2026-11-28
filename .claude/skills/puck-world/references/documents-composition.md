@@ -357,7 +357,7 @@ Law suite: `tests/Puck.World.Server.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 
 **Shared content is authored, never an engine default.** The live debug world
-and garden take the Moth avatar (`avatars/moth.puck`: body, channels, bindings,
+and garden take the Moth avatar (`avatars/moth/suits.puck`: body, channels, bindings,
 kit, motion programs, camera, seat camera feel) as their basis and import
 `worlds/standard/standard.puck` (the authored inputs, quality presets, skin,
 cursor, key hints, icons, binding bar, play wheel, camera feel and editor) as a

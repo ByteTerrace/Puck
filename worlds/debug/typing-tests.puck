@@ -1,7 +1,7 @@
 // The standard's typing play (../standard/typing.puck) on its own, with no place around it: a bench at the spawn, two
 // tiers of two words and the debug world's score for its beat. `puck test worlds/debug/typing-tests.puck`.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "typing-tests"
 
 import "../standard/typing"

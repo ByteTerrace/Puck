@@ -347,7 +347,7 @@ export type WorldDefinition = {
 /**
  * An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns — every one addresses a state row and nothing else; a document project appends its own derived arms (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.
  */
-export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectClaimIdentityRecord | WorldEffectClaimIdentityPair | WorldEffectSetIdentityRecord | WorldEffectReleaseIdentityRecord | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
+export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectMantle | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectClaimIdentityRecord | WorldEffectClaimIdentityPair | WorldEffectSetIdentityRecord | WorldEffectReleaseIdentityRecord | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
 
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -1061,7 +1061,7 @@ export type BodyHoldKind = "None" | "Gravity" | "Pull" | "Lift";
 
 export type BodyMotionCurve = "Linear" | "Smoothstep";
 
-export type BodyMotionOp = "SenseNearestInCone" | "ProduceSteeringIntent" | "FaceSensorTarget" | "ProduceFlockIntent" | "ResolveYawAttitudeAndPlanarFrame" | "IntegrateLocalAttitude" | "ComputePlanarTargetVelocity" | "ComputeLocalTargetVelocity" | "ShapeVelocity" | "SnapYawToPlanarIntent" | "ResolveDriveFrame" | "ResolveHold" | "RunActionTriggers" | "ApplyHold" | "IntegratePlanarAndVerticalVelocity" | "IntegrateScratchVelocity" | "CommitPose" | "SetVerticalVelocity" | "ScaleVerticalVelocity" | "PlanarImpulse" | "SetState" | "AddState" | "StartTimer" | "Designate" | "Generate" | "TimedMove";
+export type BodyMotionOp = "SenseNearestInCone" | "ProduceSteeringIntent" | "FaceSensorTarget" | "ProduceFlockIntent" | "ResolveYawAttitudeAndPlanarFrame" | "IntegrateLocalAttitude" | "ComputePlanarTargetVelocity" | "ComputeLocalTargetVelocity" | "ShapeVelocity" | "SnapYawToPlanarIntent" | "ResolveDriveFrame" | "ResolveHold" | "RunActionTriggers" | "ApplyHold" | "IntegratePlanarAndVerticalVelocity" | "IntegrateScratchVelocity" | "CommitPose" | "SetVerticalVelocity" | "ScaleVerticalVelocity" | "PlanarImpulse" | "SetState" | "AddState" | "StartTimer" | "Designate" | "Generate" | "TimedMove" | "Mantle";
 
 export type BodyMotionProgram = {
   /**
@@ -8098,6 +8098,33 @@ export type WorldEffectHoldProducer = {
    * The body — an index, a $cell: indirection, or a bound key.
    */
   key: StateChannelRefNonNullable;
+};
+
+/**
+ * Pulls a kit's own body up over a ledge in front of it, on any surface, with no hold row and no holdable grip: the direction the body is commanded to move must meet a steep face within Reach, and the body's own sweep must prove a place to stand past its top, higher than the kit's step and no higher than Height above the feet. The body travels there over Seconds as an exclusive move (rising beside the face, then in over the edge) and leaves it at Carry of the speed it was commanding, so it runs on the moment it is up. A firing that finds no such ledge is refused whole, so a timer or a spend beside it is not paid. A kit's own action only.
+ */
+export type WorldEffectMantle = {
+  $type?: "mantle";
+  /**
+   * The highest ledge above the body's feet it pulls up over, in body-sized world units. Positive.
+   */
+  height: number;
+  /**
+   * How far past the face the body steps in, in body-sized world units. Positive.
+   */
+  depth: number;
+  /**
+   * How long the pull takes, an exact whole number of engine ticks. Positive.
+   */
+  seconds: number;
+  /**
+   * How far ahead of the body, in body-sized world units, the face may stand. Not negative.
+   */
+  reach?: number;
+  /**
+   * The fraction of the commanded move speed the body keeps when the pull ends, in [0, 1].
+   */
+  carry?: number;
 };
 
 /**

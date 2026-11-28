@@ -583,7 +583,7 @@ side of it on levels 2 and 3; a slim pier stands either side of its bay.
 | East walkway | The rest of the ledge's strip along the east wall at level 3, from the south gallery to the north, railed along the void | 1.1 m deep |
 
 **What can be held.** Only the face: its placement alone carries
-`grip { holdable: true }`, so the standard's `climbAbility` takes it and nothing
+`grip { holdable: true }`, so the standard's `climbAction` takes it and nothing
 else of the wall. A climber stops at the face's edges, since the cheeks beside
 them cannot be held, and the climb ends at the coping, where the climb's mantle
 proves the ledge and sets her down on it. The face's plates and every hold are

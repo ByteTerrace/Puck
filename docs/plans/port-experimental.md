@@ -32,7 +32,7 @@ both; [card tables](open-items.md#card-tables-in-the-board-game-room)),
 so a lane that adds a whole game lands it as a destination document behind a
 painting, as the garden and the night field do, unless the game is priced to fit.
 And the debug world runs one local seat (`bodies { localSeats: 1 }`,
-`worlds/debug/avatars/moth.puck:197`), so a lane that needs a second seat waits
+the stage's `bodies` in `worlds/debug/stage.puck`), so a lane that needs a second seat waits
 for lane 5.
 
 ## What the debug world already has in another form
@@ -130,7 +130,7 @@ debug world itself still boots one seat and has no `embeds` row.
 
 | Feature | Source | Support | Place and why | Size |
 |---|---|---|---|---|
-| Two local seats and a `split` layout | `puck.world.json` `bodies.localSeats: 2`, `views` layout `split`; canary `split-seats`; `worlds/debug/suit-tests.puck:29` already runs two | wire; cost in the entity table and the per-seat rules (`worlds/debug/avatars/moth.puck:4085`) | `debug.puck`'s capacity; the prerequisite for the rest of this lane and for poker and Hearts in lane 12 | medium |
+| Two local seats and a `split` layout | `puck.world.json` `bodies.localSeats: 2`, `views` layout `split`; canary `split-seats`; `worlds/debug/suit-tests.puck:29` already runs two | wire; cost in the entity table and the per-seat rules (the Moth avatar's per-body rules, `worlds/debug/avatars/moth/moth.puck`) | `debug.puck`'s capacity; the prerequisite for the rest of this lane and for poker and Hearts in lane 12 | medium |
 | Lineup: hidden busts, yes-or-no questions, a computer that asks the best splitting question | `experimental/worlds/parlor/lineup.puck`, `parlor.basis.puck`; canary `lineup`; games tests `LineupLawTests`, `LineupDealLawTests` | wire (seat-scoped `visibility`, a `deal` facet) | A board game room table | medium |
 | Hidden ranks: concealed armies, per-side knowledge boards, a reveal by widening the readers | `games/hiddenranks.puck`; `experimental/tests/Puck.World.Fixtures/minimal-hiddenranks-host.puck` | wire (`visibility`, `readersFrom`, `knowledge` boards, `removeStateCell`) | A board game room table | medium |
 | Word spy: a key card only the spymasters read, an aim computed in a vector space | `games/wordspy.puck`, `games/wordspy.embeddings.json` | wire (`Puck.Embeddings`, `embeds(...)`, `puck embed`; the fixture generator has no semantics, so clues are reproducible rather than apt) | The only embeddings consumer; four roles, so addon or computer seats | large |

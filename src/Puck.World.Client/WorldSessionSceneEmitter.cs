@@ -779,7 +779,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         set => m_source.Guess = value;
     }
     private void PrepareRegistrations() {
-        var standing = ((m_preparedSnapshot == m_mirror.SnapshotRevision) && (m_preparedComposing == m_mirror.ComposingRevision) && !m_census.TryTakeMove());
+        // Read every frame: it also wakes the forms whose drawn flag the bake moved.
+        var formsMoved = m_pool.TryTakeFormsMove();
+
+        if (formsMoved) { m_formsRevision++; }
+        var standing = (!formsMoved && (m_preparedSnapshot == m_mirror.SnapshotRevision) && (m_preparedComposing == m_mirror.ComposingRevision) && !m_census.TryTakeMove());
 
         if (standing && (m_preparedDefinition == m_mirror.DefinitionRevision)) { return; }
         m_preparedDefinition = m_mirror.DefinitionRevision;
@@ -794,7 +798,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var stamps = (m_onlyPrototypes is null) ? m_census.Stamps : [];
         m_catalog.ObserveArticulation(stamps);
         m_pool.Rigid.ReconcileStatic(definition, definition.Placements, riding: true);
-        m_pool.Reconcile(definition.PlacementFrames, definition.Placements, definition.Creations, definition.Dynamics, stamps, definition.Looks);
+        m_pool.Reconcile(definition.PlacementFrames, definition.Placements, definition.Creations, definition.Dynamics, stamps, definition.Looks, definition.LookAssignment);
         m_pool.Rigid.PresentHoldings(placements: definition.Placements);
         m_avatars.Prepare();
     }
@@ -803,6 +807,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public IReadOnlyList<SdfMeshInstance> MeshInstances => m_pool.Rigid.Copies;
     /// <inheritdoc/>
     public IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges => m_pool.Rigid.TemplateRanges;
+    /// <inheritdoc/>
+    public IReadOnlyList<SdfMeshFormRange> MeshForms => m_pool.MeshForms;
     /// <inheritdoc/>
     public IReadOnlyList<int> MeshInstanceChanges => m_pool.Rigid.ChangedCopies;
     /// <inheritdoc/>
@@ -836,7 +842,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         destination[4] = m_bodyColorRevision;
         destination[5] = m_pool.Rigid.HoldingComposeRevision;
         destination[6] = m_pool.Rigid.StaticTemplateRevision;
+        destination[7] = m_formsRevision;
     }
+    // One more each time the stamp pool asked for its bodies' forms to be reconciled (WorldCreationInstances.TryTakeFormsMove).
+    private int m_formsRevision;
 
     // The bound colors the static build bakes, over the session's own followed state mirror: the one path the local
     // scene emitter reads its colors through (WorldBakedColors over WorldClient.StateMirror). Following first brings
@@ -861,7 +870,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <summary>Gets the actual catalog, articulation and local-template transform count.</summary>
     public int DynamicSlotCount => (m_catalog.SlotCount + m_pool.DynamicSlotCount);
     /// <inheritdoc/>
-    public int RevisionComponentCount => 7;
+    public int RevisionComponentCount => 8;
     /// <inheritdoc/>
     /// <remarks>The mirrored world's static placements' meshes, fixed by each live <see cref="Emit"/>, then its stamp
     /// pool's (<see cref="WorldCreationInstances.MeshDraws"/>).</remarks>

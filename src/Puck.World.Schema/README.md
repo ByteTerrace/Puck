@@ -1038,7 +1038,7 @@ from the console.
 **Bindings compose in layers.** A seat's effective binding document is the
 world's `bindingOverlays` rows in order (a `basis` chain supplies earlier rows
 and an import refines or appends them—the debug world's Moth basis,
-`worlds/debug/avatars/moth.puck`, carries the movement document, and the
+`worlds/debug/avatars/moth/suits.puck`, carries the movement document, and the
 `worlds/debug/controls.puck` the debug world imports adds the binding bar and the play wheel;
 the engine itself ships none, and a world authoring none binds nothing), then the seat's owned identity
 world's `bindingOverlays`, then live session rebinds—merged by

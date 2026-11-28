@@ -1,0 +1,163 @@
+// The mantle action (../standard/player/actions.puck's `mantleAction`) on plain ledges no hold can take, as the Moth
+// lab's jump station builds them: blocks 0.6 to 2.6 m high and 2.4 m wide, none holdable, their south faces along
+// z = -6 and 20 m deep, so a run that carries on over the edge is still on the top it reached when it is read.
+// In her mech suit she pulls up over a top within 1.9 m of her feet (avatars/moth/contract.puck): from a run (Left Shift
+// and W) the 0.6 to 1.8 m ones, and with a jump (Space) the 2.2 m one and with the heel jets' air jump the 2.6 m one.
+// She is posed facing each face (yaw 0 faces -Z), 4 m south of it for a run and 1.5 m for a jump.
+// `puck test worlds/debug/mantle-tests.puck`.
+schema: "puck.world.definition.v1"
+basis: "stage"
+documentId: "mantle-tests"
+
+import "set-controls"
+
+let mantleLedges = [0.6, 1, 1.4, 1.8, 2.2, 2.6]
+// Every ledge stands on the stage's 36 m floor, so a body posed before one stands on ground.
+function mantleLedgeX(k) = ((4 * k) - 10)
+
+prototypes {
+  prototype "mantle-ledges" {
+    document {
+      schema: "puck.creation.v2"
+      name: "mantle-ledges"
+      palette [{ color: "#9A938A" }]
+      for (h, k) in mantleLedges {
+        shape Box $"ledge-{k}" {
+          position [mantleLedgeX(k), (h / 2), -16]
+          scale [1.2, (h / 2), 10]
+          material: 0
+        }
+      }
+    }
+  }
+}
+
+placements {
+  placement "mantle-ledges" {
+    prototype: "mantle-ledges"
+    position [0, 0, 0]
+    solid
+  }
+}
+
+// Running into a ledge she can reach pulls her onto its top and on along it; a ledge above a run's reach takes a jump,
+// and she catches its top on the way up.
+test "a run pulls her up a 0.6 m ledge" {
+  when {
+    ticks 15
+    seat1: body.pose -10 0.02 -2 0 0 0 0
+    seat1: player.signal keyboard.shiftLeft press
+    seat1: player.signal keyboard.w press
+    ticks 45
+  }
+  expect {
+    bodyPosition(body, 0, y) > 0.55
+    bodyPosition(body, 0, y) < 0.7
+    bodyPosition(body, 0, z) < -6.3
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+test "a run pulls her up a 1 m ledge" {
+  when {
+    ticks 15
+    seat1: body.pose -6 0.02 -2 0 0 0 0
+    seat1: player.signal keyboard.shiftLeft press
+    seat1: player.signal keyboard.w press
+    ticks 45
+  }
+  expect {
+    bodyPosition(body, 0, y) > 0.95
+    bodyPosition(body, 0, y) < 1.1
+    bodyPosition(body, 0, z) < -6.3
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+test "a run pulls her up a 1.4 m ledge" {
+  when {
+    ticks 15
+    seat1: body.pose -2 0.02 -2 0 0 0 0
+    seat1: player.signal keyboard.shiftLeft press
+    seat1: player.signal keyboard.w press
+    ticks 45
+  }
+  expect {
+    bodyPosition(body, 0, y) > 1.35
+    bodyPosition(body, 0, y) < 1.5
+    bodyPosition(body, 0, z) < -6.3
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+test "a run pulls her up a 1.8 m ledge" {
+  when {
+    ticks 15
+    seat1: body.pose 2 0.02 -2 0 0 0 0
+    seat1: player.signal keyboard.shiftLeft press
+    seat1: player.signal keyboard.w press
+    ticks 45
+  }
+  expect {
+    bodyPosition(body, 0, y) > 1.75
+    bodyPosition(body, 0, y) < 1.9
+    bodyPosition(body, 0, z) < -6.3
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+test "a jump pulls her up a 2.2 m ledge" {
+  when {
+    ticks 15
+    seat1: body.pose 6 0.02 -4.5 0 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 2
+    seat1: player.signal keyboard.space press
+    ticks 4
+    seat1: player.signal keyboard.space release
+    ticks 40
+  }
+  expect {
+    bodyPosition(body, 0, y) > 2.15
+    bodyPosition(body, 0, y) < 2.3
+    bodyPosition(body, 0, z) < -6.3
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+test "a jump pulls her up a 2.6 m ledge" {
+  when {
+    ticks 15
+    seat1: body.pose 10 0.02 -4.5 0 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 2
+    seat1: player.signal keyboard.space press
+    ticks 4
+    seat1: player.signal keyboard.space release
+    ticks 3
+    seat1: player.signal keyboard.space press
+    ticks 3
+    seat1: player.signal keyboard.space release
+    ticks 40
+  }
+  expect {
+    bodyPosition(body, 0, y) > 2.55
+    bodyPosition(body, 0, y) < 2.7
+    bodyPosition(body, 0, z) < -6.3
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+// Walking into a ledge without the run held is not a mantle: she stops at its face.
+test "a walk into a ledge stops at its face" {
+  when {
+    ticks 15
+    seat1: body.pose -2 0.02 -2 0 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 45
+  }
+  expect {
+    bodyPosition(body, 0, y) < 0.1
+    bodyPosition(body, 0, z) > -6.1
+  }
+}

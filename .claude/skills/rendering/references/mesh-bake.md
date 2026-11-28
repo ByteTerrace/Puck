@@ -1302,6 +1302,33 @@ laws exercise that boundary.
   until it does. `world.residency` counts the products that took their
   draws (`handed`, with `handed-refused` for the last case) and those
   waiting (`ahead`).
+- **A body never draws a look whose groups have not all landed.** A body
+  that can switch looks (its own body, a suit) rides every form it keeps
+  in the program at once, each a stamp-pool registration on slots of its
+  own, all naming one `SdfMeshForm` owner; the frame lists them
+  (`SdfFrame.MeshForms`, `SdfMeshFormRange`, which the composition keeps
+  as its held program was emitted with while a successor builds). The bake
+  draws one form an owner (`SdfMeshPathBake.Forms.cs`): the named one once
+  every group riding its slots shows its own product (`ShowsProduct`) and
+  every piece stands in the region (`DecideForms`, in `ObserveResidency`),
+  the one it drew until then. The other forms are dormant: planned, baked
+  and measured where their slots stand (the body's root, so at the tier
+  the body's demand asks), named ahead after the waiting products so the
+  region keeps their words and gives them back first under pressure, and
+  drawn by no row. The one door is `DressedCopiesOf`, which answers no
+  copies for a group on a dormant form's slots; a held named form's groups
+  bake first (`AwaitedByStandIn`). The guarantee stops where the drawn
+  form leaves the frame (nothing is left to hold), and at a piece the
+  region refused, as above. The pool side is
+  `WorldCreationInstances.Forms.cs`: a body keeps the form its look wears,
+  every form the bake still draws (`SdfMeshForm.Drawn`), and, while it
+  would pose every frame at a stride's speed in some view, every other look
+  its look assignment's selectors switch between, so a switch near a view
+  draws the new form on the next frame; a form neither named nor drawn
+  rests on the root and costs no pose. `world.residency` prints `forms`,
+  `forms-held`, `forms-handed`, `form-holds` and the dormant groups,
+  meshes and bytes (an upper bound: a mesh a drawn group shares costs
+  nothing more).
 - **One region holds every resident mesh, up to what its grant reserves.**
   Before a plan the tables reserve the standing buffer and a replacement
   together in the process account (`SdfResidencyGrant.ReserveGrowth`,

@@ -2,7 +2,7 @@
 // the worlds built on their avatar): the standard's context sets (../standard/controls.puck) with what this set adds
 // to them. It opts into swimming. On foot, Backspace returns a seat to the debug world's stage. The avatar's inspection
 // views take the number keys and the View page's plates, and her jetpack's isolation F4 (the layouts and the parts are
-// avatars/moth.puck's). The play wheel gains the set's Respawn and Suit sectors and a View ring of those layouts
+// stage.puck's). The play wheel gains the set's Respawn and Suit sectors and a View ring of those layouts
 // (pad-kit.puck). It imports the standard and refines its rows by overlay, page, wheel and table key, so a world of
 // the set imports it in the standard's place; the debug world's own pages refine it in turn (controls.puck).
 import "../standard/standard"

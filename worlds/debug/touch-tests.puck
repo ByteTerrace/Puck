@@ -8,7 +8,7 @@
 // `world.view.touch <id> down|move|up <x> <y>` casts the same events from client pixels through the seat's camera.
 // `puck test worlds/debug/touch-tests.puck --reproduce` replays the taped contacts to the same state.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "touch-tests"
 
 channels [

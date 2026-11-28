@@ -34,9 +34,10 @@ inputModes {
       default: "suited"
       states [
         { name: "pilot", values ["0"], channels: concat(movement, controls) }
-        { name: "suited", values ["1"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
+        // Either suit (the mech suit, 1, and the scout suit, 6): the scout grants no flight, so its flight key does nothing.
+        { name: "suited", values ["1", "6"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
         { name: "pilot-noclip", values ["2"], channels: concat(movement, controls, ["rise"]) }
-        { name: "suited-noclip", values ["3"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
+        { name: "suited-noclip", values ["3", "7"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
         // A craft (the launch field's ship): a body no seat is, which flies on the movement and rise channels.
         { name: "craft", values ["4", "5"], channels: concat(movement, ["rise"]) }
       ]
@@ -82,7 +83,7 @@ inputModes {
     conversationFamily(
       suspendedBy: [whileEngaged, { family: "typing", states ["seated"] }, { family: "terminal", states ["engaged"] }]
     )
-    // Her menu's page and mark keys while it is open (avatars/moth.puck): none while she is engaged anywhere but at a
+    // Her menu's page and mark keys while it is open (avatars/moth/moth.puck): none while she is engaged anywhere but at a
     // machine, where holding the pad's Menu button opens the menu over the running screen (standard/menu.puck).
     menuFamily(
       suspendedBy: [

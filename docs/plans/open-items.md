@@ -771,7 +771,7 @@ Open calls, each with its sides:
   plan, which comes before its slices are dispatched.
 - **Which of the Moth's halves is right** where they do not mirror: the right
   back pod's 40 parts (ids 1200 to 1240) are rotated differently from the left
-  pod's (1100 to 1140), and `sideLock`'s position, `blinkCrease`'s position and
+  pod's (1100 to 1140), and `sideLock`'s position and
   `kneeGuard`'s profile differ. Either construct above then mirrors the chosen
   half.
 - **The chase camera with its back to the stair wall**: swing the boom, rise
@@ -2225,13 +2225,14 @@ Next: fill the engine gaps first
   The thresholds (`folds > 0` amber, `flipped > 0` red) are right and are not
   loosened. A per-axis narrowing was worse over the whole world, and moving
   the lattice off a face only moves which exhibit is red.
-- [high] The Moth's shin blend groups (`shin-*`, `shinCavity-*`, `archBand-*`,
-  `archBandHollow-*`, `archBandBack-*`, `sidePanel-*`) carry seven tenths of
-  her flipped triangles in two groups, nearly all under a square millimetre
-  and strung along the blades' edges: each blade tapers to a rim thinner than
-  the 2 mm floor, two creases in one cell, which one vertex a patch cannot
-  hold. `blinkCrease-*` and `nozzleGlow-*` are next on her, and the Humble
-  Brick's face is the worst of a wider sample; none of those three is examined. The contour needs a rule for a face it cannot
+- [high] A blade that tapers to a rim thinner than the 2 mm floor (two creases
+  in one cell, which one vertex a patch cannot hold) contours as strings of
+  flipped triangles under a square millimetre along its edges. The Moth's shin
+  blades (her ivory arch bands and side panels as dilated shells) carried seven
+  tenths of her flipped triangles until they became paints; the measurements
+  below were read in them. `nozzleGlow-*` still shows it on
+  her, and the Humble Brick's face is the worst of a wider sample; none of
+  the two is examined. The contour needs a rule for a face it cannot
   resolve (close it to one crease, as `SdfSampledLattice.CloseSheets` closes a
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
@@ -2246,8 +2247,8 @@ Next: fill the engine gaps first
   bottom face at offsets 0.3 mm apart, and the triangles between that vertex
   and its neighbours (0.3 mm high) turn over. The audit also counts each
   material-cut piece of a turned triangle: with the cut off, the group reads
-  417 flipped, not 902. Read the shins in a device store audit (the CPU-taps
-  item above) before changing their contour.
+  417 flipped, not 902. Read a remaining example in a device store audit (the
+  CPU-taps item above) before changing the contour.
 - [high] `shape-blend-xor`'s flipped triangles lie along the pinch curves
   where the sphere crosses the box's faces, where the XOR's two solids touch
   along a line, nearly all with a ring cell's merged vertex (a 15 mm cell's 24
@@ -3546,7 +3547,7 @@ intent is in its guide.
     palette, rig and bake cost carry no weight. The suit, the off-suit pilot
     and the shared head.
   - The suited Moth toward the mech-suit sheets 01, 02, 03 and 10
-    ([moth.md](../../worlds/debug/avatars/moth.md#geometry-and-motion)).
+    ([moth.md](../../worlds/debug/avatars/moth/moth.md#geometry-and-motion)).
   - Her back thrusters to references 07, 08, 09, 12 and 13: proportions from
     the straight rear view; each wing a hollow casing around a dark core,
     leaning in at the top, with domed shoulders; the shell a chain of band
@@ -5688,7 +5689,7 @@ their lane order; this packet keeps the single duplicates and leads.
   not credit an abstract or interface member called through a derived type,
   so treat its interface results as leads.
 - The `.puck` sources still under-use the language:
-  `worlds/debug/avatars/moth.puck` holds thousands of decimal literals and
+  `worlds/debug/avatars/moth/suits.puck` holds thousands of decimal literals and
   raw quaternions, with the pod's band groups pasted (a uniform row table
   waits on a template leaving a member out, G13 in
   [state and language](state-and-language.md)); `worlds/standard/cards.puck`
@@ -5851,8 +5852,8 @@ Looks and rules of play held in engine code:
   `WorldTabletopEngage.Pitch` range stops below it, and report a pitch above
   it by name.
 - [low] Flight and fuel are authored only in the Moth
-  (`worlds/debug/avatars/moth.puck`); the assisted-flight pass is a standard
-  ability template, as `dashAbility` is.
+  (`worlds/debug/avatars/moth/suits.puck`); the assisted-flight pass is a standard
+  ability template, as `dashAction` is.
 
 The standard's own surface:
 
@@ -5904,7 +5905,7 @@ The standard's own surface:
   and the night field RB opens no wheel and reads unbound.
 - Helpers that belong in the standard, transform maths first: rotation and
   transform maths (turns in degrees, axis-angle, composition, mirroring); a
-  mirrored-pair template; a toggle ability beside `dashAbility`; a tabletop
+  mirrored-pair template; a toggle ability beside `dashAction`; a tabletop
   kit (grid board, cell placement, piece prototypes), which chess, Go and
   Reversi each wrote; a named base-materials palette; scenario-step templates
   (tap, hold, wait until settled); the pad slot list and a mirrored bar-table

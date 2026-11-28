@@ -1,6 +1,6 @@
 // Semantic events travel through the same source capture and authority queue as physical input.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "input-history-tests"
 
 channels [

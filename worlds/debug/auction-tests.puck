@@ -3,7 +3,7 @@
 // later.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "auction-tests"
 import "auction"
 

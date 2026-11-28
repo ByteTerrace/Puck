@@ -4,7 +4,7 @@
 // fifth columns and the wall on 21, so red's back two rows are fog to it.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "skirmish-tests"
 import "skirmish"
 

@@ -7,7 +7,7 @@
 // player's is blue's own and scored over blue's memory.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "skirmish-disclosure"
 import "skirmish"
 

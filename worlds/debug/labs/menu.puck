@@ -5,9 +5,10 @@
 //
 // What it holds, and nothing else:
 //
-//   - the Moth (../avatars/moth.puck), whose basis brings her menu (../../standard/menu.puck), its worn screen on her
-//     gauntlets (../../standard/worn-screen.puck) and her companion roster (../../standard/companion-roster.puck, with
-//     ../companion-roster.puck's kinds), so she starts keeping Mintstitch and Tangerine with Mintstitch active;
+//   - the Moth (../avatars/moth/moth.puck), whose stage basis brings her menu (../../standard/menu.puck), its worn
+//     screen on her gauntlets (../../standard/worn-screen.puck) and her companion roster
+//     (../../standard/companion-roster.puck, with ../companion-roster.puck's kinds), so she starts keeping Mintstitch
+//     and Tangerine with Mintstitch active;
 //   - her companion (../../standard/companion.puck), wearing whichever kind is active.
 //
 // To work it: I, Escape or the pad's Menu button opens the menu and closes it (the View page's West on a pad), so does
@@ -21,7 +22,7 @@
 // from the stage facing it.
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth"
+basis: "../stage"
 documentId: "menu"
 
 import "../set-controls"

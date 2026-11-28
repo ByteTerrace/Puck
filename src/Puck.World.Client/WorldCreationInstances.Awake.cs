@@ -408,8 +408,16 @@ public sealed partial class WorldCreationInstances {
                 continue;
             }
 
-            if (live.BodyIndex is not null) {
+            if (live.BodyIndex is { } body) {
                 m_bodyBound.Add(item: index);
+                // A body's other forms (WorldCreationInstances.Forms) ride its root as its attached rows do.
+                if (!live.FormNamed) {
+                    if (!m_attachedByBody.TryGetValue(key: body, value: out var forms)) {
+                        m_attachedByBody.Add(key: body, value: forms = []);
+                    }
+
+                    forms.Add(item: index);
+                }
             } else if (live.Row?.Attach is { } attach) {
                 m_bodyBound.Add(item: index);
                 if (attach.BodyIndex is { } carrier) {
@@ -470,7 +478,8 @@ public sealed partial class WorldCreationInstances {
         var rates = ((m_rates & SdfUpdateRates.Bodies) != 0);
 
         for (var index = 0; (index < m_poolCount); index++) {
-            if ((m_pool[index] is not { PackedRoot: not null } live)) {
+            // A resting form (WorldCreationInstances.Forms) is no pose anything shows, so it takes no tier.
+            if ((m_pool[index] is not { PackedRoot: not null, Rested: false } live)) {
                 continue;
             }
 

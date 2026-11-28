@@ -2,7 +2,7 @@
 // context button, rides it, and climbs on the rise channel with the boost held. `puck test --reproduce` replays it to
 // show the tick a seat boards on re-drives as it ran (the routed input from the pilot to the ship).
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "moon-trip-tests"
 
 import "set-controls"

@@ -1,8 +1,8 @@
 // The standard camera, a library. `cameraFeel()` authors the shared input feel, the `camera-boom` response and the
 // interactive zoom bounds and step; `standard.puck` expands it, so every world importing the standard has them.
 // `chaseCamera(...)` authors a seated body's third-person chase camera: the seat control (pitch limits, automatic first
-// person, the boom), the rig, and the player's clearance preference. An avatar expands it in a document of its own with
-// its body offsets and imports that document (the debug world's Moth: `../debug/avatars/moth-camera.puck`):
+// person, the boom), the rig, and the player's clearance preference. The player module (player/player.puck) expands it
+// with the worn form's body offsets; an author seating a body without the module expands it directly:
 //
 //   import "../../standard/camera"
 //   chaseCamera(rig: "my-camera", pivotOffset: [0, 0.9, 0], fadeCloseTarget: [0, 1.5, 0], cutawayCloseTarget: [0, 1.35, 0], eyePoint: [0, 1.6, 0.2])

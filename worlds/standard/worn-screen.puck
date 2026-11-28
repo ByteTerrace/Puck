@@ -23,13 +23,15 @@ import "rig"
 import "menu"
 
 // The screen's shape, in the left side's frame about the mount's `at`: a bezel `bezel` half extents deep, along the arm
-// and across it; the glass `screen` half extents across and up it as its reader sees it, standing `screen.out` out from
-// `at`, a millimetre proud of the bezel; and a cover `cover` half extents standing `cover.out` out, over both, hinged on
-// its front edge and swung `open` radians to stand open. The cover opens with its arm's raise along a quarter turn of
-// sine, so it stands wide open as the arm arrives (three quarters open in the glance read).
+// and across it; the glass `screen` half extents across and up it as its reader sees it, `depth` half deep and standing
+// `screen.out` out from `at`, its face a millimetre proud of the bezel and its back sunk in it; and a cover `cover` half
+// extents standing `cover.out` out, over both, hinged on its front edge and swung `open` radians to stand open. The cover
+// opens with its arm's raise along a quarter turn of sine, so it stands wide open as the arm arrives (three quarters open
+// in the glance read). The glass is as deep as the bezel lets it sink: a pane much thinner than it is wide asks the bake
+// for cells its half thickness apart over its whole face.
 let wornScreenShape = {
   bezel { half [0.007, 0.064, 0.08], rounding: 0.004 }
-  screen { half [0.07, 0.055], depth: 0.002, out: 0.006 }
+  screen { half [0.07, 0.055], depth: 0.0045, out: 0.0035 }
   cover { half [0.004, 0.068, 0.084], rounding: 0.003, out: 0.0145, open: -1.9 }
 }
 // The glass's turn: a box's +Z out of the gauntlet (-X), +Y down the forearm and +X forward, so its lettering reads

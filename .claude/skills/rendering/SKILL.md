@@ -825,6 +825,7 @@ add the row you found.
 | Know which draws a raster pass selected and at which level (triangles drawn by level and tier, mesh bytes no pass selected) | The occlusion kernel's selection marks, taken only while a reading asked (`SdfWorldTables.MarksSelections`), one stage in `SdfWorldTables.SelectionMarkFrames`, read back with the portal sight verdicts through the slot's one readback (`SdfMeshOcclusion`) and read against the row epoch (`SdfWorldTables.ObserveSelectionMarks`); `world.residency`'s selection line | `src/Puck.SdfVm` |
 | Show a world from far away without holding it (a planet from its moon, a neighbour across a seam) | The world's far product (`SdfFarProduct`: read from the mesh store under a name of its static draws' shapes, placements and materials, and derived by `SdfMeshCluster` and `SdfMeshChunks.Bake` from a settled residency's static draws only where the store holds none; its log line says `stored` or `derived`), drawn by a sky `view` layer with `farProduct: true` through `WorldFarProductEmitter`; products are published and judged by document version in `WorldScreenBinder.Device.Far.cs` | `src/Puck.SdfVm`, `src/Puck.World.Presentation`; [decision](../../../docs/decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product) |
 | Let one residency serve viewers of several disclosures (a window whose session is withheld some placements), or keep a draw out of every view but one audience's | A draw's audience tag (`SdfMeshDraw.Audience`, from its rigid copy's `SdfMeshInstance.Audience`, staged at `SdfMeshRecord.AudienceShift`) and a view's audience (`SdfViewSnapshot.Audience`), filtered in the selection kernel from the controls `SdfMeshOcclusion.Stage` writes (its audience argument has no default; a window, mirror or portal seen through a home view takes that view's audience, and cascades select their own viewers' draws only while every view is theirs, `SdfMeshAudience.NeutralOnly` otherwise); a tagged draw is never static, so the far product, the irradiance volume and the distant map hold none. The World's side: `WorldSceneProof.SharesContent`, `WorldPlacementAudiences.Varies`, `WorldAudienceOverlay`, `WorldRigidAssets.AudienceRefusal` | `src/Puck.SdfVm.Model/SdfMeshAudience.cs`, `src/Puck.World.Presentation/WorldScreenBinder.Device.Session.cs`; [decision 10](../../../docs/plans/streaming-and-memory.md#decision-10-a-world-is-resident-once-and-an-instance-is-an-overlay-on-it) |
+| Keep a body's other looks (its suits) baked and resident, and switch to one only once every group of it has landed | The forms: `SdfMeshForm`, `SdfFrame.MeshForms`, the bake's dormant and held forms behind `DressedCopiesOf` (`SdfMeshPathBake.Forms.cs`), the stamp pool's forms and their prewarm gate (`WorldCreationInstances.Forms.cs`); `world.residency`'s `forms` counts | `src/Puck.SdfVm`, `src/Puck.World.Client`; [mesh bake](references/mesh-bake.md#the-mesh-region) |
 | Show something where a group's detail has not landed or was refused | The group's floor: planned first on an arrival in view (`SdfMeshDemand.Sees`; one out of view bakes its detail directly, behind the groups in view), kept while detail draws, evicted to on refusal (`SdfMeshPathBake.Floor.cs`, `Group.KeptFloor`); `world.residency`'s floor line | [mesh bake](references/mesh-bake.md#groups-poses-and-materials) |
 | Name a backend's compiled-kernel extension, or its target from an extension or some bytecode | `ShaderBytecode.FileExtension` (the extension), `ShaderTargets` (`Of` a backend or bytecode, `FileExtension` and `DeployedPath` of a `ShaderTarget`); never a `.dxil`/`.spv` ternary or string compare. A kernel-loading API (`SdfKernelSet.Load`, `SdfWorldPipelineCatalog.LoadDeployed`, `GpuRegionCopyPass`, `SdfMeshRasterPass`) takes a `ShaderTarget`, never an extension string | `src/Puck.Abstractions/Gpu/Shaders`, `src/Puck.Shaders.Model/Compiler/ShaderTarget.cs` |
 | Place several images into rects of one output in one pass, or let a package pass leave trailing inputs unbound | `RenderGraphPackageCatalog.PlaceViews` (the `place` kernel's body, `place.hlsli`, over up to `PlaceSourceCount` sources, recorded by `PlacePackage`, each source placed by its version's name through `IRenderGraphPlacements`), which `WorldRootGraph` places every view and pane through; `RenderGraphPackage.OptionalInputs` | `src/Puck.Shaders/Graph/PlacePackage.cs`, `src/Puck.Shaders.Model/Graph/RenderGraphPackages.cs`; [shaders reference](../../../docs/reference/shaders.md#the-default-root-graph) |
@@ -893,7 +894,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   turns away, so a crease's two lit faces keep their own shadows. A sunlit spot on a wall's top under a slab is the
   filter's (`sdfMeshShadowGap`): a tap counts the light hidden only inside the
   light's cone over the point, and the penumbra is the nearest in-cone
-  blocker's. `world.debug-view ao` shows the filtered occlusion and `world.debug-view shadow` the key light's
+  blocker's. The slope clearance that keeps a grazing receiver off its own surface grows as `1 / |n·l|`, so the
+  depth a tap clears is capped (`sdfMeshShadowCleared`); thin lit or violet bands along every silhouette in
+  `world.debug-view shadow` under a roof are that cap failing, a grazing receiver clearing the roof. `world.debug-view ao` shows the filtered occlusion and `world.debug-view shadow` the key light's
   answer as its walk reads it (`sdfDebugKeyShadow`: grey facing the light, amber where the probes answer, violet on a
   queried side past the terminator, dark blue unqueried), and `world.ao` toggles the occlusion live. The shadow view
   runs the probe lookup (`sdfViewsProbesWanted`) and the occlusion filter, since the probes' answer it shows reads
@@ -1033,10 +1036,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   The window describes an output footprint, which can sample different receiver
   identities on opposite jitter phases at a static silhouette. If ordinary
   receiver validation rejects it, retain the bounded window only after proving
-  the unjittered camera is exactly unchanged, every tap is nonreactive, and each
-  visible tap's previous point equals its current point. This extra motion check
-  runs only for rejected footprints. A displaced camera keeps ordinary receiver
-  rejection; a stationary current receiver alone does not prove no disocclusion.
+  the unjittered camera is exactly unchanged, every tap is nonreactive, each
+  visible tap's previous point equals its current point, and the receiver the
+  history surface names there has not moved (`sdfHistoryReceiverStill`): still
+  taps say nothing of a body that stood over the pixel long enough to fill its
+  window and then left, which the window would show as a fading copy of the body.
+  This extra motion check runs only for rejected footprints. A displaced camera
+  keeps ordinary receiver rejection; a stationary current receiver alone does not
+  prove no disocclusion.
   The package owns
   `TemporalPeriod`, `HistorySurfaceWords` and `HistoryWindowWords`; the generator
   carries them into HLSL. A layout change needs a host with the matching history
@@ -2447,8 +2454,9 @@ counts in `sdf.transforms`, never in `records.posed`.
   device-machine screens intact and disclose the desktop substitution in the
   capture report. After a suit change, allow its rule to run and check the
   residency's `[sdf.mesh-bake] done` log before capturing with
-  `world.wait bakes <seconds>`: a tick wait alone can show the old mesh
-  stretched over the new rig. Clear an operator camera with
+  `world.wait bakes <seconds>`: a tick wait alone can show the old form,
+  which draws until every group of the new one has landed
+  ([forms](references/mesh-bake.md#the-mesh-region)). Clear an operator camera with
   `view.override camera auto` before switching to a following motion layout.
 - GPU captures, device faults and the validation layers:
   [kernels](references/kernels.md#captures-faults-and-validation).

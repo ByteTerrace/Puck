@@ -259,7 +259,7 @@ public sealed partial class SdfMeshPathBake {
     // so a count never holds a contribution that nothing can take back. On the frame's thread.
     private void CountHoles(Group group, bool listed) {
         var before = ((group.HoleEpoch == m_holeEpoch) ? group.HoleBits : 0);
-        var now = ((listed && OwesFrame(group: group)) ? 1 : 0) | ((listed && !group.Done && !group.Retired && group.HasDemandBox && (group.Shown is null) && (group.Priority > 1f)) ? 2 : 0);
+        var now = ((listed && OwesFrame(group: group)) ? 1 : 0) | ((listed && !group.Done && !group.Retired && !Dormant(group: group) && group.HasDemandBox && (group.Shown is null) && (group.Priority > 1f)) ? 2 : 0);
 
         group.HoleBits = now;
         group.HoleEpoch = m_holeEpoch;
@@ -721,6 +721,7 @@ public sealed partial class SdfMeshPathBake {
             // The region's account is read every frame: the next frame's tiers are budgeted by it (Retier).
             m_regionNamedBytes = ((long)tables.MeshRegionNamedBytes);
             m_regionRefused = tables.MeshRegionRefused;
+            DecideForms(tables: tables);
             ServeAhead(tables: tables);
             if (m_regionRefused > 0) {
                 scope.Continue(site: BakeGate.Evict);
@@ -748,7 +749,7 @@ public sealed partial class SdfMeshPathBake {
                 if (group.LandedAt == 0) { group.LandedAt = now; }
                 // A landed group in reach whose drawn mesh's words the region owes is a hole, as is one still bringing its
                 // first mesh (m_unshown).
-                if (!group.Retired && group.HasDemandBox && (group.Shown is { } shown) && AnyPiece(mesh: shown, tables: tables, test: static (region, piece) => region.OwesMesh(mesh: piece)) && (MeasureDemand(group, priority: true) > 1f)) { holes++; }
+                if (!group.Retired && !Dormant(group: group) && group.HasDemandBox && (group.Shown is { } shown) && AnyPiece(mesh: shown, tables: tables, test: static (region, piece) => region.OwesMesh(mesh: piece)) && (MeasureDemand(group, priority: true) > 1f)) { holes++; }
                 // A mesh is resident once the frame's draws name it and the region owes none of its words; one the
                 // current draws do not name (a template no copy draws) costs the region nothing and counts too.
                 if ((group.Mesh is { } mesh) && (!dressed || AnyPiece(mesh: mesh, tables: tables, test: static (region, piece) => region.OwesMesh(mesh: piece)))) { continue; }
@@ -786,8 +787,9 @@ public sealed partial class SdfMeshPathBake {
     // (m_floorRevision).
     private void ServeAhead(SdfWorldTables tables) {
         var floorsMoved = (m_floorsNamed != m_floorRevision);
+        var dormantMoved = DormantNamesMoved();
 
-        if ((m_ahead.Count == 0) && !floorsMoved && (m_aheadNamed == m_aheadRevision) && ReferenceEquals(objA: tables, objB: m_aheadTables)) { return; }
+        if ((m_ahead.Count == 0) && !floorsMoved && !dormantMoved && (m_aheadNamed == m_aheadRevision) && ReferenceEquals(objA: tables, objB: m_aheadTables)) { return; }
         for (var at = (m_ahead.Count - 1); (at >= 0); at--) {
             var group = m_ahead[at];
 
@@ -797,16 +799,17 @@ public sealed partial class SdfMeshPathBake {
                 m_aheadRevision++;
             }
         }
-        if ((m_aheadNamed != m_aheadRevision) || floorsMoved || !ReferenceEquals(objA: tables, objB: m_aheadTables)) {
+        if ((m_aheadNamed != m_aheadRevision) || floorsMoved || dormantMoved || !ReferenceEquals(objA: tables, objB: m_aheadTables)) {
             m_aheadMeshes.Clear();
             foreach (var group in m_ahead) {
                 var mesh = group.Mesh!;
 
                 for (var piece = 0; (piece < mesh.PieceCount); piece++) { m_aheadMeshes.Add(item: mesh.Piece(index: piece)); }
             }
-            // The products come first, which the region gives back first when its share of the pool falls; the kept
-            // floors after them keep their words. Only the groups that keep a floor hold one, and the walk drops the
-            // retired ones from that list, in order.
+            // The products come first, then the dormant forms' meshes (Forms), which the region gives back first when its
+            // share of the pool falls; the kept floors after them keep their words. Only the groups that keep a floor
+            // hold one, and the walk drops the retired ones from that list, in order.
+            AppendDormantMeshes(meshes: m_aheadMeshes);
             var products = m_aheadMeshes.Count;
             var kept = 0;
 
@@ -1027,6 +1030,7 @@ public sealed partial class SdfMeshPathBake {
             }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" bake-age={((start == 0) ? 0d : Stopwatch.GetElapsedTime(startingTimestamp: start).TotalSeconds):0.000}s loads={m_loadsDone}/{m_loadsQueued} load-span={loadSpan:0.000}s plan-ms={m_planMilliseconds:0.0} restart-ms={m_restartMilliseconds:0.0}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" frames={m_preparedFrames} restarts={m_restarts} restart-groups={m_restartGroups} resamples={m_resamples} resample-groups={m_resampleGroups} input-readers={m_inputReaders.Count} operand-readers={m_operandReaders} operand-replans={m_operandReplans} coalesced={m_coalesced} promoted={m_promoted} successors={m_successors} ahead={m_ahead.Count} handed={m_handed} handed-refused={m_handedRefused}");
+            DescribeForms(line: line);
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" vertex-bytes={vertexBytes}");
             for (var level = 0; (level < levelTriangles.Length); level++) {
                 _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" level{level}={levelTriangles[level]}tri/{levelBytes[level]}B");

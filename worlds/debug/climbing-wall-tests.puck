@@ -22,7 +22,7 @@ documentId: "lab-climbing"
 import "gallery/layout"
 import "labs/climbing-plan"
 
-// The walker's contact skin, metres (avatars/moth.puck's collision.contactSkin), and the longest airborne run, seconds,
+// The walker's contact skin, metres (stage.puck's collision.contactSkin), and the longest airborne run, seconds,
 // once the climb is under way: the mantle carries the body over the ledge in half a second.
 let climbSkin = 0.02
 let climbAirborne = 0.8

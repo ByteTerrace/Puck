@@ -1,7 +1,7 @@
 # Moth concept pack
 
 These sheets are the visual standard for the Moth, the debug world's avatar,
-built as the native SDF creation in [moth.puck](../../../../worlds/debug/avatars/moth.puck).
+built as the native SDF creation in [moth.puck](../../../../worlds/debug/avatars/moth/suits.puck).
 They show her in two forms. Suited, she wears a 2.06 m mech suit in the spirit
 of Firefall's battleframes, Mega Man and Anthem's javelins: thick layered
 plates, exposed pivots and pistons, and heavy gauntlets, shoulders and boots.
@@ -87,5 +87,5 @@ The owner source and later owner feedback take precedence over every generated
 sheet, which are concept interpretations rather than orthographic blueprints.
 Small perspective differences do not authorize new parts. For implementation
 priorities, see the [hero brief](../armored-chibi-hero-brief.md); the
-[studio guide](../../../../worlds/debug/avatars/moth.md) covers the current
+[studio guide](../../../../worlds/debug/avatars/moth/moth.md) covers the current
 model, its controls and live editing.

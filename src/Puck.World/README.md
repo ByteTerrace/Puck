@@ -32,7 +32,7 @@ input. The point follows the published pane or whole-display view even without
 a local seat or drawn HUD cursor. A true headless host refuses GPU inspection.
 
 `view.annotate` circles problem areas on screen to point them out. F3 in the
-debug world (a `view.annotate toggle` binding row in `avatars/moth.puck`) or
+debug world (a `view.annotate toggle` binding row in `avatars/moth/suits.puck`) or
 `view.annotate on|off|toggle` switches annotate mode. In annotate mode a left
 drag in the window draws the ellipse that fits the drag box, a click draws a
 small dot ring, a right click clears every outline, and no pointer button or
@@ -119,7 +119,7 @@ For the debug world's portals (a window onto a second world, walking through
 it, and a portal seen through a portal) and the verbs that inspect them, see
 [Debug world portals](../../worlds/debug/debug.md).
 
-For the standalone avatar prototype, see the [Moth flight studio](../../worlds/debug/avatars/moth.md).
+For the standalone avatar prototype, see the [Moth flight studio](../../worlds/debug/avatars/moth/moth.md).
 It is a rebuilt SDF avatar with inspection cameras, walking and flight poses,
 and live document reload.
 
@@ -564,7 +564,7 @@ stick yaw turns the upright character through `FaceX`/`FaceZ`, while both axes
 orbit/look and never write `Turn`. Authors can pair `player.move` with
 `player.look` for movement-facing/free-orbit alternatives, or use
 `player.move.strafe` with `player.look.steer` for the standard action scheme.
-The debug world's Moth (`worlds/debug/avatars/moth.puck`, with the bar's pages
+The debug world's Moth (`worlds/debug/avatars/moth/suits.puck`, with the bar's pages
 in `worlds/debug/controls.puck`) binds the left stick to `player.move.strafe`,
 the right stick to `player.look.steer`, mouse buttons 1 and 2 to `player.orbit`
 and `player.steer`, West/J to the authored dash, the `run` channel held on Left Shift and toggled
@@ -572,7 +572,7 @@ and `player.steer`, West/J to the authored dash, the `run` channel held on Left 
 trigger's page, autorun and autofly as toggles of `forward` and `rise` and the
 held `player.look.free`, which suppresses body steering while camera look
 continues. Its full control table is
-[the Moth's controls](../../worlds/debug/avatars/moth.md#controls).
+[the Moth's controls](../../worlds/debug/avatars/moth/moth.md#controls).
 `views.seatRig` authors framing, `views.seatControl` authors the
 world's `World|Body` yaw reference and pitch envelope, and
 `seatDefaults.seatCameraFeel` authors portable sensitivity/inversion/arming/rate.
@@ -1264,7 +1264,7 @@ Facts a script needs:
 - `Assets/`—the engine's own content: the default recording. The World ships no
   world. While the current campaign runs, the one live world is the asset
   package `worlds/debug/` at the repository root (`--world worlds/debug`): its
-  entry `debug.puck`, with its basis `avatars/moth.puck`, the `quality.puck`
+  entry `debug.puck`, with its basis `avatars/moth/suits.puck`, the `quality.puck`
   presets that avatar imports, the `skies.puck` and `shapes.puck` modules it
   imports, the standard package's skin, controls, camera feel and shared
   binding-bar layouts (`worlds/standard/`). The debug world's `controls.puck`

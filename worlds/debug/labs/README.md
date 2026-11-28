@@ -55,7 +55,8 @@ Start a lab directly with the `puck` server: `puck_world_start` with
 `document: worlds/debug/labs/<lab>.puck` (and `windowed: true` on a granted GPU
 leg). By hand, `--world worlds/debug/labs/<lab>.puck` on the
 [puck-world recipe](../../../.claude/skills/puck-world/SKILL.md#running-it).
-Every lab is the Moth's (`basis: "../avatars/moth"`) and imports the debug world
+Every lab is built on the stage (`basis: "../stage"`, which seats the Moth through
+the standard player module) and imports the debug world
 set's controls, so getting about needs nothing new; the climbing, light,
 surface, shape and Moth labs also import noclip. In those five, `debug.go <place>`
 (lab-kit.puck's `goCommand`, the debug world's own command) poses a body at any
@@ -79,8 +80,8 @@ naming anything in a frame (`world.view.camera`, `world.view.pick`).
 
 ### Climbing
 
-[climbing.puck](climbing.puck): the Moth's climb (`climbAbility`, through her
-own [moth-climb.puck](../avatars/moth-climb.puck)) on a studio floor under a
+[climbing.puck](climbing.puck): the Moth's climb (`climbAction`, granted by her
+[contract](../avatars/moth/contract.puck)) on a studio floor under a
 held midday. Three bays face the seat along one line, which boots before them
 facing +Z ([climbing-plan.puck](climbing-plan.puck) holds the plan):
 
@@ -167,10 +168,10 @@ each row) and `surface-sight` (the sight line's head, facing east along it).
 ### Moth
 
 [moth.puck](moth.puck): where the Moth's look, motion and camera are judged,
-on a grey floor under the held midday. Seven stations stand apart, each course
+on a grey floor under the held midday. Eight stations stand apart, each course
 running north (-Z, the way she faces) from its spawn point, and nothing here
-adds an ability: the walk, run, jump, dash, climb and jetpack are her basis's
-own ([moth.puck](../avatars/moth.puck) and the `moth-*.puck` files beside it).
+adds or re-authors an ability: the walk, run, jump, dash, mantle, climb and jetpack
+are her forms' own ([contract.puck](../avatars/moth/contract.puck), read by the standard player module).
 
 - `look-stage`: a closed grey room round the origin, lit only by its own lamps
   (a key, a fill, a rim light behind her on each side and a wash on the walls,
@@ -190,14 +191,20 @@ own ([moth.puck](../avatars/moth.puck) and the `moth-*.puck` files beside it).
   `terrain-ramps-steep` and `terrain-stairs` stand her beside a group and
   `moth.frame` shows it;
 - `jump`: a run-up and raised platforms with gaps of 1, 2, 3, 4, 6 and 8 m for
-  the jump, air jump and dash, and ledges 0.6 to 2.6 m high to pull up onto;
+  the jump, air jump and dash, and plain ledges 0.6 to 2.6 m high, none
+  holdable, for the mantle: in the mech suit she runs up the 0.6 to 1.8 m ones
+  with the run held and jumps for the 2.2 and 2.6 m ones;
 - `climb`: a holdable face 3.5 m tall over a block to stand on, small beside the
   climbing lab's walls;
 - `flight`: four pylons with decks at 10, 20 and 30 m, bands every 5 m, for the
   jetpack (F);
 - `camera`: a 2 m wide corridor, a low ceiling at 2.4 m and pillars
   (`camera-pillar` stands her with a pillar close behind), for the chase
-  camera's clearance, fade and cutaway (`camera.clearance Cutaway|Fade`).
+  camera's clearance, fade and cutaway (`camera.clearance Cutaway|Fade`);
+- `suits`: three pads, one for each form she owns (her body, the mech suit,
+  the scout suit), each with a board of what it grants, before two plain ledges
+  1.4 m and 2 m high that tell the forms' mantles apart; the suit press (T) or
+  `moth.suit` steps her to the next form where she stands.
 
 `moth.frame <station>` stands her at a station's spawn point and shows it from
 a fixed overview camera, the same every time; `debug.go` hands back the chase

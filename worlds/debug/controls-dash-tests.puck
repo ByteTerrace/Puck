@@ -1,7 +1,7 @@
 // One deterministic ability invariant: movement direction, idle facing, cooldown and swept contact.
 // The small studio uses the real Moth kit and bindings without unrelated debug machines.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "controls-dash-tests"
 
 import "set-controls"

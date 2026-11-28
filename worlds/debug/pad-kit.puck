@@ -8,7 +8,7 @@ import "../standard/pad-kit"
 let respawnSector = { id: "respawn", command: "body.pose", text: "spawn:stage", sources: null }
 let suitSector = { id: "suit", command: "body.press", text: "suit 1 0.2", sources: null }
 
-// The Moth's inspection layouts (avatars/moth.puck).
+// The Moth's inspection layouts (stage.puck).
 let mothViewEntries = [
   { id: "play", command: "view.override", text: "layout play", value: neverRead, sources: null }
   { id: "threeQuarter", command: "view.override", text: "layout three-quarter", value: neverRead, sources: null }

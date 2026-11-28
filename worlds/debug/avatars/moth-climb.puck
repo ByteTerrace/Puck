@@ -1,7 +1,0 @@
-// Her climbing is the standard's: she takes a wall she walks or falls into, climbs it at 2.2 m/s on ten seconds of
-// stamina, leaps 1.8 m along it for a fifth of the wheel, and pulls up over a top her hands can reach, 2.3 m above her
-// feet. Jump leaps, run lets go. The wheel shows low on the view while it is not full. Out of her suit she climbs the
-// same way on the same wheel (suit.puck's `pilot` kit).
-import "../../standard/abilities"
-climbAbility(kit: "walker")
-staminaGauge()

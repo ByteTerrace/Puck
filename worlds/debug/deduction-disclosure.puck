@@ -6,7 +6,7 @@
 // The run ends long before the day's close, so nothing the game reveals on purpose differs between the worlds.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "deduction-disclosure"
 import "deduction"
 

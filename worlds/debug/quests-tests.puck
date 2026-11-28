@@ -9,7 +9,7 @@
 // The trail is a chain of three parts behind one prerequisite: `primer` opens `trailA`, and each part opens the next.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "quests-tests"
 
 import "set-controls"

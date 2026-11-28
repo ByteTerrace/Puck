@@ -3,7 +3,7 @@
 // 1), and the seeded draw makes seats 4 and 2 the moles every run, seats 1 and 3 the crew.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "deduction-tests"
 import "deduction"
 
