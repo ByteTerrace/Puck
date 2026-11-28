@@ -133,3 +133,24 @@ function formPieces(color = formTransitionColor) = {
   arrive: formAssemble(color: color)
   leave: formShed(color: color)
 }
+
+// A net parting (a net facet's `opening.effect`, WorldNetOpening): a ring of light that grows out from the opening's centre
+// as the ropes splay and back in as they close, cutting nothing, its front ragged by a hand's width of noise so it runs
+// along the strands rather than tracing a circle, and a modest drift of motes rising off the strands it crosses (a mote
+// costs whether or not it is seen, so a net that may part often spends few). The engine times the ring to the net's open
+// and close seconds.
+function formParting(color = formTransitionColor, motes = 360) = {
+  seconds: 0.6
+  edgeColor: color
+  edgeLuminance: 3500
+  edgeWidth: 0.12
+  roughness: 0.08
+  roughnessScale: 0.25
+  motes: motes
+  moteLuminance: 7000
+  moteSize: 0.012
+  moteSeconds: 0.9
+  moteSpeed: 0.25
+  moteRise: 0.35
+  moteSwirl: 1.2
+}

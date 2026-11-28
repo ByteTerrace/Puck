@@ -1,0 +1,314 @@
+// Time dilation fields (docs/decisions/play.md, "Time dilation fields"): a player casts a field that stays where it was
+// cast and slows the local time of what stands inside it. The first ability is a personal field: it forms round its
+// caster like a force field, and its caster keeps normal time inside it. A module library: it hands its importers
+// templates and functions and emits no document.
+//
+// Local time is state, read in closed form: every target (a timer a world wants slowed: a floor button's rise, a device's
+// unlock) keeps the local time it had when its rate last changed (`timeBase`), the world second it changed at
+// (`timeAnchor`) and its rate (`timeRate`, local seconds a world second), so its local time now is
+//
+//   timeBase[t] + (timeNow - timeAnchor[t]) * timeRate[t]          (timeLocal(t), timeLocalOf("name"))
+//
+// and a deadline in local seconds is a comparison against that. A rate changes only when a field starts or ends over a
+// target, so nothing counts while nothing changes. The rate inside fields is the least slowdown of the fields that cover
+// the target, eased toward one by the target's resistance: `1 - (1 - slowdown) * (1 - resist)`, so resist 1 keeps normal
+// time and resist 0 takes the field whole.
+//
+//   import "../standard/time-field"
+//   timeFields(casters: range(0, 4), targets: [
+//     timeTarget(name: "button", at: [3, 0, 4])
+//     timeTarget(name: "device", at: [9, 0, 2], duration: 900, reach: 4)
+//   ])
+//
+// Every quantity is authored. The field's own (`timeFieldStandard`, overridden by `field`): its radius, slowdown,
+// duration, cooldown and the height of its centre over the caster's root. A target tunes any of them for a field cast at
+// it (one whose sphere holds the target when it is cast): its `slowdown` (the field takes the least any covered target
+// asks), its `duration` and `cooldown` (the longest), and its `reach` (how far from a field's centre it counts as inside,
+// in place of the field's radius); and it may `resist` in part or in full. A field covers what stands inside it when it is
+// cast, since it stays where it was cast and its targets stand still.
+//
+// The caster keeps normal time: a target owned by a body (`timeOwner`, -1 for none, which a world may write: a body's own
+// timer, a machine its body operates) is never slowed by that body's own field. Slowing bodies' motion, physics and the
+// emulated machines inside a field is the second slice (open items, "Time dilation fields"); this one slows timers.
+//
+// The rows:
+//
+//   timeNow                                    Fixed, world seconds, advancing by itself
+//   timeFieldOn/X/Y/Z, timeFieldSlow           keyed by caster: whether its field stands, its centre (parked under the
+//   timeFieldUntil, timeFieldReady             world, `park`, while none stands), its slowdown, the world second it
+//   timeFieldMask                              ends at, the world second the caster may cast again, and the targets it
+//                                              covers (bit i for the i-th target)
+//   timeRate, timeBase, timeAnchor             keyed by target: its clock
+//   timeBit, timeResist, timeOwner             keyed by target: its bit, its resistance, the body that owns it
+
+import "pad-kit"
+import "shading"
+
+// The standard personal field: three metres round, a tenth of normal time inside, standing twelve seconds, castable again
+// twenty seconds after a cast, centred a metre over the caster's root (about its chest).
+let timeFieldStandard = {
+  radius: 3
+  slowdown: 0.1
+  duration: 12
+  cooldown: 20
+  height: 1
+}
+// Where a field's centre waits while no field stands: far under the world, so its shell is out of every view.
+let timeFieldPark = -10000
+
+// A target: a timer the fields slow, standing at `at` (world coordinates), with what it tunes for a field cast at it.
+function timeTarget(name, at, resist = 0, slowdown = null, duration = null, cooldown = null, reach = null) = {
+  name: name
+  at: at
+  resist: resist
+  slowdown: slowdown
+  duration: duration
+  cooldown: cooldown
+  reach: reach
+}
+
+// A target's local time now, in local seconds: `t` a key expression (`$each` in a rule sweeping the targets), or a
+// target's name for timeLocalOf.
+function timeLocal(t) = timeBase[t] + (timeNow - timeAnchor[t]) * timeRate[t]
+function timeLocalOf(name) = timeBase[name] + (timeNow - timeAnchor[name]) * timeRate[name]
+// Whether the point (x, y, z) stands within `reach` of the target at (tx, ty, tz).
+function timeInside(tx, ty, tz, reach, x, y, z) = ((((x - tx) * (x - tx)) + ((y - ty) * (y - ty)) + ((z - tz) * (z - tz))) <= (reach * reach))
+
+// The cast's input and its binding: T on the play page, and the pad's West under the left trigger (J with Z held).
+template timeFieldControls(sources = ["keyboard.t"], padSources = padWest) {
+  channels [
+    { composition: true, name: "timeField", shape: Binary }
+  ]
+  bindingOverlays [
+    {
+      id: "time-field-keys"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers: padModifiers
+        chords [
+          {
+            chord []
+            group: "play"
+            page {
+              id: "base"
+              entries [
+                { channel: "timeField", id: "timeField", label: "Time field", scale: 1, sources: sources }
+              ]
+            }
+          }
+          {
+            chord ["lt"]
+            group: "play"
+            page {
+              id: "pad-lt"
+              inherits: "base"
+              label: "View"
+              entries [
+                { channel: "timeField", id: "padTimeField", label: "Time field", scale: 1, sources: padSources }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
+// The fields of `casters` (body indices: each may cast one field at a time) over `targets` (timeTarget records), with the
+// field's quantities `field`.
+template timeFields(casters, targets = [], field = timeFieldStandard, capacity = 16) {
+  let keys = map(casters, m => $"{m}")
+  let targetCount = length(targets)
+  // Each target with its reach settled: its own, or the field's radius.
+  let reaching = map(targets, t => (t with { reach: ((t.reach == null) ? field.radius : t.reach) }))
+
+  timeFieldControls()
+
+  state {
+    world {
+      row {
+        name: "timeNow"
+        kind: "Fixed"
+        value: "0"
+        advance { perSecondNumerator: 1, perSecondDenominator: 1 }
+      }
+      row {
+        name: "timeFieldOn"
+        kind: "Int"
+        capacity: capacity
+        cells: map(keys, k => { key: k, value: 0 })
+      }
+      for axis in ["timeFieldX", "timeFieldZ", "timeFieldSlow", "timeFieldUntil", "timeFieldReady"] {
+        row {
+          name: axis
+          kind: "Fixed"
+          capacity: capacity
+          cells: map(keys, k => { key: k, value: 0 })
+        }
+      }
+      row {
+        name: "timeFieldY"
+        kind: "Fixed"
+        capacity: capacity
+        cells: map(keys, k => { key: k, value: timeFieldPark })
+      }
+      row {
+        name: "timeFieldMask"
+        kind: "Int"
+        capacity: capacity
+        cells: map(keys, k => { key: k, value: 0 })
+      }
+      row {
+        name: "timeRate"
+        kind: "Fixed"
+        capacity: maximum([1, targetCount])
+        cells: map(targets, t => { key: t.name, value: 1 })
+      }
+      for name in ["timeBase", "timeAnchor"] {
+        row {
+          name: name
+          kind: "Fixed"
+          capacity: maximum([1, targetCount])
+          cells: map(targets, t => { key: t.name, value: 0 })
+        }
+      }
+      row {
+        name: "timeResist"
+        kind: "Fixed"
+        capacity: maximum([1, targetCount])
+        cells: map(targets, t => { key: t.name, value: t.resist })
+      }
+      row {
+        name: "timeBit"
+        kind: "Int"
+        capacity: maximum([1, targetCount])
+        cells: map(range(0, targetCount), i => { key: targets[i].name, value: pow(2, i) })
+      }
+      row {
+        name: "timeOwner"
+        kind: "Int"
+        capacity: maximum([1, targetCount])
+        cells: map(targets, t => { key: t.name, value: -1 })
+      }
+    }
+  }
+
+  // A press casts the caster's field where it stands, once its cooldown has passed: the field covers every target its
+  // sphere (or the target's own reach) holds, and takes what those targets tune.
+  rule "time-field-cast" {
+    local cx = bodyPosition(each, x)
+    local cy = bodyPosition(each, y) + field.height
+    local cz = bodyPosition(each, z)
+    when channel(each, timeField) >= 1 and timeNow >= timeFieldReady[$each]
+    mode: Edge
+    forEach: timeFieldOn
+    timeFieldOn[$each] = 1
+    timeFieldX[$each] = cx
+    timeFieldY[$each] = cy
+    timeFieldZ[$each] = cz
+    timeFieldSlow[$each] = field.slowdown
+    timeFieldUntil[$each] = timeNow + field.duration
+    timeFieldReady[$each] = timeNow + field.cooldown
+    timeFieldMask[$each] = 0
+    for (t, i) in reaching {
+      if timeInside(t.at[0], t.at[1], t.at[2], t.reach, cx, cy, cz) {
+        timeFieldMask[$each] += pow(2, i)
+      }
+    }
+    for t in filter(reaching, t => (t.slowdown != null)) {
+      if timeInside(t.at[0], t.at[1], t.at[2], t.reach, cx, cy, cz) and (t.slowdown < timeFieldSlow[$each]) {
+        timeFieldSlow[$each] = t.slowdown
+      }
+    }
+    for t in filter(reaching, t => (t.duration != null)) {
+      if timeInside(t.at[0], t.at[1], t.at[2], t.reach, cx, cy, cz) and ((timeNow + t.duration) > timeFieldUntil[$each]) {
+        timeFieldUntil[$each] = timeNow + t.duration
+      }
+    }
+    for t in filter(reaching, t => (t.cooldown != null)) {
+      if timeInside(t.at[0], t.at[1], t.at[2], t.reach, cx, cy, cz) and ((timeNow + t.cooldown) > timeFieldReady[$each]) {
+        timeFieldReady[$each] = timeNow + t.cooldown
+      }
+    }
+  }
+
+  // A field lapses at its end: it covers nothing more, and its centre parks.
+  rule "time-field-lapse" {
+    when timeFieldOn[$each] == 1 and timeNow >= timeFieldUntil[$each]
+    mode: Level
+    forEach: timeFieldOn
+    timeFieldOn[$each] = 0
+    timeFieldMask[$each] = 0
+    timeFieldY[$each] = timeFieldPark
+  }
+
+  // Each target's rate follows the fields that cover it; a change keeps its local time continuous by rebasing its clock
+  // at the change.
+  if targetCount > 0 {
+    rule "time-rate" {
+      local slowest = minimum(casters, m => (((timeFieldOn[m] == 1) and ((timeFieldMask[m] & timeBit[$each]) != 0) and (timeOwner[$each] != m)) ? timeFieldSlow[m] : 1))
+      local rate = 1 - (1 - slowest) * (1 - timeResist[$each])
+      local now = timeLocal($each)
+      when timeRate[$each] != rate
+      mode: Level
+      forEach: timeRate
+      timeBase[$each] = now
+      timeAnchor[$each] = timeNow
+      timeRate[$each] = rate
+    }
+  }
+}
+
+// The time film: a cold, slow light over the field's shell, a blue to violet turning once a minute and rippling out in rings
+// a metre apart, brightest at the rim, so the region reads as held still against the brisk rainbow films of the gallery.
+let timeFilm = {
+  low [0.35, 0.5, 0.8]
+  swing [0.15, 0.2, 0.2]
+  rate [1, 1, 1]
+  offset [0.1, 0.35, 0.6]
+  cycle: 60
+  twinkle: 7
+  rings: 1
+  swirl: 0.2
+  scale: 0.8
+  rim: 4
+  power: 3
+  shimmer: 0.3
+  seed: 41
+}
+// The shell's palette: a glass film over a pale, faintly lit pane.
+function timeShellPalette(film = timeFilm, glow = 40) = [
+  magicFilmed({ color: "#DCEBFF", roughness: 0.02, emissive: glow, glass { depth: 0.02, ior: 1.03 } }, film, [0, 0, 0])
+]
+
+// Each caster's field drawn: a glass sphere the field's radius round its centre, shifted there from the field's rows, so
+// it stands where it was cast while the field stands and waits under the world while none does.
+template timeFieldShells(casters, field = timeFieldStandard) {
+  prototypes {
+    prototype "time-field-shell" {
+      document {
+        name: "time-field-shell"
+        schema: "puck.creation.v2"
+        palette: timeShellPalette()
+        shape Sphere "shell" {
+          material: 0
+          position [0, 0, 0]
+          scale [field.radius, field.radius, field.radius]
+        }
+      }
+    }
+  }
+  placements {
+    for m in casters {
+      placement $"time-field-shell-{m}" {
+        prototype: "time-field-shell"
+        position [0, 0, 0]
+        shift {
+          x: $"state.timeFieldX.{m}"
+          y: $"state.timeFieldY.{m}"
+          z: $"state.timeFieldZ.{m}"
+        }
+      }
+    }
+  }
+}

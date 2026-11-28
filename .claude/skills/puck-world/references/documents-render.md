@@ -656,7 +656,7 @@ What runs:
   a sheet displacement (`WorldNetPresentation`, `SdfSheetDisplacement`).
 
 Read it back with `world.nets` (nodes, awake, deepest deflection, reach,
-holders, leaners); a rule reads `net("<placement>", deflection|awake|holders|pushers)`
+holders, leaners); a rule reads `net("<placement>", deflection|awake|holders|pushers|openness)`
 (`$net:`); `world.budget`'s `nets` line and `world.counters physics.nets`
 (`steps`, `nodes-solved`, `strands-solved`, `substeps`, `sleeps`, `wakes`) give
 its cost. The gallery's level 1 nets are the worked example (`worlds/debug/gallery.md`,

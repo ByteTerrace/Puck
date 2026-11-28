@@ -1249,7 +1249,7 @@ template shellPlacements() {
       grip {
         holdable: true
       }
-      net: latticeNet(cells: panel.cells, pitch: toyLatticePitch, height: shellLatticeHeight, net: toyLatticeNet, sill: 0)
+      net: (latticeNet(cells: panel.cells, pitch: toyLatticePitch, height: shellLatticeHeight, net: toyLatticeNet, sill: 0) with ((panel.id == timeNetPanel) ? { opening: timeNetOpening } : {}))
     }
   }
   for (planter, n) in shellPlanters {

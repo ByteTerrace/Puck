@@ -1,0 +1,188 @@
+// The play floor's time puzzles (gallery/time-puzzles.puck) and the standard's time field (standard/time-field.puck),
+// booted in the whole debug world: `puck test worlds/debug/time-field-tests.puck --jobs 1 --reproduce`. The debug world
+// steps at 30 ticks a second (stage.puck's `rateHz`), so a second is 30 ticks below.
+//
+// Positions are world coordinates with the building at layout.puck's `gallerySite` (9.825, 0, 12.575), on level 1's floor
+// (4.55): the button's middle at (29.5, 13.5) (layout.puck's `timeButtonAt`), a spot off it toward the net at (29.5, 15.5),
+// the five tiles of the north gallery's arc (layout.puck's `timeTiles`) and the front of the south gallery's bay-3 cabinet
+// (station `cabinet-south-3`, standing at (24.5, 14.75)) at (24.5, 16.25). The net is the south gallery's bay-4 panel,
+// `gallery-lattice-south-4`.
+//
+// The tiles want five bodies: seat 1's (body 0) and four of the Alchemy table's element tokens (bodies 509 to 512), which
+// stand still where they are put.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "time-field-tests"
+import "stopped-machines"
+import "gallery/layout"
+
+let timeNet = "gallery-lattice-south-4"
+
+state {
+  world {
+    table timeProbe {
+      heldOpen = -1
+      releasedOpen = -1
+      afterRun = -1
+      longAfter = -1
+      rate = -1
+      tilesUnlocked = -1
+      tilesTitle = -1
+      fieldedRate = -1
+      plainRate = -1
+      fieldLong = -1
+      fieldedAtTease = -1
+      plainAtTease = -1
+      plainTitleAfter = -1
+      through = -1
+    }
+    row {
+      name: "timeProbeOpenness"
+      kind: "Fixed"
+      capacity: 4
+      cells [
+        { key: "held", value: -1 }
+        { key: "settled", value: -1 }
+      ]
+    }
+  }
+}
+
+// The solo puzzle's readings: the net while the button is held (tick 40), once she has stepped off a sprint's time ago
+// (0.4 s and 0.9 s after the release at tick 43), and long after.
+rule "time-probe-held" {
+  when $tick == 40
+  mode: Edge
+  timeProbe.heldOpen = timeNetOpen
+  timeProbeOpenness.held = net(timeNet, openness)
+}
+rule "time-probe-released" {
+  when $tick == 55
+  mode: Edge
+  timeProbe.releasedOpen = timeNetOpen
+}
+rule "time-probe-run" {
+  when $tick == 70
+  mode: Edge
+  timeProbe.afterRun = timeNetOpen
+  timeProbe.rate = toInt(timeRate["time-button"] * 100)
+}
+rule "time-probe-long" {
+  when $tick == 160
+  mode: Edge
+  timeProbe.longAfter = timeNetOpen
+  timeProbeOpenness.settled = net(timeNet, openness)
+}
+
+// The group puzzle's readings: the unlock just after the tiles are held (tick 10), the rates after a field cast at the
+// bay-3 cabinet (tick 40), and the two cabinets' unlocks after the tease has run out in normal time (tick 2850, 95 s).
+rule "time-probe-tiles" {
+  when $tick == 10
+  mode: Edge
+  timeProbe.tilesUnlocked = timeUnlocked["cabinet-south-3"]
+  timeProbe.tilesTitle = toyboxTitle["cabinet-south-3"]
+}
+rule "time-probe-fielded" {
+  when $tick == 40
+  mode: Edge
+  timeProbe.fieldedRate = toInt(timeRate["cabinet-south-3"] * 100)
+  timeProbe.plainRate = toInt(timeRate["cabinet-south-6"] * 100)
+  timeProbe.fieldLong = toInt(timeFieldUntil["0"] - timeNow)
+}
+rule "time-probe-tease" {
+  when $tick == 2850
+  mode: Edge
+  timeProbe.fieldedAtTease = timeUnlocked["cabinet-south-3"]
+  timeProbe.plainAtTease = timeUnlocked["cabinet-south-6"]
+  timeProbe.plainTitleAfter = toyboxTitle["cabinet-south-6"]
+}
+
+test "the button's window closes before a sprint reaches the net" {
+  when {
+    ticks 2
+    seat1: body.pose 29.5 4.6 13.5 0 0 0 0
+    ticks 40
+    seat1: body.pose 29.5 4.6 15.5 0 0 0 0
+    ticks 130
+  }
+  expect {
+    timeProbe.heldOpen == 1
+    timeProbeOpenness.held == 1
+    timeProbe.releasedOpen == 0
+    timeProbe.afterRun == 0
+    timeProbe.longAfter == 0
+    timeProbeOpenness.settled == 0
+    net(timeNet, awake) == 0
+  }
+}
+
+test "a field cast over the button slows its rise enough to run through" {
+  when {
+    ticks 2
+    seat1: body.pose 29.5 4.6 13.5 0 0 0 0
+    ticks 10
+    seat1: body.press timeField 1 0.2 0
+    ticks 30
+    seat1: body.pose 29.5 4.6 15.5 0 0 0 0
+    ticks 130
+  }
+  expect {
+    timeProbe.heldOpen == 1
+    timeProbe.releasedOpen == 1
+    timeProbe.afterRun == 1
+    timeProbe.rate == 10
+    timeProbe.longAfter == 0
+    timeProbeOpenness.settled == 0
+  }
+}
+
+test "five bodies on the tiles unlock Moth Valley, and a field holds a cabinet's unlock open" {
+  when {
+    ticks 2
+    seat1: body.pose 27.996 4.6 45.453 0 0 0 0
+    seat1: body.pose 28.582 4.6 44.689 0 0 0 509
+    seat1: body.pose 29.5 4.6 44.4 0 0 0 510
+    seat1: body.pose 30.418 4.6 44.689 0 0 0 511
+    seat1: body.pose 31.003 4.6 45.453 0 0 0 512
+    ticks 18
+    seat1: body.pose 24.5 4.6 16.25 0 0 0 0
+    ticks 5
+    seat1: body.press timeField 1 0.2 0
+    ticks 2830
+  }
+  expect {
+    timeProbe.tilesUnlocked == 1
+    timeProbe.tilesTitle == toyboxMothValley
+    timeProbe.fieldedRate == 10
+    timeProbe.plainRate == 100
+    timeProbe.fieldLong > 850
+    timeProbe.fieldedAtTease == 1
+    timeProbe.plainAtTease == 0
+    timeProbe.plainTitleAfter != toyboxMothValley
+  }
+}
+
+// The net's own opening: told to open, it parts until a body can walk through where the strands stood. A token holds the
+// button while seat 1's body, full size, walks north from the aisle through the parted net, past its
+// plane (z 20.3) onto the balcony edge's far side, where the void begins.
+rule "time-probe-through" {
+  when bodyPosition(body, 0, z) > 20.6 and timeProbe.through == -1
+  mode: Level
+  timeProbe.through = 1
+}
+test "a parted net lets a full-size body through where its strands stood" {
+  when {
+    seat1: world.state.cell.set wonderpass 0 2
+    ticks 2
+    seat1: body.pose 29.5 4.6 13.5 0 0 0 509
+    seat1: body.pose 29.7 4.6 19.3 180 0 0 0
+    ticks 40
+    seat1: body.press forward 1 2 0
+    ticks 30
+  }
+  expect {
+    timeProbe.heldOpen == 1
+    timeProbe.through == 1
+  }
+}

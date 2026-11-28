@@ -59,10 +59,10 @@ public readonly record struct FixedNetSpec(
     FixedNetOpening? Opening = null
 ) {
     /// <summary>Gets the farthest any node stands from its rest position, in metres: the reach, or, for a net with an
-    /// opening, the larger of the reach and the opening's longer half axis, the farthest the parting carries a node (a
-    /// node inside the opening goes to its rim, and is clamped onto the net). Every reader that bounds the drawn or
+    /// opening, the larger of the reach and the opening's longer axis (twice its longer half axis), the farthest the parting can carry a node (a
+    /// node inside the ellipse goes to a point of its rim, and is held onto the net). Every reader that bounds the drawn or
     /// colliding net by its rest layout grows it by this.</summary>
-    public FixedQ4816 Extent => ((Opening is { } opening) ? FixedQ4816.Max(x: Reach, y: FixedQ4816.Max(x: opening.HalfWidth, y: opening.HalfHeight)) : Reach);
+    public FixedQ4816 Extent => ((Opening is { } opening) ? FixedQ4816.Max(x: Reach, y: (FixedQ4816.Max(x: opening.HalfWidth, y: opening.HalfHeight) * FixedQ4816.FromInteger(value: 2))) : Reach);
 }
 
 /// <summary>Where a net parts, and how fast: an ellipse on the net's rest plane whose free nodes the net drives out to its
@@ -310,18 +310,28 @@ public sealed class FixedNet {
         var cellColumn = FixedQ4816.Clamp(value: FixedQ4816.Floor(value: column), minimum: FixedQ4816.Zero, maximum: FixedQ4816.FromInteger(value: (spec.Columns - 2)));
         var cellRow = FixedQ4816.Clamp(value: FixedQ4816.Floor(value: row), minimum: FixedQ4816.Zero, maximum: FixedQ4816.FromInteger(value: (spec.Rows - 2)));
         var center = GridPoint(column: (cellColumn + half), row: (cellRow + half));
+        // The node spacings along the two axes: a node's way out is measured in cells, so the four corners of the cell at
+        // the centre leave at the ellipse's diagonals and the hole they frame is the ellipse's inscribed rectangle, whatever
+        // the ellipse's aspect against the mesh's.
+        var acrossSpacing = (FixedVector3.Dot(left: spec.Across, right: acrossUnit) / FixedQ4816.FromInteger(value: (spec.Columns - 1)));
+        var upSpacing = (FixedVector3.Dot(left: spec.Up, right: upSquare) / FixedQ4816.FromInteger(value: (spec.Rows - 1)));
 
         for (var node = 0; (node < NodeCount); node++) {
             if (m_inverseMass[node] == FixedQ4816.Zero) { continue; }
             var relative = (m_rest[node] - center);
-            var x = (FixedVector3.Dot(left: relative, right: acrossUnit) / opening.HalfWidth);
-            var y = (FixedVector3.Dot(left: relative, right: upSquare) / opening.HalfHeight);
+            var along = FixedVector3.Dot(left: relative, right: acrossUnit);
+            var rise = FixedVector3.Dot(left: relative, right: upSquare);
+            var x = (along / opening.HalfWidth);
+            var y = (rise / opening.HalfHeight);
             var radiusSquared = ((x * x) + (y * y));
 
             if ((radiusSquared >= FixedQ4816.One) || (radiusSquared == FixedQ4816.Zero)) { continue; }
 
-            var radius = FixedQ4816.Sqrt(value: radiusSquared);
-            var rim = ((center + (acrossUnit * ((x / radius) * opening.HalfWidth))) + (upSquare * ((y / radius) * opening.HalfHeight)));
+            // The rim point at the parametric angle the node's offset in cells makes: (a cos θ, b sin θ), the cosine and
+            // sine read off the offset made unit, so the map keeps the nodes' order about the centre and needs no
+            // trigonometry.
+            var cells = new FixedVector3(X: (along / acrossSpacing), Y: (rise / upSpacing), Z: FixedQ4816.Zero).Normalize();
+            var rim = ((center + (acrossUnit * (cells.X * opening.HalfWidth))) + (upSquare * (cells.Y * opening.HalfHeight)));
 
             // Held on the parallelogram: its grid place clamped onto the grid.
             if (TryGrid(column: out var rimColumn, height: out _, point: in rim, row: out var rimRow)) {
@@ -333,9 +343,9 @@ public sealed class FixedNet {
             var splay = (rim - m_rest[node]);
             var extent = spec.Extent;
 
-            // The rim lies no farther than the longer half axis from a node inside the ellipse, and holding it on a
-            // rectangle never lengthens that; a sheared net's hold might, so the splay is held to the extent here, the
-            // bound every reader of the net's extent relies on.
+            // A node inside the ellipse and a point of its rim lie no farther apart than its longer axis, and holding the
+            // point on a rectangle never lengthens that; a sheared net's hold might, so the splay is held to the extent here,
+            // the bound every reader of the net's extent relies on.
             if (splay.CompareLengthTo(other: (FixedVector3.UnitX * extent)) > 0) { splay = (splay.Normalize() * extent); }
             m_driven[node] = true;
             m_splay[node] = (splay * Units);

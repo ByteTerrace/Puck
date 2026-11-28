@@ -1,0 +1,256 @@
+// The play floor's time puzzles (gallery.md "The time puzzles", docs/decisions/play.md "Time dilation fields"): a floor
+// button whose rise a time field slows, and five tiles that unlock Moth Valley on half the toybox's stations. The gallery
+// module imports this, so the gallery booted alone (gallery-root.puck) and the debug world both hold them, and with them
+// the standard's time field (time-field.puck) for every seat and visitor.
+//
+// The solo puzzle, the field's tutorial, in bay 4 of the south gallery: a round brass button on the floor against the wall
+// sinks a few centimetres under a body standing on it, and the bay's net (shell.puck's `south-4`) parts while it is held.
+// Released, the button rises over `timeButtonWindow` local seconds and the net closes once it has risen, too soon for any
+// sprint to reach it (layout.puck's arithmetic). A field cast over the button slows its rise, and its caster runs through.
+//
+// The group puzzle, in bay 4 of the north gallery: five tiles in an arc, each lit while a body stands on it. Five bodies
+// on all five at once let the six arcade cabinets run Moth Valley for a short tease of `timeTease` local seconds; a field
+// cast at a cabinet holds its unlock open for fifteen minutes (layout.puck's `timeStationField`), and its caster's next
+// cast waits as long, so the field stays spent there.
+//
+// The rows:
+//
+//   timeButtonHeld   Int, 1 while a body stands on the button
+//   timeButtonDue    Fixed, the button's local second its rise ends at
+//   timeButtonSink   Fixed, how far the button stands sunk, metres
+//   timeNetOpen      Int, 1 while the net is told to open (the net facet's `opening.by`)
+//   timeTileHeld     keyed by tile: 1 while a body stands on it
+//   timeUnlocked     keyed by station: 1 while it runs Moth Valley
+//   timeUnlockDue    keyed by station: the station's local second its unlock ends at
+
+import "../../standard/architecture"
+import "../../standard/reach"
+import "../../standard/time-field"
+import "layout"
+import "look"
+
+// The button and the stations, in the world's frame, as the fields' targets: a field cast at a station takes its duration
+// and cooldown, and reaches it from a little further than the field's radius, so a player at its console covers it.
+let timeButtonWorld = galleryWorld(timeButtonAt[0], timeButtonAt[1], timeButtonAt[2])
+let timeTargets = concat(
+  [timeTarget(name: "time-button", at: timeButtonWorld)],
+  map(timeUnlockStations, s => timeTarget(
+    name: s.id,
+    at: galleryWorld(toyboxAt(s)[0], toyboxAt(s)[1], toyboxAt(s)[2]),
+    duration: timeStationField,
+    cooldown: timeStationField,
+    reach: 3.5
+  ))
+)
+
+timeFields(casters: rentalBodies, targets: timeTargets)
+timeFieldShells(casters: rentalBodies)
+
+exports {
+  reads [timeButtonHeld, timeButtonDue, timeButtonSink, timeNetOpen, timeTileHeld, timeUnlocked, timeUnlockDue]
+  bindings [timeNetOpen]
+}
+state {
+  world {
+    slot timeButtonHeld = 0
+    row {
+      name: "timeButtonDue"
+      kind: "Fixed"
+      value: "0"
+    }
+    row {
+      name: "timeButtonSink"
+      kind: "Fixed"
+      value: "0"
+    }
+    slot timeNetOpen = 0
+    table timeTileHeld capacity(timeTileCount) {
+      for t in timeTiles {
+        [t.id] = 0
+      }
+    }
+    table timeUnlocked capacity(length(timeUnlockStations)) {
+      for s in timeUnlockStations {
+        [s.id] = 0
+      }
+    }
+    row {
+      name: "timeUnlockDue"
+      kind: "Fixed"
+      capacity: length(timeUnlockStations)
+      cells: map(timeUnlockStations, s => { key: s.id, value: 0 })
+    }
+  }
+}
+
+// The button's palette: a brass cap in a dark rim, and a tile's: a stone disc whose inlay glows while it is held.
+let timePlateRim = 0
+let timePlateCap = 1
+let timeButtonPalette = [
+  { color: "#3A3530", roughness: 0.55, specular: 0.1 }
+  { color: "#C9A24A", roughness: 0.3, specular: 0.5 }
+]
+function timeTilePalette(glow) = [
+  { color: "#5C5A66", roughness: 0.7, specular: 0.05 }
+  { color: "#9FC4FF", roughness: 0.4, specular: 0.05, emissive: glow }
+]
+
+prototypes {
+  // The button's rim: a low ring on the floor the cap sits in.
+  prototype "time-button-rim" {
+    document {
+      name: "time-button-rim"
+      schema: "puck.creation.v2"
+      palette: timeButtonPalette
+      shape Cylinder "rim" {
+        material: timePlateRim
+        position [0, 0.01, 0]
+        scale [(timeButtonRadius + 0.06), 0.01, (timeButtonRadius + 0.06)]
+      }
+    }
+  }
+  // The cap, which shifts down by `timeButtonSink` as it is held and back up as it rises.
+  prototype "time-button-cap" {
+    document {
+      name: "time-button-cap"
+      schema: "puck.creation.v2"
+      palette: timeButtonPalette
+      shape Cylinder "cap" {
+        material: timePlateCap
+        position [0, 0.02, 0]
+        scale [timeButtonRadius, 0.02, timeButtonRadius]
+        rounding: 0.008
+      }
+    }
+  }
+  for (state, glow) in [{ name: "dark", glow: 0 }, { name: "lit", glow: 240 }] {
+    prototype $"time-tile-{state.name}" {
+      document {
+        name: $"time-tile-{state.name}"
+        schema: "puck.creation.v2"
+        palette: timeTilePalette(state.glow)
+        shape Cylinder "tile" {
+          material: 0
+          position [0, 0.008, 0]
+          scale [timeTileRadius, 0.008, timeTileRadius]
+        }
+        shape Cylinder "inlay" {
+          material: 1
+          position [0, 0.017, 0]
+          scale [(timeTileRadius * 0.6), 0.002, (timeTileRadius * 0.6)]
+        }
+      }
+    }
+  }
+}
+
+placements {
+  placement "time-button-rim" {
+    prototype: "time-button-rim"
+    parent: "gallery"
+    position: timeButtonAt
+    solid
+  }
+  placement "time-button-cap" {
+    prototype: "time-button-cap"
+    parent: "gallery"
+    position: timeButtonAt
+    shift {
+      y: "state.timeButtonSink"
+    }
+    solid
+  }
+  // The button's reach: the cylinder over the cap, as a box a body's root stands in.
+  reach(id: "time-button-reach", capacity: 4, box: {
+    x0: (timeButtonWorld[0] - timeButtonRadius)
+    x1: (timeButtonWorld[0] + timeButtonRadius)
+    y0: (timeButtonWorld[1] - 0.2)
+    y1: (timeButtonWorld[1] + 0.6)
+    z0: (timeButtonWorld[2] - timeButtonRadius)
+    z1: (timeButtonWorld[2] + timeButtonRadius)
+  })
+  for t in timeTiles {
+    let at = galleryWorld(t.at[0], t.at[1], t.at[2])
+    placement $"{t.id}" {
+      prototype: "time-tile-dark"
+      parent: "gallery"
+      position: t.at
+      respond [
+        {
+          when: state(state: timeTileHeld, key: t.id, comparison: Equal, value: 1)
+          prototypeId: "time-tile-lit"
+        }
+      ]
+    }
+    reach(id: $"{t.id}-reach", capacity: 2, box: {
+      x0: (at[0] - timeTileRadius)
+      x1: (at[0] + timeTileRadius)
+      y0: (at[1] - 0.2)
+      y1: (at[1] + 0.6)
+      z0: (at[2] - timeTileRadius)
+      z1: (at[2] + timeTileRadius)
+    })
+  }
+}
+
+// The button: held while a body stands on it; let go, its rise starts, ending `timeButtonWindow` of its local seconds on.
+rule "time-button-hold" {
+  local on = ((region("time-button-reach") >= 1) ? 1 : 0)
+  local now = timeLocalOf("time-button")
+  when timeButtonHeld != on
+  mode: Level
+  if on == 0 {
+    timeButtonDue = now + timeButtonWindow
+  }
+  timeButtonHeld = on
+}
+// The net is told to open while the button is held or still rising.
+rule "time-button-net" {
+  local open = (((timeButtonHeld == 1) or (timeLocalOf("time-button") < timeButtonDue)) ? 1 : 0)
+  when timeNetOpen != open
+  mode: Level
+  timeNetOpen = open
+}
+// The cap sinks while held and rises evenly over the window, in the button's local time.
+rule "time-button-sink" {
+  local left = (timeButtonDue - timeLocalOf("time-button"))
+  local sink = ((timeButtonHeld == 1) ? timeButtonDepth : ((left > 0) ? (left * timeButtonRise) : 0))
+  when timeButtonSink != sink
+  mode: Level
+  timeButtonSink = sink
+}
+
+// Each tile is held while a body stands on it.
+for t in timeTiles {
+  rule $"{t.id}-hold" {
+    local on = ((region($"{t.id}-reach") >= 1) ? 1 : 0)
+    when timeTileHeld[t.id] != on
+    mode: Level
+    timeTileHeld[t.id] = on
+  }
+}
+// All five held at once unlock Moth Valley on every unlock station for the tease, in each station's local seconds.
+rule "time-tiles-solved" {
+  when sum(timeTiles, t => timeTileHeld[t.id]) == timeTileCount
+  mode: Edge
+  for s in timeUnlockStations {
+    timeUnlocked[s.id] = 1
+    timeUnlockDue[s.id] = timeLocalOf(s.id) + timeTease
+  }
+}
+// An unlocked station runs Moth Valley (toybox.puck's `toyboxTitle`, its deck's `contentBy`), over any cartridge put in
+// meanwhile; its unlock ends when its local time reaches its due, and its deck runs its cartridge's title again, or its
+// own pick (toybox.puck's deal) with none in.
+for s in timeUnlockStations {
+  rule $"time-unlock-{s.id}" {
+    when timeUnlocked[s.id] == 1 and timeLocalOf(s.id) < timeUnlockDue[s.id] and toyboxTitle[s.id] != toyboxMothValley
+    mode: Level
+    toyboxTitle[s.id] = toyboxMothValley
+  }
+  rule $"time-unlock-end-{s.id}" {
+    when timeUnlocked[s.id] == 1 and timeLocalOf(s.id) >= timeUnlockDue[s.id]
+    mode: Level
+    timeUnlocked[s.id] = 0
+    toyboxTitle[s.id] = ((toyboxCartridge[s.id] > 0) ? rentalCartridgeTitle[toyboxCartridge[s.id]] : 0)
+  }
+}
