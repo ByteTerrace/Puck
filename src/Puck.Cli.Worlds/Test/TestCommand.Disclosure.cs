@@ -109,7 +109,7 @@ public static partial class TestCommand {
             Console.Error.WriteLine(value: $"ERROR: {world} does not compile to a world document{((failure is null) ? "." : $":{Environment.NewLine}{failure.Diagnostics.FormatReport(File.ReadAllText(path: world))}")}");
             return 2;
         }
-        if (!TryStageTestWorld(foreign: [], generatedDirectory: Path.Combine(path1: runDirectory, path2: "generated"), name: name, path: out var staged,
+        if (!TryStageTestWorld(foreign: [], generatedDirectory: Path.Combine(path1: runDirectory, path2: "generated"), judged: out _, name: name, path: out var staged,
             reason: out var stageReason, siblings: [], sourceDirectory: (Path.GetDirectoryName(path: world) ?? "."), world: document)) {
             Console.Error.WriteLine(value: $"ERROR: {world} does not compose: {stageReason}");
             return 2;
