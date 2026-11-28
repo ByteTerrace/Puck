@@ -25,7 +25,11 @@ internal static class SdfMeshStoreCodec {
 
     private static IReadOnlyList<SdfMesh> PiecesOf(SdfMesh? mesh) => ((mesh is null) ? Array.Empty<SdfMesh>() : ((mesh.Chunks.Count == 0) ? new[] { mesh } : mesh.Chunks));
     // The same words prove the error bound, feed the encoder and place the native copy on its storage grid.
-    internal sealed record Positions(PositionGrid Grid, uint[][] Planes) {
+    // Each piece's plane is a rented array of at least its three words a vertex, which Dispose returns: the caller reads
+    // a plane only through its piece's vertex count.
+    internal sealed record Positions(PositionGrid Grid, uint[][] Planes) : IDisposable {
+        private int m_disposed;
+
         public static Positions Prepare(IReadOnlyList<SdfMesh> pieces) {
             var low = pieces.Count == 0 ? Vector3.Zero : pieces[0].PositionLow;
             var high = pieces.Count == 0 ? Vector3.Zero : pieces[0].PositionHigh;
@@ -40,13 +44,22 @@ internal static class SdfMeshStoreCodec {
                     var index = 0;
                     for (; index < pieces.Count; index++) {
                         var mesh = pieces[index];
-                        var words = planes[index] ??= new uint[3 * mesh.VertexCount];
+                        var words = planes[index] ??= RentedArrays.Rent<uint>(minimumLength: (3 * mesh.VertexCount));
                         if (!Fits(mesh, grid, words)) { break; }
                     }
                     if (index == pieces.Count) { return new(grid, planes); }
                 }
+                foreach (var plane in planes) {
+                    if (plane is not null) { RentedArrays.Return(array: plane); }
+                }
             }
             return new(new PositionGrid(low, high, 4), []);
+        }
+
+        /// <summary>Returns the planes to the pool; the positions are read no more.</summary>
+        public void Dispose() {
+            if (Interlocked.Exchange(location1: ref m_disposed, value: 1) != 0) { return; }
+            foreach (var plane in Planes) { RentedArrays.Return(array: plane); }
         }
 
         private static bool Fits(SdfMesh mesh, PositionGrid grid, uint[] words) {

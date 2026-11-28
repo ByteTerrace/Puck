@@ -626,9 +626,17 @@ laws exercise that boundary.
   store's entry encoder collects its payload in a `RentedMemoryStream` and writes
   each byte plane in chunks. A mesh the bake passes on keeps its welded sites
   (`SdfMesh.BakedSites`) through a record copy, so a later stage never hashes the
-  positions again. The stages' outputs are still allocated exactly, and a rental
-  past the shared pool's 1 MiB is a fresh array, which the done line's
-  `allocated` counts.
+  positions again. A cut keeps its tables for its rounds in a `RentedScope` of its
+  own (`SdfMeshMaterialCut`, disposed when its group lets it go), its site weld is
+  an open-addressed native table (`SdfMeshWeld`), and the hash tables of a stage
+  are `OwnedLongMap`s (`RentedScope.LongMap`), never a `Dictionary` or `HashSet`
+  that grows from empty on every call. A collapse takes its lists and arrays from
+  a pooled workspace (`SdfMeshCollapse.Collapser.Workspace`) and gives them back
+  when its levels are made. The stages' outputs (the contour's arrays, the cut's
+  mesh, the merged and levelled meshes) are still allocated exactly as managed
+  arrays, and a rental past the shared pool's 1 MiB is a fresh array, which the
+  done line's `allocated` counts: they are what a bake still allocates, since the
+  checkpoint writer may hold a managed mesh after the stage ends.
 - **A dispatch fills its samples.** A take takes lattices by priority until
   `MeshBakeMaxSamples`, passing over one too large for what is left and taking
   smaller ones behind it; stopping at the first that did not fit left the debug

@@ -456,8 +456,13 @@ public sealed class SdfMeshStore {
     /// <returns><see langword="true"/> when the entry was written.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
-    public bool Write(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh, int[] materials) =>
-        Write(identity, geometry, mesh, materials, out _);
+    public bool Write(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh, int[] materials) {
+        var written = Write(identity, geometry, mesh, materials, out var stored);
+
+        stored?.Dispose();
+
+        return written;
+    }
 
     // As the public Write, also answering the position planes the entry stored (SdfMeshStoreCodec.Encode), which a
     // written mesh's native copy conforms to; null when the encode never ran.

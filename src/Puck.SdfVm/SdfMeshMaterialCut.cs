@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Memory;
+using Puck.Maths;
 using Puck.SignedDistance.Baking;
 
 namespace Puck.SdfVm;
@@ -22,7 +23,7 @@ namespace Puck.SdfVm;
 /// edge between two sites is searched once, whichever copies its triangles name, so the faces either side of a crease cut
 /// a boundary at one point and leave no crack between them.</para>
 /// </summary>
-internal sealed class SdfMeshMaterialCut {
+internal sealed class SdfMeshMaterialCut : IDisposable {
     /// <summary>The bisection rounds after the first: each halves the interval a boundary lies in along its edge.</summary>
     public const int Rounds = 4;
     /// <summary>The most triangles <see cref="Build"/> meshes one contour quad to: a cut quad takes at most six triangles to
@@ -43,22 +44,24 @@ internal sealed class SdfMeshMaterialCut {
     private static readonly Vector2[] Quarters = [new(x: 0.25f, y: 0.25f), new(x: 0.75f, y: 0.25f), new(x: 0.75f, y: 0.75f), new(x: 0.25f, y: 0.75f)];
 
     private readonly SdfContour m_contour;
+    // The cut's state that stands across rounds is native storage charged to one owner, which Dispose releases.
+    private readonly RentedScope m_scope;
     // Each vertex's site: the first vertex at its place, which the crease copies appended after it share.
-    private readonly int[] m_site;
+    private readonly OwnedBuffer<int> m_site;
     // The site at each contour vertex's position, which a vertex the cut adds at that position (a boundary point that
     // lands on an end) answers to as well.
     private readonly SdfMeshWeld m_siteAt;
 
-    private int[] m_quarters = [];
-    private int[] m_vertices = [];
+    private readonly OwnedBuffer<int> m_quarters;
+    private readonly OwnedBuffer<int> m_vertices;
 
-    // The edges searched, keyed by their two sites (lower first), each with the interval its boundary lies in, as a
-    // fraction of the way from the lower site, and the material of that site.
-    private readonly Dictionary<(int Low, int High), int> m_edgeOf = [];
-    private readonly List<(int Low, int High)> m_edges = [];
+    // The edges searched, keyed by their two sites (lower first, packed by EdgeKey), each with the interval its boundary
+    // lies in, as a fraction of the way from the lower site, and the material of that site.
+    private readonly OwnedLongMap<int> m_edgeOf;
+    private readonly OwnedBuffer<(int Low, int High)> m_edges;
 
-    private float[] m_from = [];
-    private float[] m_to = [];
+    private readonly OwnedBuffer<float> m_from;
+    private readonly OwnedBuffer<float> m_to;
     private int m_round = -1;
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshMaterialCut"/> class.</summary>
@@ -66,24 +69,45 @@ internal sealed class SdfMeshMaterialCut {
     /// <param name="uniform">The one material every point of the group's field reads
     /// (<see cref="SdfMeshGeometryBuilder.MaterialsClosed"/> over a single material), whose cut samples no point and meshes
     /// every quad whole in it; <see langword="null"/> to sample the field's materials.</param>
-    public SdfMeshMaterialCut(SdfContour contour, int? uniform = null) {
+    /// <param name="owner">The workspace owner charged for the cut's working storage, or <see langword="null"/> for none.</param>
+    /// <param name="allocator">The native allocator the working storage comes from, so a background bake's scratch never
+    /// reaches the collector, or <see langword="null"/> for the process's.</param>
+    public SdfMeshMaterialCut(SdfContour contour, int? uniform = null, IAllocationObserver? owner = null, IAllocator? allocator = null) {
         m_contour = contour;
-        m_siteAt = new SdfMeshWeld(contour.VertexCount);
-        m_site = new int[contour.VertexCount];
-        for (var vertex = 0; (vertex < m_site.Length); vertex++) {
-            m_site[vertex] = m_siteAt.Site(Position(vertex), vertex);
-        }
-        if (uniform is { } material) {
-            m_quarters = new int[(4 * contour.QuadCount)];
-            m_vertices = new int[contour.VertexCount];
-            Array.Fill(array: m_quarters, value: material);
-            Array.Fill(array: m_vertices, value: material);
-            m_round = Rounds;
+        m_scope = new RentedScope(allocator: allocator, owner: owner);
+        try {
+            m_siteAt = new SdfMeshWeld(capacity: contour.VertexCount, allocator: allocator, owner: owner);
+            m_site = m_scope.Buffer<int>(length: contour.VertexCount);
+            for (var vertex = 0; (vertex < m_site.Length); vertex++) {
+                m_site[vertex] = m_siteAt.Site(Position(vertex), vertex);
+            }
+            m_quarters = m_scope.RentList<int>();
+            m_vertices = m_scope.RentList<int>();
+            m_edgeOf = m_scope.LongMap<int>();
+            m_edges = m_scope.RentList<(int Low, int High)>();
+            m_from = m_scope.RentList<float>();
+            m_to = m_scope.RentList<float>();
+            if (uniform is { } material) {
+                m_quarters.Resize(length: (4 * contour.QuadCount), clear: false, preserve: false);
+                m_vertices.Resize(length: contour.VertexCount, clear: false, preserve: false);
+                m_quarters.GetSpan().Fill(value: material);
+                m_vertices.GetSpan().Fill(value: material);
+                m_round = Rounds;
+            }
+        } catch {
+            Dispose();
+            throw;
         }
     }
 
     /// <summary>Gets the mesh edges the cut searches for a boundary.</summary>
-    public int Edges => m_edges.Count;
+    public int Edges => m_edges.Length;
+
+    /// <summary>Releases the cut's working storage and its charges; the contour is the caller's.</summary>
+    public void Dispose() {
+        m_siteAt?.Dispose();
+        m_scope.Dispose();
+    }
 
     /// <summary>Writes the points the next round samples into a buffer, in the frame the contour is in; none once every
     /// round is answered.</summary>
@@ -115,17 +139,17 @@ internal sealed class SdfMeshMaterialCut {
 
             return points.Length;
         }
-        if ((m_round >= Rounds) || (m_edges.Count == 0)) {
+        if ((m_round >= Rounds) || (m_edges.Length == 0)) {
             into.Resize(length: 0, clear: false, preserve: false);
 
             return 0;
         }
 
-        into.Resize(length: m_edges.Count, clear: false, preserve: false);
+        into.Resize(length: m_edges.Length, clear: false, preserve: false);
 
         var middles = into.GetSpan();
 
-        for (var edge = 0; (edge < m_edges.Count); edge++) {
+        for (var edge = 0; (edge < m_edges.Length); edge++) {
             var (position, normal) = Along(edge: edge, t: (0.5f * (m_from[edge] + m_to[edge])));
 
             middles[edge] = Lifted(normal: normal, position: position);
@@ -139,7 +163,7 @@ internal sealed class SdfMeshMaterialCut {
         if (m_round < 0) {
             AnswerFirst(materials: materials);
         } else {
-            for (var edge = 0; (edge < m_edges.Count); edge++) {
+            for (var edge = 0; (edge < m_edges.Length); edge++) {
                 var middle = (0.5f * (m_from[edge] + m_to[edge]));
 
                 if (materials[edge] == m_vertices[m_edges[edge].Low]) {
@@ -157,8 +181,8 @@ internal sealed class SdfMeshMaterialCut {
         var contour = m_contour;
         var quadCount = contour.QuadCount;
 
-        m_quarters = materials[..(4 * quadCount)].ToArray();
-        m_vertices = new int[contour.VertexCount];
+        m_quarters.CopyFrom(source: materials[..(4 * quadCount)]);
+        m_vertices.Resize(length: contour.VertexCount, clear: false, preserve: false);
         for (var vertex = 0; (vertex < m_vertices.Length); vertex++) {
             m_vertices[vertex] = materials[((4 * quadCount) + m_site[vertex])];
         }
@@ -175,37 +199,37 @@ internal sealed class SdfMeshMaterialCut {
                 for (var side = 0; (side < 3); side++) {
                     var (a, b) = (triangle[side], triangle[((side + 1) % 3)]);
 
-                    if ((m_vertices[a] != m_vertices[b]) && m_edgeOf.TryAdd(key: Key(a: m_site[a], b: m_site[b]), value: m_edges.Count)) {
-                        m_edges.Add(item: Key(a: m_site[a], b: m_site[b]));
-                    }
+                    if (m_vertices[a] == m_vertices[b]) { continue; }
+
+                    var key = Key(a: m_site[a], b: m_site[b]);
+
+                    if (m_edgeOf.TryAdd(key: EdgeKey(key: key), value: m_edges.Length)) { m_edges.Add(item: key); }
                 }
             }
         }
 
-        m_from = new float[m_edges.Count];
-        m_to = new float[m_edges.Count];
-        Array.Fill(array: m_to, value: 1f);
+        m_from.Resize(length: m_edges.Length, clear: true, preserve: false);
+        m_to.Resize(length: m_edges.Length, clear: false, preserve: false);
+        m_to.GetSpan().Fill(value: 1f);
     }
 
     /// <summary>Builds the mesh once every round is answered: each quad by the quarter rule, or cut along its boundary
     /// where its vertices disagree.</summary>
-    /// <param name="owner">The workspace owner charged for the mesh's working lists, or <see langword="null"/> for none.</param>
     /// <returns>The mesh, in the frame the contour is in; <see langword="null"/> for a contour with no quad.</returns>
     /// <exception cref="InvalidOperationException">The mesh grows past <see cref="MaxTrianglesPerQuad"/> triangles or
     /// <see cref="MaxVerticesPerQuad"/> added vertices for each contour quad. The contour bounds the lists, so a cut that
     /// does not end fails its group by name instead of taking the process.</exception>
-    /// <param name="allocator">The native allocator the mesh's working lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
-    public SdfMesh? Build(IAllocationObserver? owner = null, IAllocator? allocator = null) {
+    public SdfMesh? Build() {
         var contour = m_contour;
 
         if (contour.QuadCount == 0) { return null; }
 
-        // The lists are working storage the output arrays are copied from, rented so the next group's cut reuses them.
-        using var scope = new RentedScope(allocator: allocator, owner: owner);
-        var positions = scope.RentList<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
-        var sites = scope.RentList<int>(capacity: (contour.VertexCount + m_edges.Count));
-        var addedSites = new SdfMeshWeld(m_edges.Count);
-        var normals = scope.RentList<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
+        // The lists and tables are working storage the output arrays are copied from, native and released with the build.
+        using var scope = new RentedScope(allocator: m_scope.Allocator, owner: m_scope.Owner);
+        var positions = scope.RentList<Vector3>(capacity: (contour.VertexCount + m_edges.Length));
+        var sites = scope.RentList<int>(capacity: (contour.VertexCount + m_edges.Length));
+        using var addedSites = new SdfMeshWeld(capacity: m_edges.Length, allocator: m_scope.Allocator, owner: m_scope.Owner);
+        var normals = scope.RentList<Vector3>(capacity: (contour.VertexCount + m_edges.Length));
         var indices = scope.RentList<uint>(capacity: (6 * contour.QuadCount));
         var triangleMaterials = scope.RentList<uint>(capacity: (2 * contour.QuadCount));
         var triangleLimit = (((long)MaxTrianglesPerQuad) * contour.QuadCount);
@@ -264,16 +288,19 @@ internal sealed class SdfMeshMaterialCut {
         // crease shades the piece on the face as a spike of the face beyond it. Every vertex of one edge lies at its one point. An interval still touching an end after every round puts the
         // boundary at that end's vertex: a piece a thirty-second of an edge wide is a sliver whose facing is rounding noise,
         // and the triangle that would hold it has no area and is dropped on both sides of its edges.
-        var boundary = new Dictionary<(int Edge, int Low, int High, int Side), uint>();
+        // Keyed by the vertex pair (which fixes the searched edge) and the side a crease gives its own piece: none, the
+        // lower vertex's or the higher's, two bits below the pair.
+        var boundary = scope.LongMap<uint>();
 
         // The boundary vertex of the edge between `a` and `b` for the piece on `a`'s side.
         uint On(int a, int b) {
-            var edge = m_edgeOf[Key(a: m_site[a], b: m_site[b])];
+            var edge = (m_edgeOf.TryGetValue(key: EdgeKey(key: Key(a: m_site[a], b: m_site[b])), value: out var found) ? found : throw new KeyNotFoundException());
             var middle = Boundary(edge: edge);
 
             var (aNormal, bNormal) = (Vector3.Normalize(value: Normal(vertex: a)), Vector3.Normalize(value: Normal(vertex: b)));
             var creased = (Vector3.Dot(vector1: aNormal, vector2: bNormal) < SdfContour.CreaseCosine);
-            var key = (edge, Math.Min(val1: a, val2: b), Math.Max(val1: a, val2: b), (creased ? a : -1));
+            var (low, high) = Key(a: a, b: b);
+            var key = ((((long)low) << 33) | (((long)high) << 2) | (creased ? ((a == low) ? 1L : 2L) : 0L));
 
             if (!boundary.TryGetValue(key: key, value: out var vertex)) {
                 var fromA = ((m_site[a] == m_edges[edge].Low) ? middle : (1f - middle));
@@ -292,11 +319,11 @@ internal sealed class SdfMeshMaterialCut {
         // normal is the pair's own, so the copy shades its own face. Two sites a rounding step apart have no point
         // between them: their middle is one of them, the edge has nothing to split at, and it is not a quartered edge
         // (the split of a triangle across it would hold that edge again, without end).
-        var middles = new Dictionary<(uint Low, uint High), uint>();
-        var quartered = new HashSet<(int Low, int High)>();
+        var middles = scope.LongMap<uint>();
+        var quartered = scope.LongMap<byte>();
 
         uint Middle(uint a, uint b) {
-            var key = ((a < b) ? (a, b) : (b, a));
+            var key = ((a < b) ? ((((long)a) << 32) | b) : ((((long)b) << 32) | a));
 
             if (!middles.TryGetValue(key: key, value: out var vertex)) {
                 var endpoints = Key(sites[(int)a], sites[(int)b]);
@@ -305,7 +332,7 @@ internal sealed class SdfMeshMaterialCut {
 
                 vertex = Add(normal: (normals[(int)a] + normals[(int)b]), point: point);
                 middles.Add(key: key, value: vertex);
-                if ((point != low) && (point != high)) { quartered.Add(item: endpoints); }
+                if ((point != low) && (point != high)) { _ = quartered.TryAdd(key: EdgeKey(key: endpoints), value: 0); }
             }
 
             return vertex;
@@ -375,14 +402,17 @@ internal sealed class SdfMeshMaterialCut {
         // lands on an end of its edge is a vertex of its own at that site. A quarter's own triangles hold no such edge:
         // each of their edges ends at a middle or the centre.
         if (quartered.Count > 0) {
-            var pending = new Stack<int>(capacity: (indices.Length / 3));
+            var pending = scope.RentList<int>(capacity: (indices.Length / 3));
 
-            for (var at = ((indices.Length / 3) - 1); (at >= 0); at--) { pending.Push(item: at); }
-            while (pending.TryPop(result: out var at)) {
+            for (var at = ((indices.Length / 3) - 1); (at >= 0); at--) { pending.Add(item: at); }
+            while (pending.Length > 0) {
+                var at = pending[(pending.Length - 1)];
+
+                pending.Resize(length: (pending.Length - 1), clear: false);
                 for (var side = 0; (side < 3); side++) {
                     var (u, v) = (indices[((3 * at) + side)], indices[((3 * at) + ((side + 1) % 3))]);
 
-                    if (!quartered.Contains(Key(sites[(int)u], sites[(int)v]))) {
+                    if (!quartered.TryGetValue(key: EdgeKey(key: Key(sites[(int)u], sites[(int)v])), value: out _)) {
                         continue;
                     }
 
@@ -395,8 +425,8 @@ internal sealed class SdfMeshMaterialCut {
                     indices.Add(item: middle); indices.Add(item: v); indices.Add(item: w);
                     triangleMaterials.Add(item: triangleMaterials[at]);
                     Within();
-                    pending.Push(item: at);
-                    pending.Push(item: ((indices.Length / 3) - 1));
+                    pending.Add(item: at);
+                    pending.Add(item: ((indices.Length / 3) - 1));
 
                     break;
                 }
@@ -442,6 +472,8 @@ internal sealed class SdfMeshMaterialCut {
         triangle[2] = corners[(2 + half)];
     }
     private static (int Low, int High) Key(int a, int b) => ((a < b) ? (a, b) : (b, a));
+    // A sorted site pair as one word: the pair's table key.
+    private static long EdgeKey((int Low, int High) key) => PackedIntPair.Pack(high: key.Low, low: key.High);
     // The point a fraction `t` along a searched edge from its lower vertex, and the normal there; an end is the vertex's
     // own position exactly, so a boundary at an end coincides with it and the pieces there have no area.
     private (Vector3 Position, Vector3 Normal) Along(int edge, float t) {

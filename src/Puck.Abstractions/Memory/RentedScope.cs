@@ -4,7 +4,7 @@ namespace Puck.Abstractions.Memory;
 /// The workspace of one build, charged to one owner and released together when the scope is disposed: a builder that
 /// holds many same-lifetime tables (a mesh simplifier's per-place and per-triangle tables) takes each through the scope
 /// instead of allocating it, so the owner is charged for exactly what the build holds. Buffers and lists
-/// (<see cref="Buffer{T}"/>, <see cref="RentList{T}"/>) are native storage, so a build's scratch never reaches the
+/// (<see cref="Buffer{T}"/>, <see cref="RentList{T}"/>, <see cref="LongMap{TValue}"/>) are native storage, so a build's scratch never reaches the
 /// collector; an array (<see cref="Rent{T}"/>) comes from <see cref="RentedArrays"/>, for a caller that needs one (an
 /// element that holds references, an interface that takes an array).
 /// </summary>
@@ -58,6 +58,19 @@ public sealed class RentedScope(IAllocationObserver? owner = null, IAllocator? a
         m_leases.Add(item: list);
 
         return list;
+    }
+    /// <summary>Creates an empty native map from 64-bit keys whose storage the scope releases when disposed, charged to the
+    /// scope's owner.</summary>
+    /// <typeparam name="TValue">The unmanaged value.</typeparam>
+    /// <param name="capacity">The keys the first storage holds before it grows.</param>
+    /// <returns>The map, valid until the scope is disposed.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is negative.</exception>
+    public OwnedLongMap<TValue> LongMap<TValue>(int capacity = 0) where TValue : unmanaged {
+        var map = new OwnedLongMap<TValue>(allocator: allocator, capacity: capacity, observer: owner);
+
+        m_leases.Add(item: map);
+
+        return map;
     }
     /// <summary>Returns every array the scope rented and releases every buffer and its charges.</summary>
     public void Dispose() {

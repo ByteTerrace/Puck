@@ -29,7 +29,7 @@ public sealed class OwnedLongMap<TValue> : IDisposable where TValue : unmanaged 
         ArgumentOutOfRangeException.ThrowIfNegative(value: capacity);
         m_allocator = allocator;
         m_observer = observer;
-        var slots = SlotsFor(count: capacity);
+        var slots = ArrayCapacity.TableSlots(count: capacity);
 
         m_keys = Table<long>(slots: slots);
         m_values = Table<TValue>(slots: slots);
@@ -59,6 +59,21 @@ public sealed class OwnedLongMap<TValue> : IDisposable where TValue : unmanaged 
             }
             if (keys[slot] == key) { return false; }
         }
+    }
+    /// <summary>Sets a key's value, adding the key when the map does not hold it.</summary>
+    /// <param name="key">The key.</param>
+    /// <param name="value">The value.</param>
+    public void Set(long key, TValue value) {
+        var used = m_used.GetSpan();
+        var keys = m_keys.GetSpan();
+
+        for (var slot = Home(key: key); (used[slot] != 0); slot = ((slot + 1) & m_mask)) {
+            if (keys[slot] == key) {
+                m_values[slot] = value;
+                return;
+            }
+        }
+        _ = TryAdd(key: key, value: value);
     }
     /// <summary>Adds a key the map does not hold.</summary>
     /// <param name="key">The key.</param>
@@ -93,8 +108,6 @@ public sealed class OwnedLongMap<TValue> : IDisposable where TValue : unmanaged 
     }
 
     private int Home(long key) => (int)(InvertibleBitMix.Mix64(value: (ulong)key) & (ulong)m_mask);
-    // A power of two at least sixteen that keeps `count` keys at most half the table.
-    private static int SlotsFor(int count) => (int)Math.Max(val1: 16UL, val2: (((ulong)Math.Max(val1: 1, val2: count)) * 2UL).NextPowerOfTwo());
     private OwnedBuffer<T> Table<T>(int slots, bool clear = false) where T : unmanaged => OwnedBuffer<T>.OfLength(allocator: m_allocator, clear: clear, length: slots, observer: m_observer);
     private void Grow() {
         var keys = m_keys;
