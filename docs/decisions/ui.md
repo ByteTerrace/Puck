@@ -104,17 +104,15 @@ ruling that the engine is generic is in [AGENTS.md](../../AGENTS.md).
   patch interface, per-mod and global budgets with atomic refusal that keeps
   the last good tree, and a generated Rust SDK. UI grants are separate from
   observing or changing state.
-- **The pause menu is always reachable** from the Menu button and Escape,
-  which no binding may take, and from the bar. Escape and a tap of Menu open
-  it; while a cartridge is engaged, a tap of Menu is the emulated console's
-  Start and a hold of about a second opens it
-  ([play decisions](play.md#the-game)). It is the one menu
+- **The menu opens from the Menu button, Escape and I**, as the standard's own
+  bindings, and from the bar. While a cartridge is engaged, the Menu button is the
+  emulated console's Start ([play decisions](play.md#the-game)). It is the one menu
   ([play decisions](play.md#the-game)): the standard authors its entries and
   look, and the engine composes the entries no world or mod may remove: exit
   to the hub and exit to the desktop now, the Mods surface, settings and focus
   recovery later. It draws only while open, under a host root no world or mod
   namespace reaches, so none can cover it or intercept its input;
-  [the hub memo](../plans/hub-and-saves.md#12-the-pause-menu) designs it.
+  [the hub memo](../plans/hub-and-saves.md#12-the-menu) designs it.
 - **The player sees what each mod does**: a Mods surface lists each mod's
   permissions and use with per-mod show-UI, input and sound toggles, and a held
   key shows who drew anything on screen.

@@ -16,21 +16,21 @@ import "moth-climb"
 import "moth-camera"
 import "../../standard/stars"
 import "../../standard/occlusion"
-import "../../standard/journal"
-import "../../standard/wrist-panel"
-import "../../standard/menagerie"
-import "../menagerie"
+import "../../standard/menu"
+import "../../standard/worn-screen"
+import "../../standard/companion-roster"
+import "../companion-roster"
 
 walkMotion()
 
-// Her journal, worn on her wrist (../../standard/journal.puck, ../../standard/wrist-panel.puck), and the companions she
-// keeps in its menagerie (../menagerie.puck): every character of the set starts with Mintstitch and Tangerine. The
-// panel mounts on her forearms (`mothWristMount` below).
-journalPlay(kinds: menagerieKinds)
-menagerie(kinds: menagerieKinds, granted: [1, 2])
-menagerieCreatures()
+// Her menu, shown on a screen worn on her forearm (../../standard/menu.puck, ../../standard/worn-screen.puck), and the
+// companions she keeps in the roster (../companion-roster.puck): every character of the set starts with Mintstitch and
+// Tangerine. The screen mounts on her forearms (`mothWristMount` below).
+menuPlay(kinds: rosterKinds)
+companionRoster(kinds: rosterKinds, granted: [1, 2])
+rosterCreatures()
 
-// The font her journal's screen letters in.
+// The font her worn screen letters the menu in.
 text {
   defaultFont: "inter"
   fonts [
@@ -92,8 +92,8 @@ let bootCyan = 25 // #1F9BAE the heel lenses' idle pilot light
 let bootGlow = 26 // #D8FDFF the heel lenses' pale cores
 let pistonSteel = 27 // satin steel piston cylinders
 let torsoSuit = 28 // segmented charcoal fabric between the chest and belt
-let journalScreenLeft = 29 // the left journal panel's glass, whose paints are the journal's interface
-let journalScreenRight = 30 // the right journal panel's glass
+let wornScreenGlassLeft = 29 // the left worn screen's glass, whose paints are the menu's interface
+let wornScreenGlassRight = 30 // the right worn screen's glass
 // Slot 6 (cyan) is free.
 
 // Wear is a faint floor on a pristine suit: its coverage stays under the primer's threshold except at the tightest
@@ -227,9 +227,9 @@ template braidChain(chainIdx, baseId, positions, rotations) {
   }
 }
 
-// Where her journal's wrist panel (../../standard/wrist-panel.puck) mounts, in the left side's frame: on each forearm,
-// the middle of its gauntlet's outer face, raised about her shoulder and elbow. The panel's shape, flap, screen, raise
-// and camera focus are the panel module's; a suit carrying the panel names its own mount.
+// Where her worn screen (../../standard/worn-screen.puck) mounts, in the left side's frame: on each forearm, the middle
+// of its gauntlet's outer face, raised about her shoulder and elbow. The screen's shape, cover, glass, raise and camera
+// focus are the worn-screen module's; a suit carrying the screen names its own mount.
 let mothWristMount = {
   part: "forearm"
   at [-0.513, 0.995, 0]
@@ -289,7 +289,7 @@ template mothLimbs(side, isRight) {
       }
       // On a wall both arms reach forward and up to it; the hand effectors plant each palm in turn as she climbs.
       swing("cling", [-1, 0, 0], -2.2, mirrorX(isRight, [-0.295, 1.4515, 0])) with { wave: "constant" }
-      for s in wristPanelSwings("upper", mothWristMount, side, isRight) { s }
+      for s in wornScreenSwings("upper", mothWristMount, side, isRight) { s }
     ]
   }
 
@@ -408,7 +408,7 @@ template mothLimbs(side, isRight) {
         0.05,
         mirrorX(isRight, [-0.336, 1.2201, -0.004])
       ) with { wave: "linear" }
-      for s in wristPanelSwings("fore", mothWristMount, side, isRight) { s }
+      for s in wornScreenSwings("fore", mothWristMount, side, isRight) { s }
     ]
   }
 
@@ -446,12 +446,12 @@ template mothLimbs(side, isRight) {
     rounding: 0.003
   }
 
-  wristPanel(
+  wornScreen(
     mount: mothWristMount,
     side: side,
     isRight: isRight,
     ids: [2000 + isRight * 68, 2001 + isRight * 68, 2002 + isRight * 68],
-    materials: { bezel: charcoal, flap: violet, screen: bySide(isRight, journalScreenLeft, journalScreenRight) }
+    materials: { bezel: charcoal, cover: violet, screen: bySide(isRight, wornScreenGlassLeft, wornScreenGlassRight) }
   )
 
   shape Capsule $"elbowRod-{side}" {
@@ -2412,11 +2412,11 @@ looks {
         gaitAmplitude: 0
         replayFrames: false
         secondsPerFrame: 0
-        // Lane 0 is her journal's glass, lit as its arm rises. Lane 1 is the jets: dark out of flight mode, a pilot
+        // Lane 0 is her worn screen's glass, lit as its arm rises. Lane 1 is the jets: dark out of flight mode, a pilot
         // flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is flight mode itself, the heel and
         // nozzle glows it lights. Lane 3 is the boot jets' flame under the air jump.
         lanes [
-          maximum(journalRaiseLeft[$body], journalRaiseRight[$body])
+          maximum(menuRaiseLeft[$body], menuRaiseRight[$body])
           maximum(bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body]), dashPose[$body])
           maximum(bodyState($body, flightFuel) / 1000, dashPose[$body])
           bootBoost[$body]
@@ -3152,9 +3152,9 @@ prototypes {
             }
           ]
         }
-        // The journal panels' glass (the wrist panel's), lettered with the journal's interface and lit as a flap opens.
-        wristPanelGlass("left", menagerieKinds)
-        wristPanelGlass("right", menagerieKinds)
+        // The worn screens' glass, lettered with the menu's interface and lit as a cover opens.
+        wornScreenGlass("left", rosterKinds)
+        wornScreenGlass("right", rosterKinds)
       ]
       shape Superellipsoid "pelvis" {
         id: 1
@@ -3587,8 +3587,8 @@ prototypes {
           blendOutSeconds: 0
           when ["always"]
         }
-        // Her wrist panel's arm raise and flaps.
-        for driver in wristPanelDrivers { driver }
+        // Her worn screen's arm raise and covers.
+        for driver in wornScreenDrivers { driver }
         // Her pace in metres per second, the X every gait curve reads.
         {
           name: "pace"

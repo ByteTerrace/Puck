@@ -49,14 +49,15 @@ pinned driver ([addons/companion.wat](addons/companion.wat)) flies the body.
 `companionUnlock` and `companionSight` keep what it learns on its owner's
 identity. The debug world's faerie is one (`../debug/companion.puck`).
 
-[journal.puck](journal.puck) is the journal, which is also the menu: `journalPlay(kinds)` opens it on the journal key,
-chooses a pause or an action read each tick, turns its pages (the menagerie first) and swaps the active companion.
-[wrist-panel.puck](wrist-panel.puck) is the panel that wears it on a forearm: an avatar or a suit names a mount and
-its palette slots, and the panel brings its geometry, flap, screen, the arm's raise and the camera's focus.
-[menagerie.puck](menagerie.puck) is the companions a character keeps, one active at a time: `menagerie(kinds,
-granted)` keeps them on body registers saved as the character's facts and records, and dresses a companion
-(`companion(menagerie: true)`) as the active kind. The debug world set's Moth wears all three
-(`../debug/avatars/moth.puck`), and its lab is `../debug/labs/journal.puck`.
+[menu.puck](menu.puck) is the player's menu, made of pages: `menuPlay(kinds)` opens it on the menu key (I, Escape or the
+pad's Menu button), chooses a focused or a glance read each tick, turns its pages (companions, quests, marks, notes) and
+swaps the active companion.
+[worn-screen.puck](worn-screen.puck) is the screen that shows it on a body part: an avatar or a suit names a mount and
+its palette slots, and the screen brings its geometry, cover, glass, the arm's raise and the camera's focus.
+[companion-roster.puck](companion-roster.puck) is the companions a character keeps, one active at a time:
+`companionRoster(kinds, granted)` keeps them on body registers saved as the character's facts and records, and dresses a
+companion (`companion(roster: true)`) as the active kind. The debug world set's Moth wears all three
+(`../debug/avatars/moth.puck`), and its lab is `../debug/labs/menu.puck`.
 
 [lockon.puck](lockon.puck) is lock-on targeting: `lockOn(targets)` declares what
 can be targeted (the `lockable` row), the lock and cycle keys, the rules that pick
@@ -161,11 +162,11 @@ the standard's place; an author's own avatar refines its `walker` kit, look and 
 debug world's avatar is its own, [`../debug/avatars/moth.puck`](../debug/avatars/moth.puck)).
 
 `character.puck` names the identity template every character an account mints starts as, `identity.puck`, whose
-record pools hold what a character keeps: the journal's notes, tags and links, its marks, items and quests.
+record pools hold what a character keeps: the menu's notes, tags and links, its marks, items and quests.
 `quests.puck` is a library a world imports to give quests: `questStart`, `questAdvance` and `questSetAsideNow` splice
 into a rule over the players, and `questChain` declares a chain of parts, each open to a character who finished the one
 before it, and the share that offers the chain to a group's members, each joining at the farthest part it qualifies
-for, with the sharer's journal recording who accepted, completed or did not qualify. The debug world's lantern trail is
+for, with the sharer's `questShares` recording who accepted, completed or did not qualify. The debug world's lantern trail is
 the worked chain ([`../debug/lantern-trail.puck`](../debug/lantern-trail.puck)).
 
 `motion.puck` authors the standard's body motion programs: `walk`, which every avatar that walks imports, so a

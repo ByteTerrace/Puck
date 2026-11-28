@@ -160,7 +160,7 @@ test "a quest past its last step is done, and starting it again changes nothing"
 }
 
 // Ada has finished the primer, trailA and trailB and follows trailC; Bram has finished the primer and trailA. Shared,
-// the chain reaches Bram at trailB, the farthest part he qualifies for, not at Ada's trailC, and Ada's journal records
+// the chain reaches Bram at trailB, the farthest part he qualifies for, not at Ada's trailC, and Ada's `questShares` records
 // that he accepted it there.
 test "a recipient joins the chain at the farthest part it qualifies for" {
   when {
@@ -186,8 +186,8 @@ test "a recipient joins the chain at the farthest part it qualifies for" {
   }
 }
 
-// Bram has not finished the primer the trail requires, so he qualifies for no part: he gains no quest, and Ada's journal
-// records that he did not qualify.
+// Bram has not finished the primer the trail requires, so he qualifies for no part: he gains no quest, and
+// Ada's `questShares` records that he did not qualify.
 test "a recipient that lacks the chain's prerequisite does not qualify" {
   when {
     for code in [1, 2, 3] {

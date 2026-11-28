@@ -270,15 +270,13 @@ declare several pages. Undeclared pages and binds fall through to the player's
 own. Neither the engine nor an overlay strips them implicitly, and the bar's
 layout, model and scale stay the player's preference.
 
-No overlay, page or rebinding can take the pad's Menu button or the keyboard's
-Escape: they always reach the pause menu
-([play decisions](play.md#the-game)). Escape opens
-it at once. A tap of Menu opens it too, except while a cartridge is engaged,
-where a tap is the emulated console's Start and a hold of about a second opens
-the menu; the always-active plane decides, so an engaged machine's Start is
-never an authored binding. `BindingProfile.Compile` is to refuse a row naming either
-([hub plan H4](../plans/hub-and-saves.md#11-menu-routing)); until that step
-lands, nothing enforces it.
+The pad's Menu button and the keyboard's Escape are ordinary bindings, not
+reservations (the owner's ruling that the menu is the journal and the world does
+not pause, [play decisions](play.md#the-game)): the standard's menu overlay binds
+them, with I and the View page's West, to the `menu` channel that opens the menu.
+An engaged machine reads the Menu button as its own Start because the seat's mode
+offers `start` there and not `menu`; the overlay binds the button to both, and
+the mode decides ([hub plan](../plans/hub-and-saves.md#11-menu-routing)).
 
 ## Switching releases input
 

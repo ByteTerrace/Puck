@@ -833,7 +833,7 @@ disclose-all.
 
 A traveler crossing a seam discloses its identity projection and nothing else: its id, name and
 color, the two motion rates, the record pools its `identity.travel` names crossing, and its facts
-row. The rest of its owned document never travels: state rows, home record pools (a journal's
+row. The rest of its owned document never travels: state rows, home record pools (the menu's
 notes), binding layers, the private HUD panel, the seat look, grants and
 controller history. The rule holds on every path a crossing takes: a reservation, a commit, a
 commit retried after its source restarts, and a colocated crossing, which is the same interface
