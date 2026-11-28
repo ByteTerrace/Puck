@@ -861,8 +861,13 @@ quantization of the integer endpoints. A separate signed sum weights the
 same intervals by absorption per channel, `σ = −ln(tint) / depth`.
 Absorption over a path of length `d` passes `exp(−σ · d)` of the
 light behind. Paired faces cancel their common origin exactly in integer
-arithmetic. A draw cut by a portal plane retains its receiver-relative
-accumulation, since its crossings can be missing.
+arithmetic. A draw cut by a portal plane accumulates relative to the opaque
+hit instead, since its crossings can be missing, and so does a draw whose box
+lies wholly beyond the near plane, which no ray can start inside: its faces'
+near-plane terms cancel along every ray, so measuring from the opaque hit gives
+the same sum, its winding and material terms sum to zero and are left out, and
+a face behind the opaque hit writes nothing, so glass hidden behind a wall
+costs the raster no writes and the shading pass no tiles.
 
 If the ray begins inside a closed solid, its back faces outnumber its front
 faces. The winding and material key include faces hidden by the opaque hit,

@@ -1,7 +1,15 @@
-// The glass raster accumulates clipped ray intervals in integer words. For each closed draw a back face adds
-// and a front face subtracts the interval from the near plane to the face or opaque hit, whichever comes first.
-// The same difference applies to the RGB optical depth, weighted by the material's absorption. Winding and
-// material keys use every forward face, so a solid still contributes when opaque geometry hides its exit.
+// The glass raster accumulates clipped ray intervals in integer words, in one of two forms (sdfGlassAccumulate):
+// - From the near plane, for a closed draw a ray may start inside (its box reaches the near plane, or it has none): a back
+//   face adds and a front face subtracts the interval from the near plane to the face or opaque hit, whichever comes
+//   first. Winding and material keys use every forward face, so a solid still contributes when opaque geometry hides its
+//   exit, and a ray that starts inside it knows so.
+// - From the opaque hit, for a draw no ray starts inside (its box lies wholly beyond the near plane) and for a draw cut by
+//   a portal plane, which can lack either endpoint: a visible front face adds and a visible back face subtracts the
+//   interval from the face to the opaque hit, and a face behind the opaque hit writes nothing. For a closed draw no ray
+//   starts in this is the same sum as the first form's, since its faces' near-plane terms cancel along every ray, and its
+//   winding and material terms, which sum to zero, are left out; so glass hidden behind opaque geometry costs no write and
+//   marks no tile.
+// The same difference applies to the RGB optical depth, weighted by the material's absorption.
 // Every visible front face also enters the pixel's layer list: SDF_GLASS_LAYERS 64-bit entries, each a face's key
 // (its distance's code above its draw and triangle) stored inverted, so the cleared zero is empty and a 64-bit atomic
 // maximum keeps the nearest. A face takes the first entry it beats and carries the entry it displaced on to the next, so
@@ -115,7 +123,8 @@ void sdfGlassEnterLayer(uint word, float t, uint draw, uint triangleIndex) {
 }
 // Marks a render pixel's tile in the glass tiles' marked mask, which the glass tiles pass compacts into the tile list.
 // Every tile the raster writes a sums word in passes through here first, which keeps the words outside the listed tiles
-// zero (frame/sdf-glass-tiles.hlsli).
+// zero (frame/sdf-glass-tiles.hlsli). The caller excludes helper lanes, so the wave operations see only covered lanes: a
+// wave whose lanes all lie in one tile marks it from its first lane.
 void sdfGlassMarkTile(uint2 pixel, uint2 extent) {
     uint words;
     uint stride;
@@ -126,37 +135,40 @@ void sdfGlassMarkTile(uint2 pixel, uint2 extent) {
     uint maskWord = sdfGlassTileMarkedWord(tile);
     uint bit = (1u << (tile & 31u));
 
+    if (WaveActiveAllEqual(tile) && !WaveIsFirstLane()) {
+        return;
+    }
     // A tile past the capacity has no sums words either; the graph sizes both for the render extent's tiles. A bit already
     // set needs no atomic.
     if ((tile < sdfGlassTileCapacity(words)) && ((sdfGlassTilesRW[maskWord] & bit) == 0u)) {
         InterlockedOr(sdfGlassTilesRW[maskWord], bit);
     }
 }
-// Writes one crossing to a render pixel's sums, marking its tile first. The caller excludes helper lanes.
-void sdfGlassAccumulate(uint2 pixel, uint2 extent, float t, float start, float opaque, bool front, float3 absorption, int material, uint draw, uint triangleIndex, bool clippedDraw) {
+// Writes one crossing to a render pixel's sums, marking its tile first, in the form the head of this file names: from the
+// opaque hit where `relative` (a draw no ray starts inside, or one a portal plane cuts), from the near plane otherwise. The
+// caller excludes helper lanes.
+void sdfGlassAccumulate(uint2 pixel, uint2 extent, float t, float start, float opaque, bool front, float3 absorption, int material, uint draw, uint triangleIndex, bool relative) {
     bool visible = (t < opaque);
-    if (clippedDraw && !visible) return;
+    if (relative && !visible) return;
 
     uint word = sdfGlassSumWord(pixel, extent);
 
     sdfGlassMarkTile(pixel, extent);
 
-    // Integrate a closed draw from the eye to the opaque hit by clamping both endpoints to that hit.
-    // A draw cut by a portal plane can lack either endpoint. Keep its receiver-relative integral.
-    float from = (clippedDraw ? t : start);
-    float to = (clippedDraw ? opaque : max(start, min(t, opaque)));
-    bool positive = (clippedDraw ? front : !front);
+    float from = (relative ? t : start);
+    float to = (relative ? opaque : max(start, min(t, opaque)));
+    bool positive = (relative ? front : !front);
     int distance = (int)round(to * SDF_GLASS_SUM_SCALE) - (int)round(from * SDF_GLASS_SUM_SCALE);
     uint before;
 
     InterlockedAdd(sdfGlassSumsRW[word], asuint(positive ? distance : -distance), before);
-    if (!clippedDraw) {
+    if (!relative) {
         InterlockedAdd(sdfGlassSumsRW[word + SdfGlassWindingWord], asuint(front ? -1 : 1), before);
         InterlockedAdd(sdfGlassSumsRW[word + SdfGlassMaterialWord], asuint((front ? -1 : 1) * (material + 1)), before);
     }
     if (front && visible) {
         sdfGlassEnterLayer(word, max(t, 0.0), draw, triangleIndex);
-    } else if (!front && (!clippedDraw || visible)) {
+    } else if (!front && (!relative || visible)) {
         InterlockedMax(sdfGlassSumsRW[(word + SdfGlassNearestBackWord)], ~asuint(max(t, 0.0)), before);
     }
 

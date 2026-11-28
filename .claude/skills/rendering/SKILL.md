@@ -1378,9 +1378,15 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   supplies indirect light, reflections and traced static-light visibility. Glass
   gathers at its own pane (`passes/sdf-glass-stage.hlsli`), since a pane is lit
   apart from the surface behind it, and keeps the near face's gathers in a history
-  of its own (`glassProbeHistory`, `sdfGlassNearProbes`) on the same functions and
-  reuse test (`passes/sdf-probe-reuse.hlsli`); the cell's first pixel writes its
-  entry. The glass pass draws nothing in a frame with no glass in view, which a
+  of its own (`glassProbeHistory`, the shading pass's `CSMain`) on the same functions
+  and reuse test (`passes/sdf-probe-reuse.hlsli`); the cell's most central glass
+  pixel writes its entry (`sdfGlassCellKey`). Glass gathers and keys its history at
+  the surface's own normal and reads the gather along the shading normal, as views
+  does: a history keyed at the normal a program or the flow tilts (a relief, moving
+  water) fails the reuse test's facing and plane checks at nearly every pixel of
+  such a surface. The receivers
+  the history does not serve go into the group's list, one gather a lane, so a wave
+  runs a gather once with every lane busy. The glass pass draws nothing in a frame with no glass in view, which a
   history output allows only because the runtime keeps a history its one writer
   skipped (`ShaderPipelineRenderNode.KeepsHistory`). `passes/sdf-views-split.hlsli` holds the
   views pass's compile-out switches for reading each part's share of
@@ -1533,7 +1539,13 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   (`SdfWorldPackage.GlassTiles`, `frame/sdf-glass-tiles.hlsli`) hold a count, a
   marked and a shown mask of the render grid's 8 by 8 tiles, a tile list and
   each tile's sky filter; the sums lie tile by tile (`sdfGlassSumWord`). The
-  raster marks a tile before it writes a sums word there (`sdfGlassMarkTile`);
+  raster marks a tile before it writes a sums word there (`sdfGlassMarkTile`,
+  once a wave where the wave's lanes share a tile). A glass draw whose box lies
+  wholly beyond the near plane (`sdfGlassBeyondNear`) accumulates from the opaque
+  hit, as a portal-cut draw does, so its faces behind opaque geometry write and
+  mark nothing; only a draw a ray may start inside keeps the near-plane form with
+  its winding and material key (the head of `frame/sdf-glass.hlsli` holds why the
+  two forms sum alike);
   `glass-tiles` compacts the marked mask into the list in increasing tile order
   and writes one indirect argument record a job of the committed glass plan
   (`SdfWorldPasses.CommitShadePlan` and `ShadePlanOf` with `glass`,

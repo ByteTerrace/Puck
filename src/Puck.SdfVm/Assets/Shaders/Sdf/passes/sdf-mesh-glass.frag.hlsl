@@ -12,6 +12,31 @@
 #include "../frame/sdf-glass.hlsli"
 #include "../field/sdf-program.hlsli"
 #include "../shade/sdf-material.hlsli"
+#include "../frame/sdf-mesh-box.hlsli"
+
+// Whether no ray of the view can start inside a draw: its world box lies wholly beyond the near plane, by a margin over
+// the box's rounding, so every crossing of its closed surface lies past every ray's start and the draw accumulates from the
+// opaque hit (frame/sdf-glass.hlsli). False for a draw no box bounds.
+bool sdfGlassBeyondNear(uint record, ViewportData view) {
+    uint4 a = sdfSelectionRow(record, 0u);
+
+    if ((a.w & 1u) != 0u) {
+        return false;
+    }
+
+    float3 center;
+    float3 x;
+    float3 y;
+    float3 z;
+
+    sdfSelectionBox(record, a, sdfSelectionRow(record, 1u), sdfSelectionRow(record, 2u), sdfSelectionRow(record, 3u), center, x, y, z);
+
+    float3 forward = view.forward.xyz;
+    float nearest = (dot((center - view.position.xyz), forward) - sdfSelectionRadius(forward, x, y, z));
+    float nearPlane = worldSurfaceNearDistance(view);
+
+    return (nearest > ((nearPlane * 1.01) + 1.0e-3));
+}
 
 struct GlassFragment {
     float4 target : SV_Target0;
@@ -43,10 +68,12 @@ GlassFragment PSMain(MeshRasterVertex input, uint primitive : SV_PrimitiveID) {
         float start = worldSurfaceNearDistance(view) / dot(ray, view.forward.xyz);
         int materialId = sdfMeshRasterMaterial(input.draw, triangleIndex);
         SdfMaterialData material = sdfMaterialLoad(materialId);
-        bool clippedDraw = any(sdfMeshClipPlane(record) != 0.0);
+        // A draw a portal plane cuts, and one no ray starts inside, accumulate from the opaque hit, so a face of either
+        // behind the opaque hit writes nothing and marks no tile.
+        bool relative = (any(sdfMeshClipPlane(record) != 0.0) || sdfGlassBeyondNear(record, view));
 
         sdfGlassAccumulate(pixel, passGroup.imageExtent, t, start, opaque, front, material.absorption,
-            materialId, input.draw, triangleIndex, clippedDraw);
+            materialId, input.draw, triangleIndex, relative);
     }
     puckCountFragmentWork(0u, 1u);
 

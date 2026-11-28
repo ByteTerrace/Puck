@@ -23,8 +23,10 @@
 // - a contact (sdfGlassContact) adds coverage to the flow's where the opaque hit lies within its reach of the surface,
 //   and the coverage the flow reveals covers the interface as its revealed surface, lit diffusely by the same light;
 // - the near interface's irradiance gather comes from the glass probe history where a preceding render kept one for a
-//   receiver its own passes the reuse test against (sdfGlassNearProbes, sdf-probe-history.hlsli), and is gathered and
-//   kept for the next render otherwise; the far interface and a medium the ray starts in gather every time;
+//   receiver its own passes the reuse test against (CSMain, sdf-probe-history.hlsli), and is gathered, one gather a lane of
+//   the group's list of the receivers the history did not serve, and kept for the next render otherwise; the far interfaces
+//   and a medium the ray starts in gather every time; every gather is taken at the surface's own normal and read along the
+//   shading normal, as the views pass reads its gathers;
 // - its surroundings reflect in it by Fresnel (Schlick over the index's normal reflectance): the sky the lighting sees,
 //   blurred by the roughness (worldEnvironmentReflection), occluded by the irradiance volume and replaced by the light its
 //   probes measured where they do not see the sky (sdfMeshReflection), as an opaque surface reflects them; where no probe
@@ -259,41 +261,6 @@ float sdfGlassShare(bool first, bool last, float t, float nextT, float back, flo
     return clamp(share, 0.0, remaining);
 }
 
-// The probes the near interface's receiver at `surfacePoint` shades with, at the normal `normal` its shading tilted it
-// to, met by the ray at `cosine` in a pixel that spans `footprint` metres there: the preceding render's gather from the
-// glass probe history where one stands for the receiver (sdfProbeHistoryFind), else a gather of its own. The pixel at
-// its cell's first place writes the cell's entry for the next render (`writes`, set false here once it has): the gather
-// it reused, carried, or the one it took, kept where it is complete. Every view's glass shades one view, so its cells are
-// view zero's.
-SdfMeshProbes sdfGlassNearProbes(uint2 pixel, float3 surfacePoint, float3 normal, float cosine, float footprint, bool reads, inout bool writes) {
-    float2 tolerance = sdfViewsProbeTolerance(footprint, cosine);
-    uint entry = sdfProbeHistoryEntry((pixel / SDF_VIEWS_PROBE_RATE), 0u);
-    uint previous;
-
-    if (reads && sdfProbeHistoryFind(sdfGlassProbeHistory, 0u, surfacePoint, normal, tolerance, previous)) {
-        if (writes) {
-            sdfProbeHistoryCarry(sdfGlassProbeHistory, sdfGlassProbeHistoryRW, entry, previous);
-            writes = false;
-        }
-        puckCountDetail(SdfGlassNearReusedDetail, 1u, 0u, 0u, 0u, 0u);
-        return sdfProbeHistoryLoad(sdfGlassProbeHistory, previous);
-    }
-
-    puckCountDetail(SdfGlassNearGatheredDetail, 1u, 0u, 0u, 0u, 0u);
-
-    bool complete;
-    bool windowBound;
-    SdfMeshProbes probes = sdfMeshProbesAtComplete(surfacePoint, normal, complete, windowBound);
-
-    if (writes) {
-        uint hold = sdfProbeHistoryHoldOf((surfacePoint + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS)), windowBound);
-
-        sdfProbeHistoryStore(sdfGlassProbeHistoryRW, entry, (complete && (probes.share > 0.0)), surfacePoint, sdfVisibilityPackNormal(normal), hold, probes);
-        writes = false;
-    }
-    return probes;
-}
-
 // The same homogeneous transport applies between the camera and an exit and behind an entrance.
 float3 sdfGlassTransmission(SdfMaterialData material, float3 opticalDepth, float distance, out float3 scattered) {
     float unscattered = exp(-max(material.scattering, 0.0) * distance);
@@ -320,9 +287,9 @@ bool sdfGlassPixelNeeds(uint2 pixel, uint2 extent, out bool gathers) {
 
 // Shades one pixel of a tile the glass tiles show: the glass image and the pixel's sky filter word at its place in the
 // tile (frame/sdf-glass-tiles.hlsli), both written for every pixel, the lit image and a filter that passes the sky as it is
-// for a pixel that shows no glass. `writesCell` says the pixel writes its cell's entry of the glass probe history: the
-// cell's chosen glass pixel (CSMain), or, in a cell with none, its first pixel, which writes that it keeps no gather.
-void sdfGlassPixel(uint2 pixel, bool writesCell) {
+// for a pixel that shows no glass. `nearProbes` is the near interface's gather (CSMain), none for a pixel with no near
+// glass face.
+void sdfGlassPixel(uint2 pixel, SdfMeshProbes nearProbes) {
     uint2 extent = passGroup.imageExtent;
     // The pass works in nits and stores at the view's light scale, as the views pass does.
     float storedScale = sdfStoredLightScale(passGroup.debugMode, passGroup.lightScale);
@@ -352,11 +319,6 @@ void sdfGlassPixel(uint2 pixel, bool writesCell) {
     // passes (frame/sdf-glass-sky-filter.hlsli); the coverage below carries the filter's luminance.
     float skyBehind = (1.0 - color.a);
     float3 skyFilter = float3(1.0, 1.0, 1.0);
-    // The glass probe history: whether this render keeps it, reads the preceding render's, and whether this pixel still
-    // owes its cell's entry.
-    bool keepsProbes = sdfProbeHistoryKeeps(sdfGlassProbeHistoryRW, 0u);
-    bool readsProbes = sdfProbeHistoryReads(sdfGlassProbeHistory, keepsProbes, extent, 0u);
-    bool writesProbes = (keepsProbes && writesCell);
     float3 origin = view.position.xyz;
     float3 rayDirection = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(extent)));
     float insideDistance = 0.0;
@@ -417,6 +379,9 @@ void sdfGlassPixel(uint2 pixel, bool writesCell) {
             float curvature;
             int frameSlot;
             float3 normal = sdfMeshSurfaceNormal(hit, surfacePoint, rayDirection, face, curvature, frameSlot);
+            // The irradiance volume is gathered at the surface's own normal, as the views pass gathers at the record's,
+            // and read along the shading normal the program or the flow tilts it to (sdfGlassReceived).
+            float3 gatherNormal = normal;
             int materialId = sdfMeshMaterial(hit);
             SdfMaterialData material = sdfMaterialLoad(materialId);
             SdfShadeBinding shadeBinding = sdfShadeBinding(materialId);
@@ -485,12 +450,11 @@ void sdfGlassPixel(uint2 pixel, bool writesCell) {
                 material.roughness = roughness;
             }
 
-            SdfMeshProbes probes;
+            // The near interface's probes come from the group's compacted gathers or the glass probe history (CSMain).
+            SdfMeshProbes probes = nearProbes;
 
-            if (isNear) {
-                probes = sdfGlassNearProbes(pixel, surfacePoint, normal, abs(dot(rayDirection, normal)), (footprint * t), readsProbes, writesProbes);
-            } else {
-                probes = sdfMeshProbesAt(surfacePoint, normal);
+            if (!isNear) {
+                probes = sdfMeshProbesAt(surfacePoint, gatherNormal);
                 puckCountDetail(SdfGlassFarGatheredDetail, 1u, 0u, 0u, 0u, 0u);
             }
             float3 highlights;
@@ -614,10 +578,6 @@ void sdfGlassPixel(uint2 pixel, bool writesCell) {
     sdfGlassTilesRW[sdfGlassTileFilterWord(sdfGlassTileCapacity(tileWords), sdfGlassTileOf(pixel, extent), sdfGlassTilePlace(pixel))] =
         ((glass || (insideDistance > 0.0)) ? sdfGlassSkyFilterPack(skyFilter) : 0u);
 
-    // A cell none of whose pixels gathered at a glass face keeps no gather.
-    if (writesProbes) {
-        sdfProbeHistoryStore(sdfGlassProbeHistoryRW, sdfProbeHistoryEntry((pixel / SDF_VIEWS_PROBE_RATE), 0u), false, float3(0.0, 0.0, 0.0), 0u, 0u, sdfMeshProbesNone());
-    }
     output[pixel] = float4(min((color.rgb * storedScale), SDF_LUMINANCE_CEILING), color.a);
     if ((passGroup.temporal != 0u) && (glass || insideDistance > 0.0)) {
         uint index = sdfReactivityIndex(pixel, 0u, extent);
@@ -630,27 +590,75 @@ void sdfGlassPixel(uint2 pixel, bool writesCell) {
 // The probe cells of one tile, which lie wholly inside it.
 #define SDF_GLASS_TILE_CELL_EDGE (SDF_GLASS_TILE_EDGE / SDF_VIEWS_PROBE_RATE)
 #define SDF_GLASS_TILE_CELLS (SDF_GLASS_TILE_CELL_EDGE * SDF_GLASS_TILE_CELL_EDGE)
+// The words of one compacted gather in group memory: the receiver's point and normal it is asked at, then the gather as
+// SdfMeshProbes holds it (cages, sixteen weights, share) with its flags (measured, remainder measured, complete,
+// window-bound) in the last word.
+#define SDF_GLASS_GATHER_ASK_WORDS 6u
+#define SDF_GLASS_GATHER_WORDS 20u
+static const uint SdfGlassGatherMeasured = 1u;
+static const uint SdfGlassGatherRemainderMeasured = 2u;
+static const uint SdfGlassGatherComplete = 4u;
+static const uint SdfGlassGatherWindowBound = 8u;
 
-// Whether any pixel of the group's tile needs its shading (sdfGlassPixelNeeds), and for each probe cell of the tile the
-// key of the pixel that writes its entry of the glass probe history (sdfGlassCellKey), all ones for a cell with none.
+// Whether any pixel of the group's tile needs its shading (sdfGlassPixelNeeds), for each probe cell of the tile the key of
+// the pixel that writes its entry of the glass probe history (sdfGlassCellKey), all ones for a cell with none, and the near
+// interfaces' gathers the glass probe history did not serve, compacted so a lane takes one each (CSMain).
 groupshared uint sdfGlassTileNeeded;
 groupshared uint sdfGlassCellWriter[SDF_GLASS_TILE_CELLS];
+groupshared uint sdfGlassGatherCount;
+groupshared float sdfGlassGatherAsk[SDF_GLASS_TILE_PIXELS * SDF_GLASS_GATHER_ASK_WORDS];
+groupshared uint sdfGlassGathered[SDF_GLASS_TILE_PIXELS * SDF_GLASS_GATHER_WORDS];
 
 // The key that chooses a cell's writer among its pixels that gather at a near glass face: the nearest the cell's centre,
 // then the first in the tile, so the entry's receiver lies where the most of the cell's pixels find it within reach and a
-// cell that shows glass anywhere keeps a gather (a cell whose first pixel shows none once kept none, and every glass pixel
-// in it gathered every frame).
+// cell that shows glass anywhere keeps a gather.
 uint sdfGlassCellKey(uint2 pixel, uint place) {
     uint2 inCell = (pixel % SDF_VIEWS_PROBE_RATE);
     uint2 offCentre = (uint2)abs((int2(inCell) * 2) - int(SDF_VIEWS_PROBE_RATE - 1u));
 
     return (((offCentre.x + offCentre.y) << 8u) | place);
 }
+// Keeps a compacted gather, and reads one back.
+void sdfGlassGatherKeep(uint slot, SdfMeshProbes probes, bool complete, bool windowBound) {
+    uint at = (slot * SDF_GLASS_GATHER_WORDS);
+
+    sdfGlassGathered[at] = probes.cage;
+    sdfGlassGathered[at + 1u] = probes.remainderCage;
+    [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
+        sdfGlassGathered[at + 2u + corner] = asuint(probes.weight[corner]);
+    }
+    sdfGlassGathered[at + 18u] = asuint(probes.share);
+    sdfGlassGathered[at + 19u] = ((probes.measured ? SdfGlassGatherMeasured : 0u) | (probes.remainderMeasured ? SdfGlassGatherRemainderMeasured : 0u)
+        | (complete ? SdfGlassGatherComplete : 0u) | (windowBound ? SdfGlassGatherWindowBound : 0u));
+}
+SdfMeshProbes sdfGlassGatherTake(uint slot, out bool complete, out bool windowBound) {
+    uint at = (slot * SDF_GLASS_GATHER_WORDS);
+    SdfMeshProbes probes = sdfMeshProbesNone();
+    uint flags = sdfGlassGathered[at + 19u];
+
+    probes.cage = sdfGlassGathered[at];
+    probes.remainderCage = sdfGlassGathered[at + 1u];
+    [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
+        probes.weight[corner] = asfloat(sdfGlassGathered[at + 2u + corner]);
+    }
+    probes.share = asfloat(sdfGlassGathered[at + 18u]);
+    probes.measured = ((flags & SdfGlassGatherMeasured) != 0u);
+    probes.remainderMeasured = ((flags & SdfGlassGatherRemainderMeasured) != 0u);
+    complete = ((flags & SdfGlassGatherComplete) != 0u);
+    windowBound = ((flags & SdfGlassGatherWindowBound) != 0u);
+    return probes;
+}
 
 // A group a listed tile, the list in tile order: the pushed index is the job's first entry in the glass tiles' list, and
 // the job's indirect arguments dispatch a group for each listed entry from it (passes/sdf-glass-tiles.comp.hlsl), so no
 // group shades a tile the raster wrote nothing in. The group's answer sets or clears the tile's shown bit every recording:
 // a tile none of whose pixels needs its shading writes nothing more, and the readers read the lit image there.
+// In a shown tile each pixel with a near glass face finds its receiver (its point and the surface's own normal, before a
+// program or the flow tilts it) and asks the glass probe history for a gather a preceding render kept there; the pixels it
+// does not serve go into a list, and each lane takes one gather of the list, so a wave runs the gather once with every lane
+// busy rather than once for each lane that missed. Each cell's chosen pixel then writes the cell's entry for the next
+// render: the gather it reused, carried, or the one taken for it, kept where it is complete; a cell with no near glass
+// face writes from its first pixel that it keeps none. Every view's glass shades one view, so its cells are view zero's.
 [numthreads(8, 8, 1)]
 void CSMain(uint3 group : SV_GroupID, uint place : SV_GroupIndex) {
     uint2 extent = passGroup.imageExtent;
@@ -675,6 +683,7 @@ void CSMain(uint3 group : SV_GroupID, uint place : SV_GroupIndex) {
 
     if (place == 0u) {
         sdfGlassTileNeeded = 0u;
+        sdfGlassGatherCount = 0u;
     }
     if (place < SDF_GLASS_TILE_CELLS) {
         sdfGlassCellWriter[place] = 0xFFFFFFFFu;
@@ -704,11 +713,97 @@ void CSMain(uint3 group : SV_GroupID, uint place : SV_GroupIndex) {
         return;
     }
 
-    uint writer = sdfGlassCellWriter[cell];
-    bool writesCell = ((writer != 0xFFFFFFFFu) ? ((writer & 0xFFu) == place) : all((pixel % SDF_VIEWS_PROBE_RATE) == 0u));
+    // The near receiver, as sdfGlassPixel's first interface finds it.
+    bool keeps = sdfProbeHistoryKeeps(sdfGlassProbeHistoryRW, 0u);
+    bool reads = sdfProbeHistoryReads(sdfGlassProbeHistory, keeps, extent, 0u);
+    bool hasNear = false;
+    float3 nearPoint = float3(0.0, 0.0, 0.0);
+    float3 nearNormal = float3(0.0, 0.0, 1.0);
 
+    if (covered && gathers) {
+        ViewportData view = worldView();
+        float4 front = glassVisibility.Load(int3(pixel, 0));
+        SdfMeshHit hit = (SdfMeshHit)0;
+
+        if (sdfMeshResolveHit(((uint)front.y - 1u), (uint)front.z, hit)) {
+            float3 rayDirection = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(extent)));
+            float3 face;
+            float curvature;
+            int frameSlot;
+
+            nearPoint = (view.position.xyz + (rayDirection * front.x));
+            nearNormal = sdfMeshSurfaceNormal(hit, nearPoint, rayDirection, face, curvature, frameSlot);
+            hasNear = true;
+        }
+    }
+
+    // The history serves a receiver compatible with the one it kept (sdfProbeHistoryFind); the rest join the list.
+    uint previous = 0u;
+    bool reused = false;
+    uint ask = 0xFFFFFFFFu;
+
+    if (hasNear && reads) {
+        ViewportData view = worldView();
+        float footprint = (((2.0 * view.right.w) / max(float(extent.y), 1.0)) * length(nearPoint - view.position.xyz));
+        float cosine = abs(dot(normalize(nearPoint - view.position.xyz), nearNormal));
+
+        reused = sdfProbeHistoryFind(sdfGlassProbeHistory, 0u, nearPoint, nearNormal, sdfViewsProbeTolerance(footprint, cosine), previous);
+    }
+    if (hasNear && !reused) {
+        InterlockedAdd(sdfGlassGatherCount, 1u, ask);
+        sdfGlassGatherAsk[(ask * SDF_GLASS_GATHER_ASK_WORDS)] = nearPoint.x;
+        sdfGlassGatherAsk[(ask * SDF_GLASS_GATHER_ASK_WORDS) + 1u] = nearPoint.y;
+        sdfGlassGatherAsk[(ask * SDF_GLASS_GATHER_ASK_WORDS) + 2u] = nearPoint.z;
+        sdfGlassGatherAsk[(ask * SDF_GLASS_GATHER_ASK_WORDS) + 3u] = nearNormal.x;
+        sdfGlassGatherAsk[(ask * SDF_GLASS_GATHER_ASK_WORDS) + 4u] = nearNormal.y;
+        sdfGlassGatherAsk[(ask * SDF_GLASS_GATHER_ASK_WORDS) + 5u] = nearNormal.z;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // One gather a lane, the list's first lanes.
+    if (place < sdfGlassGatherCount) {
+        uint at = (place * SDF_GLASS_GATHER_ASK_WORDS);
+        float3 askPoint = float3(sdfGlassGatherAsk[at], sdfGlassGatherAsk[at + 1u], sdfGlassGatherAsk[at + 2u]);
+        float3 askNormal = float3(sdfGlassGatherAsk[at + 3u], sdfGlassGatherAsk[at + 4u], sdfGlassGatherAsk[at + 5u]);
+        bool complete;
+        bool windowBound;
+        SdfMeshProbes probes = sdfMeshProbesAtComplete(askPoint, askNormal, complete, windowBound);
+
+        sdfGlassGatherKeep(place, probes, complete, windowBound);
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    SdfMeshProbes nearProbes = sdfMeshProbesNone();
+    bool nearComplete = false;
+    bool nearWindowBound = false;
+
+    if (reused) {
+        nearProbes = sdfProbeHistoryLoad(sdfGlassProbeHistory, previous);
+        puckCountDetail(SdfGlassNearReusedDetail, 1u, 0u, 0u, 0u, 0u);
+    } else if (ask != 0xFFFFFFFFu) {
+        nearProbes = sdfGlassGatherTake(ask, nearComplete, nearWindowBound);
+        puckCountDetail(SdfGlassNearGatheredDetail, 1u, 0u, 0u, 0u, 0u);
+    }
+
+    // The cell's entry, from its chosen pixel.
+    uint writer = sdfGlassCellWriter[cell];
+    bool writesCell = (keeps && ((writer != 0xFFFFFFFFu) ? ((writer & 0xFFu) == place) : all((pixel % SDF_VIEWS_PROBE_RATE) == 0u)));
+
+    if (writesCell) {
+        uint entry = sdfProbeHistoryEntry((pixel / SDF_VIEWS_PROBE_RATE), 0u);
+
+        if (reused) {
+            sdfProbeHistoryCarry(sdfGlassProbeHistory, sdfGlassProbeHistoryRW, entry, previous);
+        } else if (ask != 0xFFFFFFFFu) {
+            uint hold = sdfProbeHistoryHoldOf((nearPoint + (nearNormal * SDF_MESH_IRRADIANCE_NORMAL_BIAS)), nearWindowBound);
+
+            sdfProbeHistoryStore(sdfGlassProbeHistoryRW, entry, (nearComplete && (nearProbes.share > 0.0)), nearPoint, sdfVisibilityPackNormal(nearNormal), hold, nearProbes);
+        } else {
+            sdfProbeHistoryStore(sdfGlassProbeHistoryRW, entry, false, float3(0.0, 0.0, 0.0), 0u, 0u, sdfMeshProbesNone());
+        }
+    }
     if (covered) {
-        sdfGlassPixel(pixel, writesCell);
+        sdfGlassPixel(pixel, nearProbes);
     }
     puckCountDetail(SdfGlassTilesShownDetail, ((place == 0u) ? 1u : 0u), 0u, 0u, 0u, 0u);
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
