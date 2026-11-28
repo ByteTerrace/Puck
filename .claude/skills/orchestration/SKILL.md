@@ -1182,6 +1182,12 @@ rejects the flag ([`verification`](../verification/SKILL.md#build-before-you-tes
 
 ## Select models and route findings
 
+**Grunts first, Opus for the hard parts, Codex liberally** (the owner's ruling): a cheap model (Sonnet `implementer`,
+Haiku `scout`) does whatever it can do well, Opus (`specialist`) takes only the tough coding problems and bugs, and
+Codex is used liberally beside them, for diagnosis, second opinions and implementation alike. The owner also gave
+standing approval for continual work on visual quality and performance: the lead keeps lanes on both without asking
+each time, still briefing the owner before a new direction.
+
 All three families implement. Choose the model and effort per lane by the
 factors that matter for it (the owner's ruling in AGENTS.md: "intelligent",
 not "religious"):
