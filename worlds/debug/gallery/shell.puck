@@ -1,4 +1,4 @@
-// The gallery's shell: its walls, floors, roof, stairs, lift tower, forecourt and the kit pieces that stand on them, as
+// The gallery's shell: its walls, floors, roof, stairs, lift shafts, entrance, forecourts and the kit pieces that stand on them, as
 // templates gallery.puck expands in its `prototypes` and `placements` blocks. A module library: it emits no document.
 // The plan and its dimensions are layout.puck's; every bound below is in the building's frame, and every placement
 // stands under the root placement `gallery`.
@@ -134,10 +134,13 @@ function shellPads(level) = map(filter(galleryDisplays, display => (display.leve
 // each its opening, and a kit bay stands in it.
 function shellBay(level, face, at) = { level: level, face: face, at: at }
 let shellBays = flatMap(range(0, 4), k => concat(
-  map(((k < 3) ? southBaysWest : []), at => shellBay(k, "south", at)),
-  map(((k == 1) ? concat([((entranceWest + entranceEast) / 2)], southBaysEast) : []), at => shellBay(k, "south", at)),
-  map(((k >= wingLevel) ? wingBays : []), at => shellBay(k, "wing", at)),
-  map(northBays, at => shellBay(k, "north", at)),
+  map(
+    filter(((k < 3) ? southBaysWest : []), at => ((at + (bayWidth / 2)) < (shellSouthWall(k).x1 - galleryWall))),
+    at => shellBay(k, "south", at)
+  ),
+  map(((k == 1) ? southBaysEast : []), at => shellBay(k, "south", at)),
+  map(((k >= wingLevel) ? wingBays(k) : []), at => shellBay(k, "wing", at)),
+  map(northBays(k), at => shellBay(k, "north", at)),
   map(westBays[k], at => shellBay(k, "west", at)),
   map(concat(((k >= wingLevel) ? [-2] : []), eastBays[k]), at => shellBay(k, "east", at))
 ))
@@ -173,17 +176,16 @@ function shellBayYaw(face) = (
 // The faces the sun reaches carry fan shades: the south, the projecting wing's and the east.
 let shellShaded = filter(shellBays, bay => ((bay.face != "north") and (bay.face != "west")))
 
-// The openings of the south wall's core: the lift's door and the entrance.
-let liftDoorway = { a0: (liftX - 0.9), a1: (liftX + 0.9), y0: 0, y1: 2.7 }
-let entranceDoorway = { a0: entranceWest, a1: entranceEast, y0: 0, y1: (entranceTop + 0.05) }
+// The entrance's opening in the west wall, across the nave's middle.
+let entranceDoorway = { a0: entranceSouth, a1: entranceNorth, y0: 0, y1: entranceTop }
 
 // A wall's two skins: ochre cladding outside and the hall's cream inside, `skin` of the wall's thickness the cladding.
 let shellSkin = 0.12
 // How far under an upper level's floor the fascia round its balcony edges hangs, in metres.
 let shellFascia = 0.6
 
-// One storey's walls. The south face holds the core's openings; on the projecting wing's storeys it stops at the wing,
-// whose own south face stands 4 m out, and on the top storey it starts where the terrace ends.
+// One storey's walls. The west face holds the entrance on level 0; the south face, on the projecting wing's storeys,
+// stops at the wing, whose own south face stands 4 m out, and on the top storey it starts where the terrace ends.
 function shellSouthWall(level) = {
   x0: ((level == 3) ? (terraceEast - galleryWall) : galleryWestOut)
   x1: ((level >= wingLevel) ? wingWest : galleryWidth)
@@ -201,12 +203,7 @@ template shellWalls(level) {
       y1: (galleryStorey * (level + 1)),
       z0: skin.near,
       z1: skin.far,
-      openings: concat(
-        map(filter(shellFaceBays(level, "south"), at => (at < liftX)), at => bayOpening(at)),
-        [liftDoorway],
-        ((level == 0) ? [entranceDoorway] : []),
-        map(filter(shellFaceBays(level, "south"), at => (at > liftX)), at => bayOpening(at))
-      ),
+      openings: map(shellFaceBays(level, "south"), at => bayOpening(at)),
       slot: skin.slot
     )
     wallAlongX(
@@ -228,7 +225,11 @@ template shellWalls(level) {
       y1: (galleryStorey * (level + 1)),
       z0: ((level == 3) ? terraceNorth : galleryWall),
       z1: galleryNorth,
-      openings: map(shellFaceBays(level, "west"), at => bayOpening(at)),
+      openings: concat(
+        map(filter(shellFaceBays(level, "west"), at => (at < entranceSouth)), at => bayOpening(at)),
+        ((level == 0) ? [entranceDoorway] : []),
+        map(filter(shellFaceBays(level, "west"), at => (at > entranceNorth)), at => bayOpening(at))
+      ),
       slot: skin.slot
     )
     wallAlongZ(
@@ -241,7 +242,7 @@ template shellWalls(level) {
       z1: galleryNorth,
       openings: concat(
         map(filter(shellFaceBays(level, "east"), at => (at < naveSouth)), at => bayOpening(at)),
-        map(((level < 2) ? tallBayZs : []), at => tallOpening(level, at)),
+        map(tallBayZs, at => tallOpening(level, at)),
         map(filter(shellFaceBays(level, "east"), at => (at > naveNorth)), at => bayOpening(at))
       ),
       slot: skin.slot
@@ -311,7 +312,8 @@ template shellSlab(label, x0, x1, y0, y1, z0, z1, top = shellFloor) {
 }
 
 // An upper level's floor as the boxes of its plan: the north gallery, the bridge west of the nave, the south gallery,
-// and on the wing's levels the floor of the projection, holed by a well over each stair, on level 1 by one over the
+// on the wing's levels the floor of the projection, and on level 3 the east walkway the climbing wall's ledge belongs
+// to, holed by a well over each stair, on level 1 by one over the
 // endless fall's ceiling painting, and by a small square wherever the flaw passes through (layout.puck's
 // `flawCrossings`), which the flaw's collar (flaw.puck) fills and rounds.
 let fallWell = { x0: (fallPlan[0] - fallHole), x1: (fallPlan[0] + fallHole), z0: (fallPlan[1] - fallHole), z1: (fallPlan[1] + fallHole) }
@@ -329,7 +331,8 @@ function shellFloorPieces(level) = boundsCutAll(
       { id: "south", x0: galleryWestIn, x1: wingWest, z0: galleryWall, z1: naveSouth }
       { id: "east", x0: wingWest, x1: galleryEast, z0: galleryWall, z1: naveSouth }
     ],
-    ((level >= wingLevel) ? [{ id: "wing", x0: wingWest, x1: galleryWidth, z0: wingSouth, z1: galleryWall }] : [])
+    ((level >= wingLevel) ? [{ id: "wing", x0: wingWest, x1: galleryWidth, z0: wingSouth, z1: galleryWall }] : []),
+    ((level == climbWallLevel) ? climbWalkPieces : [])
   ),
   concat(galleryStairWells, (((level == 1) and fallOpen) ? [fallWell] : []), flawOpenings(level))
 )
@@ -343,7 +346,6 @@ let shellRoofPieces = concat(
   [
     { id: "north", x0: galleryWestIn, x1: galleryEast, z0: naveNorth, z1: galleryNorth }
     { id: "bridge", x0: galleryWestIn, x1: skylights[0].x0, z0: naveSouth, z1: naveNorth }
-    { id: "core", x0: terraceEast, x1: wingWest, z0: galleryWall, z1: naveSouth }
     { id: "east", x0: wingWest, x1: galleryEast, z0: galleryWall, z1: naveSouth }
     { id: "wing", x0: wingWest, x1: galleryWidth, z0: wingSouth, z1: galleryWall }
     { id: "nave-south", x0: skylights[0].x0, x1: galleryEast, z0: naveSouth, z1: skylightSouth }
@@ -392,72 +394,129 @@ function shellWellRails(stair, k) = concat(
     t => { id: $"back-{t}", x: (stair.well.x0 + ((t + 0.5) * galleryTile)), z: (stair.well.z0 - 0.08), yaw: 180 }
   )
 )
-// The balcony edges' 4 m lengths stop a tile short of the east end's last pier, so a tile of balustrade closes each
-// edge's last tile on every upper level, where the eastern stairs arrive beside it.
-let shellTileRails = concat(
-  flatMap(
-    filter(galleryStairs, stair => (stair.form == "spiral")),
-    stair => flatMap(range(1, 4), k => map(shellWellRails(stair, k), rail => (rail with { id: $"{stair.id}-{k}-{rail.id}", y: galleryFloor[k] })))
-  ),
-  flatMap(range(1, 4), k => [
-    { id: $"nave-south-end-{k}", x: tileX((gridTilesX - 2)), y: galleryFloor[k], z: (naveSouth - 0.08), yaw: 180 }
-    { id: $"nave-north-end-{k}", x: tileX((gridTilesX - 2)), y: galleryFloor[k], z: (naveNorth + 0.08), yaw: 0 }
-  ]),
+let shellTileRails = flatMap(
+  filter(galleryStairs, stair => (stair.form == "spiral")),
+  stair => flatMap(range(1, 4), k => map(shellWellRails(stair, k), rail => (rail with { id: $"{stair.id}-{k}-{rail.id}", y: galleryFloor[k] })))
 )
 
-// The lift's tower, outside the south wall: four teal posts, a ring beam at each floor, glass between them on the three
-// outer sides, and a cream cap over a glazed lantern. The door wall is the south wall itself.
-let towerRings = [[-0.05, 0.35], [4.2, 4.55], [8.7, 9.05], [13.2, 13.55], [17.7, 18.05], [20.2, 20.4]]
-template shellTower() {
+// A lift's glass shaft (layout.puck's galleryLifts), in its car's own frame: x across, z from the landing side (-z, the
+// shaft's front on the balcony edge) to its back, y up from the hall's floor to level 3's ceiling. Teal posts stand at
+// its four corners and a ring beam at each floor and at its head, glass closes its back and sides from the floor to the
+// ceiling, and its front holds a landing on every level: a door opening between teal jambs under a header, glass
+// either side of it, a teal panel above it to the next floor, and a sill reaching from the balcony's edge to the car's
+// platform. The shaft is solid, so nothing walks or flies into it but through an open landing door.
+let shaftPost = 0.16
+let shaftGlass = 0.06
+let shaftDoorHalf = 0.9
+let shaftJamb = 0.08
+let shaftDoorHeight = 2.7
+let shaftHeader = 0.3
+let shaftBeam = 0.3
+let shaftTop = galleryCeiling[3]
+let shaftHalf = liftShaftHalf
+let shaftWing = (galleryTile / 2)
+template shellLiftShaft() {
   for post in [
-    { name: "sw", x: towerWest, z: towerSouth }
-    { name: "se", x: (towerEast - 0.3), z: towerSouth }
-    { name: "nw", x: towerWest, z: -0.3 }
-    { name: "ne", x: (towerEast - 0.3), z: -0.3 }
+    { name: "front-w", x: (0 - shaftHalf), z: liftFront }
+    { name: "front-e", x: (shaftHalf - shaftPost), z: liftFront }
+    { name: "back-w", x: (0 - shaftHalf), z: (liftShaftBack - shaftPost) }
+    { name: "back-e", x: (shaftHalf - shaftPost), z: (liftShaftBack - shaftPost) }
   ] {
-    boundsBox(
-      label: $"post-{post.name}",
-      x0: post.x,
-      x1: (post.x + 0.3),
-      y0: 0,
-      y1: 20.4,
-      z0: post.z,
-      z1: (post.z + 0.3),
-      slot: shellTrim,
-      bevel: 0.04
-    )
+    boundsBox(label: $"post-{post.name}", x0: post.x, x1: (post.x + shaftPost), y0: 0, y1: shaftTop, z0: post.z, z1: (post.z + shaftPost), slot: shellTrim, bevel: 0.03)
   }
-  for (ring, n) in towerRings {
-    boundsBox(label: $"ring-south-{n}", x0: towerWest, x1: towerEast, y0: ring[0], y1: ring[1], z0: towerSouth, z1: (towerSouth + 0.3), slot: shellTrim)
-    boundsBox(label: $"ring-west-{n}", x0: towerWest, x1: (towerWest + 0.3), y0: ring[0], y1: ring[1], z0: towerSouth, z1: 0, slot: shellTrim)
-    boundsBox(label: $"ring-east-{n}", x0: (towerEast - 0.3), x1: towerEast, y0: ring[0], y1: ring[1], z0: towerSouth, z1: 0, slot: shellTrim)
+  boundsBox(label: "glass-back", x0: (shaftPost - shaftHalf), x1: (shaftHalf - shaftPost), y0: 0, y1: shaftTop, z0: (liftShaftBack - (shaftPost / 2) - (shaftGlass / 2)), z1: (liftShaftBack - (shaftPost / 2) + (shaftGlass / 2)), slot: shellGlass)
+  // A glass wing either side of the front, from the shaft out to the arcade's pier, closing the balcony edge between
+  // them on every level but the walkway's.
+  for side in [-1, 1] {
+    boundsBox(label: $"glass-wing-{side}", x0: ((side == -1) ? (0 - (shaftHalf + shaftWing)) : shaftHalf), x1: ((side == -1) ? (0 - shaftHalf) : (shaftHalf + shaftWing)), y0: 0, y1: (galleryFloor[3] - shaftBeam), z0: liftFront, z1: (liftFront + shaftGlass), slot: shellGlass)
   }
-  for n in range(0, 5) {
-    boundsBox(label: $"glass-south-{n}", x0: (towerWest + 0.3), x1: (towerEast - 0.3), y0: towerRings[n][1], y1: towerRings[(n + 1)][0], z0: (towerSouth + 0.1), z1: (towerSouth + 0.2), slot: shellGlass)
-    boundsBox(label: $"glass-west-{n}", x0: (towerWest + 0.1), x1: (towerWest + 0.2), y0: towerRings[n][1], y1: towerRings[(n + 1)][0], z0: (towerSouth + 0.3), z1: -0.3, slot: shellGlass)
-    boundsBox(label: $"glass-east-{n}", x0: (towerEast - 0.2), x1: (towerEast - 0.1), y0: towerRings[n][1], y1: towerRings[(n + 1)][0], z0: (towerSouth + 0.3), z1: -0.3, slot: shellGlass)
+  for side in [-1, 1] {
+    boundsBox(label: $"glass-side-{side}", x0: ((side * (shaftHalf - (shaftPost / 2))) - (shaftGlass / 2)), x1: ((side * (shaftHalf - (shaftPost / 2))) + (shaftGlass / 2)), y0: 0, y1: shaftTop, z0: (liftFront + shaftPost), z1: (liftShaftBack - shaftPost), slot: shellGlass)
   }
-  boundsBox(label: "pit", x0: towerWest, x1: towerEast, y0: -0.3, y1: -0.06, z0: towerSouth, z1: 0, slot: shellTrim)
-  boundsRound(label: "cap", x0: (towerWest - 0.15), x1: (towerEast + 0.15), y0: 20.4, y1: towerTop, z0: (towerSouth - 0.15), z1: 0.15, slot: shellCream, rounding: 0.18)
+  // A ring beam round the back and sides at each upper floor's slab and at the shaft's head, and a kerb at its foot.
+  for (ring, n) in concat([[0, 0.12]], map(range(1, 4), k => [(galleryFloor[k] - shaftBeam), galleryFloor[k]]), [[(shaftTop - shaftBeam), shaftTop]]) {
+    boundsBox(label: $"ring-back-{n}", x0: (0 - shaftHalf), x1: shaftHalf, y0: ring[0], y1: ring[1], z0: (liftShaftBack - shaftPost), z1: liftShaftBack, slot: shellTrim)
+    for side in [-1, 1] {
+      boundsBox(label: $"ring-side-{side}-{n}", x0: ((side == -1) ? (0 - shaftHalf) : (shaftHalf - shaftPost)), x1: ((side == -1) ? (shaftPost - shaftHalf) : shaftHalf), y0: ring[0], y1: ring[1], z0: liftFront, z1: liftShaftBack, slot: shellTrim)
+    }
+    boundsBox(label: $"ring-front-{n}", x0: (shaftPost - shaftHalf), x1: (shaftHalf - shaftPost), y0: ring[0], y1: ring[1], z0: liftFront, z1: (liftFront + shaftPost), slot: shellTrim)
+  }
+  // Each landing's front: the door's jambs and header, glass either side, the panel over it to the next floor's beam,
+  // and the sill across the opening.
+  for k in range(0, 4) {
+    let floor = galleryFloor[k]
+    let above = ((k == 3) ? (shaftTop - shaftBeam) : (galleryFloor[(k + 1)] - shaftBeam))
+    for side in [-1, 1] {
+      boundsBox(label: $"jamb-{k}-{side}", x0: ((side == -1) ? (0 - (shaftDoorHalf + shaftJamb)) : shaftDoorHalf), x1: ((side == -1) ? (0 - shaftDoorHalf) : (shaftDoorHalf + shaftJamb)), y0: floor, y1: (floor + shaftDoorHeight + shaftHeader), z0: liftFront, z1: (liftFront + 0.12), slot: shellTrim, bevel: 0.02)
+      boundsBox(label: $"glass-front-{k}-{side}", x0: ((side == -1) ? (shaftPost - shaftHalf) : (shaftDoorHalf + shaftJamb)), x1: ((side == -1) ? (0 - (shaftDoorHalf + shaftJamb)) : (shaftHalf - shaftPost)), y0: floor, y1: (floor + shaftDoorHeight + shaftHeader), z0: (liftFront + 0.03), z1: (liftFront + 0.03 + shaftGlass), slot: shellGlass)
+    }
+    boundsBox(label: $"header-{k}", x0: (0 - (shaftDoorHalf + shaftJamb)), x1: (shaftDoorHalf + shaftJamb), y0: (floor + shaftDoorHeight), y1: (floor + shaftDoorHeight + shaftHeader), z0: liftFront, z1: (liftFront + 0.12), slot: shellTrim)
+    boundsBox(label: $"panel-{k}", x0: (shaftPost - shaftHalf), x1: (shaftHalf - shaftPost), y0: (floor + shaftDoorHeight + shaftHeader), y1: above, z0: liftFront, z1: (liftFront + 0.08), slot: shellTrim)
+    boundsBox(label: $"sill-{k}", x0: (0 - shaftDoorHalf), x1: shaftDoorHalf, y0: (floor - 0.25), y1: floor, z0: liftFront, z1: (liftFront + 0.17), slot: shellTrim)
+  }
+}
+
+// The entrance (layout.puck's entrance values): a deep teal portal round the opening in the west wall, a brass
+// threshold across it, and a cream canopy on two teal columns over the forecourt, lettered across its fascia, so the
+// way in reads from across the forecourt and frames the hall's length beyond it.
+let entranceReveal = 0.4
+let entranceCanopyFront = (galleryWestOut - entranceCanopy)
+let entranceCanopyWing = 1.6
+template shellEntrance() {
+  for side in [-1, 1] {
+    boundsRound(label: $"jamb-{side}", x0: (galleryWestOut - 0.12), x1: (galleryWestIn + 0.08), y0: 0, y1: (entranceTop + entranceReveal), z0: ((side == -1) ? (entranceSouth - entranceReveal) : entranceNorth), z1: ((side == -1) ? entranceSouth : (entranceNorth + entranceReveal)), slot: shellTrim, rounding: 0.04)
+    boundsRound(label: $"column-{side}", x0: (entranceCanopyFront + 0.25), x1: (entranceCanopyFront + 0.55), y0: 0, y1: (entranceTop + entranceReveal), z0: ((side == -1) ? ((entranceSouth - 1.1) - 0.15) : ((entranceNorth + 1.1) - 0.15)), z1: ((side == -1) ? ((entranceSouth - 1.1) + 0.15) : ((entranceNorth + 1.1) + 0.15)), slot: shellTrim, rounding: 0.08)
+  }
+  boundsRound(label: "lintel", x0: (galleryWestOut - 0.12), x1: (galleryWestIn + 0.08), y0: entranceTop, y1: (entranceTop + entranceReveal), z0: (entranceSouth - entranceReveal), z1: (entranceNorth + entranceReveal), slot: shellTrim, rounding: 0.04)
+  boundsBox(label: "threshold", x0: (galleryWestOut - 0.3), x1: (galleryWestIn + 0.3), y0: 0.02, y1: (galleryFloor[0] + 0.012), z0: entranceSouth, z1: entranceNorth, slot: shellBrass)
+  boundsRound(label: "canopy", x0: entranceCanopyFront, x1: galleryWestOut, y0: (entranceTop + entranceReveal), y1: (entranceTop + entranceReveal + 0.22), z0: (entranceSouth - entranceCanopyWing), z1: (entranceNorth + entranceCanopyWing), slot: shellCream, rounding: 0.06)
+  boundsRound(label: "fascia", x0: (entranceCanopyFront - 0.08), x1: (entranceCanopyFront + 0.22), y0: (entranceTop + entranceReveal - 0.12), y1: (entranceTop + entranceReveal + 0.3), z0: (entranceSouth - entranceCanopyWing), z1: (entranceNorth + entranceCanopyWing), slot: shellTrim, rounding: 0.04)
+  textRuns [
+    {
+      text: "GALLERY"
+      position [(entranceCanopyFront - 0.082), (entranceTop + entranceReveal + 0.09), naveMid]
+      rotation: rotate([0, 1, 0], 270)
+      emHeight: 0.26
+      depth: 0.006
+      mode: "emboss"
+      material: shellCream
+      align: "center"
+      anchor: "capMiddle"
+    }
+  ]
 }
 
 // The cream bands of the outside: a thick rounded band round the building at each upper floor and a deeper one as the
 // roof's parapet, each a strip standing proud of a wall face. A strip names the face it lies on (the fixed coordinate
 // and the side the outside is on) and its run along it.
-// The tall bays pass through level 1, so the east wall's band there stops at the bays' outer jambs.
-let tallBaysSouth = ((tallBayZs[0] - (tallBayWidth / 2)) - 0.6)
-let tallBaysNorth = ((tallBayZs[2] + (tallBayWidth / 2)) + 0.6)
+// A tier of tall bays passes through the floor above its first (levels 1 and 3), so the east wall's band there stops at
+// each bay's outer jambs.
+let tallBayGaps = map(tallBayZs, z => [((z - (tallBayWidth / 2)) - 0.6), ((z + (tallBayWidth / 2)) + 0.6)])
+function shellEastRuns(k, a0, a1) = (((k % 2) == 1) ? [
+  [a0, tallBayGaps[0][0]]
+  [tallBayGaps[0][1], tallBayGaps[1][0]]
+  [tallBayGaps[1][1], a1]
+] : [[a0, a1]])
 let shellRings = concat(
   flatMap(range(1, 4), k => concat(
     [
       { id: $"north-{k}", axis: "x", at: galleryDepth, out: 1, a0: galleryWestOut, a1: galleryWidth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
       { id: $"west-{k}", axis: "z", at: galleryWestOut, out: -1, a0: 0, a1: galleryDepth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
-      { id: $"east-{k}", axis: "z", at: galleryWidth, out: 1, a0: ((k >= wingLevel) ? wingSouth : 0), a1: ((k == 1) ? tallBaysSouth : galleryDepth), y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
       { id: $"south-{k}", axis: "x", at: 0, out: -1, a0: galleryWestOut, a1: ((k >= wingLevel) ? wingWest : galleryWidth), y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
     ],
-    ((k == 1) ? [
-      { id: $"east-north-{k}", axis: "z", at: galleryWidth, out: 1, a0: tallBaysNorth, a1: galleryDepth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
-    ] : []),
+    map(
+      range(0, length(shellEastRuns(k, 0, galleryDepth))),
+      n => {
+        id: $"east-{k}-{n}"
+        axis: "z"
+        at: galleryWidth
+        out: 1
+        a0: shellEastRuns(k, ((k >= wingLevel) ? wingSouth : 0), galleryDepth)[n][0]
+        a1: shellEastRuns(k, ((k >= wingLevel) ? wingSouth : 0), galleryDepth)[n][1]
+        y0: ((galleryStorey * k) - 0.5)
+        y1: ((galleryStorey * k) + 0.3)
+      }
+    ),
     ((k >= wingLevel) ? [
       { id: $"wing-south-{k}", axis: "x", at: wingSouth, out: -1, a0: wingWest, a1: galleryWidth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
       { id: $"wing-west-{k}", axis: "z", at: wingWest, out: -1, a0: wingSouth, a1: 0, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
@@ -504,16 +563,26 @@ template shellBands() {
   }
 }
 
-// The forecourt: terracotta paving from the west wing's last bay east to the corner and 11 m out, its top level with the
-// hall's floor, inside a cream kerb.
+// The forecourts: terracotta paving, its top level with the hall's floor, inside a cream kerb. The south one runs from
+// the west wing's last bay east to the corner and 11 m out under the projecting wing's arches; the west one lies before
+// the entrance, `entranceCourt` deep and reaching three tiles past its canopy either side, its kerb open where the way
+// in meets it.
 let forecourtWest = 12
 let forecourtEast = 62
 let forecourtSouth = -11
+let westCourtWest = (galleryWestOut - entranceCourt)
+let westCourtSouth = ((entranceSouth - entranceCanopyWing) - (3 * galleryTile))
+let westCourtNorth = ((entranceNorth + entranceCanopyWing) + (3 * galleryTile))
 template shellForecourt() {
   boundsBox(label: "paving", x0: forecourtWest, x1: forecourtEast, y0: -0.3, y1: galleryFloor[0], z0: forecourtSouth, z1: 0, slot: shellPaving)
   boundsRound(label: "kerb-south", x0: (forecourtWest - 0.3), x1: (forecourtEast + 0.3), y0: -0.3, y1: 0.12, z0: (forecourtSouth - 0.3), z1: forecourtSouth, slot: shellCream, rounding: 0.05)
   boundsRound(label: "kerb-west", x0: (forecourtWest - 0.3), x1: forecourtWest, y0: -0.3, y1: 0.12, z0: forecourtSouth, z1: 0, slot: shellCream, rounding: 0.05)
   boundsRound(label: "kerb-east", x0: forecourtEast, x1: (forecourtEast + 0.3), y0: -0.3, y1: 0.12, z0: forecourtSouth, z1: 0, slot: shellCream, rounding: 0.05)
+  boundsBox(label: "west-paving", x0: westCourtWest, x1: galleryWestOut, y0: -0.3, y1: galleryFloor[0], z0: westCourtSouth, z1: westCourtNorth, slot: shellPaving)
+  for side in [-1, 1] {
+    boundsRound(label: $"west-kerb-{side}", x0: (westCourtWest - 0.3), x1: galleryWestOut, y0: -0.3, y1: 0.12, z0: ((side == -1) ? (westCourtSouth - 0.3) : westCourtNorth), z1: ((side == -1) ? westCourtSouth : (westCourtNorth + 0.3)), slot: shellCream, rounding: 0.05)
+    boundsRound(label: $"west-kerb-end-{side}", x0: (westCourtWest - 0.3), x1: westCourtWest, y0: -0.3, y1: 0.12, z0: ((side == -1) ? westCourtSouth : (naveMid + (entranceTiles * galleryTile))), z1: ((side == -1) ? (naveMid - (entranceTiles * galleryTile)) : westCourtNorth), slot: shellCream, rounding: 0.05)
+  }
 }
 
 // The kit pieces that stand on the plan, each a list gallery.puck stamps: the arcades' piers on every level, the
@@ -532,16 +601,21 @@ let shellPierEnds = [
 function shellPierEnd(b, yaw) = ((b == 0) ? ((yaw == 0) ? "-neg" : "-pos") : ((b == galleryBays) ? ((yaw == 0) ? "-pos" : "-neg") : ""))
 function shellPierKind(k, b) = ((k == 1) ? $"gallery-pier-toy-{(b % length(lookToyPiers))}" : "gallery-pier")
 function shellPierPrototype(k, b, yaw) = $"{shellPierKind(k, b)}{shellPierEnd(b, yaw)}"
-let shellPiers = flatMap(range(0, 4), k => flatMap(range(0, length(arcadeXs)), b => [
-  { id: $"pier-south-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeSouth, yaw: 180, prototype: shellPierPrototype(k, b, 180) }
-  { id: $"pier-north-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeNorth, yaw: 0, prototype: shellPierPrototype(k, b, 0) }
-]))
+// On level 3 the east walkway runs where the arcades' last piers would stand, so they stop a pier short there.
+let shellPiers = flatMap(range(0, 4), k => flatMap(
+  filter(range(0, length(arcadeXs)), b => ((k != climbWallLevel) or (b != galleryBays))),
+  b => [
+    { id: $"pier-south-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeSouth, yaw: 180, prototype: shellPierPrototype(k, b, 180) }
+    { id: $"pier-north-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeNorth, yaw: 0, prototype: shellPierPrototype(k, b, 0) }
+  ]
+))
 // A length of balustrade: its centre, the yaw that turns its drop side to the void, and whether it is the 2 m piece. Level
 // 2's balcony edges take them; level 1's are its lattice (below).
 // Levels 2 and 3's edges take one length per bay between their piers, centred on the bay, except where a doorway stands
-// (layout.puck's galleryEdgeDoors: a tree branch's landing, the climbing wall's ledge); there the bay takes the doorway
-// (below) with a short length either side of it.
-let shellBalconyBays = range(arcadeWestBays, galleryBays)
+// (layout.puck's galleryEdgeDoors: a tree branch's landing); there the bay takes the doorway (below) with a short length
+// either side of it. The lifts' bay takes none: its shafts' fronts close the edges there. Level 3's east walkway is
+// railed along its void edge but where the climbing wall's frame tops it.
+let shellBalconyBays = filter(range(arcadeWestBays, galleryBays), b => (b != liftBay))
 function shellDoorSides(k, side, z, yaw) = flatMap(galleryEdgeDoorsOn(k, side), d => map([-1, 1], s => {
   id: $"rail-door-{side}-{k}-{bayOf(d.x)}-{s}"
   x: (d.x + (s * (((treeDoorWidth / 2) + treeDoorPost) + (treeDoorSide / 2))))
@@ -562,6 +636,7 @@ let shellRails = concat(
     shellDoorSides(k, "north", (naveNorth + balconyInset), 0),
     map(range(0, 5), i => { id: $"rail-bridge-{k}-{i}", x: (naveWest - balconyInset), y: galleryFloor[k], z: (naveSouth + 2 + (4 * i)), yaw: 270, short: 0 })
   )),
+  map(climbWalkRails, rail => { id: $"rail-{rail.id}", x: (climbWallFace + balconyInset), y: climbWallTop, z: rail.z, yaw: 90, short: rail.short }),
   (fallOpen ? [
     { id: "rail-fall-south", x: fallPlan[0], y: galleryFloor[1], z: ((fallPlan[1] - fallHole) - 0.08), yaw: 180, short: 1 }
     { id: "rail-fall-north", x: fallPlan[0], y: galleryFloor[1], z: ((fallPlan[1] + fallHole) + 0.08), yaw: 0, short: 1 }
@@ -572,14 +647,15 @@ let shellRails = concat(
   map(range(0, 2), i => { id: $"rail-terrace-west-{i}", x: (galleryWestOut + 0.15), y: galleryFloor[3], z: (2.3 + (4 * i)), yaw: 90, short: 0 })
 )
 // Level 1's lattice (layout.puck's toyLattice values): a four-tile panel in each arcade bay along the void's south and
-// north edges, from pier to pier, and a half-tile one from the last pier to the east wall; and the bridge's edge in
+// north edges, from pier to pier, but the lifts' bay, whose shafts' fronts close it, and a half-tile one from the last
+// pier to the east wall; and the bridge's edge in
 // four-tile panels about one tile on the nave's axis. Each panel stands
 // on level 1's floor and reaches into the fascia hanging under level 2's balcony edge, and neighbouring panels' posts overlap at every joint and corner. A loose panel (`slat`, its
 // `toyboxSlats` cell) shows its `open` prototype while its cell is 1.
 let shellLatticeHeight = ((((galleryStorey * 2) - shellFascia) - galleryFloor[1]) + 0.05)
 let shellLatticeTileCells = (galleryTile / toyLatticePitch)
 let shellLatticeBayCells = (galleryBayTiles * shellLatticeTileCells)
-let shellLatticeBays = range(arcadeWestBays, galleryBays)
+let shellLatticeBays = filter(range(arcadeWestBays, galleryBays), b => (b != liftBay))
 let shellBridgeMid = ((galleryNaveTiles - 1) / 2)
 function shellBridgeZ(tile, tiles) = (tileEdgeZ((galleryAisleTiles + tile)) + ((tiles * galleryTile) / 2))
 function shellLatticeBay(b, edge, z) = ((b == toyLatticeLooseBay) ? {
@@ -619,20 +695,20 @@ let shellLattices = concat(
     }
   ]
 )
-// The piers of the nave's end wall stand between its tall bays and either side of them.
-let naveEndSpan = ((tallBayZs[1] - tallBayZs[0]) / 2)
+// The piers of the nave's end wall stand either side of each of its three bays, the climbing wall's in the middle.
+let naveEndSpan = (tallBayPitch / 2)
 let naveEndPiers = map(range(0, 4), i => ((tallBayZs[0] - naveEndSpan) + ((2 * naveEndSpan) * i)))
 // The planters keep the benches' rhythm on the tile grid: each is two tiles long, centred on a tile, against a long wall
 // in the first tile row. On level 0 one stands against each wall in every bay a pair of displays fills, so walking an
 // aisle meets a planter across from each display and a bench in each bay between them; a south bay stays bare where
-// the entrance, the lift's door, a fin of the painting wing or a painting's door stands. The upper levels keep a
+// a fin of the painting wing or a painting's door stands. The upper levels keep a
 // planter at each end of the bridge's middle, one in each south-west corner beside the stair, and the terrace's along
 // its parapet. Furniture on every level yields to the stairs' wells.
 function shellFurnitureClear(item) = galleryStairClear(galleryTileX(item.x), galleryTileZ(item.z), galleryTile, (galleryTile / 2))
 let shellPlanterBays = map(showcaseBays, b => bayX(b))
 let shellPlanterBlocked = concat(
   shellBenchBlocked,
-  [[entranceWest, entranceEast], [(courtFin + galleryWall), ((courtFin + galleryWall) + 1)]],
+  [[(courtFin + galleryWall), ((courtFin + galleryWall) + 1)]],
   map(courtWallDoors, door => [(door - 0.6), (door + 0.6)])
 )
 function shellPlanterClear(x) = (count(shellPlanterBlocked, span => overlaps([(x - galleryTile), (x + galleryTile)], span)) == 0)
@@ -649,16 +725,16 @@ let shellPlanters = filter(concat(
 // The benches stand in the floor's empty bays, each two tiles long and centred on a tile, so its ends lie on the
 // centres of the tiles either side (the placements snap each to its nearest tile centre). On level 0 they keep the
 // displays' rhythm: the displays' pairs fill every other arcade bay, and in each bay between them a bench stands against
-// each long wall, in the first tile row. A south bay is left bare where its bench would stand across the lift's door or
-// a fin of the painting wing.
+// each long wall, in the first tile row. A south bay is left bare where its bench would stand across a fin of the
+// painting wing.
 let shellBenchBays = map(restBays, b => bayX(b))
-let shellBenchBlocked = [[liftDoorway.a0, liftDoorway.a1], [courtWest, (courtWest + galleryWall)], [courtFin, (courtFin + galleryWall)]]
+let shellBenchBlocked = [[courtWest, (courtWest + galleryWall)], [courtFin, (courtFin + galleryWall)]]
 function shellBenchClear(x) = (count(shellBenchBlocked, span => overlaps([(x - galleryTile), (x + galleryTile)], span)) == 0)
 let shellBenches = filter(concat(
   map(filter(shellBenchBays, x => shellBenchClear(x)), x => { x: x, y: 0, z: tileZ(wallRowSouth), yaw: 0 }),
   map(filter(shellBenchBays, x => labWingClear(x)), x => { x: x, y: 0, z: tileZ(wallRowNorth), yaw: 0 }),
   [
-    { x: 6, y: 1, z: 5, yaw: 0 }, { x: 6, y: 1, z: naveMid, yaw: 90 }, { x: 52, y: 1, z: 3, yaw: 0 }
+    { x: 6, y: 1, z: 5, yaw: 0 }, { x: 6, y: 1, z: naveMid, yaw: 90 }
     { x: 6, y: 2, z: 5, yaw: 0 }, { x: 6, y: 2, z: naveMid, yaw: 90 }
     { x: 4, y: 3, z: 5.4, yaw: 0 }, { x: 9, y: 3, z: 5.4, yaw: 0 }, { x: 6, y: 3, z: naveMid, yaw: 90 }, { x: 38, y: 3, z: (arcadeSouth - 1.35), yaw: 0 }
   ]
@@ -681,8 +757,7 @@ template shellPrototypes() {
       palette: shellPalette(shellPads(0))
       boundsBox(label: "ground", x0: galleryWestIn, x1: galleryEast, y0: 0, y1: galleryFloor[0], z0: galleryWall, z1: naveMid, slot: shellFloor)
       boundsBox(label: "ground-north", x0: galleryWestIn, x1: galleryEast, y0: 0, y1: galleryFloor[0], z0: naveMid, z1: galleryNorth, slot: shellFloorNorth)
-      boundsBox(label: "threshold", x0: entranceWest, x1: entranceEast, y0: 0, y1: galleryFloor[0], z0: 0, z1: galleryWall, slot: shellFloor)
-      boundsBox(label: "lift-threshold", x0: liftDoorway.a0, x1: liftDoorway.a1, y0: 0, y1: galleryFloor[0], z0: 0, z1: galleryWall, slot: shellTrim)
+      boundsBox(label: "threshold", x0: galleryWestOut, x1: galleryWestIn, y0: 0, y1: galleryFloor[0], z0: entranceSouth, z1: entranceNorth, slot: shellFloor)
     }
   }
   // Each upper floor: its slab's boxes and the cream fascia that deepens its balcony edges round the void.
@@ -704,19 +779,12 @@ template shellPrototypes() {
             top: ((piece.z0 >= naveMid) ? shellFloorNorth : shellFloor)
           )
         }
-        boundsBox(
-          label: "lift-threshold",
-          x0: liftDoorway.a0,
-          x1: liftDoorway.a1,
-          y0: ((galleryStorey * k) - 0.25),
-          y1: galleryFloor[k],
-          z0: 0,
-          z1: galleryWall,
-          slot: shellTrim
-        )
         boundsBox(label: "fascia-south", x0: naveWest, x1: galleryEast, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: (naveSouth - 0.2), z1: naveSouth, slot: shellCream)
         boundsBox(label: "fascia-north", x0: naveWest, x1: galleryEast, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: naveNorth, z1: (naveNorth + 0.2), slot: shellCream)
         boundsBox(label: "fascia-bridge", x0: (naveWest - 0.2), x1: naveWest, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: naveSouth, z1: naveNorth, slot: shellCream)
+        for piece in ((k == climbWallLevel) ? climbWalkPieces : []) {
+          boundsBox(label: $"fascia-{piece.id}", x0: climbWallFace, x1: (climbWallFace + 0.2), y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: piece.z0, z1: piece.z1, slot: shellCream)
+        }
       }
     }
   }
@@ -783,12 +851,20 @@ template shellPrototypes() {
       }
     }
   }
-  prototype "gallery-tower" {
+  prototype "gallery-lift-shaft" {
     document {
-      name: "gallery-tower"
+      name: "gallery-lift-shaft"
       schema: "puck.creation.v2"
       palette: shellPlain
-      shellTower()
+      shellLiftShaft()
+    }
+  }
+  prototype "gallery-entrance" {
+    document {
+      name: "gallery-entrance"
+      schema: "puck.creation.v2"
+      palette: shellPlain
+      shellEntrance()
     }
   }
   prototype "gallery-bands" {
@@ -847,6 +923,15 @@ template shellPrototypes() {
       branchedPier(base: 0, height: (galleryCeiling[1] - galleryFloor[0]), span: archSpan, depth: 0.55, shaft: 0.6)
     }
   }
+  // The westmost arch stands just inside the wing's west face, so its haunch stops there.
+  prototype "gallery-arch-end" {
+    document {
+      name: "gallery-arch-end"
+      schema: "puck.creation.v2"
+      palette: shellStructure
+      branchedPier(base: 0, height: (galleryCeiling[1] - galleryFloor[0]), span: archSpan, depth: 0.55, shaft: 0.6, reach: [(archXs[0] - wingWest), archSpan])
+    }
+  }
   prototype "gallery-bay" {
     document {
       name: "gallery-bay"
@@ -863,8 +948,8 @@ template shellPrototypes() {
       windowBay(base: 0, width: tallBayWidth, height: tallBayHeight, sill: baySill, wall: galleryWall)
     }
   }
-  // The middle tall bay of the nave's end wall, which no fan shade covers, glazed with stained glass (look.puck's
-  // lookStained) that the morning sun comes through.
+  // The upper tier of the nave's end wall's tall bays, high either side of the climbing wall, glazed with stained glass
+  // (look.puck's lookStained) that the morning sun comes through; no fan shade covers them.
   prototype "gallery-bay-stained" {
     document {
       name: "gallery-bay-stained"
@@ -1057,11 +1142,31 @@ template shellPlacements() {
       solid
     }
   }
-  for id in ["gallery-tower", "gallery-forecourt"] {
+  for id in ["gallery-forecourt", "gallery-entrance"] {
     placement $"{id}" {
       prototype: id
       parent: "gallery"
       position [0, 0, 0]
+      solid
+    }
+  }
+  // The entrance's planters, either side of its canopy on the forecourt.
+  for side in [-1, 1] {
+    placement $"gallery-entrance-planter-{side}" {
+      prototype: "gallery-planter"
+      parent: "gallery"
+      position [(galleryWestOut - 1.2), galleryFloor[0], (naveMid + (side * (((entranceTiles * galleryTile) / 2) + entranceCanopyWing + 1.4)))]
+      yawDegrees: 90
+      solid
+    }
+  }
+  // The lifts' shafts, each turned with its car so its front faces its landings.
+  for car in galleryLifts {
+    placement $"gallery-lift-shaft-{car.id}" {
+      prototype: "gallery-lift-shaft"
+      parent: "gallery"
+      position [car.x, 0, car.z]
+      yawDegrees: car.yaw
       solid
     }
   }
@@ -1089,9 +1194,9 @@ template shellPlacements() {
       }
     }
   }
-  for x in archXs {
+  for (x, n) in archXs {
     placement $"gallery-arch-{x}" {
-      prototype: "gallery-arch"
+      prototype: ((n == 0) ? "gallery-arch-end" : "gallery-arch")
       parent: "gallery"
       position [x, galleryFloor[0], archZ]
       solid
@@ -1118,33 +1223,29 @@ template shellPlacements() {
       yawDegrees: shellBayYaw(bay.face)
     }
   }
-  for tier in [0] {
+  for tier in tallBayTiers {
     for (z, n) in tallBayZs {
-      placement $"gallery-bay-tall-{tier}-{n}" {
-        prototype: ((n == 1) ? "gallery-bay-stained" : "gallery-bay-tall")
+      placement $"gallery-bay-tall-{tier.level}-{n}" {
+        prototype: (tier.stained ? "gallery-bay-stained" : "gallery-bay-tall")
         parent: "gallery"
-        position [(galleryWidth - (galleryWall / 2)), galleryFloor[tier], z]
+        position [(galleryWidth - (galleryWall / 2)), galleryFloor[tier.level], z]
         yawDegrees: 270
         solid
       }
     }
-    for n in [0, 2] {
-      placement $"gallery-fan-tall-{tier}-{n}" {
-        prototype: $"gallery-fan-tall-{tier}"
-        parent: "gallery"
-        position [
-          ((galleryWidth - (galleryWall / 2)) + 0.26),
-          (galleryFloor[tier] + windowHubHeight(tallBayHeight, baySill)),
-          tallBayZs[n]
-        ]
-        yawDegrees: 270
-      }
+  }
+  for (z, n) in tallBayZs {
+    placement $"gallery-fan-tall-0-{n}" {
+      prototype: "gallery-fan-tall-0"
+      parent: "gallery"
+      position [((galleryWidth - (galleryWall / 2)) + 0.26), (galleryFloor[0] + windowHubHeight(tallBayHeight, baySill)), z]
+      yawDegrees: 270
     }
   }
   shellTreeEdges()
   for rail in shellRails {
     placement $"gallery-{rail.id}" {
-      prototype: ((rail.short == 2) ? "gallery-rail-door-side" : ((rail.short == 1) ? "gallery-rail-short" : "gallery-rail"))
+      prototype: ((rail.short == 3) ? "gallery-rail-tile" : ((rail.short == 2) ? "gallery-rail-door-side" : ((rail.short == 1) ? "gallery-rail-short" : "gallery-rail")))
       parent: "gallery"
       position [rail.x, rail.y, rail.z]
       yawDegrees: rail.yaw

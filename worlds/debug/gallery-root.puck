@@ -12,9 +12,12 @@ import "set-controls"
 import "noclip"
 import "ship-rows"
 import "shapes"
+import "game-stations"
+import "gallery/layout"
 import "exposure"
-import "game-station-deck"
 import "gallery/gallery"
+// The board game room's twelve stations (gallery/games.puck); the debug world stands only the first.
+import "gallery/games"
 // Every player's hand torch, switched by 6 (the standard's flashlight.puck).
 import "../standard/flashlight"
 // A body's size register, which level 1's size field writes (gallery/wonder.puck).
@@ -25,18 +28,20 @@ metadata {
   description: "The debug world's gallery and its exhibits alone, for iterating on the building."
 }
 
-// The seat boots on the forecourt, facing the entrance; the module declares the building's own spawn points.
+// The seat boots on the west forecourt facing the entrance, with the hall's length beyond it; the module declares the
+// building's own spawn points.
 spawnPoints: concat(
   [
-    { id: "hero", position: galleryWorld(((entranceWest + entranceEast) / 2), 0.05, -7), yawDegrees: 180 }
+    { id: "hero", position: galleryWorld((galleryWestOut - 9), 0.05, naveMid), yawDegrees: 270 }
   ],
   gallerySpawns
 )
 
 commands: galleryCommands
 
+// The board game room's stations stand their tokens as holodeck pools, room for each station's largest game.
 bodies {
-  capacity: (galleryPopulation + cardBodies)
+  capacity: (galleryPopulation + (gameStationBodies * length(galleryRoomStations)))
   localSeats: seatPopulation
   networkPlayers: visitorPopulation
 }

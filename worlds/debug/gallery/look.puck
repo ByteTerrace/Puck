@@ -305,17 +305,21 @@ let lookShots = [
   { name: "hall-side", eye [32, 1.6, 10.2], aim [54, 4.6, 26], fov: 78 }
   { name: "plinth", eye [37.6, 1.7, 17.8], aim [36, 1.5, 13.5], fov: 60 }
   { name: "arcade", eye [42, 1.6, 22.6], aim [44, 3.3, 29.4], fov: 68 }
-  { name: "bay", eye [50, 1.6, 19], aim [60, 3.6, 19], fov: 70 }
+  { name: "bay", eye [50, 1.6, 19], aim [60, 5.6, 19], fov: 70 }
   { name: "balcony", eye [10.4, 6.15, 19], aim [40, 5.4, 28.7], fov: 62 }
   { name: "floor", eye [40, 1.6, 19], aim [43.4, 0, 21.4], fov: 60 }
   { name: "ceiling", eye [40, 1.6, 32.7], aim [45, 4.2, 33.6], fov: 60 }
   { name: "furniture", eye [42.5, 1.6, 12.4], aim [45.5, 2, 9.2], fov: 58 }
-  { name: "atrium", eye [26, 1.6, 1.6], aim [27, 5.2, 21], fov: 78 }
-  { name: "outside", eye [44, 2.2, -30], aim [36, 8.5, 0], fov: 68 }
+  { name: "atrium", eye [-1.5, 1.6, 18.4], aim [60, 6, 18.4], fov: 70 }
+  { name: "outside", eye [-30, 2.2, 10], aim [0, 6, 18.4], fov: 68 }
+  { name: "east-end", eye [36, 1.6, 18.4], aim [62.8, 9, 18.4], fov: 78 }
+  { name: "lifts", eye [52, 10.65, 18.4], aim [59.7, 8, 27], fov: 74 }
+  { name: "board-room", eye [21, 10.7, 6.5], aim [50, 9.05, 1.5], fov: 74 }
+  { name: "portals-south", eye [30, 15.2, 6.8], aim [40, 15, -3.7], fov: 74 }
   { name: "toybox", eye [34.7, 10.65, 29.8], aim [34.7, 6.2, 3.6], fov: 70 }
   { name: "toybox-across", eye [34.7, 6.15, 7.2], aim [34.7, 6.2, 33.2], fov: 70 }
-  { name: "climbing-wall", eye [49.7, 1.6, 17.5], aim [49.7, 7.4, 28.5], fov: 70 }
-  { name: "climbing-wall-across", eye [49.7, 10.65, 7.2], aim [49.7, 8.6, 28.5], fov: 62 }
+  { name: "climbing-wall", eye [52, 1.6, 18.4], aim [62, 8.4, 18.4], fov: 70 }
+  { name: "climbing-wall-across", eye [40, 10.65, 7.2], aim [61.7, 9.6, 18.4], fov: 62 }
 ]
 
 // The climbing wall (climbing-wall.puck), in the standard's slots (climbing.puck): its face is sandstone panels in four

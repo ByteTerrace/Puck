@@ -19,17 +19,17 @@ rule "action-demonstrated" {
 // The sweep holds the run and forward keys through entry, so a zero read here is the entry's release barrier
 // and not the keys coming up.
 // The board is the gallery's game station's (`spawn:chess` stands the seat at its near chair), whose pick grid is the
-// world row `south3Cells`.
+// world row `a1Cells`.
 rule "board-demonstrated" {
   when (genreChecks["action"] == 1 and
-    board(engaged, south3Cells, 1) == 1 and
+    board(engaged, a1Cells, 1) == 1 and
     channel(1, forward) == 0 and
     channel(1, run) == 0)
   mode: Edge
   genreChecks["board"] = 1
 }
 rule "board-leak" {
-  when genreChecks["action"] == 1 and board(engaged, south3Cells, 1) == 1 and (channel(1, forward) == 1 or
+  when genreChecks["action"] == 1 and board(engaged, a1Cells, 1) == 1 and (channel(1, forward) == 1 or
       channel(1, run) == 1)
   mode: Edge
   genreChecks["leak"] = 1

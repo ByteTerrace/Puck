@@ -215,9 +215,9 @@
         (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5) (i64.extend_i32_u (i32.const 49324)) (i64.const 22) (i64.const 0)))))
       (if (i32.and (i32.eq (global.get $poseParts) (i32.const 15)) (i32.eq (global.get $kinParts) (i32.const 3))) (then
         ;; Gallery route entries: 19 calls level one, 20 boards, 21 rides down.
-        (if (i32.and (i64.eq (global.get $waypoint) (i64.const 19)) (i32.eqz (global.get $liftStage))) (then
+        (if (i32.and (i64.eq (global.get $waypoint) (i64.const 27)) (i32.eqz (global.get $liftStage))) (then
           (call $stateWrite (i32.const 7) (i64.const 1) (i64.const 0)) (global.set $liftStage (i32.const 1))))
-        (if (i32.and (i64.eq (global.get $waypoint) (i64.const 21)) (i32.eq (global.get $liftStage) (i32.const 1))) (then
+        (if (i32.and (i64.eq (global.get $waypoint) (i64.const 29)) (i32.eq (global.get $liftStage) (i32.const 1))) (then
           (call $stateWrite (i32.const 7) (i64.const 0) (i64.const 0)) (global.set $liftStage (i32.const 2))))
         (local.set $dx (i64.sub (i64.load (i32.const 17472)) (global.get $x)))
         (local.set $dy (i64.sub (i64.load (i32.const 17480)) (global.get $y)))
@@ -252,7 +252,7 @@
             (global.set $waypoint (i64.add (global.get $waypoint) (i64.const 1))) (global.set $age (i64.const 0)))
           (else
             ;; Wait on the landing until the authored car state reaches level one (72 sixteenths).
-            (if (i32.or (i64.ne (global.get $waypoint) (i64.const 20)) (i64.eq (i64.load (i32.const 17448)) (i64.const 72))) (then
+            (if (i32.or (i64.ne (global.get $waypoint) (i64.const 28)) (i64.eq (i64.load (i32.const 17448)) (i64.const 72))) (then
               (call $act (i32.const 43) (i32.const 1) (call $clamp (local.get $dx)))
               (call $act (i32.const 43) (i32.const 0) (call $clamp (i64.sub (i64.const 0) (local.get $dz))))))))))
         (call $stateWrite (i32.const 3) (global.get $waypoint) (i64.const 0))
@@ -274,7 +274,7 @@
 (call $read (i32.const 0) (i32.const 49204) (i32.const 7) (i32.const 17424))
 (call $read (i32.const 0) (i32.const 49212) (i32.const 9) (i32.const 17432))
 (call $read (i32.const 0) (i32.const 50000) (i32.const 5) (i32.const 17440))
-(call $read (i32.const 4) (i32.const 50024) (i32.const 6) (i32.const 17448))
+(call $read (i32.const 4) (i32.const 50024) (i32.const 1) (i32.const 17448))
     (if (i64.ne (i64.load (i32.const 0x4400)) (i64.const 0)) (then
       (call $bodyQueries (i32.const 43))
       (global.set $cursor (i32.const 0x5100)) (call $putInt (global.get $waypoint)) (call $put (i32.const 120))
@@ -315,12 +315,12 @@
   (data (i32.const 49684) "\74\72\61\76\65\72\73\61\6c\20\70\61\73\73\20\63\6f\6d\70\6c\65\74\65\00")
   (data (i32.const 50000) "start\00")
   (data (i32.const 50016) "liftAt\00")
-  (data (i32.const 50024) "$value\00")
+  (data (i32.const 50024) "1\00")
   ;; Bound addresses are declarations; every write still checks its live grant and audience.
   (global $boundCells (mut i32) (i32.const 0))
   (func $stateWrite (param $slot i32) (param $value i64) (param $kind i64)
     (drop (call $emit (i32.const 1) (i32.const 1) (local.get $slot) (i32.const 1) (i32.const 15)
       (local.get $value) (local.get $kind) (i64.const 0))))
-  (data (i32.const 53248) "\00\e0\00\00\0a\e0\00\00\09\00\05\00\00\00\00\00\00\e0\00\00\10\e0\00\00\09\00\07\00\00\00\00\00\00\e0\00\00\18\e0\00\00\09\00\06\00\00\00\00\00\00\e0\00\00\1f\e0\00\00\09\00\08\00\00\00\00\00\00\e0\00\00\28\e0\00\00\09\00\04\00\00\00\00\00\00\e0\00\00\2d\e0\00\00\09\00\03\00\00\00\00\00\00\e0\00\00\31\e0\00\00\09\00\04\00\00\00\00\00\36\e0\00\00\3f\e0\00\00\08\00\06\00\00\00\00\00")
-  (data (i32.const 57344) "\74\72\61\76\65\72\73\61\6c\00\66\61\6c\6c\73\00\72\65\61\63\68\65\64\00\6d\69\73\73\65\64\00\77\61\79\70\6f\69\6e\74\00\74\69\63\6b\00\72\75\6e\00\64\6f\6e\65\00\6c\69\66\74\43\61\6c\6c\00\24\76\61\6c\75\65\00")
+  (data (i32.const 53248) "\00\e0\00\00\0a\e0\00\00\09\00\05\00\00\00\00\00\00\e0\00\00\10\e0\00\00\09\00\07\00\00\00\00\00\00\e0\00\00\18\e0\00\00\09\00\06\00\00\00\00\00\00\e0\00\00\1f\e0\00\00\09\00\08\00\00\00\00\00\00\e0\00\00\28\e0\00\00\09\00\04\00\00\00\00\00\00\e0\00\00\2d\e0\00\00\09\00\03\00\00\00\00\00\00\e0\00\00\31\e0\00\00\09\00\04\00\00\00\00\00\36\e0\00\00\3f\e0\00\00\08\00\01\00\00\00\00\00")
+  (data (i32.const 57344) "\74\72\61\76\65\72\73\61\6c\00\66\61\6c\6c\73\00\72\65\61\63\68\65\64\00\6d\69\73\73\65\64\00\77\61\79\70\6f\69\6e\74\00\74\69\63\6b\00\72\75\6e\00\64\6f\6e\65\00\6c\69\66\74\43\61\6c\6c\00\31\00")
 )

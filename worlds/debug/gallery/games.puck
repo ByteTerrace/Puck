@@ -1,29 +1,21 @@
 import "layout"
 import "../game-stations"
-// The gallery's game floor on level 3 (layout.puck's galleryGameStations plans twelve stations, six on each gallery).
-// It stands the plan's first, south3, the debug world set's station (../game-stations.puck) holding its own games: chess,
-// whose pieces its holodeck stands on the glass as bodies while chess is shown, and Klondike and FreeCell. The rest of
-// the plan waits on the rule work sheet beside the rest of the debug world (../game-station.md, "Cost"); the board
-// games lab's stress mode stands twelve. The gallery imports this file, so the station stands in the debug world and
-// gallery-root alike, and each root imports its card bodies from ../game-station-deck.puck where its body order wants
-// them: the debug world numbers its bodies below the deck from it, so its cards stand always (`holodeck: false`) rather
-// than as a pool, and its chess pieces take the free slots the population keeps for them (../shapes.puck's
-// galleryPopulation). ../game-station.md says how to play and drive it.
+// The gallery's board game room on level 2 (layout.puck's galleryGameStations: twelve stations in two rows of six), as
+// the gallery booted alone stands it (gallery-root.puck imports this file), the plan's first eleven
+// (`galleryRoomStations`; the rule work sheet has no room for the twelfth yet): each the debug world set's station
+// (../game-stations.puck) holding its own games, chess, whose pieces its holodeck stands on the glass as bodies while
+// chess is shown, and Klondike and FreeCell, whose cards it stands the same way. Each is its own instance, aliased by
+// the station's id, so a move at one station never touches another. The debug world stands only the first
+// (../game-station-deck.puck). Both wait on the stations' rules becoming one set over every station for the rest
+// (game-station.md, "Cost"); a station added here is one more `use` line once `galleryRoomStood` admits it. ../game-station.md says how to play and drive them.
 
-let stations = [galleryGameStations[0]]
+gameStationSet(stations: galleryRoomStations)
 
-prototypes {
-  gameStationSetPrototypes(stations: stations)
-}
-
-placements {
-  gameStationSetPlacements(stations: stations)
-}
-
-// At the first station's near chair (south3), 1.5 m from its centre at its -Z edge and facing +Z across the glass,
-// inside the engage radius: the context button sits her down.
+// At the first station's near chair (a1), 1.5 m from its centre at its -Z edge and facing +Z across the glass, inside
+// the engage radius: the context button sits her down.
 spawnPoints [
-  { id: "cards", position: gameStationChairAt(stations[0], "near"), yawDegrees: 180 }
+  { id: "cards", position: gameStationChairAt(galleryRoomStations[0], "near"), yawDegrees: 180 }
+  { id: "chess", position: gameStationChairAt(galleryRoomStations[0], "near"), yawDegrees: 180 }
 ]
 
 state {
@@ -50,17 +42,17 @@ state {
     White
     Black
   }
-
-  gameStationSetGrids(stations: stations)
-  world {
-    gameStationSetState(stations: stations, holodeck: false)
-  }
 }
 
-commands: gameStationSetCommands(stations)
-
-gameStationSetRules(holodeck: false)
-chessStationSet(stations: stations)
-
 // One instance a station, aliased by the station's id.
-use gameStationGames as south3(station: stations[0], index: 0)
+use gameStationGames as a1(station: galleryRoomStations[0], index: 0)
+use gameStationGames as a2(station: galleryRoomStations[1], index: 1)
+use gameStationGames as a3(station: galleryRoomStations[2], index: 2)
+use gameStationGames as a4(station: galleryRoomStations[3], index: 3)
+use gameStationGames as a5(station: galleryRoomStations[4], index: 4)
+use gameStationGames as a6(station: galleryRoomStations[5], index: 5)
+use gameStationGames as b1(station: galleryRoomStations[6], index: 6)
+use gameStationGames as b2(station: galleryRoomStations[7], index: 7)
+use gameStationGames as b3(station: galleryRoomStations[8], index: 8)
+use gameStationGames as b4(station: galleryRoomStations[9], index: 9)
+use gameStationGames as b5(station: galleryRoomStations[10], index: 10)

@@ -10,8 +10,8 @@
 //
 // The walk is the owner's: from the stage into the gallery and its lobby, up the nave and into the painting wing,
 // through the looping pair, back to the lobby, into Wonderland through the big painting to the machines and out
-// through the mouse hole. Then the seams: the valley into the lobby and back, the garden painting, the city painting, and
-// the lift ridden by its buttons. Places are places.puck's regions (`place-*`); headings are yaws (0 faces -Z, 90 faces
+// through the mouse hole. Then the seams: the valley into the hall's west entrance and back, the garden painting, the
+// city painting, and the north lift ridden by its buttons. Places are places.puck's regions (`place-*`); headings are yaws (0 faces -Z, 90 faces
 // -X, 180 faces +Z, 270 faces +X); points are on the floor. A point in the hall is given in the building's frame and
 // stood where the world stands the building (gallery/layout.puck's `galleryWorld`), and a point in Wonderland where its
 // room stands beside the hall's west wall (`galleryWestShift`, as wonderland.puck places it), so the walk follows the
@@ -24,17 +24,17 @@ import "tree-walk"
 let floor0 = galleryFloor[0]
 let floor3 = galleryFloor[3]
 
-// The lift (gallery/gallery.puck), in the building's frame: the landing's call plate reach box east of the car's door,
-// the car's door in the south wall, and the car's rail at its back, whose buttons for levels 0 to 3 stand left to right
-// from the viewer facing it (-Z).
-let liftPadX = (liftX + 1)
-let liftPadZ = (galleryWall + 0.6)
-let liftPanelZ = (liftZ - 0.95)
-function liftButton(level) = (liftX - (0.95 - ((1.9 / 6) * (level + 0.5))))
+// The north lift (gallery/gallery.puck, layout.puck's galleryLifts), in the building's frame: a point in its car's own
+// frame stood in the plan (`liftPoint`), its landing's CALL plate reach before the shaft's front, the car's door, and
+// the car's rail at its back, whose buttons for levels 0 to 3 stand left to right from the viewer facing it.
+let liftRide = galleryLifts[0]
+function liftRideAt(across, y, along) = liftPoint(liftRide, [across, y, along])
+function liftButton(level) = (0.95 - ((1.9 / 6) * (level + 0.5)))
 // Where the net climb starts: on level 1's north aisle, 1.5 m behind the rope net panel, facing it (-Z).
 let netClimbStart = galleryWorld(bayX(toyLatticeNetBay), galleryFloor[1], ((naveNorth + balconyInset) + 1.5))
-// The line through the middle of the hall's entrance, in the building's frame.
-let entranceMid = ((entranceWest + entranceEast) / 2)
+// Just inside the hall's entrance on the nave's axis, and the valley floor 26.6 m out from it, in the building's frame.
+let entranceIn = (entranceInside + [1.5, 0, 0])
+let entranceOut = [(galleryWestOut - 26.6), floor0, naveMid]
 // A point on Wonderland's floor on the line through its big painting and its mouse hole, `x` as authored against the
 // hall's west wall at x 10.3.
 function wonderAt(x) = [(x + galleryWestShift), floor0, 30.5]
@@ -50,30 +50,31 @@ function press(action, seconds) = { $type: "press", action: action, seconds: sec
 // Riding the lift from the landing a body stands on to another: call the car at the landing's plate, step in through
 // the door, press the level's button on the panel, ride until the car reaches that level, and step out as its doors
 // open. Inside the car every step walks.
+function liftWorld(p) = galleryWorld(p[0], p[1], p[2])
 function ride(from, to, level, pace) = [
-  goTo(galleryWorld(liftPadX, from, liftPadZ), pace, 0.15)
-  face(0, 0.5)
+  goTo(liftWorld(liftRideAt(liftPanelAcross, from, (liftFront - 0.6))), pace, 0.15)
+  face(liftLandingYaw(liftRide), 0.5)
   press("interact", 3)
-  step(galleryWorld(liftX, from, (galleryWall + 1.1)))
-  step(galleryWorld(liftX, from, (liftZ + 0.45)))
-  step(galleryWorld(liftButton(level), from, liftPanelZ), 0.12)
-  face(0, 0.5)
+  step(liftWorld(liftRideAt(0, from, (liftFront - 1.1))))
+  step(liftWorld(liftRideAt(0, from, -0.45)))
+  step(liftWorld(liftRideAt(liftButton(level), from, 0.95)), 0.12)
+  face(liftLandingYaw(liftRide), 0.5)
   { $type: "press", action: "interact", until: $"place-gallery-level-{level}", seconds: 40 }
   stand(4)
-  step(galleryWorld(liftX, to, (liftZ + 0.65)))
-  step(galleryWorld(liftX, to, (galleryWall + 1.3)))
+  step(liftWorld(liftRideAt(0, to, -0.65)))
+  step(liftWorld(liftRideAt(0, to, (liftFront - 1.3))))
 ]
 
 // The seams (docs/plans/streaming-and-memory.md#the-seam-walk), each from its own spawn so a chapter fails alone. The
-// valley floor from 32 m out into the lobby and back out, then in again; the garden painting, eight metres into the
-// garden and back through its arrival frame; the lift from level 0 to level 3 and back.
+// valley floor from 32 m out through the west entrance into the hall and back out, then in again; the garden painting,
+// eight metres into the garden and back through its arrival frame; the north lift from level 0 to level 3 and back.
 function valleySeam(name, pace) = {
   name: name
   steps [
     { $type: "pose", spawn: `seam-valley` }
     stand(1)
-    goTo(galleryWorld(entranceMid, floor0, 5.4), pace)
-    goTo(galleryWorld(entranceMid, floor0, -26.6), pace)
+    goTo(galleryWorld(entranceIn[0], entranceIn[1], entranceIn[2]), pace)
+    goTo(galleryWorld(entranceOut[0], entranceOut[1], entranceOut[2]), pace)
     go("place-lobby", pace)
     stand(1)
   ]
@@ -146,7 +147,7 @@ routes [
             stand(1)
             go("place-hall-entrance", "run")
             go("place-lobby", "run")
-            goTo(galleryWorld(entranceMid, floor0, 6.4), "walk")
+            goTo(galleryWorld(entranceIn[0], entranceIn[1], entranceIn[2]), "walk")
           ]
         }
         {
@@ -190,7 +191,7 @@ routes [
   }
   // The gallery's climbing wall (gallery/climbing-wall.puck), climbed as a player climbs it: from the place before its
   // pad onto the pad, then straight at the face with the stick held forward, which takes the face, climbs it and,
-  // where it ends under the ledge, pulls up onto the ledge, and through the doorway behind it onto level 3. The climb is
+  // where it ends under the ledge, pulls up onto the ledge, and along the east walkway onto level 3's north gallery. The climb is
   // a crossing whose arrival is the ledge's place, since a body on a face gains no ground toward any point.
   // The climbing lab's `climb-wall` route (labs/climbing.puck) plays the same climb on the lab's copy, headless in
   // climbing-wall-tests.puck.
@@ -203,8 +204,8 @@ routes [
         steps [
           {
             $type: "pose"
-            point: galleryWorld(climbWallX, floor0, ((climbWallFace - climbWallPad.depth) - 2.5))
-            yawDegrees: 180
+            point: galleryWorld(((climbWallFace - climbWallPad.depth) - 2.5), floor0, climbWallZ)
+            yawDegrees: 270
           }
           stand(1)
           {
@@ -219,7 +220,7 @@ routes [
       {
         name: "the face to the ledge"
         steps [
-          { $type: "cross", headingDegrees: 180, until: "place-climbing-wall-top", pace: "walk", metres: 3 }
+          { $type: "cross", headingDegrees: 270, until: "place-climbing-wall-top", pace: "walk", metres: 3 }
         ]
       }
       {

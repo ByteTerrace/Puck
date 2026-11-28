@@ -146,52 +146,140 @@ function galleryStairClear(x, z, halfX, halfZ) = (count(
     (((z + halfZ) > well.z0) and ((z - halfZ) < well.z1)))
 ) == 0)
 
-// The core, against the south wall: the lift tower outside the wall and the entrance east of it.
-// The lift: the car's centre, in a tower 3.6 m wide that stands outside the south wall, its door in the wall. The
-// car's floor reaches to 0.1 m short of the wall's outer face.
-let liftX = 18.8
-let liftZ = -1.65
-let towerWest = 17
-let towerEast = 20.6
-let towerSouth = -3.7
-let towerTop = 21
-let entranceWest = 24
-let entranceEast = 28
-let entranceTop = 3.3
+// The entrance: one wide doorway in the west wall on the nave's centre line (the owner's ruling), so a visitor walks in
+// under a canopy and looks straight down the hall to the climbing wall on the east wall, like a giant hallway. Its
+// opening is `entranceTiles` floor tiles wide, centred on the nave's middle tile row, and `entranceTop` high under the
+// bridge's slab; the canopy reaches `entranceCanopy` out over a forecourt of paving `entranceCourt` deep.
+let entranceTiles = 5
+let entranceSouth = (naveMid - ((entranceTiles * galleryTile) / 2))
+let entranceNorth = (naveMid + ((entranceTiles * galleryTile) / 2))
+let entranceTop = 3.4
+let entranceCanopy = 3.4
+let entranceCourt = 12
+// Where a visitor stands outside the doorway, facing in (yaw 270 faces +x), and just inside it.
+let entranceOutside = [(galleryWestOut - 4), galleryFloor[0], naveMid]
+let entranceInside = [(galleryWestIn + 2.5), galleryFloor[0], naveMid]
 
-// The east wing's upper two storeys project 4 m south of the wall from x 21, carried on arches over the forecourt; the
-// west wing's top storey stops at the nave, leaving a roof terrace over its south aisle that runs east to the third
-// pier's tile.
-let wingWest = 21
+// The east wing's upper two storeys project 4 m south of the wall from the terrace's edge, carried on arches over the
+// forecourt, so level 3's south outer wall runs straight from the terrace to the east wall; the west wing's top storey
+// stops at the nave, leaving a roof terrace over its south aisle that runs east to the third pier's tile.
+let terraceEast = tileEdgeX(((galleryBayTiles * arcadeWestBays) + 1))
+let terraceNorth = (naveSouth - galleryWall)
+let wingWest = terraceEast
 let wingSouth = -4
 let wingLevel = 2
 let archZ = -3.4
 let archSpan = 3.75
-let archXs = map(range(0, 6), i => (22.5 + ((2 * archSpan) * i)))
-let terraceEast = tileEdgeX(((galleryBayTiles * arcadeWestBays) + 1))
-let terraceNorth = (naveSouth - galleryWall)
+let archXs = map(range(0, 7), i => (15 + ((2 * archSpan) * i)))
+
+// The glass lifts (the owner's ruling): two cars at the nave's east end, flanking the climbing wall, each in a glass
+// shaft standing in the void against a balcony edge in the last arcade bay, its landing door opening onto that edge's
+// balcony on every level, from the hall's floor to level 3. The shaft fills the bay between its two piers' feet
+// (`liftShaftHalf` either side of the bay's centre) and reaches `liftShaftBack` behind the car's centre; the car's
+// centre stands `liftCarFromEdge` in from the edge, so its platform's front lies a few centimetres short of the landing's
+// sill. Each row is a car: `key` its cells' key in the lift's rows (gallery.puck), `edge` and `out` the balcony edge it
+// opens onto and the way out across it (+1 north, -1 south), and `yaw` the car's turn, which faces its door out.
+// Riding to level 1 shrinks a rider and riding away grows it back: each shaft is a stretch of level 1's size field
+// (wonder.puck). A point of a car's own frame (x across the cab, z toward its back, y up from the ground) is stood in
+// the plan by `liftPoint`.
+let liftShaftHalf = ((3 * galleryTile) / 2)
+let liftCarFromEdge = 1.74
+let liftShaftBack = 2.01
+let liftBay = (galleryBays - 1)
+let galleryLifts = [
+  { id: "north", key: 0, x: bayX(liftBay), z: (naveNorth - liftCarFromEdge), edge: naveNorth, out: 1, yaw: 180 }
+  { id: "south", key: 1, x: bayX(liftBay), z: (naveSouth + liftCarFromEdge), edge: naveSouth, out: -1, yaw: 0 }
+]
+function liftPoint(car, p) = [(car.x - (car.out * p[0])), p[1], (car.z - (car.out * p[2]))]
+// A shaft's plan rectangle, the size field's zone over it.
+function liftShaftBox(car) = {
+  x0: (car.x - liftShaftHalf)
+  x1: (car.x + liftShaftHalf)
+  z0: minimum(liftPoint(car, [0, 0, (0 - liftCarFromEdge)])[2], liftPoint(car, [0, 0, liftShaftBack])[2])
+  z1: maximum(liftPoint(car, [0, 0, (0 - liftCarFromEdge)])[2], liftPoint(car, [0, 0, liftShaftBack])[2])
+}
+// The controls' hooks: one control point a car and landing, where a lift's panel stands and a press calls the car
+// there. Each is in the car's own frame beside its landing door, on the shaft's front facing the landing, at
+// `liftPanelHeight` over the floor: `at` its plan point, `yaw` the way it faces, and `reach` the box before it a body
+// stands in to press it. Inside each car the panel is the rail across its back (gallery.puck's `carPads`). A panel that
+// calls a car writes `liftHallOf<key>[level]`, one that sends it `liftCarCallOf<key>[level]` (gallery.puck).
+let liftPanelAcross = -1.35
+let liftPanelHeight = 1.2
+let liftFront = (0 - liftCarFromEdge)
+let galleryLiftLandings = flatMap(galleryLifts, car => map(range(0, 4), k => {
+  car: car.id
+  key: car.key
+  level: k
+  at: liftPoint(car, [liftPanelAcross, (galleryFloor[k] + liftPanelHeight), (liftFront - 0.04)])
+  yaw: car.yaw
+  reach {
+    x0: minimum(liftPoint(car, [(liftPanelAcross - 0.45), 0, 0])[0], liftPoint(car, [(liftPanelAcross + 0.45), 0, 0])[0])
+    x1: maximum(liftPoint(car, [(liftPanelAcross - 0.45), 0, 0])[0], liftPoint(car, [(liftPanelAcross + 0.45), 0, 0])[0])
+    y0: (galleryFloor[k] - 0.5)
+    y1: (galleryFloor[k] + 1)
+    z0: minimum(liftPoint(car, [0, 0, liftFront])[2], liftPoint(car, [0, 0, (liftFront - 1.3)])[2])
+    z1: maximum(liftPoint(car, [0, 0, liftFront])[2], liftPoint(car, [0, 0, (liftFront - 1.3)])[2])
+  }
+}))
+// Where a body stands on a landing before a car's door, facing it, and inside the car, facing its door.
+function liftLandingStand(car, level) = liftPoint(car, [0, galleryFloor[level], (liftFront - 1.6)])
+function liftLandingYaw(car) = ((car.yaw + 180) % 360)
+
+// The painting portals' places (the owner's ruling, placed by the portal lane): twelve against level 3's outer walls,
+// six on the projecting wing's south wall and six on the north wall, one in each of the middle arcade bays, clear of the
+// corner stairs, the lifts' bay and the bays either side that carry windows. Each row is one portal's place: `side`,
+// `bay`, `at` the point on the wall's inner face at its bay's centre on level 3's floor, `yaw` the way it faces into the
+// gallery (180 faces +z, 0 faces -z), and `wall` the face's plane along z. Level 3 leaves these faces bare: no window,
+// switch, bench or planter stands in them.
+let galleryPortalLevel = 3
+let galleryPortalBayList = [5, 6, 7, 8, 9, 10]
+let galleryPortalBays = concat(
+  map(galleryPortalBayList, b => {
+    side: "south"
+    bay: b
+    at [bayX(b), galleryFloor[galleryPortalLevel], (wingSouth + galleryWall)]
+    yaw: 180
+    wall: (wingSouth + galleryWall)
+  }),
+  map(galleryPortalBayList, b => {
+    side: "north"
+    bay: b
+    at [bayX(b), galleryFloor[galleryPortalLevel], galleryNorth]
+    yaw: 0
+    wall: galleryNorth
+  })
+)
+// Whether a window bay centred at `at` along a level-3 outer face keeps clear of every portal bay.
+function galleryPortalClear(at) = (count(
+  galleryPortalBayList,
+  b => (((at + (bayWidth / 2)) > pierX(b)) and ((at - (bayWidth / 2)) < pierX((b + 1))))
+) == 0)
 
 // A window bay's opening: 3.2 m wide and 3.1 m tall, from 0.6 m over its floor, one every 4 m along a face.
 let bayWidth = 3.2
 let bayHeight = 3.1
 let baySill = 0.6
-// The nave's end wall holds one tier of three wide, tall bays through levels 0 and 1, a pier between each pair.
+// The nave's end wall is the tallest, most glazed wall (the owner's ruling): the climbing wall rises up its middle bay
+// from the floor to the ceiling, and either side of it a wide, tall bay of clear glass passes through levels 0 and 1
+// and a stained-glass bay through levels 2 and 3, a slim pier between each lower pair.
 let tallBayWidth = 5
 let tallBayHeight = 7.3
 // The end wall is an arcade of its own: three bays of six tiles span it exactly from the south arcade's row to the
-// north's, the centre one on the nave's axis, so its corner piers are the side arcades' last.
+// north's, the middle one on the nave's axis and the climbing wall's, so its corner piers are the side arcades' last.
+// `tallBayZs` are the two side bays' centres, and `tallBayTiers` the levels each tier of them starts on: clear glass
+// on level 0 and stained glass on level 2.
 let tallBayPitch = ((arcadeNorth - arcadeSouth) / 3)
-let tallBayZs = [(naveMid - tallBayPitch), naveMid, (naveMid + tallBayPitch)]
+let tallBayZs = [(naveMid - tallBayPitch), (naveMid + tallBayPitch)]
+let tallBayTiers = [{ level: 0, stained: false }, { level: 2, stained: true }]
 
 // The bays of each face by level, as the centre of each along its face. The south face's are the west wing's (the
-// terrace takes level 3's), level 1's over the entrance and along the painting wing, and the projecting wing's on
-// levels 2 and 3, which stand in its own south face.
+// terrace takes level 3's), level 1's along the old lobby and the painting wing, and the projecting wing's on levels 2
+// and 3, which stand in its own south face. Level 3 keeps its outer faces' portal bays bare (`galleryPortalBays`).
 let southBaysWest = [4, 8, 12]
-let southBaysEast = map(range(0, 7), i => (31.5 + (4 * i)))
-let wingBays = map(range(0, 9), i => (23.5 + (4 * i)))
-let northBays = map(range(0, 15), i => (2 + (4 * i)))
-// The west face's level 0 leaves the stretch Wonderland's room stands against (its painting hangs inside it); above it
-// the bridge's bays run the nave's width.
+let southBaysEast = map(range(0, 10), i => (19.5 + (4 * i)))
+function wingBays(level) = filter(map(range(0, 11), i => (15.5 + (4 * i))), at => ((level != galleryPortalLevel) or galleryPortalClear(at)))
+function northBays(level) = filter(map(range(0, 15), i => (2 + (4 * i))), at => ((level != galleryPortalLevel) or galleryPortalClear(at)))
+// The west face's level 0 holds the entrance across the nave's middle; above it the bridge's bays run the nave's width.
 let bridgeBays = map(range(0, 4), i => (naveSouth + 2.5 + (5 * i)))
 let westBays = [
   [3.2, (naveNorth - 2.5), northAisleMid]
@@ -201,7 +289,7 @@ let westBays = [
 ]
 let eastBays = [[northAisleMid], [4.4, northAisleMid], [4.4, northAisleMid], [4.4, northAisleMid]]
 
-// The painting wing: level 0's south aisle east of the entrance lobby, x 30 to the east wall. Three fins stand out from
+// The painting wing: level 0's south aisle from x 30 to the east wall. Three fins stand out from
 // the south wall, each 4.2 m long: at x 30, at x 44.3, and against the west side of the south-east stair's well, which
 // fills the wing's last bay, so the east court ends at that fin; the fall's well is at (52.5, 6.2), under a hole in
 // level 1's floor.
@@ -356,8 +444,8 @@ let displayExhibitLift = 0.3
 // Level 1's toybox (toybox.puck): twelve Humble Gaming Deck stations, six on each gallery, mirrored about the nave so
 // each north station stands across the void from its south twin. Along each gallery, in bays 2, 3, 5, 6, 7 and 8, a
 // living-room television set and a two-player arcade cabinet alternate. The plan keeps clear of the corner bays and the
-// walls beside them (0 and 12: the corner stairs, and the handhelds' corners to come), the lift's landing (bay 4)
-// and the endless fall's well (bay 11). A cabinet
+// walls beside them (0 and 12: the corner stairs, the lifts' landings and the handhelds' corners to come), bay 4, and
+// the endless fall's well (bay 11). A cabinet
 // stands on a gallery's second tile row in from its wall, as a television set's stand does, so a set's rug and
 // beanbags reach no nearer than 2.8 m to the balcony edge; each faces the nave, a south one +z (yaw 180), a north one -z
 // (yaw 0). `look` is the colourway a station wears (look.puck's lookCabinets and lookTelevisions) and `cartridge` the
@@ -394,25 +482,30 @@ let toyboxScreen = 20
 // Where a station stands in the building's frame, on its tile.
 function toyboxAt(s) = [bayX(s.bay), galleryFloor[toyboxLevel], tileZ(s.row)]
 
-// Level 3's game floor (gallery/games.puck): the plan for twelve game stations (../game-stations.puck), six on each
-// gallery and most mirrored about the nave, as level 1 holds its twelve deck stations and the nave its twelve display
-// stations; games.puck stands the stations the rule work sheet admits, from the first. Each
-// stands on its gallery's middle tile row, its near chair toward the south and its far chair toward the north, so a
-// chair is 1.5 m out from the table at either edge and every aisle keeps 2 m and more round a station. The plan keeps
-// clear of the corner stairs (bays 0 and 12), the terrace that is level 3's west end (bays 1 and 2 south), the lift's
-// landing (bay 4), the wonder keys' stand (bay 5 south, rentals.puck) and the tree's north branch landing (bay 7
-// north). A station's id is its gallery and bay, and is the alias of its instance (game-stations.puck).
-let gameStationLevel = 3
-let gameStationSides = [
-  { name: "south", row: (wallRowSouth + 2), bays [3, 6, 7, 8, 9, 10] }
-  { name: "north", row: (wallRowNorth - 2), bays [3, 5, 6, 8, 9, 10] }
+// The board game room (the owner's ruling): level 2's south gallery and the wing projecting over the forecourt, holding
+// twelve game stations (../game-stations.puck), each one table that plays every game of the set's catalog on a holodeck
+// board. They stand in two rows of six, one station to an arcade bay from bay 5 to bay 10: the front row on the south
+// gallery's fourth tile row, its far chairs a tile short of the arcade's piers, and the back row out in the wing, its
+// near chairs a tile and a half short of the wing's south wall, so every chair keeps 2 m of aisle behind it. Each
+// station's near chair faces north (+z) across its glass and its far chair south. A station's id is its row and column
+// (`a1` to `a6` the front row west to east, `b1` to `b6` the back), and is the alias of its instance (games.puck).
+let gameStationLevel = wingLevel
+let galleryGameBays = range(5, 11)
+let galleryGameRows = [
+  { name: "a", z: tileZ(3) }
+  { name: "b", z: tileZ(-1) }
 ]
-// Every station in the world's frame, south then north, each bay west to east. A station's creation's floor lies 0.5 m
-// under its origin (the standard's gameStationFloor), so it stands on level 3.
-let galleryGameStations = flatMap(gameStationSides, side => map(side.bays, b => {
-  id: $"{side.name}{b}"
-  at: galleryWorld(bayX(b), (galleryFloor[gameStationLevel] - 0.5), tileZ(side.row))
+// Every station in the world's frame, front row then back, each west to east. A station's creation's floor lies 0.5 m
+// under its origin (the standard's gameStationFloor), so it stands on level 2.
+let galleryGameStations = flatMap(galleryGameRows, row => map(range(0, length(galleryGameBays)), n => {
+  id: $"{row.name}{n + 1}"
+  at: galleryWorld(bayX(galleryGameBays[n]), (galleryFloor[gameStationLevel] - 0.5), row.z)
 }))
+// The stations the gallery booted alone stands (games.puck): the plan's first `galleryRoomStood`. The rule work sheet
+// admits eleven beside the rest of the building; the twelfth, b6, waits on the stations' rules becoming one set over
+// every station (game-station.md, "Cost").
+let galleryRoomStood = 11
+let galleryRoomStations = map(range(0, galleryRoomStood), i => galleryGameStations[i])
 
 // Level 1's handheld rentals (rentals.puck): a pool of one brick and one advanced brick for each seat's body (bodies 0
 // to 11, shapes.puck's four local seats and eight visitors), each run only while its body holds a rented device of that
@@ -427,17 +520,17 @@ let galleryVisitorHeight = 2.06
 
 // The stewards (stewards.puck): four of the Moth's crew who stand in the gallery and, asked, give a visitor its normal
 // size back. Each stands on level 0, where a visitor that left level 1 small comes down (the tree's walkway ends at its
-// foot) or goes looking for help: at the tree's foot, east of the trunk where the walkway comes in; in the lobby, beside
-// the way in from the entrance; in the north aisle under the toybox's north gallery; and in the painting wing, against
+// foot) or goes looking for help: at the tree's foot, east of the trunk where the walkway comes in; in the west hall,
+// beside the way in from the entrance and facing it; in the north aisle under the toybox's north gallery; and in the painting wing, against
 // its south wall between its first two paintings, before a small visitor walks into one and clear of the way along the
-// wing past its fins. Each keeps its reach clear of a display's terminal reach, and of the holiday firs on the nave's axis
-// (holiday.puck). None stands on level 1's floor: there the toybox's stairs and lift give a body
+// wing past its fins. Each keeps its reach clear of a display's terminal reach, and of the holiday firs
+// (holiday.puck). None stands on level 1's floor: there the toybox's stairs and lifts give a body
 // its size back as it leaves, and its games stay a pass holder's (gallery.md, "The size of level 1"). A steward faces
 // its heading `yaw` (0 faces -z, 90 -x, 180 +z, 270 +x) with its slate `stewardSlateOut` before it, and is talked to
 // from within `stewardReach` of the slate; `crew` is the crew member it is (stewards.puck's `stewardCrew`).
 let stewardPlan = [
   { id: "tree", crew: "vector", x: (treeX + 6.5), z: treeZ, yaw: 90 }
-  { id: "lobby", crew: "skylark", x: tileX(20), z: tileZ(3), yaw: 270 }
+  { id: "lobby", crew: "skylark", x: tileX(3), z: tileZ((naveRowMid - 4)), yaw: 90 }
   { id: "north", crew: "bulwark", x: bayX(treeBay), z: tileZ((wallRowNorth - 2)), yaw: 0 }
   { id: "wing", crew: "forge", x: ((courtWallDoors[0] + courtWallDoors[1]) / 2), z: tileZ((wallRowSouth + 1)), yaw: 180 }
 ]
@@ -482,9 +575,9 @@ let toyLatticeNet = { strand: 0.035, pitch: 0.3 }
 let toyLatticeLooseBay = 8
 // The rope net panel: the north edge's bay whose frame holds a net that gives and climbs (architecture.puck's `latticeNet`
 // facet, gallery.md "The lattice") rather than a net drawn over a pane. Its frame and its net still close the edge to
-// every body. Kept clear of the toybox's stairs, lift, stations and house, of every tree branch's landing and of the
-// climbing wall's bay (10, below): bay 9 has none of them, standing between the tree's
-// gate (bay 8) and the little house (bay 10), its aisle open to walk up to the net from.
+// every body. Kept clear of the toybox's stairs, lifts, stations and house and of every tree branch's landing: bay 9
+// has none of them, standing between the tree's gate (bay 8) and the little house (bay 10), its aisle open to walk up
+// to the net from.
 let toyLatticeNetBay = 9
 
 // The central tree (tree.puck): a giant tree at the hall's exact centre, bay 6 (the middle rest bay) on the nave's
@@ -606,48 +699,67 @@ function treeBranchAt(b, t) = (let p = quadraticPoint(treeBranchA(b), treeBranch
   (treeZ - p[2])
 ])
 
-// The climbing wall (climbing-wall.puck): a face `climbWallWidth` across standing in front of the north balcony edge in
-// bay `climbWallBay`, from the nave's floor to level `climbWallLevel`, facing the nave. The bay is the nave's last even
-// bay clear of everything an edge already carries: the tree's branches land in bays 4, 6 (its trunk), 7 and 8, the
-// loose lattice panel is bay 8's, and bay 12 is the north-east stair's. The odd bays either side hold displays, whose
-// plinths stand 4.5 m in from the edge and leave the pad more than a metre of floor on each side.
+// The climbing wall (climbing-wall.puck): a face `climbWallWidth` across in the middle bay of the nave's east end wall
+// (the owner's ruling), on the nave's axis, facing west down the hall with the whole nave open before it, so a visitor
+// walking in at the entrance looks straight at it. It rises from the nave's floor to level `climbWallLevel`, where its
+// ledge is the east walkway, and its sandstone carries on above the ledge to the ceiling as a headwall nothing holds. The
+// lifts' shafts stand either side of it at the balcony edges, and the stained-glass bays high either side of it.
 //
-// The wall stands `climbWallDepth` deep in front of the edge, its back on the edge's line, so its ledge (the frame's
+// The wall stands `climbWallDepth` deep in front of the east wall, its back against it, so its ledge (the frame's
 // coping, level with the floor it tops out at) is deep enough for a mantle to set a body down on it whole: the climb's
 // mantle carries a body 0.8 m in from where it hangs, one body radius off the face, so it lands 0.45 m past the face
-// with its capsule reaching 0.35 m either side, all of it on the ledge and clear of the balustrade. A doorway in that level's
-// balustrade opens behind the ledge (`galleryEdgeDoors`). Before the face a pad `climbWallPad.depth` deep catches a
-// fall, reaching past the frame on each side; the face stands on the pad, and the frame on the floor.
-let climbWallBay = 10
+// with its capsule reaching 0.35 m either side, all of it on the ledge and clear of the headwall. Before the face a pad
+// `climbWallPad.depth` deep catches a fall, reaching past the frame on each side; the face stands on the pad, and the
+// frame on the floor. A point on the face is `u` metres across from its middle toward the face's own right (south, as a
+// climber facing the wall sees it on the left) and `v` up from its foot.
 let climbWallLevel = 3
-let climbWallX = bayX(climbWallBay)
+let climbWallZ = naveMid
+let climbWallYaw = 90
 let climbWallWidth = 4
 let climbWallDepth = 1.1
 let climbWallThickness = 0.2
 let climbWallCoping = 0.3
 let climbWallPad = { width: 5, depth: 2.5, height: 0.25 }
-// The climbing plane's line in the plan (the face's front, where a climber's hands go), the pad's top, the ledge's top
-// and the face's height from the pad to the coping.
-let climbWallFace = (naveNorth - climbWallDepth)
+// The climbing plane's line in the plan (the face's front along x, where a climber's hands go), the pad's top, the
+// ledge's top and the face's height from the pad to the coping.
+let climbWallFace = (galleryEast - climbWallDepth)
 let climbWallFoot = (galleryFloor[0] + climbWallPad.height)
 let climbWallTop = galleryFloor[climbWallLevel]
 let climbWallFaceHeight = ((climbWallTop - climbWallFoot) - climbWallCoping)
-// A point on the face, `u` metres across from its middle (toward +x) and `v` up from its foot, in the plan, on the
-// climbing plane.
-function climbWallAt(u, v) = [(climbWallX + u), (climbWallFoot + v), climbWallFace]
+// The headwall over the ledge, from the ledge to level 3's ceiling, flat against the east wall.
+let climbWallHeadwall = (galleryCeiling[climbWallLevel] - climbWallTop)
+// The frame's half width across the face: the face, its cheeks and the coping's nose (the standard's climbingFrame).
+let climbWallFrameHalf = ((climbWallWidth / 2) + 0.26)
+// A point `out` metres in front of the face at face coordinate (u, v), in the plan.
+function climbWallOff(u, v, out) = [(climbWallFace - out), (climbWallFoot + v), (climbWallZ - u)]
+function climbWallAt(u, v) = climbWallOff(u, v, 0)
 // Where a climb starts and ends: on the pad before the face's middle, a step out from it; on the ledge, a body's stance
-// in from the face where the climb's mantle sets it down; and on the floor of its level through the doorway behind.
-let climbWallStart = [climbWallX, climbWallFoot, (climbWallFace - 0.7)]
-let climbWallSummit = [climbWallX, climbWallTop, (climbWallFace + 0.5)]
-let climbWallLanding = [climbWallX, climbWallTop, (naveNorth + 1.5)]
+// in from the face where the climb's mantle sets it down; and on level 3's north gallery, along the walkway past the
+// north lift's shaft.
+let climbWallStart = climbWallOff(0, 0, 0.7)
+let climbWallSummit = [(climbWallFace + 0.5), climbWallTop, climbWallZ]
+let climbWallLanding = [(galleryEast - (climbWallDepth / 2)), climbWallTop, (naveNorth + 1.2)]
+// The east walkway on level 3 the ledge belongs to: a strip `climbWallDepth` deep along the east wall across the nave's
+// end, from the south gallery to the north one behind the lifts' shafts, its void edge railed but where the climb tops
+// out over the frame's coping. `climbWalkPieces` are its two stretches either side of the frame, and `climbWalkRails`
+// its balustrade's lengths along them, laid from the frame outward, the last a tile's length at the gallery's edge.
+let climbWalkPieces = [
+  { id: "walk-south", x0: climbWallFace, x1: galleryEast, z0: naveSouth, z1: (climbWallZ - climbWallFrameHalf) }
+  { id: "walk-north", x0: climbWallFace, x1: galleryEast, z0: (climbWallZ + climbWallFrameHalf), z1: naveNorth }
+]
+let climbWalkRails = flatMap([-1, 1], side => concat(
+  map(range(0, 2), i => {
+    id: $"walk-{side}-{i}"
+    z: (climbWallZ + (side * (climbWallFrameHalf + 2 + (4 * i))))
+    short: 0
+  }),
+  [{ id: $"walk-{side}-end", z: (climbWallZ + (side * ((((naveNorth - naveSouth) / 2) - (galleryTile / 2))))), short: 3 }]
+))
 
 // The doorways in the balustrades of levels 2 and 3, each filling a bay's balcony edge where something meets the floor
-// from over the void: the tree's branches on those levels (`treeLimbs`) and the climbing wall's ledge. Each is
-// { level, side, x }, `x` the bay's centre; the balustrade leaves the bay to the doorway and a short length either side.
-let galleryEdgeDoors = concat(
-  map(filter(treeLimbs, b => (b.level >= 2)), b => { level: b.level, side: b.side, x: b.x }),
-  [{ level: climbWallLevel, side: "north", x: climbWallX }]
-)
+// from over the void: the tree's branches on those levels (`treeLimbs`). Each is { level, side, x }, `x` the bay's
+// centre; the balustrade leaves the bay to the doorway and a short length either side.
+let galleryEdgeDoors = map(filter(treeLimbs, b => (b.level >= 2)), b => { level: b.level, side: b.side, x: b.x })
 function galleryEdgeDoorsOn(level, side) = filter(galleryEdgeDoors, d => ((d.level == level) and (d.side == side)))
 // Whether the balcony edge at `x` on a level's side is a plain length of balustrade, with no doorway in its bay.
 function galleryEdgeRailed(level, side, x) = (count(galleryEdgeDoorsOn(level, side), d => (d.x == x)) == 0)

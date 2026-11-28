@@ -1,6 +1,7 @@
-// Holiday trees for the owner to judge on level 0: the standard's firs (conifer.puck) on the nave's centre line, two
-// strung with classic bulbs (one taller and fuller), bright enough to read lit indoors, and one fibre-optic fir on the
-// world's shared fibre lanes (fir-fiber.puck). Its prototypes and placements join the gallery.
+// Holiday trees for the owner to judge on level 0: the standard's firs (conifer.puck), two strung with classic bulbs (one
+// taller and fuller), bright enough to read lit indoors, and one fibre-optic fir on the world's shared fibre lanes
+// (fir-fiber.puck). Each stands on a showcase row in a rest bay, between two displays, so the nave's centre line stays
+// open from the entrance to the climbing wall. Its prototypes and placements join the gallery.
 import "../../standard/conifer"
 import "../fir-fiber"
 import "layout"
@@ -9,11 +10,11 @@ import "layout"
 // so its lights must outshine the station screens (3000) to read as lit.
 let holidayBulbGlow = 4000
 
-// Where each tree stands on the nave's centre line, by bay, and which fir it is.
+// Where each tree stands, by bay and showcase row, and which fir it is.
 let holidayTrees = [
-  { id: "lit", bay: 3, prototype: "gallery-fir-lit", yaw: 0 }
-  { id: "tall", bay: 9, prototype: "gallery-fir-tall-lit", yaw: 40 }
-  { id: "fiber", bay: 11, prototype: "gallery-fir-fiber", yaw: 200 }
+  { id: "lit", bay: 4, row: showcaseRowNorth, prototype: "gallery-fir-lit", yaw: 0 }
+  { id: "tall", bay: 10, row: showcaseRowSouth, prototype: "gallery-fir-tall-lit", yaw: 40 }
+  { id: "fiber", bay: 10, row: showcaseRowNorth, prototype: "gallery-fir-fiber", yaw: 200 }
 ]
 
 prototypes {
@@ -27,7 +28,7 @@ placements {
     placement $"gallery-holiday-{tree.id}" {
       prototype: tree.prototype
       parent: "gallery"
-      position [bayX(tree.bay), galleryFloor[0], naveMid]
+      position [bayX(tree.bay), galleryFloor[0], tileZ(tree.row)]
       yawDegrees: tree.yaw
       solid
     }

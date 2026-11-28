@@ -60,7 +60,7 @@ every station.
   patience rules that read its chairs (`patienceStationRules` in
   [`../games/patience-station.puck`](../games/patience-station.puck)).
   Every row and rule the instance declares is the instance's own, `<id>$<name>`
-  (`world.state south3$gameStationChair`).
+  (`world.state a1$gameStationChair`).
 - **The rules one set plays for every station**, `gameStationSetRules()` at the
   world's top level: the patience collection
   ([`solitaire.puck`](../games/solitaire.puck)), Klondike
@@ -96,16 +96,18 @@ Worlds that stand stations:
   own chess (id `station`) on a small floor. Boot it with
   `--world worlds/debug/game-station-root.puck`: seat 1 starts at the near chair
   (spawn `hero`) and seat 2 at the far chair (spawn `rival`).
-- The gallery's game floor on level 3 ([`gallery/games.puck`](gallery/games.puck))
-  plans twelve stations, six on each gallery
-  ([`gallery/layout.puck`](gallery/layout.puck)'s `galleryGameStations`, clear of
-  the corner stairs, the terrace, the lift's landing, the wonder keys' stand
-  and the tree's north branch). It stands the first, `south3`, holding its own
-  chess; the rest wait on the work sheet ([Cost](#cost)). `debug.go cards` and
-  `debug.go chess` stand the seat at its near chair. The debug world numbers
-  its bodies below the deck from it, so its cards stand always rather than as a
-  pool (`holodeck: false`), and its chess pieces take the free slots
-  `galleryPopulation` keeps.
+- The gallery's board game room on level 2 ([`gallery/games.puck`](gallery/games.puck))
+  plans twelve stations in two rows of six, `a1` to `a6` on the south gallery
+  and `b1` to `b6` out in the projecting wing
+  ([`gallery/layout.puck`](gallery/layout.puck)'s `galleryGameStations`). The
+  gallery booted alone (`gallery-root.puck`) stands the first eleven, each
+  holding its own games and its cards as a holodeck pool; the twelfth waits on
+  the work sheet ([Cost](#cost)). The debug world stands only the first, `a1`
+  ([`game-station-deck.puck`](game-station-deck.puck)): it numbers its bodies
+  below the deck from it, so its cards stand always rather than as a pool
+  (`holodeck: false`), and its chess pieces take the free slots
+  `galleryPopulation` keeps. `debug.go cards` and `debug.go chess` stand the
+  seat at `a1`'s near chair.
 - The board games lab ([`labs/board-games.puck`](labs/board-games.puck)) stands
   one station, and its stress mode
   ([`labs/board-games-stress.puck`](labs/board-games-stress.puck)) twelve, each
@@ -195,7 +197,8 @@ the same sheet live, and `--spent` what it spent):
 |---|---|
 | One station (game-station-root, the board games lab) | 358,663 |
 | Twelve stations playing themselves (the stress lab) | 2,714,219 |
-| The debug world with its one station | 3,543,572 |
+| The debug world with its one station | 4,295,589 |
+| The gallery booted alone with eleven stations | 4,382,315 |
 
 The tick admits 4.2 million units (`RuleCapacity.MaxWorkUnitsPerTick`). Each
 station past the first adds about 214 thousand: its instance's own lines
@@ -215,8 +218,9 @@ each body; the fresh-game door writes only what something reads before the
 judge's first settled pass; the search's own lines (`search(ply) > 0`) are
 priced with the search, not the tick; and a pose rule's arrival deadline wakes
 only the bodies it is due for. What an idle station spends is a different number: its rules are
-judged by change, so at rest they do no work. Twelve stations in the debug
-world itself still wait on the sheet: the open item "Twelve game stations on
+judged by change, so at rest they do no work. The gallery booted alone holds
+eleven beside the rest of the building; twelve there, and more than one in the
+debug world, still wait on the sheet: the open item "Twelve game stations on
 the work sheet" in
 [the open items](../../docs/plans/open-items.md#card-tables-in-the-board-game-room).
 

@@ -29,9 +29,9 @@ function climbOnVolume(at, volume) = (let d = (at - volume.at) in
 function climbStandOff(at) = maximum(map(climbVolumes, volume => climbOnVolume(at, volume)))
 
 // The routes, each a family's line of holds (the standard's climbRoute: a hold every `pitch` metres along its points,
-// stepping to either side of the line in turn). Sunflower is the gentle line, mostly jugs; teal climbs the west side
-// on crimps and pinches; berry the east side on slopers and pinches, wider apart. Each ends 0.4 m under the coping,
-// before the doorway.
+// stepping to either side of the line in turn). Sunflower is the gentle line, mostly jugs; teal climbs the face's left
+// (a climber's right) on crimps and pinches; berry its right on slopers and pinches, wider apart. Each ends 0.4 m under
+// the coping.
 let climbRoutes = [
   {
     family: "sunflower"
