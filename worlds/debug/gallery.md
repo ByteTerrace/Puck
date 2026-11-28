@@ -38,6 +38,15 @@ The owner walked the gallery and ruled its shape:
    aim is a standardized system that pushes the Puck language, finds engine
    gaps, makes performance follow from composition (a feature left out costs
    nothing), and leaves artists free to compose.
+8. **The whole gallery scales with one value**, as an SVG group does. The
+   building places every module through one frame (position, yaw and a uniform
+   scale), and its physics follows that scale (gravity, walking and jumping
+   speeds, step heights, reach), so moving through a scaled gallery feels
+   exactly as it does at full size. The windows deliberately give the scale
+   away: they show the outside world at its true size, so a grown or shrunk
+   gallery reads only through the glass. This is the lifts' Wonderland idea
+   seen from the other side: shrinking the rider and growing the building are
+   one transform.
 
 ## The plan
 
