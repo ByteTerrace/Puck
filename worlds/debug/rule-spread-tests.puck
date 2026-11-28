@@ -1,0 +1,71 @@
+// A tick that runs over its rule allowance spreads its firings over the following ticks
+// (docs/reference/state/analysis.md#spread-a-tick-that-runs-over). One write wakes sixteen sweeps of 128 keys at once,
+// 2048 firings, against a rule share of 1% of the 30 Hz tick: each sweep's answer to that change fits the budget alone,
+// so the world is admitted, but the burst passes the tick's firing allowance several times over and the rest of it
+// carries, each binding judged on a later tick against the state it finds then.
+// `puck test worlds/debug/rule-spread-tests.puck --jobs 1 --reproduce` replays every tick with the schedules off,
+// which must carry exactly the same work on exactly the same ticks.
+schema: "puck.world.definition.v1"
+basis: "stage"
+documentId: "rule-spread-tests"
+
+let spreadGroups = 16
+let spreadKeys = 128
+
+simulation {
+  rateHz: 30
+  rulePercent: 1
+}
+
+state {
+  world {
+    row {
+      name: "spreadGo"
+      kind: Int
+      value: 0
+    }
+    // The marks set so far, over every sweep.
+    row {
+      name: "spreadMarked"
+      kind: Int
+      value: 0
+    }
+    for g in range(0, spreadGroups) {
+      table $"spreadMarks{g}" capacity(spreadKeys) = map(range(0, spreadKeys), k => 0)
+    }
+  }
+}
+
+for g in range(0, spreadGroups) {
+  rule $"spread-mark-{g}" {
+    forEach: $"spreadMarks{g}"
+    when spreadGo == 1 and $"spreadMarks{g}"[$each] == 0
+    mode: Level
+    $"spreadMarks{g}"[$each] = 1
+    spreadMarked += 1
+  }
+}
+
+test "a burst past the allowance fires the first sweeps and carries the rest" {
+  when {
+    ticks 5
+    seat1: world.state.cell.set spreadGo $value 1
+    ticks 1
+  }
+  expect {
+    spreadMarked > 0
+    count(spreadMarks15, c -> c != 0) == 0
+    spreadMarked < 2048
+  }
+}
+
+test "the carried bindings all fire on the ticks after the burst" {
+  when {
+    ticks 5
+    seat1: world.state.cell.set spreadGo $value 1
+    ticks 30
+  }
+  expect {
+    spreadMarked == 2048
+  }
+}

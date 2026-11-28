@@ -1552,10 +1552,10 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   in kit partitions
   ([the kit advance split](engine-job-system.md#the-steps-phases)) over one
   frozen pose image; this transaction is what the state-writing kits wait on.
-- [high] Rule admission is priced in time (`WorldRuleTimePricing`), but no device profile in
-  `worlds/standard/quality.puck` carries measured figures yet, so every world is priced at
-  `RuleCostCalibration.Uncalibrated`. Run `puck bench rules --device <profile> --output <file>` in a quiet
-  window on the RTX 4070 and the RTX 2060 and author each `rules { ... }` block. What the figures leave unpriced:
+- [high] Rule admission is priced in time (`WorldRuleTimePricing`) with the RTX 4070's and the RTX 2060's measured
+  figures in `worlds/standard/quality.puck`; the Steam Deck borrows the RTX 2060's until it is measured
+  (`puck bench rules --device steamdeck --output <file>` in a quiet window). Re-measure both after an evaluator change
+  that moves a firing's or a judgement's cost. What the figures leave unpriced:
   the rule part's fixed per-tick host work (`WorldRuleHost.EvaluateWorldRules`' fact derivation, arena publication
   and delivery), which the bench's empty scenario measures and the sheet charges nowhere; host effects that charge a
   door without counting it (`WorldIdentityFactEffect`'s write, `WorldPlacementEffectCost.DocumentCost`, a document write and revalidation), priced as element
@@ -5955,34 +5955,22 @@ shell, each usable alone, each named for what it does.
   prototype, at most 16 volumes) would let a king topple as a king does, and a queened pawn would need its kit chosen by
   its code.
 
-- [high] The worlds under the calibrated rules budget. With the measured `rules` figures in `worlds/standard/quality.puck`'s
-  device rows, the RTX 2060 prices the gallery booted alone past the rules' 8.33 ms and the debug world far past it on both
-  devices (`puck compile <world> --validate --budget 60`, which orders lines by their time on the slowest device), so the
-  figures are not yet authored. What still holds the price up, costliest first:
+- [medium] What the rules sheet still charges past what the evaluator runs. Admission holds the realistic tick, and a
+  tick that runs over spreads ([analysis](../reference/state/analysis.md#the-realistic-tick)), so none of these refuses
+  a world; each makes the realistic tick, the sheet's one-change-per-line total and the firing allowance read more than
+  play spends:
   - The stations' press lines whose Level gate is a one-tick press edge another rule writes (`patience-pick`,
-    `patience-step`, `chess-station-step-*`, `chess-station-cancel-*`): the sheet cannot see the edge clear, so it
-    charges every station a firing every tick. `chess-station-pick-*` became an Edge, which is equivalent for a gate of
-    one button's edge; the others read several buttons' edges, so an Edge could miss a second button pressed on the next
-    tick.
-  - Klondike's and FreeCell's deal, gather, draw and recycle loops, priced at every station at once, and Klondike's seven
-    reveals, whose gate (`count(column) == 0`) a transfer into that column closes but no proof reads.
+    `patience-step`, `chess-station-step-*`, `chess-station-cancel-*`): the evaluator fires each once per press, since
+    the writer (`game-station-near`) runs again and clears the edge, but the sheet cannot see the edge clear. An edge
+    read from the input events (`inputTick(seat, channel, Press, 0) == $tick`) in `worlds/standard/game-station.puck`,
+    or a proof that a cell is a one-tick pulse, would show it.
   - Sweeps bounded by `maxFirings` (the four `chess-ai-relocate-*` lines, `chess-station-hover-*`, `chess-ai-request`
-    and `chess-input-move`, 384 bindings each in the gallery) are due by change and keep the bindings their cap left
-    due, but one change opens a station's 32 pieces against a cap of one, so the sheet still charges every binding a
-    check. A proof that at most one binding's gate holds (the pieces' cells are distinct) would price them at the
-    bindings one change opens.
-  - The sheet's total is every line's price at once: a tick at rest plus one change for each line, so one tick is
-    charged a change at every one of its lines. That is neither a bound nor what one tick can do. A bound from the
-    inputs one tick can change would charge each per-station line once for each player who can act on that tick (a
-    rough reading of the gallery's lines, scaling each "one change opens n of M" line to `min(M, 12n)`, gives about 63 ms
-    on the RTX 2060 instead of 11 ms), and the exclusive lines' state machines (`klondikeStage[$each]`, Go's phases) can
-    all be passed through in one tick in pass order, so a single-cell analysis proves no exclusion there. Admitting the
-    gallery and the debug world under the measured figures needs a decision on what the budget bounds (an expectation,
-    or a true per-tick bound with each player's inputs counted), since no sound proof within today's model brings them
-    under 8.33 ms on the RTX 2060.
-  - The debug world adds Go (about 11 ms on the RTX 2060: the play doors, report, evaluate and score lines are single
-    heavy firings over 361 cells, and the scoring flood), the quest share (`lanternTrail-share`, a firing at each of
-    twelve recipients) and the granary's influence lines, which read moving facts. Go's board kernels are per cell:
+    and `chess-input-move`) open a station's 32 pieces against a cap of one, so the sheet charges every binding a check.
+    A proof that at most one binding's gate holds (the pieces' cells are distinct) would price them at the bindings one
+    change opens.
+  - The realistic tick's change share is the dearest single line's answer, not a cascade: a change that wakes several
+    lines in one pass is priced as its dearest line, and the rest spreads at run time.
+  - Go's board kernels are per cell:
     `boardCombine` reads, combines and writes every cell through the arena's door one at a time
     (`ArenaTransforms.TryBoardCombine`), where the board's value planes (`StateArena.TryReadBoardPlanes`) would combine
     a 361-cell board in six words; and its scoring floods one step a tick for up to `goPoints + 2` ticks

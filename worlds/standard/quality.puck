@@ -74,7 +74,16 @@ render {
   // the storey level is half a volume's probes, and every world a painting shows holds them on a card whose whole
   // device bar is 4.5 GiB.
   devices [
-    { name: "rtx4070", match: "RTX 4070", quality: high, deviceMemoryMiB: 8192, hostMemoryMiB: 8192, frameBar { width: 2560, height: 1440, hertz: 60 } }
+    {
+      name: "rtx4070"
+      match: "RTX 4070"
+      quality: high
+      deviceMemoryMiB: 8192
+      hostMemoryMiB: 8192
+      frameBar { width: 2560, height: 1440, hertz: 60 }
+      // Measured by `puck bench rules`.
+      rules { setup: 24559, binding: 41845, check: 9314, firing: 196238, door: 347979, effect: 14054, host: 9314, growth: 1495, build: "rtx4070; 0.1.0-alpha+c84ef054ee8610ec1d8c7c93b8893fea7104d7e0; 2026-11-28; 15x60 ticks; host=check" }
+    }
     {
       name: "rtx2060"
       match: "RTX 2060"
@@ -82,6 +91,8 @@ render {
       deviceMemoryMiB: 4608
       hostMemoryMiB: 6144
       frameBar { width: 1920, height: 1080, hertz: 60 }
+      // Measured by `puck bench rules`.
+      rules { setup: 25309, binding: 92236, check: 14983, firing: 245219, door: 596352, effect: 30477, host: 14983, growth: 2381, build: "rtx2060; 0.1.0-alpha+a36da503509b8c0c87e6697884a052facf961f46; 2026-11-28; 15x60 ticks; host=check" }
       table {
         viewsRate { maxRate: 1, tileSize: 4 }
         reflections { cell: 2, steps: 24 }

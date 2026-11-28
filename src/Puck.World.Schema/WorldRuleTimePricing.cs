@@ -11,11 +11,15 @@ namespace Puck.World;
 /// <param name="Calibration">The figures the sheet was converted with.</param>
 /// <param name="Source">Where the figures came from: the device's own measurement, another device's figures it borrows,
 /// or the uncalibrated default.</param>
-/// <param name="Tick">The tick's worst-case time: the sheet's exclusion tree over every line in time, plus the host's
-/// passes.</param>
+/// <param name="Tick">The realistic tick admission holds to the budget: what recurs on every tick of play plus the
+/// dearest answer one line gives one change (<see cref="Puck.State.Rules.RuleTickPrice.Tick"/>).</param>
 /// <param name="Worst">Every line's worst case at once (a boot, every group changing together); reported, never
 /// admitted against the budget.</param>
-public sealed record WorldRuleDevicePrice(string Device, RuleCostCalibration Calibration, string Source, RuleTime Tick, RuleTime Worst);
+public sealed record WorldRuleDevicePrice(string Device, RuleCostCalibration Calibration, string Source, RuleTime Tick, RuleTime Worst) {
+    /// <summary>Gets the whole price the tick was read from: its recurring part, its dearest change, the sheet's total
+    /// of one change at every line, and the worst case.</summary>
+    public Puck.State.Rules.RuleTickPrice Detail { get; init; }
+}
 /// <summary>A world's rule work in time: the sheet (<see cref="WorldRuleWorkBudget"/>) converted with every device
 /// profile's calibration (<see cref="WorldDeviceProfile.Rules"/>) and compared with the tick's rule budget, the authored
 /// share of the tick period (<see cref="WorldSimulationDefaults.RulePercent"/>). The world is admitted against its
@@ -53,9 +57,16 @@ public sealed class WorldRuleTimePricing {
     /// <summary>Gets why the authored budget or figures cannot be read (a percent out of range, a negative figure), or
     /// <see langword="null"/>.</summary>
     public string? Issue { get; }
-    /// <summary>Gets the time the budget leaves after the slowest device's worst tick, for arena growth and its
+    /// <summary>Gets the time the budget leaves after the slowest device's realistic tick, for arena growth and its
     /// rollback; zero when the sheet fills it or has no number.</summary>
     public long GrowthHeadroomPicoseconds => (Slowest.Tick.Fits(budgetPicoseconds: BudgetPicoseconds) ? (BudgetPicoseconds - Slowest.Tick.Picoseconds) : 0L);
+    /// <summary>Gets the firing work one tick may charge at run time before it carries its remaining due work to the
+    /// next ticks (<see cref="Puck.State.Rules.RuleTickAllowance"/>), in the slowest device's picoseconds: the budget
+    /// less the recurring judgements and host passes, which the allowance does not meter. A document constant: it reads
+    /// the document's devices and share, never the machine.</summary>
+    public long FiringAllowancePicoseconds => (Slowest.Detail.RecurringChecks.Fits(budgetPicoseconds: BudgetPicoseconds)
+        ? (BudgetPicoseconds - Slowest.Detail.RecurringChecks.Picoseconds)
+        : 0L);
 
     /// <summary>Prices a sheet for every device a world authors.</summary>
     /// <param name="definition">The world: its rate, its rule share and its device profiles.</param>
@@ -113,9 +124,9 @@ public sealed class WorldRuleTimePricing {
         );
 
         WorldRuleDevicePrice Read(RuleCostCalibration calibration, string device, string source) {
-            var (tick, worst) = calibration.Price(hostUnits: budget.HostWorkUnitsPerTick, lines: lines, writers: writers);
+            var price = calibration.Price(hostUnits: budget.HostWorkUnitsPerTick, lines: lines, writers: writers);
 
-            return new WorldRuleDevicePrice(Calibration: calibration, Device: device, Source: source, Tick: tick, Worst: worst);
+            return new WorldRuleDevicePrice(Calibration: calibration, Device: device, Source: source, Tick: price.Tick, Worst: price.Worst) { Detail = price };
         }
     }
 
@@ -123,7 +134,7 @@ public sealed class WorldRuleTimePricing {
     /// <param name="device">The device profile's name.</param>
     /// <returns>The reading, or <see langword="null"/> when the world authors no such device.</returns>
     public WorldRuleDevicePrice? For(string device) => Devices.FirstOrDefault(predicate: price => string.Equals(a: price.Device, b: device, comparisonType: StringComparison.Ordinal));
-    /// <summary>Returns admission's refusal of the sheet, or <see langword="null"/> when the slowest device's worst tick
+    /// <summary>Returns admission's refusal of the sheet, or <see langword="null"/> when the slowest device's realistic tick
     /// fits the budget. A bound nothing prices or that overflowed has no number and is refused, never read as small.</summary>
     /// <param name="rowsAtCeiling">Names, for one line, the rows priced at the engine's cell ceiling for want of a
     /// capacity (<see cref="WorldRuleWorkBudget.RowsAtCeiling(Puck.State.Rules.RuleCompileContext, Puck.State.Rules.CompiledRule)"/>),
@@ -150,7 +161,7 @@ public sealed class WorldRuleTimePricing {
             : $"no bound on their time a tick on '{Slowest.Device}' ({Slowest.Tick}), which cannot be admitted under")} the rules' {RuleTime.Milliseconds(picoseconds: BudgetPicoseconds)}, {RulePercent.ToString(provider: CultureInfo.InvariantCulture)}% of the {RateHz.ToString(provider: CultureInfo.InvariantCulture)} Hz tick; costliest: {named} ({fix}; world.budget.rules lists every line and how it is priced).";
     }
     /// <summary>Returns the refusal of an arena growth while a tick runs, or <see langword="null"/> when the growth and
-    /// its rollback fit what the budget leaves after the slowest device's worst tick, priced at that device's growth
+    /// its rollback fit what the budget leaves after the slowest device's realistic tick, priced at that device's growth
     /// figure. The same document refuses the same growth on every machine.</summary>
     /// <param name="growthUnits">The growth units already spent this tick plus the proposed change and its rollback
     /// (<see cref="StateArena.ReservationWork"/>).</param>
@@ -159,7 +170,7 @@ public sealed class WorldRuleTimePricing {
         var growth = Slowest.Calibration.GrowthTime(units: growthUnits);
 
         if (growth.IsKnown && Slowest.Tick.IsKnown && (growth + Slowest.Tick).Fits(budgetPicoseconds: BudgetPicoseconds)) { return null; }
-        return $"arena growth and rollback ({growthUnits.ToString(provider: CultureInfo.InvariantCulture)} units, {growth} on '{Slowest.Device}') plus the rules' worst tick ({Slowest.Tick}) exceed the rules' {RuleTime.Milliseconds(picoseconds: BudgetPicoseconds)} a tick";
+        return $"arena growth and rollback ({growthUnits.ToString(provider: CultureInfo.InvariantCulture)} units, {growth} on '{Slowest.Device}') plus the rules' realistic tick ({Slowest.Tick}) exceed the rules' {RuleTime.Milliseconds(picoseconds: BudgetPicoseconds)} a tick";
     }
     /// <summary>Spells the budget and every device's reading, one line each, for <c>world.budget.rules</c> and
     /// <c>puck compile</c>.</summary>
@@ -167,11 +178,11 @@ public sealed class WorldRuleTimePricing {
     /// <returns>The lines, the budget first.</returns>
     public IReadOnlyList<string> Describe(string prefix) {
         var output = new List<string>(capacity: (Devices.Count + 1)) {
-            $"{prefix} time: worst tick {Slowest.Tick} on '{Slowest.Device}' of {RuleTime.Milliseconds(picoseconds: BudgetPicoseconds)} ({RulePercent.ToString(provider: CultureInfo.InvariantCulture)}% of the {RateHz.ToString(provider: CultureInfo.InvariantCulture)} Hz tick); growth headroom {RuleTime.Milliseconds(picoseconds: GrowthHeadroomPicoseconds)}; {((Refusal() is null) ? "admitted" : "refused")}{((Issue is { } issue) ? $": {issue}" : string.Empty)}",
+            $"{prefix} time: realistic tick {Slowest.Tick} on '{Slowest.Device}' of {RuleTime.Milliseconds(picoseconds: BudgetPicoseconds)} ({RulePercent.ToString(provider: CultureInfo.InvariantCulture)}% of the {RateHz.ToString(provider: CultureInfo.InvariantCulture)} Hz tick); growth headroom {RuleTime.Milliseconds(picoseconds: GrowthHeadroomPicoseconds)}; firing allowance {RuleTime.Milliseconds(picoseconds: FiringAllowancePicoseconds)}; {((Refusal() is null) ? "admitted" : "refused")}{((Issue is { } issue) ? $": {issue}" : string.Empty)}",
         };
 
         foreach (var device in Devices) {
-            output.Add(item: $"{prefix} device {device.Device}: tick={device.Tick} worst={device.Worst} {device.Calibration.Describe()} ({device.Source})");
+            output.Add(item: $"{prefix} device {device.Device}: tick={device.Tick} (recurring {device.Detail.Recurring} + dearest change {device.Detail.DearestChange}{((device.Detail.DearestChangeLine.Length > 0) ? $" '{device.Detail.DearestChangeLine}'" : string.Empty)}) one-change-per-line={device.Detail.Changes} worst={device.Worst} {device.Calibration.Describe()} ({device.Source})");
         }
 
         return output;

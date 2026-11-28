@@ -695,6 +695,9 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 }
                 output.Add(item: $"[world.budget.rules total: work={report.HeuristicWorkUnitsPerTick} units; worst tick={report.WorkBudget.WorstWorkUnitsPerTick} units]");
                 output.AddRange(collection: report.Pricing.Describe(prefix: "[world.budget.rules").Select(selector: static line => $"{line}]"));
+                if (server.RuleHost.DescribeSpread() is { } spread) {
+                    output.Add(item: $"[world.budget.rules {spread}]");
+                }
                 output.Add(item: $"[world.budget.rules reference: model={report.ModelId} evidence={report.EvidenceDigest} cycles={report.TotalBound} allowance={report.StepAllowanceCycles} certified={report.Admitted}]");
                 return new CommandResult(Output: string.Join(
                     separator: Environment.NewLine,

@@ -27,6 +27,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     /// <summary>Gets the units of the passes the host runs beside the rules: the flock affinities and the decision
     /// perception.</summary>
     public RuleWork HostWorkUnitsPerTick { get; init; }
+    /// <summary>Gets the sheet's lines in the evaluation order's own order: one per rule of
+    /// <see cref="RuleEvaluationOrder.Rules"/>, then one per interaction, so a host prices each compiled rule it runs
+    /// from the line at its index.</summary>
+    public IReadOnlyList<RuleWorkContributor> RuleLines { get; init; } = [];
     /// <summary>Gets, per cell, the firings per tick that can write it and their places in the pass, which the sheet's
     /// exclusion tree read; a time pricing tallies the same tree over the lines in time
     /// (<see cref="Puck.State.Rules.RuleCostCalibration.Price"/>).</summary>
@@ -80,7 +84,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     internal static (WorldRuleWorkBudget Budget, IReadOnlyList<RuleWorkContributor> Contributors) Analyze(WorldDefinition definition, RuleEvaluationOrder order, CompiledRule[] interactions, WorldFactsCompileContext? context = null) {
         context ??= WorldFactsCompiler.Context(definition: definition);
         var lines = Lines(context: context, definition: definition, interactions: interactions, order: order);
-        var budget = Measure(context: context, definition: definition, interactions: interactions, lines: lines, order: order);
+        var budget = Measure(context: context, definition: definition, interactions: interactions, lines: lines, order: order) with { RuleLines = lines.ToArray() };
 
         Sort(contributors: lines);
         return (budget, lines.AsReadOnly());

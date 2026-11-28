@@ -216,7 +216,10 @@ public sealed partial class WorldRuleHost {
         FreezeDecisionPerception(rules: m_rules);
         m_ruleGateHeld.CountTick();
         RefreshFacts();
+        BeginTickAllowance();
         m_evaluatingWorldRules = true;
+        // The allowance meters the tick's own pass alone: an evaluation outside it (a console firing) is never carried.
+        m_evaluator.Allowance = m_allowance;
 
         bool applied;
         try {
@@ -244,6 +247,7 @@ public sealed partial class WorldRuleHost {
                 );
             }
         } finally {
+            m_evaluator.Allowance = null;
             m_evaluatingWorldRules = false;
         }
         FlushIdentityFacts();
