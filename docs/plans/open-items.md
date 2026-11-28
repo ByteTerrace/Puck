@@ -6428,15 +6428,6 @@ timers, never motion.
   A play keyed by the shell's shift moving off its park (like the net's parting
   plays, `WorldNetPresentation.StepPartings`) would sweep motes onto it as it
   forms and off it as it lapses.
-- [high] While the walk-through scenario was being written, a `puck test` run of
-  `worlds/debug/time-field-tests.puck` stalled one world step past the job pool's
-  30-second fork deadline (`JobPool.Fork`, a `TimeoutException`) three times: twice
-  with a body walking into the parted net while its hold sheet still offered the
-  cells round the hole (once with the button's cap shifted 120 m by a sign error
-  since fixed), and once with a body standing off the button under a field. A parted net now
-  offers no hold (`FixedNet.CellColliders`) and the cap is held to its depth, and
-  the later runs did not stall, but the cause was not named: a stack sample of a
-  stalled step (`dotnet-stack report` on the world process while it hangs) names it.
 - [low] A field cast at a cabinet reaches every target within 3.5 m of where it is
   cast; two cabinets never stand that close today, so one field holds one.
 
@@ -6558,6 +6549,13 @@ Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: the agent harness and embeddings as features, then new
 content on the owner's call.
 
+- **The owner's walk-through notes on the gallery:**
+  - The time puzzle's button becomes one of level 1's floor tiles, and it sinks into the floor when stepped on. The
+    net-opening tile is the one at about (32.0, 4.6, 14.7) in level 1's south gallery, not a separate brass button.
+  - The handheld rental kiosk at about (60.1, 4.6, 16.1) on level 1 (`rentals.puck`'s `rental-counter`) is plain and
+    badly placed. It moves closer to the stairs and gets some character.
+  - T is bound to both the suit switch (`worlds/debug/suit.puck`) and the time-field cast
+    (`worlds/standard/time-field.puck`'s `timeFieldControls`), so one press fires both. The cast gets its own key.
 - **The gallery's flaw is tabled** (the owner's call, while simpler work comes
   first). No floor in `worlds/debug/gallery/layout.puck` enables the `flaw`
   module, so the tube, its collars, its slab openings and its lights are not

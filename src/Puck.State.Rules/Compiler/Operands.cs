@@ -161,10 +161,7 @@ public sealed class LocalOperand : RuleOperand {
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
         if (Source is { } source) {
-            RuleDataflow.CollectExpression(
-                into: into,
-                tokens: source.Expression
-            );
+            into.AddRange(collection: source.Reads);
         }
     }
     /// <inheritdoc/>

@@ -223,6 +223,11 @@ public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledProgr
     /// <summary>Gets how a refusal names the binding (<c>binding 'name'</c>), spelled once when the local is
     /// compiled so a refused evaluation reports it without building it again.</summary>
     public string Describe { get; } = $"binding '{Name}'";
+    /// <summary>Gets every state cell one evaluation of <see cref="Expression"/> reads, each once in first-read order,
+    /// the reads of the locals it reads included: derived when the local is constructed from the earlier locals' own
+    /// reads, so a chain of locals that each read the one before twice costs one walk a local rather than one walk a
+    /// path through the chain. A copy made with <c>with</c> keeps these reads, so it never replaces the expression.</summary>
+    public CellAccess[] Reads { get; } = RuleDataflow.DistinctReads(tokens: Expression);
 }
 /// <summary>One compiled rule: its name, its mode, the flattened gate, the compiled effects, and the
 /// <see cref="RuleNeeds"/> the compiler read off its facts' declarations. A document project derives its own record

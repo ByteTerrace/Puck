@@ -92,6 +92,23 @@ public sealed class RuleNeedsBuilder {
     private readonly List<FacetRef> m_facets = [];
     private readonly List<ICompiledFact> m_facetFacts = [];
     private readonly List<int> m_hostOwnedRows = [];
+    private readonly Dictionary<object, bool> m_entered = new(comparer: ReferenceEqualityComparer.Instance);
+
+    /// <summary>Records that a walk is about to fold a shared program (a local's expression, which every read of the
+    /// local reaches) into this builder, and returns whether it must. Everything a walk adds is a union, so a program
+    /// folded once already left here all it adds; a chain of locals that each read the one before twice is then walked
+    /// once a local, not once a path through the chain.</summary>
+    /// <param name="program">The shared program, compared by reference.</param>
+    /// <param name="keyDependencies">Whether the walk also follows key indirections, which adds to what a walk without
+    /// them adds.</param>
+    /// <returns><see langword="true"/> when the program has not been folded here with at least this scope.</returns>
+    public bool TryEnter(object program, bool keyDependencies) {
+        ArgumentNullException.ThrowIfNull(argument: program);
+
+        if (m_entered.TryGetValue(key: program, value: out var walked) && (walked || !keyDependencies)) { return false; }
+        m_entered[program] = keyDependencies;
+        return true;
+    }
 
     /// <summary>Gets every fact added so far whose type names a facet, each instance once, in walk order: what a read
     /// schedule asks its host to version (<see cref="IStateReader.TryScheduleFact"/>).</summary>
@@ -173,6 +190,7 @@ public sealed class RuleNeedsBuilder {
         m_facets.Clear();
         m_facetFacts.Clear();
         m_hostOwnedRows.Clear();
+        m_entered.Clear();
 
         m_effectReadsTick = false;
         m_irreversible = false;
