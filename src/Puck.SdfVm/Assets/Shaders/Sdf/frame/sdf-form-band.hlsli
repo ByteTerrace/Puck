@@ -30,10 +30,14 @@ uint sdfFormBandWord(uint band) {
 float4 sdfFormBandFloats(uint word) {
     return asfloat(uint4(sdfFrameSampled[word], sdfFrameSampled[word + 1u], sdfFrameSampled[word + 2u], sdfFrameSampled[word + 3u]));
 }
-// The band whose run holds a slot, or -1: a search over the bands in the order of their first slots, which the tables
-// sort them in (SdfWorldTables.SortFormBands).
+// The bands keyed by a run of slots, which lead the table; the rest are keyed by a displacement handle.
+uint sdfFormBandSlotCount(uint count) {
+    return min(sdfFrameSampled[SDF_FRAME_SAMPLED_SLOT_BAND_COUNT_WORD], count);
+}
+// The band whose run holds a slot, or -1: a search over the slot bands in the order of their first slots, which the
+// tables sort them in (SdfWorldTables.SortFormBands).
 int sdfFormBandOf(uint slot) {
-    uint count = sdfFormBandCount();
+    uint count = sdfFormBandSlotCount(sdfFormBandCount());
 
     if (count == 0u) { return -1; }
 
@@ -56,14 +60,28 @@ int sdfFormBandOf(uint slot) {
     }
     return -1;
 }
-// A band's flags (SDF_FORM_BAND_SWEPT_FLAG, SDF_FORM_BAND_PARTED_FLAG, SDF_FORM_BAND_WHOLE_FLAG).
+// The band keyed by a displacement handle (a draw record's SDF_MESH_DISPLACEMENT_WORD), or -1: a walk over the bands
+// after the slot bands, which are few (a net parting), so an undisplaced draw pays one comparison.
+int sdfFormBandOfDisplacement(uint handle) {
+    if (handle == SDF_FRAME_SAMPLED_NONE) { return -1; }
+
+    uint count = sdfFormBandCount();
+
+    [loop]
+    for (uint band = sdfFormBandSlotCount(count); (band < count); band++) {
+        if (sdfFrameSampled[sdfFormBandWord(band) + SDF_FORM_BAND_FIRST_SLOT_WORD] == handle) { return int(band); }
+    }
+    return -1;
+}
+// A band's flags (SDF_FORM_BAND_SWEPT_FLAG, SDF_FORM_BAND_PARTED_FLAG, SDF_FORM_BAND_WHOLE_FLAG,
+// SDF_FORM_BAND_DISPLACED_FLAG, SDF_FORM_BAND_RADIAL_FLAG).
 uint sdfFormBandFlags(uint band) {
     return sdfFrameSampled[sdfFormBandWord(band) + SDF_FORM_BAND_FLAGS_WORD];
 }
-// How far a world point lies ahead of a band's front, metres along its axis: positive where the front has not reached,
-// negative where it has passed. The front runs from its start to its end over its seconds, and the lattice noise at the
-// point, keyed on the band's seed, moves it by up to the band's roughness, so the cut and the edge are ragged on the real
-// surface rather than a flat plane.
+// How far a world point lies ahead of a band's front, metres along its axis (or out from its origin, for a radial
+// front): positive where the front has not reached, negative where it has passed. The front runs from its start to its
+// end over its seconds, and the lattice noise at the point, keyed on the band's seed, moves it by up to the band's
+// roughness, so the cut and the edge are ragged on the real surface rather than a flat plane or a true sphere.
 float sdfFormBandAhead(uint band, float3 p) {
     uint word = sdfFormBandWord(band);
     float4 origin = sdfFormBandFloats(word + SDF_FORM_BAND_ORIGIN_WORD);
@@ -72,8 +90,9 @@ float sdfFormBandAhead(uint band, float3 p) {
     float progress = saturate(sweep.z / max(sweep.w, 1.0e-6));
     float front = (origin.w + ((axis.w - origin.w) * progress));
     float rough = ((sweep.x > 0.0) ? (sweep.x * sdfLatticeNoise3((p * sweep.y), sdfFrameSampled[word + SDF_FORM_BAND_SEED_WORD])) : 0.0);
+    float along = (((sdfFormBandFlags(band) & SDF_FORM_BAND_RADIAL_FLAG) != 0u) ? length(p - origin.xyz) : dot((p - origin.xyz), axis.xyz));
 
-    return ((dot((p - origin.xyz), axis.xyz) + rough) - front);
+    return ((along + rough) - front);
 }
 // How far a world point lies into the side of a band that stays drawn: behind the front for a materializing run, ahead
 // of it for a dissolving one, and its distance from the front either way for a run that stays whole; negative on the
@@ -85,31 +104,16 @@ float sdfFormBandKept(uint band, float3 p) {
     if ((flags & SDF_FORM_BAND_WHOLE_FLAG) != 0u) { return abs(ahead); }
     return (((flags & SDF_FORM_BAND_SWEPT_FLAG) != 0u) ? -ahead : ahead);
 }
-// Discards a raster fragment at world point `p` of a draw on slot `slot` that its run's band cuts: on the cut side of
-// the front, or any fragment of a skinned draw (`skinned`) in a run whose slots move apart.
-void sdfFormBandClip(uint slot, bool skinned, float3 p) {
-    int band = sdfFormBandOf(slot);
-
+// Discards a raster fragment at world point `p` that band `band` cuts (none for -1): on the cut side of the front, or
+// any fragment of a skinned draw (`skinned`) in a run whose slots move apart.
+void sdfFormBandClip(int band, bool skinned, float3 p) {
     if (band < 0) { return; }
     if (skinned && ((sdfFormBandFlags(uint(band)) & SDF_FORM_BAND_PARTED_FLAG) != 0u)) { clip(-1.0); }
     clip(sdfFormBandKept(uint(band), p));
 }
-#ifdef SDF_MESH_HLSLI
-// Discards a mesh raster fragment at world point `p` of draw `draw` that its frame slot's band cuts (sdfFormBandClip),
-// before the fragment writes depth or a glass sum, as the stamp fade does.
-void sdfMeshFormBandClip(uint draw, float3 p) {
-    uint record = sdfMeshRecord(draw);
-
-    sdfFormBandClip(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD), ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) != 0u), p);
-}
-#endif
-// The light a band's edge emits at a surface point of slot `slot`, in nits: the edge's light, falling off over its
-// width behind the front on the side that stays; black for a slot no band holds.
-float3 sdfFormBandEdge(int slot, float3 p) {
-    if (slot < 0) { return float3(0.0, 0.0, 0.0); }
-
-    int band = sdfFormBandOf(uint(slot));
-
+// The light band `band` (none for -1) emits at a surface point, in nits: the edge's light, falling off over its width
+// behind the front on the side that stays.
+float3 sdfFormBandEdgeOf(int band, float3 p) {
     if (band < 0) { return float3(0.0, 0.0, 0.0); }
 
     float4 edge = sdfFormBandFloats(sdfFormBandWord(uint(band)) + SDF_FORM_BAND_EDGE_WORD);
@@ -120,5 +124,28 @@ float3 sdfFormBandEdge(int slot, float3 p) {
 
     return (edge.xyz * (fall * fall));
 }
+#ifdef SDF_MESH_HLSLI
+// The band a draw record's draws ride: the one keyed by the displacement it is drawn through (a net's sheet, whose
+// static draw rides no slot), else the one whose run holds its frame slot, else -1. The one door every reader of a
+// draw's band takes, so the cut, the edge and the motes' rows (SdfWorldTables.PackFormBandRows, in the same order) agree.
+int sdfMeshFormBand(uint record, int slot) {
+    int band = sdfFormBandOfDisplacement(sdfMeshRecordWord(record + SDF_MESH_DISPLACEMENT_WORD));
+
+    return (((band < 0) && (slot >= 0)) ? sdfFormBandOf(uint(slot)) : band);
+}
+// Discards a mesh raster fragment at world point `p` of draw `draw` that its band cuts (sdfMeshFormBand), before the
+// fragment writes depth or a glass sum, as the stamp fade does.
+void sdfMeshFormBandClip(uint draw, float3 p) {
+    uint record = sdfMeshRecord(draw);
+
+    sdfFormBandClip(sdfMeshFormBand(record, asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD))),
+        ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) != 0u), p);
+}
+// The light a resolved hit's band emits at a surface point (sdfMeshFormBand), `slot` being the slot the hit shades in
+// this view.
+float3 sdfMeshFormBandEdge(SdfMeshHit hit, int slot, float3 p) {
+    return sdfFormBandEdgeOf(sdfMeshFormBand(hit.record, slot), p);
+}
+#endif
 
 #endif

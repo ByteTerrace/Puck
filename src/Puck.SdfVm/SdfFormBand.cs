@@ -89,6 +89,16 @@ public readonly record struct SdfFormBand {
     /// <summary>Gets how fast a mote's drift turns about <see cref="Axis"/>, radians a second.</summary>
     public float MoteSwirl { get; init; }
 
-    /// <summary>Returns whether a band cuts anything: it covers a slot and its sweep has length and time.</summary>
-    public bool IsLive => ((SlotCount > 0) && (Seconds > 0f) && (High >= Low) && float.IsFinite(f: Origin.LengthSquared()) && (Axis.LengthSquared() > 0f));
+    /// <summary>Gets the displacement whose draws the band sweeps instead of a run of slots (a net's sheet, whose static
+    /// draws ride no frame slot), or <see langword="null"/> for a band over <see cref="FirstSlot"/> and
+    /// <see cref="SlotCount"/>. A displacement the frame's program does not hold leaves the band out.</summary>
+    public Puck.SignedDistance.SdfDisplacement? Displacement { get; init; }
+    /// <summary>Gets whether the front is a sphere about <see cref="Origin"/> growing from <see cref="Low"/> to
+    /// <see cref="High"/> metres across (a hole opening, a shell flaring), rather than a plane sweeping along
+    /// <see cref="Axis"/>; <see cref="Axis"/> then only leans the motes' drift.</summary>
+    public bool Radial { get; init; }
+
+    /// <summary>Returns whether a band cuts anything: it covers a slot or a displacement and its sweep has length and
+    /// time.</summary>
+    public bool IsLive => (((SlotCount > 0) || (Displacement is not null)) && (Seconds > 0f) && (High >= Low) && float.IsFinite(f: Origin.LengthSquared()) && (Axis.LengthSquared() > 0f));
 }

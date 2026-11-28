@@ -19,8 +19,73 @@ public sealed class WorldNetPresentation {
     private readonly HashSet<string> m_seen = new(comparer: StringComparer.Ordinal);
     private readonly List<string> m_gone = [];
     private Vector3[] m_offsets = [];
+    // The parting plays' clock (presentation seconds the frames advanced) and the bands the latest step published.
+    private double m_clock;
+    private IReadOnlyList<Puck.SdfVm.SdfFormBand> m_bands = [];
+    private readonly List<Puck.SdfVm.SdfFormBand> m_bandScratch = [];
 
-    private sealed record Sheet(WorldPlacementNet Facet, Puck.Physics.FixedNetSpec Spec, SdfSheetDisplacement Displacement);
+    private sealed record Sheet(WorldPlacementNet Facet, Puck.Physics.FixedNetSpec Spec, SdfSheetDisplacement Displacement) {
+        // The opening cell as the latest step read it (null before the first read, so a net met already open plays
+        // nothing), and the parting or closing play it began, by its start on the clock.
+        public bool? Open { get; set; }
+        public double PlayStart { get; set; } = double.NaN;
+        public long Plays { get; set; }
+    }
+
+    /// <summary>Gets the form bands the nets' partings sweep this frame (<see cref="Puck.SdfVm.ISdfSceneEmitter.FormBands"/>):
+    /// one per net whose opening cell changed within its effect's length, keyed by the net's sheet
+    /// (<see cref="Puck.SdfVm.SdfFormBand.Displacement"/>), a front growing out from the opening's centre across its rim,
+    /// whole on both sides. A new list whenever any plays, the one empty list while none does.</summary>
+    public IReadOnlyList<Puck.SdfVm.SdfFormBand> FormBands => m_bands;
+
+    /// <summary>Advances the parting plays: reads each net's opening cell from the presented state, begins a play where it
+    /// changed (its effect over the open time when it opened, over the close time when it closed), and publishes the
+    /// bands of the plays still running. Presentation only: the seed is the placement's and the play's count, so every
+    /// client plays the same parting.</summary>
+    /// <param name="mirror">The presented state the opening cells are read from.</param>
+    /// <param name="deltaSeconds">The seconds since the previous step.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
+    public void StepPartings(WorldStateMirror mirror, float deltaSeconds) {
+        ArgumentNullException.ThrowIfNull(argument: mirror);
+
+        m_clock += Math.Max(val1: deltaSeconds, val2: 0f);
+        m_bandScratch.Clear();
+        foreach (var (id, sheet) in m_sheets) {
+            if ((sheet.Facet.Opening is not { Effect: { } effect } opening) || (sheet.Spec.Opening is not { } kernel)) { continue; }
+
+            var open = (mirror.Scalar(fallback: 0f, scalar: opening.By) != 0f);
+
+            if ((sheet.Open is { } was) && (was != open)) {
+                sheet.PlayStart = m_clock;
+                sheet.Plays++;
+            }
+            sheet.Open = open;
+            if (double.IsNaN(d: sheet.PlayStart) || ((m_clock - sheet.PlayStart) > effect.TotalSeconds)) { continue; }
+
+            var across = Vector3.Normalize(value: sheet.Spec.Across.ToVector3());
+            var up = Vector3.Normalize(value: (sheet.Spec.Up.ToVector3() - (across * Vector3.Dot(vector1: sheet.Spec.Up.ToVector3(), vector2: across))));
+            var centre = ((sheet.Spec.Origin.ToVector3() + (across * (float)kernel.CenterAcross)) + (up * (float)kernel.CenterUp));
+            var band = WorldFormEffects.Band(
+                arriving: false,
+                direction: Vector3.Cross(vector1: across, vector2: up),
+                effect: effect,
+                elapsed: (float)(m_clock - sheet.PlayStart - Math.Max(val1: effect.Delay, val2: 0f)),
+                firstSlot: 0,
+                high: MathF.Max(x: (float)kernel.HalfWidth, y: (float)kernel.HalfHeight),
+                low: 0f,
+                origin: centre,
+                parted: false,
+                rotation: Quaternion.Identity,
+                seconds: (open ? opening.OpenSeconds : opening.CloseSeconds),
+                seed: WorldFormEffects.Seed(body: -1, creation: id, ordinal: sheet.Plays),
+                side: Puck.SdfVm.SdfFormBandSide.Whole,
+                slotCount: 0
+            );
+
+            m_bandScratch.Add(item: (band with { Displacement = sheet.Displacement, Radial = true }));
+        }
+        m_bands = ((m_bandScratch.Count == 0) ? [] : [.. m_bandScratch]);
+    }
 
     /// <summary>Returns the sheet a placement's instances are drawn through, made at its rest layout on first ask, or
     /// <see langword="null"/> for a placement that carries no net or does not resolve to one copy.</summary>

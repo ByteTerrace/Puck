@@ -335,7 +335,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             }
             // A changing form's edge glows over the surface it lies on, after the program and its ink, as scene light
             // the display pass alone tones (frame/sdf-form-band.hlsli).
-            color += sdfFormBandEdge(s.frameSlot, surfacePoint);
+            color += sdfMeshFormBandEdge(meshHit, s.frameSlot, surfacePoint);
         }
     }
 
