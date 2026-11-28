@@ -176,7 +176,7 @@ Engine facts those worlds exercised, which hold for any world:
   (`MachineCartridgeLawTests`).
 - **Derived limits.** Sixteen drive-reach ordinals across channels and target
   registers; aggregate physical-region primer and sampled-surface byte budgets; and the rule budget
-  `RuleCapacity.MaxWorkUnitsPerTick`, where a
+  (`WorldRuleTimePricing`, a share of the tick on the slowest device), where a
   body-pair interaction costs capacity squared.
 - **Placement policy.** `placements.policy` is optional, and whole when
   authored (a partial block refuses at parse naming the missing member).

@@ -54,7 +54,7 @@ corrected in the same change.
 | Vector rows: nearest, mix, mean, remember | `ArenaVectorTransforms` (Vectors) | [vectors](../../../docs/reference/state/vectors.md) |
 | Legal moves, a computer opponent's best move, chance nodes | `ArenaSearch` over journal scopes, judged by `IArenaSearchJudge.Judge` (`RuleArenaSearchJudge`, over a `RuleLatch.Fresh` latch that writes no edge bit); world jobs are `search` rows (`WorldSearchSection`) | [search](../../../docs/reference/state/search.md) |
 | Schedule a distance or region interaction | `WorldRuleHost` supplies carrier rows, positions and sampled occupancy to `RuleDueList`. `RuleEvaluator.DrainFactMoves` delivers moves to both rule families. | [analysis](../../../docs/reference/state/analysis.md) |
-| Read and write sets, order-sensitive pairs, judge a binding only when something it reads moved, price a tick by that | `RuleDataflow`, `RuleHazards`, `RuleSchedule` and `RuleDueList` (per rule, and per binding of a keyed sweep, fed by `StateArena.TryReadCellMoves` and the host's fact moves), `RuleResponse` and `RuleWorkBudget` against `RuleCapacity.MaxWorkUnitsPerTick` | [analysis](../../../docs/reference/state/analysis.md) |
+| Read and write sets, order-sensitive pairs, judge a binding only when something it reads moved, price a tick by that | `RuleDataflow`, `RuleHazards`, `RuleSchedule` and `RuleDueList` (per rule, and per binding of a keyed sweep, fed by `StateArena.TryReadCellMoves` and the host's fact moves), `RuleResponse` and `RuleWorkBudget`, converted to time by each device's `RuleCostCalibration` (`puck bench rules`) and held to the tick's rule budget (`WorldRuleTimePricing`) | [analysis](../../../docs/reference/state/analysis.md) |
 | Bound the values a program or a read can answer; prove a written value lands inside what its destination keeps | `RuleBounds.Of` over `RuleCompileContext.ReadBounds` (a `ValueBounds`: an exact set by enumerating the reads' declared values through the one evaluator, else a range over `FixedInterval`); a host answers for its facts (`WorldBodyStateReads.TryCounterBounds`) | [bounds](../../../docs/reference/state/analysis.md#bound-what-a-program-can-answer) |
 | Know which lane ordinals' slots were touched since you last looked, open writes and rewinds included | `ArenaLaneTouches` through `StateArena.WatchLaneTouches` (the cell-level `RowGeneration`); the open scopes' touched lane ordinals and keys are `StateArena.CollectOpenLaneOrdinals` and `TryCollectOpenKeys` | [arena](../../../docs/reference/state/arena.md#row-versions-and-generations) |
 | Stop a Level rule firing again when its firing changed nothing | the firing schedule (`RuleDataflow.CollectFiring`), settled by `RuleEvaluator.FireProposal`; an unversioned host fact or host-owned row keeps it firing, so version them in the host (`IStateReader.TryScheduleFact`, `IStateReader.TryScheduleHostOwnedRow`) | [keep a Level firing](../../../docs/reference/state/analysis.md#keep-a-level-firing-that-changed-nothing) |
@@ -227,10 +227,15 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   source) answers the key itself (`IStateReader.TryFactKey`), and a source that
   answers no key there wakes the wrong binding, which the replay catches.
 - **Bounded before it runs.** Every row, pool, pattern and search has a
-  ceiling checked at compile or load, and a world whose rules could exceed
-  `RuleCapacity.MaxWorkUnitsPerTick` is refused at load. When merged content
-  hits the work ceiling, first check the sheet prices only what can run
-  (`world.budget.rules --why`); then raise the engine constant rather than
+  ceiling checked at compile or load, and a world whose rules could exceed the
+  tick's rule budget on its slowest device is refused at load: the sheet's units
+  are converted to time with each device profile's measured figures
+  (`WorldDeviceProfile.Rules`, a `RuleCostCalibration` from `puck bench rules`)
+  and compared with `simulation.rulePercent` of the tick period
+  (`WorldRuleTimePricing`). Nothing reads the machine the check runs on, so the
+  verdict is the same everywhere. When merged content hits the budget, first
+  check the sheet prices only what can run (`world.budget.rules --why`), then
+  that the devices are calibrated, then raise the authored share rather than
   cutting content
   ([the rule](../../../docs/reference/state/analysis.md#when-merged-content-collides-with-a-capacity)).
 - **The sheet prices what the evaluator runs.** A rule a due list judges by
@@ -330,7 +335,7 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 | Latch lifecycle writes stay outside firings | `RuleLatch` writers take the journal and refuse inside a scope |
 | A transform reads no names while it runs | `RuleCompiler.TryResolveTransform` resolves to an `ArenaTransform` of ordinals |
 | A rule fits its host | `RuleNeeds`, read off the rule's own declarations by `RuleNeedsBuilder` and admitted against the host's facets; a rule the host cannot serve is refused before evaluation |
-| Worst-case work fits a tick | `RuleWorkBudget` against `RuleCapacity.MaxWorkUnitsPerTick`, at load; the evaluator's deferred locals and the sheet read one `CompiledRule.Deferred`, and the world host's rule pass and the sheet's line places (`RuleWorkContributor.Order`) read one `RuleEvaluationOrder`. A host with another pass order builds its own |
+| Worst-case work fits a tick | `RuleWorkBudget` in time (`RuleCostCalibration.Price`, the same exclusion tree over every line in picoseconds) against the slowest device's budget (`WorldRuleTimePricing`), at load and at every reuse of the programs, which reads the devices and the share afresh; an arena growth while a tick runs against what that budget leaves (`WorldRuleTimePricing.RefuseGrowth`); the evaluator's deferred locals and the sheet read one `CompiledRule.Deferred`, and the world host's rule pass and the sheet's line places (`RuleWorkContributor.Order`) read one `RuleEvaluationOrder`. A host with another pass order builds its own |
 | A price is a function of declarations | `RuleCompileContext.RowCapacity`, the one room `IRuleCostContext` serves every fact, search price and rewind estimate; `RecipientOracleLawTests` compares two hidden-member variants. Nothing refuses a new price that reads storage instead |
 | A read audience encloses the destination's | `StateArena.ReadAudienceEncloses`, called by search and the disclosure transforms, over the restricting zones the arena derives from its own rows and layout (a catalog is reused across a policy-only redeclaration, so a list it derived goes stale). A transform's firing reads its bound live ends, `ArenaTransform.DisclosureReads` and the member reads of its own binding (`ArenaTransformBinding.Each`), which `RuleCompiler.SettleDisclosure` settles: only a member a live end selects by the binding's own key, read by that same key, is left to the bound-end check |
 | A session mirror presents another stream's image only while disclosed alike | `WorldImageClasses.Judge`, the one door that binds a mirror to its class leader's (`WorldSessionMirror.Presented`), comparing `WorldRecipientView.DisclosureClass` at every delivery; review holds that the class names everything a stream's composition reads ([hazards](../../../docs/development/hazards.md#silent-invariants)) |

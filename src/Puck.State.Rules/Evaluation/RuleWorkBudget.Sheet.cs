@@ -94,6 +94,10 @@ public readonly record struct RulePinnedCell(int RowOrdinal, CellKey Key, long L
 /// against the ceiling.</param>
 /// <param name="Response">How <paramref name="Judged"/> and <paramref name="Firings"/> were derived, for the
 /// read-back.</param>
+/// <param name="SetupUnits">The setup part of <paramref name="CheckUnits"/>: the keys the sweep snapshots for the
+/// bindings judged.</param>
+/// <param name="WorstFirings">The firings <paramref name="WorstUnits"/> charges: the multiplier, capped by the rule's
+/// <see cref="CompiledRule.MaxFirings"/>.</param>
 public readonly record struct RuleWorkContributor(
     string Name,
     bool IsInteraction,
@@ -107,7 +111,9 @@ public readonly record struct RuleWorkContributor(
     long Order = -1L,
     long Judged = 0L,
     RuleWork WorstUnits = default,
-    string Response = ""
+    string Response = "",
+    RuleWork SetupUnits = default,
+    long WorstFirings = 0L
 );
 /// <summary>The firings per tick that can write one cell, each at its place in the tick's evaluation pass. A write
 /// changes what the lines after it read and nothing before, so two lines can read different values of the cell only
@@ -288,7 +294,9 @@ public static partial class RuleWorkBudget {
             Name: rule.Name,
             Order: order,
             Response: response.Why,
+            SetupUnits: setup,
             WorkUnits: (checkUnits + firingUnits),
+            WorstFirings: capped,
             WorstUnits: ((cost.Setup + (multiplier * cost.Check)) + (capped * cost.Effects))
         );
     }

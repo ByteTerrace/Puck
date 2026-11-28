@@ -64,15 +64,14 @@ public sealed class BrowserCostReportLawTests {
         var deferred = new List<string>();
 
         Assert.False(condition: BrowserParser.TryParseAndValidate(bytes, validationErrors, deferred, out _));
-        Assert.Contains(collection: validationErrors, filter: static error => error.Contains(comparisonType: StringComparison.Ordinal, value: "the maximum of"));
+        Assert.Contains(collection: validationErrors, filter: static error => error.Contains(comparisonType: StringComparison.Ordinal, value: "of the 30 Hz tick"));
 
         var analysis = BrowserCostAnalyzer.Analyze(utf8Json: bytes);
 
         Assert.True(condition: analysis.Ok, userMessage: string.Join(separator: Environment.NewLine, values: (analysis.Errors ?? [])));
         Assert.False(condition: analysis.Validated);
         Assert.NotNull(@object: analysis.Report);
-        Assert.True(condition: (long.Parse(analysis.Report.HeuristicWorkUnitsPerTick, System.Globalization.CultureInfo.InvariantCulture) > RuleCapacity.MaxWorkUnitsPerTick));
-        Assert.Contains(collection: analysis.ValidationErrors!, filter: static error => error.Message.Contains(comparisonType: StringComparison.Ordinal, value: "the maximum of"));
+        Assert.Contains(collection: analysis.ValidationErrors!, filter: static error => error.Message.Contains(comparisonType: StringComparison.Ordinal, value: "of the 30 Hz tick"));
         Assert.Empty(collection: analysis.Deferred!);
         Assert.Null(@object: analysis.Errors);
     }

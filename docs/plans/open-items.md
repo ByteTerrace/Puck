@@ -1553,6 +1553,15 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   in kit partitions
   ([the kit advance split](engine-job-system.md#the-steps-phases)) over one
   frozen pose image; this transaction is what the state-writing kits wait on.
+- [high] Rule admission is priced in time (`WorldRuleTimePricing`), but no device profile in
+  `worlds/standard/quality.puck` carries measured figures yet, so every world is priced at
+  `RuleCostCalibration.Uncalibrated`. Run `puck bench rules --device <profile> --output <file>` in a quiet
+  window on the RTX 4070 and the RTX 2060 and author each `rules { ... }` block. What the figures leave unpriced:
+  the rule part's fixed per-tick host work (`WorldRuleHost.EvaluateWorldRules`' fact derivation, arena publication
+  and delivery), which the bench's empty scenario measures and the sheet charges nowhere; host effects that charge a
+  door without counting it (`WorldIdentityFactEffect`'s write, `WorldPlacementEffectCost.DocumentCost`, a document write and revalidation), priced as element
+  units; the host passes, priced at the check figure; and the search lane, still a unit allowance
+  (`SearchCapacity.MaxWorkUnitsPerStep`).
 - [medium] The rule phase's remaining volatile and visit costs are the memo's
   ([rule evaluation stays serial](engine-job-system.md#rule-evaluation-stays-serial)).
 - [medium] Rule programs and gates evaluate as closure trees
@@ -1563,9 +1572,7 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   valid until a binding's firing commits; order-free folds (`all`, `any`,
   `count`) over a row's cells in vector lanes, `sum` staying scalar for its
   overflow fault; and gates a dataflow proof shows binding-invariant decided
-  once per sweep. The rule work price (`RuleCapacity.MaxWorkUnitsPerTick`'s
-  1.6 ns a unit) is recalibrated against a measured board sweep once the lead's
-  quiet window has read the closures. A tree deeper than
+  once per sweep. A tree deeper than
   `ProgramClosures.MaxDepth` (only an expression nested to its token ceiling
   inside calls nested to theirs) answers `Domain` where the interpreter it
   replaced answered a value; the cause fix is a lowering that evaluates such a
@@ -3969,7 +3976,7 @@ grow:
   table on every send; its step 3 measures that before removing the ring.
 - [medium] A world's tick rate could follow its load. One deterministic world
   per authority makes EVE-style tick dilation per world possible: a world over
-  its work allowance (`RuleCapacity.MaxWorkUnitsPerTick`) steps slower in wall
+  its rule budget (`WorldRuleTimePricing`) steps slower in wall
   time, not skipping ticks, so its state stays one fixed history and its
   neighbours are unaffected. Weigh it in [the MMO foundations register](mmo-foundations/synthesis.md#4-puck-native-combinations)
   against shedding load by splitting the place at runtime, for which the
@@ -6055,8 +6062,8 @@ shell, each usable alone, each named for what it does.
   [settlement](#settlement-trust-roles-and-revocation). The stake rows serve
   every product row, so the owner's deferred casino call waits on nothing
   here.
-- The rules' work-budget cost is the table's price (`world.budget` against
-  `RuleCapacity.MaxWorkUnitsPerTick`): a transfer between named piles costs a
+- The rules' work-budget cost is the table's price (`world.budget` against the
+  tick's rule budget): a transfer between named piles costs a
   few thousand units where one between piles a live zone table picks costs
   about 140,000, so every deal, gather and move is a rule pinned on its
   literal piles, and the table reads one pile a tick (`kSync.scan`).
@@ -6413,7 +6420,7 @@ built and wired into the debug world (`worlds/debug/targeting.puck`).
   `readersFrom` row from membership closes it.
 - [medium] Edges over a moving input (`lock-press`, `ping-press`, `mark-press`)
   are priced as every binding firing every tick, so the debug world's sheet
-  sits within about sixteen thousand units of `RuleCapacity.MaxWorkUnitsPerTick`.
+  sits within about sixteen thousand units of the unit ceiling the time budget replaced.
   A sweep of the step's input events (`inputEvents(…)`) binds only presses.
 - [medium] `marks-<s>` reads its seat's character records every tick
   (`$record:` is unversioned); an identity record revision the rule host

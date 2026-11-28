@@ -90,7 +90,9 @@ public sealed class WriteEffect : RuleEffect, IStateWriteEffect, IValueSourcedEf
         );
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (512L + Source.Cost(context: context));
+    public override RuleWork Cost(IRuleCostContext context) => (RuleWorkBudget.DoorUnits + Source.Cost(context: context));
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) => 1L;
 }
 /// <summary>Fires a generator row into its draw site.</summary>
 public sealed class GenerateEffect : RuleEffect, IStateAddressedEffect {
@@ -152,7 +154,9 @@ public sealed class RemoveStateCellEffect : RuleEffect, IStateAddressedEffect {
     public override void CollectWrites(List<CellAccess> into) =>
         CollectWriteAccess(effect: this, into: into);
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => 512L;
+    public override RuleWork Cost(IRuleCostContext context) => RuleWorkBudget.DoorUnits;
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) => 1L;
 }
 /// <summary>Writes an absolute simulation due tick into an integer state cell.</summary>
 public sealed class ScheduleStateEffect : RuleEffect, IStateWriteEffect {
@@ -191,7 +195,9 @@ public sealed class ScheduleStateEffect : RuleEffect, IStateWriteEffect {
     public override void CollectWrites(List<CellAccess> into) =>
         CollectWriteAccess(effect: this, into: into);
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => 512L;
+    public override RuleWork Cost(IRuleCostContext context) => RuleWorkBudget.DoorUnits;
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) => 1L;
 }
 /// <summary>A savepoint inside the firing's scope: when a step refuses, the savepoint rewinds so earlier siblings
 /// survive, <see cref="OnFailure"/> runs in the firing's own scope, and later siblings continue.</summary>
@@ -251,6 +257,11 @@ public sealed class TransactionEffect : RuleEffect {
         // rewinds the steps before it and fires the failure branch once in the firing's scope.
         return ((1L + main) + failure);
     }
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) => Puck.Maths.BinaryIntegerFunctions.AddSaturating(
+        left: RuleWorkBudget.EffectsDoors(context: context, effects: Effects),
+        right: RuleWorkBudget.EffectsDoors(context: context, effects: OnFailure)
+    );
 }
 /// <summary>Pushes one evaluated value into a history row's ring.</summary>
 public sealed class PushStateEffect : RuleEffect, IValueSourcedEffect {
@@ -349,6 +360,16 @@ public sealed class IfEffect : RuleEffect {
             effects: Else
         )
     ));
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) {
+        // The doors of the branch the cost takes; on a tie the fewer, so no unit of the dearer branch is priced as a door
+        // it is not.
+        var order = RuleWork.Compare(left: RuleWorkBudget.EffectsCost(context: context, effects: Then), right: RuleWorkBudget.EffectsCost(context: context, effects: Else));
+        var then = RuleWorkBudget.EffectsDoors(context: context, effects: Then);
+        var otherwise = RuleWorkBudget.EffectsDoors(context: context, effects: Else);
+
+        return ((order > 0) ? then : ((order < 0) ? otherwise : Math.Min(val1: then, val2: otherwise)));
+    }
 }
 /// <summary>An atomic discrete state transform. The authored declaration carries the transform's own parameters;
 /// every row it addresses is resolved here to a catalog ordinal.</summary>
@@ -449,4 +470,6 @@ public sealed class TransformStateEffect : RuleEffect {
     }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => Price;
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) => 1L;
 }

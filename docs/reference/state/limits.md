@@ -25,8 +25,9 @@ A few rules apply to every limit on this page:
   document, raise the ceiling that was hit and keep the content as it is.
 
 > [!NOTE]
-> Work units are heuristic prices that aren't calibrated against CPU time. The
-> sheet a document is held to under `RuleCapacity.MaxWorkUnitsPerTick` prices
+> Work units are heuristic prices; admission converts them to time with each
+> device's measured calibration (`RuleCostCalibration`). The sheet a document is
+> held to under the tick's rule budget (`WorldRuleTimePricing`) prices
 > a tick at rest plus one change for each rule the evaluator judges by change,
 > and every binding for each other line; it doesn't guarantee how long a tick
 > takes, and a tick in which many things change at once costs more, up to the
@@ -113,7 +114,7 @@ A few rules apply to every limit on this page:
 
 | Limit | Value | Constant | Explained in |
 |---|---|---|---|
-| Rule work per tick | 4,400,000 work units | `RuleCapacity.MaxWorkUnitsPerTick` | [Rule analysis, scheduling, and work budgets](analysis.md) |
+| Rule work per tick | a share of the tick period on the slowest device | `WorldSimulationDefaults.DefaultRulePercent`, `WorldRuleTimePricing` | [Rule analysis, scheduling, and work budgets](analysis.md#the-budget) |
 | Firings in one iterating sweep | Every binding, or the rule's `maxFirings` (at least 1) | `Rule.MaxFirings` | [Rules and firing](rules.md#bound-how-many-bindings-fire) |
 | Locals per rule, including implicit ones | 64 | `RuleCapacity.MaxLocalsPerRule` | [Rules and firing](rules.md) |
 | Top-level effects per rule | 256 | `RuleCapacity.MaxEffectsPerRule` | [Rules and firing](rules.md) |

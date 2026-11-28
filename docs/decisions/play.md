@@ -728,9 +728,9 @@ player reaches by pushing pieces is accepted as any move is.
 
 **Both document ceilings are structural, so a collision widens them.** The
 tabletop, rigid-fidelity, and cards lanes each fit under `StateCapacity.MaxRows`
-and `RuleCapacity.MaxWorkUnitsPerTick` alone and sum past both when merged; the
-answer is to widen the ceilings rather than cut a lane. The work-unit count is a
-priced allowance the [state and language](state-and-language.md#capacities)
+and the tick's rule budget (`WorldRuleTimePricing`) alone and sum past both when
+merged; the answer is to widen the ceilings rather than cut a lane. The rule budget
+is a priced allowance the [state and language](state-and-language.md#capacities)
 decisions own, and the code owns the constants; this records what the collision
 proves, not what a constant should be.
 

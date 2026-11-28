@@ -2679,7 +2679,9 @@ sphere to the lattice, clamps every result to the field envelope, and caps its
 radius at eight cells, bounding one firing to at most 4,913 candidate visits.
 
 Rule execution admits at most 256 top-level effects per rule/interaction and
-`RuleCapacity.MaxWorkUnitsPerTick` statically derived heuristic work units per tick. There is no separate
+statically derived heuristic work units per tick, admitted in time against the tick's rule budget
+(`WorldRuleTimePricing`: each device's `RuleCostCalibration`, the slowest device held to
+`simulation.rulePercent` of the tick). There is no separate
 ordinary-rule count ceiling. A line has three parts: setup, paid once per sweep;
 check, paid once per evaluation whether or not the gate holds; and firing, paid
 once per evaluation whose effects run. The cost includes gate/expression
@@ -2794,8 +2796,7 @@ limits: they neither grant omniscient sensing nor enlarge the inspected sample.
 Zero affinity does not disable separation. These are relative mean weights;
 the profile's outer `cohesion` and `alignment` still set each term's strength.
 `world.flock` echoes the expressions and counters, and `world.budget` includes
-their conservative cost in the shared `RuleCapacity.MaxWorkUnitsPerTick`
-admission ceiling.
+their conservative cost in the shared rule budget (`WorldRuleTimePricing`).
 Runtime sampling and checkpoint semantics live in the
 [server reference](../Puck.World.Server/README.md#local-flock-steering).
 
@@ -3414,9 +3415,8 @@ frames, and seed ride the checkpoint and hash.
 
 Search spends work, not nodes. One judge run costs the frame-evaluable judge
 rules' work sheet, tallied like the tick's, so a judge rule's `maxFirings`
-lowers every candidate's price too. What `RuleCapacity.
-MaxWorkUnitsPerTick` leaves after the sheet, less every job's worst-case fold of
-its input dependency rows (the stamp that tells it its inputs moved), is every
+lowers every candidate's price too. `SearchCapacity.MaxWorkUnitsPerStep`, less every
+job's worst-case fold of its input dependency rows (the stamp that tells it its inputs moved), is every
 job's allowance. Position-key prices use only that job's plan and judge rows;
 unrelated state is never folded or charged. A tick
 steps one job with work to do (enabled, and its inputs moved, its walk open or

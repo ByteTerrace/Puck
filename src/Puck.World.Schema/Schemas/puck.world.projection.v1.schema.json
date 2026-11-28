@@ -929,6 +929,68 @@
                 "additionalProperties": false,
                 "default": null,
                 "title": "WorldFrameBar"
+              },
+              "rules": {
+                "description": "What the device spends on each quantity the rule work sheet prices, as puck bench rules measured it there. Rule admission converts the sheet to time with each device\u0027s figures and holds the slowest device the world authors to the tick\u0027s rule budget (WorldRuleTimePricing); a device without figures is priced at the slowest calibrated device\u0027s, and says so.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "setup": {
+                    "description": "Picoseconds per setup unit: one key a sweep snapshots, or one distance test an interaction charges before its evaluations.",
+                    "type": "integer"
+                  },
+                  "binding": {
+                    "description": "Picoseconds per binding judged, beyond the units its gate prices.",
+                    "type": "integer"
+                  },
+                  "check": {
+                    "description": "Picoseconds per check unit: an operand read, an operation or a comparison of a gate or local.",
+                    "type": "integer"
+                  },
+                  "firing": {
+                    "description": "Picoseconds per firing, beyond the units its effects price.",
+                    "type": "integer"
+                  },
+                  "door": {
+                    "description": "Picoseconds per door an effect charges (Doors): an arena cell write, an effect arm\u0027s dispatch.",
+                    "type": "integer"
+                  },
+                  "effect": {
+                    "description": "Picoseconds per effect unit that is not a door: a source\u0027s operand reads and operations, a transform\u0027s element moves, the host\u0027s commit work.",
+                    "type": "integer"
+                  },
+                  "host": {
+                    "description": "Picoseconds per unit of the passes a host runs beside the rules (flock affinities, decision perception).",
+                    "type": "integer"
+                  },
+                  "growth": {
+                    "description": "Picoseconds per arena growth unit (ReservationWork): copying and reindexing a changed reservation, or taking it back.",
+                    "type": "integer"
+                  },
+                  "build": {
+                    "description": "What measured these figures (the device, the build\u0027s version and commit, the date), as the bench wrote it; absent for figures an author wrote by hand.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "setup",
+                  "binding",
+                  "check",
+                  "firing",
+                  "door",
+                  "effect",
+                  "host",
+                  "growth"
+                ],
+                "additionalProperties": false,
+                "default": null,
+                "title": "RuleCostCalibration"
               }
             },
             "required": [
@@ -7096,6 +7158,14 @@
             "Watched": "A world someone stands in observes it through a surface they stand near, or an observer the host knows nothing more about (another process) holds a session on it.",
             "Occupied": "Someone stands in the world."
           }
+        },
+        "rulePercent": {
+          "description": "The percent of the tick period the world\u0027s rules may take at worst on the slowest device it authors (WorldRuleTimePricing), 1 to 100. Absent is DefaultRulePercent.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
         }
       },
       "required": [

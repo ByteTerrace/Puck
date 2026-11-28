@@ -99,9 +99,11 @@ public sealed class ClaimEffect : RuleEffect {
     }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => (RuleWork.Known(units: BinaryIntegerFunctions.AddSaturating(
-        left: BinaryIntegerFunctions.AddSaturating(left: 512L, right: PoolEffectWork.OccupancyWords(pool: Pool)),
+        left: BinaryIntegerFunctions.AddSaturating(left: RuleWorkBudget.DoorUnits, right: PoolEffectWork.OccupancyWords(pool: Pool)),
         right: PoolEffectWork.InsertWidth(pool: Pool, context: context)
     )) + RuleWorkBudget.EffectsCost(context: context, effects: Effects));
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) => BinaryIntegerFunctions.AddSaturating(left: 1L, right: RuleWorkBudget.EffectsDoors(context: context, effects: Effects));
 }
 /// <summary>Releases one generation-checked pool handle held in an evaluator register.</summary>
 public sealed class ReleaseEffect : RuleEffect {
@@ -137,7 +139,7 @@ public sealed class ReleaseEffect : RuleEffect {
     }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) {
-        var units = BinaryIntegerFunctions.AddSaturating(left: 512L, right: PoolEffectWork.ReleaseWidth(pool: Pool, context: context));
+        var units = BinaryIntegerFunctions.AddSaturating(left: RuleWorkBudget.DoorUnits, right: PoolEffectWork.ReleaseWidth(pool: Pool, context: context));
         var releaseCalls = 1L;
         var scanWidth = 0L;
 
@@ -146,7 +148,7 @@ public sealed class ReleaseEffect : RuleEffect {
         // of scans is one for the requested handle plus one for each possibly live cascade handle.
         foreach (var pair in m_cascadePools) {
             var live = pair.MaxLive;
-            var pairRelease = BinaryIntegerFunctions.AddSaturating(left: 512L, right: PoolEffectWork.ReleaseWidth(context: context, pool: pair));
+            var pairRelease = BinaryIntegerFunctions.AddSaturating(left: RuleWorkBudget.DoorUnits, right: PoolEffectWork.ReleaseWidth(context: context, pool: pair));
 
             units = BinaryIntegerFunctions.AddSaturating(left: units, right: BinaryIntegerFunctions.MultiplySaturating(left: live, right: pairRelease));
             releaseCalls = BinaryIntegerFunctions.AddSaturating(left: releaseCalls, right: live);
@@ -159,6 +161,17 @@ public sealed class ReleaseEffect : RuleEffect {
         );
 
         return RuleWork.Known(units: units);
+    }
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) {
+        // One release door for the handle, and one for every pair the cascade may release.
+        var doors = 1L;
+
+        foreach (var pair in m_cascadePools) {
+            doors = BinaryIntegerFunctions.AddSaturating(left: doors, right: pair.MaxLive);
+        }
+
+        return doors;
     }
 
     private static void CollectPoolReads(StatePoolDescriptor pool, List<CellAccess> into) {
@@ -227,12 +240,14 @@ public sealed class ClaimPairEffect : RuleEffect {
     public override RuleWork Cost(IRuleCostContext context) {
         // Check live endpoint pairs for duplicates, then select the lowest free storage slot.
         var units = BinaryIntegerFunctions.AddSaturating(
-            left: ((512L + (3L * Pool.MaxLive)) + PoolEffectWork.OccupancyWords(pool: Pool)),
+            left: ((RuleWorkBudget.DoorUnits + (3L * Pool.MaxLive)) + PoolEffectWork.OccupancyWords(pool: Pool)),
             right: PoolEffectWork.InsertWidth(pool: Pool, context: context)
         );
 
         return (RuleWork.Known(units: units) + RuleWorkBudget.EffectsCost(context: context, effects: Effects));
     }
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) => BinaryIntegerFunctions.AddSaturating(left: 1L, right: RuleWorkBudget.EffectsDoors(context: context, effects: Effects));
 }
 /// <summary>Runs a lexical body once for each full handle snapshotted from a pool. Handles carry generations, so a
 /// released and reclaimed slot is not confused with its earlier lifetime.</summary>
@@ -278,6 +293,11 @@ public sealed class ForEachPoolEffect : RuleEffect {
 
         return (RuleWork.Known(units: snapshot) + (capacity * RuleWorkBudget.EffectsCost(context: context, effects: Effects)));
     }
+    /// <inheritdoc/>
+    public override long Doors(IRuleCostContext context) => BinaryIntegerFunctions.MultiplySaturating(
+        left: (Pool.IsPair ? Pool.MaxLive : context.RowCapacity(rowOrdinal: Pool.DomainRowOrdinal)),
+        right: RuleWorkBudget.EffectsDoors(context: context, effects: Effects)
+    );
 }
 /// <summary>Reads one field addressed by a typed, generation-checked instance binding.</summary>
 public sealed class InstanceFieldOperand : RuleOperand {

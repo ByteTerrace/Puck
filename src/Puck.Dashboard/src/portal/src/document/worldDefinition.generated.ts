@@ -3491,6 +3491,45 @@ export type Principal = string;
 
 export type QualityTier = "low" | "medium" | "high";
 
+export type RuleCostCalibration = {
+  /**
+   * Picoseconds per setup unit: one key a sweep snapshots, or one distance test an interaction charges before its evaluations.
+   */
+  setup: number;
+  /**
+   * Picoseconds per binding judged, beyond the units its gate prices.
+   */
+  binding: number;
+  /**
+   * Picoseconds per check unit: an operand read, an operation or a comparison of a gate or local.
+   */
+  check: number;
+  /**
+   * Picoseconds per firing, beyond the units its effects price.
+   */
+  firing: number;
+  /**
+   * Picoseconds per door an effect charges (Doors): an arena cell write, an effect arm's dispatch.
+   */
+  door: number;
+  /**
+   * Picoseconds per effect unit that is not a door: a source's operand reads and operations, a transform's element moves, the host's commit work.
+   */
+  effect: number;
+  /**
+   * Picoseconds per unit of the passes a host runs beside the rules (flock affinities, decision perception).
+   */
+  host: number;
+  /**
+   * Picoseconds per arena growth unit (ReservationWork): copying and reindexing a changed reservation, or taking it back.
+   */
+  growth: number;
+  /**
+   * What measured these figures (the device, the build's version and commit, the date), as the bench wrote it; absent for figures an author wrote by hand.
+   */
+  build?: string | null;
+};
+
 export type RuleGroupDeclaration = {
   /**
    * The group's stable name — unique within the section, and never a rule's name.
@@ -7630,6 +7669,10 @@ export type WorldDeviceProfile = {
    * The device's frame bar: the window size its frame time is judged at and the rate it must hold there. A host started with --frame-bar opens its window at this size, and a benchmark run judges its iterations against this rate's period. Absent where the world states no bar for the device.
    */
   frameBar?: WorldFrameBar | null;
+  /**
+   * What the device spends on each quantity the rule work sheet prices, as puck bench rules measured it there. Rule admission converts the sheet to time with each device's figures and holds the slowest device the world authors to the tick's rule budget (WorldRuleTimePricing); a device without figures is priced at the slowest calibrated device's, and says so.
+   */
+  rules?: RuleCostCalibration | null;
 };
 
 export type WorldDisclosureTier = "Frames" | "Presentation" | "Replica";
@@ -15595,6 +15638,10 @@ export type WorldSimulationDefaults = {
    * The least attention the world steps at (WorldAttention). Below it the host that runs the world does not step it: the world lapses, and when attention returns its clocks jump the whole lapsed span in one closed-form move before it steps again, so nothing in it ran while nobody looked and no tick is replayed. Absent is Unobserved: the world steps whoever observes it, and its state never depends on attention. A lapse is authority input, so a world that authors a higher value states that observation may decide what happens in it.
    */
   stepsAt?: WorldAttention;
+  /**
+   * The percent of the tick period the world's rules may take at worst on the slowest device it authors (WorldRuleTimePricing), 1 to 100. Absent is DefaultRulePercent.
+   */
+  rulePercent?: number | null;
 };
 
 export type WorldSkyBlend = "over" | "add" | "multiply" | "screen";

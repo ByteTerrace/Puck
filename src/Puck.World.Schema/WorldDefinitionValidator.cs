@@ -1748,6 +1748,11 @@ public static partial class WorldDefinitionValidator {
 
         if ((run.Before is { } before) && ValidatedPrograms.TryGetValue(before, out var previous) &&
             (previous.ReuseFor(definition) is { } reused)) {
+            // The programs stand, but the devices or the rule share may have moved, and they decide admission.
+            if (reused.Pricing.Refusal(rowsAtCeiling: name => RowsAtCeiling(definition: definition, rules: reused.Rules, interactions: reused.Interactions, name: name)) is { } reusedRefusal) {
+                errors.Add(reusedRefusal);
+                return null;
+            }
             ValidatedPrograms.AddOrUpdate(definition, reused);
             return reused;
         }
@@ -1773,28 +1778,33 @@ public static partial class WorldDefinitionValidator {
             }
             order = Puck.State.Rules.RuleEvaluationOrder.Of(groups: groups, rules: rules);
             work = WorldRuleWorkBudget.Analyze(definition, order, interactions, context);
-            if (WorldRuleWorkBudget.Refuse(
-                contributors: () => work.Contributors,
-                rowsAtCeiling: name => (rules.Concat(interactions).FirstOrDefault(rule => rule.Name == name) is { } line
-                    ? WorldRuleWorkBudget.RowsAtCeiling(context: context ??= WorldFactsCompiler.Context(definition), rule: line)
-                    : []),
-                work: work.Budget.WorkUnitsPerTick
-            ) is { } refusal) {
-                errors.Add(refusal);
-            }
             if (errors.Count > 0) { return null; }
 
             ValidateSearch(definition: definition, errors: errors, rules: rules);
-            if ((errors.Count > 0) || !run.RetainCompilation) { return null; }
+            if (errors.Count > 0) { return null; }
 
-            tables = WorldRuleCompilation.CompileTables(definition, context);
+            tables = (run.RetainCompilation ? WorldRuleCompilation.CompileTables(definition, context) : []);
         } finally {
             inputs = recording.End();
         }
+        // Admission reads the devices' calibrations and the rule share outside the programs' recording: they price the
+        // sheet but compile nothing, so a render edit never recompiles the rules, and the reuse above admits afresh.
+        var pricing = WorldRuleTimePricing.Of(budget: work.Budget, definition: definition, lines: work.Contributors);
+
+        if (pricing.Refusal(rowsAtCeiling: name => RowsAtCeiling(definition: definition, rules: rules, interactions: interactions, name: name)) is { } refusal) {
+            errors.Add(refusal);
+            return null;
+        }
+        if (!run.RetainCompilation) { return null; }
         var compiled = new WorldRuleCompilation(definition, rules, groups, interactions, tables, order, work, inputs);
         ValidatedPrograms.AddOrUpdate(definition, compiled);
         return compiled;
     }
+    // The rows a refused line's price stands at the engine's cell ceiling for, named only to word the refusal.
+    private static IEnumerable<string> RowsAtCeiling(WorldDefinition definition, Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledRule[] interactions, string name) =>
+        (rules.Concat(interactions).FirstOrDefault(rule => rule.Name == name) is { } line
+            ? WorldRuleWorkBudget.RowsAtCeiling(context: WorldFactsCompiler.Context(definition), rule: line)
+            : []);
     private static void RefuseCollected(List<string> errors) {
         if (errors.Count > 0) {
             throw new InvalidOperationException(message: $"Invalid WorldDefinition:{Environment.NewLine} - {string.Join(

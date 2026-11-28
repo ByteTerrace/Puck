@@ -6286,6 +6286,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lanes[].name` | `WorldRenderLane.Name` | a render lane's name, which a creation's lane members write |
 | `render.devices[].name` | `WorldDeviceProfile.Name` | a device profile's name, which a host selects the profile by (WorldDeviceProfiles.Find) |
 | `render.devices[].match` | `WorldDeviceProfile.Match` | a device match pattern |
+| `render.devices[].rules.build` | `RuleCostCalibration.Build` | what measured a rule cost calibration |
 | `screens[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `screens[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].source[session].destination` | `WorldScreenSource.Session.Destination` | a destination name |

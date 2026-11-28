@@ -228,7 +228,8 @@ public enum MatchFacet : byte {
     Length,
 }
 /// <summary>Hard bounds for rule programs. Each names the storage it sizes or the recursion it bounds; what a
-/// program costs to run is the work sheet's to price, not a count's to cap.</summary>
+/// program costs to run is the work sheet's to price, and a host's calibrated time budget to admit
+/// (<c>RuleCostCalibration</c>), not a count's to cap.</summary>
 public static class RuleCapacity {
     /// <summary>The most local values one rule may declare: every evaluator host holds one eight-byte slot per
     /// local for the evaluation in flight, 512 bytes a host.</summary>
@@ -249,12 +250,4 @@ public static class RuleCapacity {
     public const int MaxPredicateTokens = 1024;
     /// <summary>The most effects in one atomic transaction branch, priced like any other effect.</summary>
     public const int MaxTransactionEffects = 256;
-    /// <summary>The maximum statically derived rule work admitted for one simulation tick — sized against the
-    /// tick's own budget at a consumer's shipped 30 Hz cadence (a 33.3 ms tick), not chosen independent of it. The
-    /// rule sweep is one of several passes a tick pays for; reserving about 7 ms of the tick (a little over a fifth)
-    /// as its worst-case share and pricing one work unit at ~1.6 ns — a plausible cost for the fixed-point compare,
-    /// read, or write every rule/effect cost is built from — yields this ceiling. It bounds what an author may express
-    /// and never what a shipped world already does: the highest shipped sheet, the debug world's, sits under it. The
-    /// search jobs draw on the same ceiling, so a world's rules and the dearest search's minimum share it.</summary>
-    public const long MaxWorkUnitsPerTick = 4_400_000L;
 }
