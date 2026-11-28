@@ -147,14 +147,14 @@ public sealed class CompiledBodyMotionProgram {
             or BodyMotionOp.IntegrateScratchVelocity => (BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
         BodyMotionOp.CommitPose => BodyProgramAdmission.Pose,
         BodyMotionOp.SetVerticalVelocity or BodyMotionOp.ScaleVerticalVelocity or BodyMotionOp.PlanarImpulse => BodyProgramAdmission.Velocity,
-        BodyMotionOp.TimedMove => (BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
+        BodyMotionOp.TimedMove or BodyMotionOp.Mantle => (BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
         BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer or BodyMotionOp.Designate or BodyMotionOp.Generate => BodyProgramAdmission.ActionState,
         _ => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity | BodyProgramAdmission.ActionState | BodyProgramAdmission.Sensors),
     };
 
     /// <summary>Reports whether this program profile admits an instruction's required registers.</summary>
     public bool Admits(BodyMotionOp operation) => ((RequiredAdmission(operation: operation) & ~AdmissionMask) == BodyProgramAdmission.None)
-        && ((operation != BodyMotionOp.TimedMove) || SupportsTimedMove);
+        && ((operation is not (BodyMotionOp.TimedMove or BodyMotionOp.Mantle)) || SupportsTimedMove);
     /// <summary>Compiles and validates a program's declared shape in one construction-time walk.</summary>
     /// <param name="name">The stable program name.</param>
     /// <param name="version">The declared instruction-set version; must equal <see cref="SupportedVersion"/>.</param>

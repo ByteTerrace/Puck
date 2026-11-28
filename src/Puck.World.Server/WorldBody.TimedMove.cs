@@ -6,7 +6,12 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 /// <summary>The complete continuation of a body-relative move after its launch frame has been resolved.</summary>
-public readonly record struct WorldTimedBodyMove(FixedTimedMove Motion, FixedQ4816 StartYaw, ulong ElapsedTicks) {
+/// <param name="Motion">The move's travel, yaw, duration, curve, arc and exclusivity.</param>
+/// <param name="StartYaw">The body's yaw in the move's frame at the launch, in radians.</param>
+/// <param name="ElapsedTicks">The engine ticks of the move already travelled.</param>
+/// <param name="ExitVelocity">The planar velocity, in world units per second, an exclusive move hands the body on the
+/// tick it ends; zero leaves it at rest.</param>
+public readonly record struct WorldTimedBodyMove(FixedTimedMove Motion, FixedQ4816 StartYaw, ulong ElapsedTicks, FixedVector3 ExitVelocity = default) {
     internal bool IsActive => (Motion.DurationTicks != 0);
 
     internal (FixedVector3 Displacement, FixedQ4816 RelativeYaw, ulong Elapsed) SampleStep(ulong stepTicks) {
@@ -27,6 +32,7 @@ public readonly record struct WorldTimedBodyMove(FixedTimedMove Motion, FixedQ48
         writer.WriteByte(value: (byte)move.Motion.Curve);
         writer.WriteFixedVector(value: move.Motion.Arc);
         writer.WriteBoolean(value: move.Motion.Exclusive);
+        writer.WriteFixedVector(value: move.ExitVelocity);
     }
 
     internal static WorldTimedBodyMove Read(ref WireReader reader) {
@@ -40,11 +46,12 @@ public readonly record struct WorldTimedBodyMove(FixedTimedMove Motion, FixedQ48
         var curve = (BodyMotionCurve)reader.ReadByte();
         var arc = reader.ReadFixedVector();
         var exclusive = reader.ReadBoolean();
+        var exitVelocity = reader.ReadFixedVector();
         if ((elapsed >= duration) || !Enum.IsDefined(curve)) {
             reader.Fail(detail: "invalid timed move continuation", refusal: WireRefusal.PayloadMalformed);
             return default;
         }
-        return new(Motion: new(displacement, yaw, duration, curve, arc, exclusive), StartYaw: startYaw, ElapsedTicks: elapsed);
+        return new(Motion: new(displacement, yaw, duration, curve, arc, exclusive), StartYaw: startYaw, ElapsedTicks: elapsed, ExitVelocity: exitVelocity);
     }
 }
 
@@ -121,9 +128,16 @@ public sealed partial class WorldBody {
             var rotation = FixedQuaternion.FromAxisAngle(angle: m_yaw, axis: FixedVector3.UnitY);
             scratch.Orientation = TimedYawFrame(scratch.Up, scratch.AttitudeUp) * rotation;
         }
-        m_timedMove = ((sample.Elapsed == m_timedMove.Motion.DurationTicks)
-            ? default
-            : m_timedMove with { ElapsedTicks = sample.Elapsed });
+        if (sample.Elapsed == m_timedMove.Motion.DurationTicks) {
+            // An exclusive move ends at rest unless it hands the body on at a speed (a mantle carries its run on).
+            if (m_timedMove.Motion.Exclusive) {
+                m_planarVelocity = m_timedMove.ExitVelocity;
+            }
+
+            m_timedMove = default;
+        } else {
+            m_timedMove = m_timedMove with { ElapsedTicks = sample.Elapsed };
+        }
         return true;
     }
 }

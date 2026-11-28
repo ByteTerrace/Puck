@@ -347,7 +347,7 @@ export type WorldDefinition = {
 /**
  * An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns — every one addresses a state row and nothing else; a document project appends its own derived arms (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.
  */
-export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectClaimIdentityRecord | WorldEffectClaimIdentityPair | WorldEffectSetIdentityRecord | WorldEffectReleaseIdentityRecord | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
+export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectMantle | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectClaimIdentityRecord | WorldEffectClaimIdentityPair | WorldEffectSetIdentityRecord | WorldEffectReleaseIdentityRecord | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
 
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -1055,7 +1055,7 @@ export type BodyHoldKind = "None" | "Gravity" | "Pull" | "Lift";
 
 export type BodyMotionCurve = "Linear" | "Smoothstep";
 
-export type BodyMotionOp = "SenseNearestInCone" | "ProduceSteeringIntent" | "FaceSensorTarget" | "ProduceFlockIntent" | "ResolveYawAttitudeAndPlanarFrame" | "IntegrateLocalAttitude" | "ComputePlanarTargetVelocity" | "ComputeLocalTargetVelocity" | "ShapeVelocity" | "SnapYawToPlanarIntent" | "ResolveDriveFrame" | "ResolveHold" | "RunActionTriggers" | "ApplyHold" | "IntegratePlanarAndVerticalVelocity" | "IntegrateScratchVelocity" | "CommitPose" | "SetVerticalVelocity" | "ScaleVerticalVelocity" | "PlanarImpulse" | "SetState" | "AddState" | "StartTimer" | "Designate" | "Generate" | "TimedMove";
+export type BodyMotionOp = "SenseNearestInCone" | "ProduceSteeringIntent" | "FaceSensorTarget" | "ProduceFlockIntent" | "ResolveYawAttitudeAndPlanarFrame" | "IntegrateLocalAttitude" | "ComputePlanarTargetVelocity" | "ComputeLocalTargetVelocity" | "ShapeVelocity" | "SnapYawToPlanarIntent" | "ResolveDriveFrame" | "ResolveHold" | "RunActionTriggers" | "ApplyHold" | "IntegratePlanarAndVerticalVelocity" | "IntegrateScratchVelocity" | "CommitPose" | "SetVerticalVelocity" | "ScaleVerticalVelocity" | "PlanarImpulse" | "SetState" | "AddState" | "StartTimer" | "Designate" | "Generate" | "TimedMove" | "Mantle";
 
 export type BodyMotionProgram = {
   /**
@@ -8025,6 +8025,33 @@ export type WorldEffectHoldProducer = {
 };
 
 /**
+ * Pulls a kit's own body up over a ledge in front of it, on any surface, with no hold row and no holdable grip: the direction the body is commanded to move must meet a steep face within Reach, and the body's own sweep must prove a place to stand past its top, higher than the kit's step and no higher than Height above the feet. The body travels there over Seconds as an exclusive move (rising beside the face, then in over the edge) and leaves it at Carry of the speed it was commanding, so it runs on the moment it is up. A firing that finds no such ledge is refused whole, so a timer or a spend beside it is not paid. A kit's own action only.
+ */
+export type WorldEffectMantle = {
+  $type?: "mantle";
+  /**
+   * The highest ledge above the body's feet it pulls up over, in body-sized world units. Positive.
+   */
+  height: number;
+  /**
+   * How far past the face the body steps in, in body-sized world units. Positive.
+   */
+  depth: number;
+  /**
+   * How long the pull takes, an exact whole number of engine ticks. Positive.
+   */
+  seconds: number;
+  /**
+   * How far ahead of the body, in body-sized world units, the face may stand. Not negative.
+   */
+  reach?: number;
+  /**
+   * The fraction of the commanded move speed the body keeps when the pull ends, in [0, 1].
+   */
+  carry?: number;
+};
+
+/**
  * Paints one lattice field cell, or the cube of Radius around it.
  */
 export type WorldEffectPaintField = {
@@ -11095,6 +11122,10 @@ export type WorldPlacement = {
    * The placement's turn facet (see WorldPlacementTurn): the row turns about its own up axis by an angle read from state, a turntable, or null for a row that keeps its authored yaw. Omitted from the wire when null.
    */
   turn?: WorldPlacementTurn | null;
+  /**
+   * The placement's net facet (see WorldPlacementNet): the row's creation is a net of rope strands the authority steps, that gives under the bodies leaning on it and carries the bodies holding it, or null for a rigid row. Omitted from the wire when null.
+   */
+  net?: WorldPlacementNet | null;
 };
 
 /**
@@ -11339,6 +11370,92 @@ export type WorldPlacementMirror = {
    * The signed plane offset along the normalized Normal.
    */
   offset: number;
+};
+
+/**
+ * A placement's net facet: the row's creation is a net of rope strands that gives under the bodies that lean on it and carries the bodies that hold it (a climbing net, a rope bridge, a hammock, a cargo net, a banner, a sail). The authority keeps a coarse grid of nodes over the parallelogram Origin + s·Across + t·Up in the row's frame, steps it in fixed point every tick it is awake (Puck.Physics.FixedNet: its strands' caps, its pins, its reach), and lets it sleep when nothing touches it. The net collides as a sheet of thin boxes over its node cells, posed every tick, a body holding it rides it and loads it with its weight, and a body leaning on it pushes its nodes out; presentation draws the creation baked once at rest and displaces each vertex by the nodes' offsets about it, so a net that moves rebuilds no program and keys no mesh.
+ */
+export type WorldPlacementNet = {
+  /**
+   * The nodes along Across, 2 to MaxNodesPerEdge.
+   */
+  columns: number;
+  /**
+   * The nodes along Up, 2 to MaxNodesPerEdge.
+   */
+  rows: number;
+  /**
+   * The rest position of node (0, 0), in the row's frame.
+   */
+  origin: DocumentVector3;
+  /**
+   * The rest edge from node (0, 0) to the last column's, in the row's frame.
+   */
+  across: DocumentVector3;
+  /**
+   * The rest edge from node (0, 0) to the last row's, in the row's frame; not parallel to Across.
+   */
+  up: DocumentVector3;
+  /**
+   * Whether the first column, along Up at the origin, is held to the frame.
+   */
+  pinLeft?: boolean;
+  /**
+   * Whether the last column is held to the frame.
+   */
+  pinRight?: boolean;
+  /**
+   * Whether the first row, along Across at the origin, is held to the frame.
+   */
+  pinBottom?: boolean;
+  /**
+   * Whether the last row is held to the frame. At least one edge is held.
+   */
+  pinTop?: boolean;
+  /**
+   * The mass one free node carries, in kilograms; positive.
+   */
+  nodeMass?: number;
+  /**
+   * One strand's stiffness against stretch past its length, in newtons per metre; positive.
+   */
+  stiffness?: number;
+  /**
+   * The share of a node's speed lost each second; non-negative.
+   */
+  damping?: number;
+  /**
+   * The slack each strand carries past its rest spacing, as a share of it, in [0, 1].
+   */
+  sag?: number;
+  /**
+   * The farthest a node moves from rest, in metres before the row's scale; positive.
+   */
+  reach?: number;
+  /**
+   * The projection passes a step makes over every strand, 1 to MaxIterations.
+   */
+  iterations?: number;
+  /**
+   * The thickness the net collides at, in metres before the row's scale: each node cell is a box this thick about the nodes' surface, and a body leaning on the net pushes its nodes until they stand this far beyond the box's face; positive.
+   */
+  strand?: number;
+  /**
+   * The mass, in kilograms, a body of authored size loads the net with while it holds it, scaled by the cube of the body's size; non-negative.
+   */
+  bodyMass?: number;
+  /**
+   * The speed, in metres a second, under which every node counts as still; non-negative.
+   */
+  restSpeed?: number;
+  /**
+   * The seconds every node must stay still, untouched, before the net sleeps; non-negative.
+   */
+  sleepSeconds?: number;
+  /**
+   * The acceleration every free node falls at along world down, in metres a second squared; non-negative.
+   */
+  gravity?: number;
 };
 
 export type WorldPlacementPolicyDefaults = {

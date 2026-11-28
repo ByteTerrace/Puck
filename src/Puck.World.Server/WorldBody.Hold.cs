@@ -1319,56 +1319,30 @@ public sealed partial class WorldBody {
     // through the top of the raise at its middle, so it rises beside the face before it moves in over the edge.
     private bool TryBeginMantle(in FixedBodyHold hold, FixedQ4816 raise, ref BodyMotionScratch scratch) {
         if (
-            !CanStartTimedMove ||
             (hold.Mantle.DurationTicks == 0UL) ||
-            (m_contactField is not { } field) ||
-            (m_collider is null) ||
             !TryFaceInto(
             into: out var into,
             normal: in m_holdNormal,
             up: in scratch.Up
+        ) ||
+            !TryProveMantle(
+            depth: (hold.Mantle.Depth * m_scale),
+            into: in into,
+            raise: raise,
+            scratch: ref scratch,
+            travel: out var travel
         )
         ) {
             return false;
         }
 
-        var start = m_position;
-        var still = FixedVector3.Zero;
-        var step = ContactStep(field: field, scratch: ref scratch);
-
-        if (!FixedStepUp.TryStep(
-            blocked: in start,
-            intended: (start + (into * (hold.Mantle.Depth * m_scale))),
-            result: out var landing,
-            start: in start,
-            step: ref step,
-            stepHeight: raise,
-            up: in scratch.Up,
-            velocity: in still
-        ) || !FixedStepUp.Stands(
-            field: field,
-            groundNormal: landing.Resolution.GroundNormal,
-            orientation: scratch.Orientation,
-            position: landing.Position,
-            up: scratch.Up,
-            volumes: ScaledColliderVolumes()
-        )) {
-            return false;
-        }
-
-        var travel = (landing.Position - start);
-
-        m_timedMove = new(
-            ElapsedTicks: 0UL,
-            Motion: new FixedTimedMove(
-                Arc: ((scratch.Up * raise) - (travel / FixedQ4816.FromInteger(value: 2L))),
-                Curve: BodyMotionCurve.Smoothstep,
-                Displacement: travel,
-                DurationTicks: hold.Mantle.DurationTicks,
-                Exclusive: true,
-                Yaw: FixedQ4816.Zero
-            ),
-            StartYaw: FixedQ4816.Zero
+        m_timedMove = MantleMove(
+            durationTicks: hold.Mantle.DurationTicks,
+            curve: BodyMotionCurve.Smoothstep,
+            exitVelocity: FixedVector3.Zero,
+            raise: raise,
+            travel: in travel,
+            up: in scratch.Up
         );
 
         // `hold` is the row the body holds: a mantle begins only from the held face, which every caller guards.
@@ -1399,6 +1373,184 @@ public sealed partial class WorldBody {
         scratch.FaceInto = FixedVector3.Zero;
 
         return true;
+    }
+    // The one proof every mantle passes, a climb's off the top of its face and a mantle action's off any ledge: raised
+    // by `raise`, carried `depth` along the level direction `into`, and lowered onto walkable support
+    // (FixedStepUp.TryStep, the step a kerb takes) that it stands on rather than rolls off (FixedStepUp.Stands). The
+    // landing it proves is the only place a mantle carries a body, which keeps a mantle out of geometry and off edges.
+    private bool TryProveMantle(in FixedVector3 into, FixedQ4816 raise, FixedQ4816 depth, ref BodyMotionScratch scratch, out FixedVector3 travel) {
+        travel = FixedVector3.Zero;
+
+        if (
+            !CanStartTimedMove ||
+            (m_contactField is not { } field) ||
+            (m_collider is null)
+        ) {
+            return false;
+        }
+
+        var start = m_position;
+        var still = FixedVector3.Zero;
+        var step = ContactStep(field: field, scratch: ref scratch);
+
+        if (!FixedStepUp.TryStep(
+            blocked: in start,
+            intended: (start + (into * depth)),
+            result: out var landing,
+            start: in start,
+            step: ref step,
+            stepHeight: raise,
+            up: in scratch.Up,
+            velocity: in still
+        ) || !FixedStepUp.Stands(
+            field: field,
+            groundNormal: landing.Resolution.GroundNormal,
+            orientation: scratch.Orientation,
+            position: landing.Position,
+            up: scratch.Up,
+            volumes: ScaledColliderVolumes()
+        )) {
+            return false;
+        }
+
+        travel = (landing.Position - start);
+
+        return true;
+    }
+    // A mantle's exclusive move: a parabola through the top of the raise at its middle, so the body rises beside the
+    // face before it moves in over the edge.
+    private static WorldTimedBodyMove MantleMove(in FixedVector3 travel, in FixedVector3 up, FixedQ4816 raise, ulong durationTicks, BodyMotionCurve curve, in FixedVector3 exitVelocity) => new(
+        ElapsedTicks: 0UL,
+        ExitVelocity: exitVelocity,
+        Motion: new FixedTimedMove(
+            Arc: ((up * raise) - (travel / FixedQ4816.FromInteger(value: 2L))),
+            Curve: curve,
+            Displacement: travel,
+            DurationTicks: durationTicks,
+            Exclusive: true,
+            Yaw: FixedQ4816.Zero
+        ),
+        StartYaw: FixedQ4816.Zero
+    );
+
+    // How many raises a mantle action tries between a step and its height; the lowest that lands wins, so the body
+    // clears the ledge by at most one gap.
+    private const int MantleActionRaises = 4;
+
+    // Whether a mantle action's firing finds a ledge: the level direction the body is commanded to move meets a face
+    // steeper than a walkable slope within the action's reach, and a raise between the kit's step and the action's
+    // height proves a landing past its top that stands higher than a step. `move` is the exclusive move that carries the
+    // body there, leaving it at the action's share of the commanded speed. A body already moving under a timed move,
+    // or holding a face, finds none: a climb's own mantle owns the top of a held face.
+    private bool TryPrepareMantleAction(in CompiledBodyInstruction instruction, ref BodyMotionScratch scratch, out WorldTimedBodyMove move) {
+        move = default;
+
+        if (
+            m_timedMove.IsActive ||
+            Holding ||
+            !CanStartTimedMove ||
+            (m_contactField is not { } field) ||
+            (m_collider is null)
+        ) {
+            return false;
+        }
+
+        var (forward, strafe) = PlanarIntent(intent: in scratch.Intent);
+        var command = PlanarCommand(forward: forward, orientation: in scratch.Orientation, strafe: strafe).RejectFrom(unitAxis: scratch.Up);
+
+        if (!command.TryLength(length: out var commanded) || (commanded <= FixedQ4816.Zero)) {
+            return false;
+        }
+
+        var into = (command / commanded);
+        var start = m_position;
+        var still = FixedVector3.Zero;
+        var step = ContactStep(field: field, scratch: ref scratch);
+        var ahead = (start + (into * (instruction.Direction.X * m_scale)));
+        var probe = step.Sweep(position: ref ahead, previousPosition: in start, velocity: ref still);
+        // A face whose normal rises less than halfway to up (steeper than 60 degrees) is a face to pull up over;
+        // nothing ahead, or only ground the body walks up, is no ledge.
+        var steep = (FixedQ4816.One / FixedQ4816.FromInteger(value: 2L));
+
+        if (
+            (probe.Refusal != ContactRefusal.None) ||
+            probe.Unproved ||
+            (probe.ObstructionNormal == FixedVector3.Zero) ||
+            (FixedVector3.Dot(left: probe.ObstructionNormal, right: scratch.Up) >= steep) ||
+            (FixedVector3.Dot(left: probe.ObstructionNormal, right: into) >= FixedQ4816.Zero)
+        ) {
+            return false;
+        }
+
+        var reached = FixedQ4816.Max(x: FixedQ4816.Zero, y: FixedVector3.Dot(left: (ahead - start), right: into));
+        var depth = (reached + (instruction.Direction.Z * m_scale));
+        var lowest = StepHeight;
+        var highest = (instruction.Direction.Y * m_scale);
+
+        if (highest <= lowest) {
+            return false;
+        }
+
+        for (var sample = 1; (sample <= MantleActionRaises); sample++) {
+            var raise = (lowest + (((highest - lowest) * FixedQ4816.FromInteger(value: sample)) / FixedQ4816.FromInteger(value: MantleActionRaises)));
+
+            if (
+                !TryProveMantle(depth: depth, into: in into, raise: raise, scratch: ref scratch, travel: out var travel) ||
+                (FixedVector3.Dot(left: travel, right: scratch.Up) <= lowest)
+            ) {
+                continue;
+            }
+
+            var speed = (ApplySpeedHeld(baseSpeed: scratch.MoveSpeed, intent: in scratch.Intent) * FixedQ4816.Min(x: commanded, y: FixedQ4816.One));
+
+            move = MantleMove(
+                curve: BodyMotionCurve.Linear,
+                durationTicks: instruction.DurationTicks,
+                exitVelocity: (into * (speed * instruction.Value)),
+                raise: raise,
+                travel: in travel,
+                up: in scratch.Up
+            );
+
+            return true;
+        }
+
+        return false;
+    }
+    // Whether a firing holds a mantle action that finds no ledge, which refuses the firing whole so nothing beside it
+    // is spent; a firing whose mantle finds one carries the move it proved to the action's execution in `scratch`.
+    private bool MantleFindsNoLedge(CompiledBodyInstruction[] effects, ref BodyMotionScratch scratch) {
+        scratch.PreparedMantle = default;
+
+        for (var index = 0; (index < effects.Length); index++) {
+            if (effects[index].Operation != BodyMotionOp.Mantle) {
+                continue;
+            }
+
+            if (!TryPrepareMantleAction(instruction: in effects[index], move: out var move, scratch: ref scratch)) {
+                return true;
+            }
+
+            scratch.PreparedMantle = move;
+
+            return false;
+        }
+
+        return false;
+    }
+    // Starts the mantle a firing's proof prepared: the body lets go of its velocity and travels the move.
+    private void BeginPreparedMantle(ref BodyMotionScratch scratch) {
+        if (!scratch.PreparedMantle.IsActive) {
+            return;
+        }
+
+        m_timedMove = scratch.PreparedMantle;
+        scratch.PreparedMantle = default;
+        m_planarVelocity = FixedVector3.Zero;
+        m_verticalVelocity = FixedQ4816.Zero;
+        m_verticalVelocityAccumulator.Reset();
+        ClearBallisticTangent();
+        CancelImpulse();
     }
     // An impulse fired while a pull holds the body lies in the held face: the commanded direction laid onto the face
     // when the effect follows the move direction, else the authored body direction with its part through the face

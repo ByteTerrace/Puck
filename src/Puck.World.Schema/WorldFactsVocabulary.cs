@@ -643,6 +643,7 @@ public static partial class WorldFactsVocabulary {
             BodyMotionArm<WorldEffect.PlanarImpulse>(discriminator: "planarImpulse"),
             BodyMotionArm<WorldEffect.TimedMove>(discriminator: "timedMove"),
             BodyProgramArm<WorldEffect.StartTimer>(discriminator: "startTimer"),
+            BodyProgramArm<WorldEffect.Mantle>(discriminator: "mantle"),
             BodyMotionArm<WorldEffect.Designate>(discriminator: "designate"),
             new WorldFactsEffectArm(
                 compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveCue(

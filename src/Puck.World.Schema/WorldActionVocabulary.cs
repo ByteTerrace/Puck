@@ -114,6 +114,28 @@ public static class WorldEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Toward = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? TowardOffset = null
     ) : ActionEffect;
+    /// <summary>Pulls a kit's own body up over a ledge in front of it, on any surface, with no hold row and no
+    /// holdable grip: the direction the body is commanded to move must meet a steep face within
+    /// <paramref name="Reach"/>, and the body's own sweep must prove a place to stand past its top, higher than the
+    /// kit's step and no higher than <paramref name="Height"/> above the feet. The body travels there over
+    /// <paramref name="Seconds"/> as an exclusive move (rising beside the face, then in over the edge) and leaves it at
+    /// <paramref name="Carry"/> of the speed it was commanding, so it runs on the moment it is up. A firing that finds
+    /// no such ledge is refused whole, so a timer or a spend beside it is not paid. A kit's own action only.</summary>
+    /// <param name="Height">The highest ledge above the body's feet it pulls up over, in body-sized world units.
+    /// Positive.</param>
+    /// <param name="Depth">How far past the face the body steps in, in body-sized world units. Positive.</param>
+    /// <param name="Seconds">How long the pull takes, an exact whole number of engine ticks. Positive.</param>
+    /// <param name="Reach">How far ahead of the body, in body-sized world units, the face may stand. Not
+    /// negative.</param>
+    /// <param name="Carry">The fraction of the commanded move speed the body keeps when the pull ends, in
+    /// <c>[0, 1]</c>.</param>
+    public sealed record Mantle(
+        decimal Height,
+        decimal Depth,
+        decimal Seconds,
+        decimal Reach = 0.5m,
+        decimal Carry = 1m
+    ) : ActionEffect;
     /// <summary>Starts a named timer slot with an authored duration.</summary>
     public sealed record StartTimer(
         [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] string State,
