@@ -280,9 +280,13 @@ set](topologies.md#read-a-declared-set) covers the rules.
 ### boardCombine
 
 `boardCombine` rewrites a board from one or two sources over the same
-topology, cell by cell, in one mutation. It's the tool for boards wider than a
-64-bit mask. A source is a board row or a declared cell set, named in `left` or
-`right`.
+topology in one mutation. It's the tool for boards wider than a 64-bit mask. A
+source is a board row or a declared cell set, named in `left` or `right`. The
+sources are read from their value planes as cell sets and combined a word at a
+time, so a 19×19 board's `Or` is six word operations, and the result lands
+through one set write for its members and one for the rest
+(`StateArena.TryWriteBoardCells`), which writes, journals and wakes readers only
+for the cells whose value changes.
 
 ```puck
 rule copyBoard {
@@ -299,6 +303,26 @@ rule copyBoard {
 | `Not` | `left` | Every cell that isn't a member of `left`. |
 | `Shift` | `left`, `direction` | Each member moved one step along the direction; a member with no neighbor that way drops. |
 | `Image` | `left`, `element` | Each member carried through a point-group element. |
+| `Reach` | `left`, `right` | The members of `left` and every member of `right` a path of members of `right` joins to one: a flood fill from `left` through `right`, finished in the one firing. |
+
+`Reach` replaces a flood that grows one step a tick. Go's area scoring floods
+each side's reach from its stones through the empty points in one rule:
+
+```puck
+set goOpen: board(goBoard, 0..0)
+set goBlacks: board(goBoard, 1..1)
+
+rule "go-score" {
+  when goOver == 1 and goScored == 0
+  mode: Level
+  transform boardCombine(row: goBlackReach, operation: Reach, left: goBlacks, right: goOpen)
+}
+```
+
+The flood dilates its newest cells a word at a time while there are enough of
+them that a word step costs no more than visiting each, then visits the rest
+cell by cell, so one firing costs at most a visit of every cell
+(`CompiledTopology.Reach`, priced by `CompiledTopology.ReachWork`).
 
 Except for `Copy`, a cell is a **member** when its value differs from its
 board's empty value; the result writes `value` (default 1) to members and the

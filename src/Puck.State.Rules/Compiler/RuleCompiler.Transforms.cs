@@ -953,18 +953,29 @@ public static partial class RuleCompiler {
 
             return ordinal;
         }
+        // A board source reads its planes' words (or every cell, for a board that keeps none) into the set's words, and
+        // an operator combines the sets a word at a time.
+        var words = BitWords.WordsFor(members: cells);
+
         long Walk(CellSetExpression expression) {
             switch (expression) {
-                case CellSetExpression.Board board:
-                    _ = SourceRow(
-                        row: board.Row,
-                        what: "board"
-                    );
+                case CellSetExpression.Board board: {
+                        var ordinal = SourceRow(
+                            row: board.Row,
+                            what: "board"
+                        );
 
-                    return BoardCells(
-                        context: context,
-                        row: context.FindRow(name: board.Row.Value)
-                    );
+                        return (words + TransformWork.BoardRangeRead(
+                            cells: BoardCells(
+                                context: context,
+                                row: context.FindRow(name: board.Row.Value)
+                            ),
+                            context: context,
+                            lower: board.Low,
+                            rowOrdinal: ordinal,
+                            upper: board.High
+                        ));
+                    }
                 case CellSetExpression.Zone zone:
                     return context.RowCapacity(rowOrdinal: SourceRow(
                         row: zone.Row,
@@ -998,13 +1009,13 @@ public static partial class RuleCompiler {
                         return units;
                     }
                 case CellSetExpression.Any any:
-                    return (any.Items.Sum(selector: Walk) + cells);
+                    return (any.Items.Sum(selector: Walk) + (any.Items.Count * words));
                 case CellSetExpression.Both both:
-                    return (both.Items.Sum(selector: Walk) + cells);
+                    return (both.Items.Sum(selector: Walk) + (both.Items.Count * words));
                 case CellSetExpression.Complement complement:
-                    return (Walk(expression: complement.Item) + cells);
+                    return (Walk(expression: complement.Item) + words);
                 default:
-                    return cells;
+                    return words;
             }
         }
 
@@ -1026,6 +1037,10 @@ public static partial class RuleCompiler {
             context: context,
             row: context.FindRowAt(rowOrdinal: rowOrdinal)
         );
+        long CellWords(int rowOrdinal) => BitWords.WordsFor(members: BoardCells(
+            context: context,
+            row: context.FindRowAt(rowOrdinal: rowOrdinal)
+        ));
         // A live end can select any row its table or family names; a literal end is its own row.
         int[] Ends(LiveRow? live, int own) {
             if (live is null) {
@@ -1056,21 +1071,22 @@ public static partial class RuleCompiler {
                 context: context,
                 observe: observe
             ),
-            // The declared-set lowering is the source price the caller adds; the kernel tests every cell of the
-            // lowered set and stores each member. A mask reads one cell and walks at most its 64 bits.
+            // The declared-set lowering is the source price the caller adds; the kernel copies the lowered set's words
+            // and hands them to one set write. A mask reads one cell and writes at most its 64 bits.
             ArenaTransform.WriteSet write => ((write.Set is not null)
-                ? (Cells(rowOrdinal: write.RowOrdinal) * (1L + board))
-                : ((door + 64L) + (Math.Min(
-                    val1: Cells(rowOrdinal: write.RowOrdinal),
-                    val2: 64L
-                ) * board))),
-            // Three leases, one pass per source (a board read or a set's fill), the target's fill and combine, and a
-            // store per cell.
-            ArenaTransform.BoardCombine combine => (Cells(rowOrdinal: combine.RowOrdinal) * (((5L + (BoardCombination.NeedsLeft(operation: combine.Operation)
-                ? 1L
-                : 0L)) + (BoardCombination.NeedsRight(operation: combine.Operation)
-                ? 1L
-                : 0L)) + board)),
+                ? (CellWords(rowOrdinal: write.RowOrdinal) + TransformWork.BoardCellsWrite(
+                    cells: Cells(rowOrdinal: write.RowOrdinal),
+                    words: CellWords(rowOrdinal: write.RowOrdinal)
+                ))
+                : (door + TransformWork.BoardCellsWrite(
+                    cells: Math.Min(val1: Cells(rowOrdinal: write.RowOrdinal), val2: 64L),
+                    words: 1L
+                ))),
+            ArenaTransform.BoardCombine combine => BoardCombineWork(
+                combine: combine,
+                context: context,
+                lefts: Ends(live: fromRow, own: combine.LeftRowOrdinal)
+            ),
             ArenaTransform.ClearEnclosed enclosed => ClearEnclosedWork(
                 context: context,
                 enclosed: enclosed
@@ -1169,18 +1185,62 @@ public static partial class RuleCompiler {
             rowOrdinal: observe.RowOrdinal
         )) + stamp))));
     }
-    // The flood reads the board once and visits each cell at most once over two cell bitsets, then writes the cleared
-    // cells in the order their set's bits iterate, so no sort is paid.
+    // The flood reads its group and liberty cells from the board's planes (or every cell, for a board that keeps none)
+    // and visits each cell at most once over two cell bitsets, then hands the cleared cells to one set write.
     private static long ClearEnclosedWork(RuleCompileContext context, ArenaTransform.ClearEnclosed enclosed) {
-        var topology = ((context.FindRowAt(rowOrdinal: enclosed.RowOrdinal)?.EffectiveDomain is StateDomain.CellsOf board)
-            ? context.FindTopology(name: board.Topology)
-            : null
-        );
-        var cells = ((long)(topology?.CellCount ?? 0));
+        var topology = BoardTopology(context: context, rowOrdinal: enclosed.RowOrdinal);
+        var cells = (topology?.CellCount ?? 0);
         var directions = ((long)(topology?.DirectionCount ?? 0));
-        var words = (3L * Puck.Maths.BitWords.WordsFor(members: (int)cells));
-        return directions + words + (cells * (7L + (3L * directions) + TransformWork.BoardWrite));
+        var words = (long)BitWords.WordsFor(members: cells);
+        var reads = (TransformWork.BoardRangeRead(cells: cells, context: context, lower: enclosed.Lower, rowOrdinal: enclosed.RowOrdinal, upper: enclosed.Upper)
+            + TransformWork.BoardRangeRead(cells: cells, context: context, lower: enclosed.BoundaryLower, rowOrdinal: enclosed.RowOrdinal, upper: enclosed.BoundaryUpper));
+
+        return (((directions + (5L * words)) + reads) + (cells * (5L + (3L * directions)))) + TransformWork.BoardCellsWrite(cells: cells, words: words);
     }
+    // Three word leases, each source's member cells (a board's planes, or a declared set's words beside the lowering
+    // the caller prices), the algebra on the words, and the two set writes that split the board's cells between the
+    // members and the rest. A copy carries values instead: a plane read and a set write per value of its source's
+    // window, then the stores of every cell once; a source that keeps no planes is read and written a cell at a time.
+    // A stored value lies inside its row's declared window, since every write is admitted against it, so no cell
+    // falls outside a planed source's planes.
+    private static long BoardCombineWork(RuleCompileContext context, ArenaTransform.BoardCombine combine, int[] lefts) {
+        if (BoardTopology(context: context, rowOrdinal: combine.RowOrdinal) is not { } topology) {
+            return 0L;
+        }
+
+        var cells = topology.CellCount;
+        var words = (long)topology.CellWords;
+
+        if ((combine.Operation == BoardCombineOp.Copy) && (combine.LeftSet is null)) {
+            return lefts.Max(selector: left => (TransformWork.TryPlaneWindow(context: context, lower: out var lower, rowOrdinal: left, width: out var width)
+                ? (((3L * words) + (width * ((TransformWork.BoardRangeRead(cells: cells, context: context, lower: lower, rowOrdinal: left, upper: lower) + TransformWork.BoardCellsDoor(words: words)) + words))) + TransformWork.BoardCellStores(cells: cells))
+                : (cells * (1L + TransformWork.BoardWrite))));
+        }
+
+        long Members(int rowOrdinal, CellSetRow? set) {
+            if (set is not null) {
+                return words;
+            }
+
+            var empty = ((context.FindRowAt(rowOrdinal: rowOrdinal)?.EffectiveDomain is StateDomain.CellsOf source) ? source.Empty : 0L);
+
+            return ((2L * words) + TransformWork.BoardRangeRead(cells: cells, context: context, lower: empty, rowOrdinal: rowOrdinal, upper: empty));
+        }
+
+        var left = (BoardCombination.NeedsLeft(operation: combine.Operation)
+            ? lefts.Max(selector: row => Members(rowOrdinal: row, set: combine.LeftSet))
+            : 0L);
+        var right = (BoardCombination.NeedsRight(operation: combine.Operation)
+            ? Members(rowOrdinal: combine.RightRowOrdinal, set: combine.RightSet)
+            : 0L);
+
+        return ((((3L * words) + left) + right) + BoardCombination.MembersWork(direction: combine.Direction, operation: combine.Operation, topology: topology))
+            + ((2L * TransformWork.BoardCellsDoor(words: words)) + words + TransformWork.BoardCellStores(cells: cells));
+    }
+    private static CompiledTopology? BoardTopology(RuleCompileContext context, int rowOrdinal) => ((context.FindRowAt(rowOrdinal: rowOrdinal)?.EffectiveDomain is StateDomain.CellsOf board)
+        ? context.FindTopology(name: board.Topology)
+        : null
+    );
     private static long ArrangeWork(RuleCompileContext context, ArenaTransform.Arrange arrange) {
         var tokens = Math.Min(
             val1: context.RowCapacity(rowOrdinal: arrange.RowOrdinal),

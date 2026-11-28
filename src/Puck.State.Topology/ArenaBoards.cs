@@ -34,9 +34,27 @@ public static class ArenaBoards {
             result = BoardQueries.Attacks(attacks, default, layout.Empty, source, arena, rowOrdinal);
             return true;
         }
-        if ((query is BoardMaskQuery mask) && arena.TryReadBoardPlanes(rowOrdinal, mask.Lower, mask.Upper, out var planes)) {
-            result = (long)planes;
-            return true;
+        if (query is BoardMaskQuery mask) {
+            // The mask is one expression value, so it answers the board's first 64 cells.
+            using var planes = arena.Scratch.Rent<ulong>(length: Puck.Maths.BitWords.WordsFor(members: topology.CellCount));
+
+            if (arena.TryReadBoardPlanes(rowOrdinal, mask.Lower, mask.Upper, planes.Span)) {
+                result = (long)planes.Span[0];
+                return true;
+            }
+        }
+        if ((query is BoardComponentQuery component) && (component.Planes is not null)) {
+            // The flood reads its member and boundary cells from the board's planes, never every cell.
+            using var members = arena.Scratch.Rent<ulong>(length: topology.CellWords);
+            using var boundary = arena.Scratch.Rent<ulong>(length: topology.CellWords);
+
+            if (
+                arena.TryReadBoardPlanes(rowOrdinal, component.Lower, component.Upper, members.Span) &&
+                arena.TryReadBoardPlanes(rowOrdinal, component.BoundaryLower, component.BoundaryUpper, boundary.Span)
+            ) {
+                result = BoardQueries.EvaluateComponent(component, members.Span, boundary.Span, source, arena.Scratch);
+                return true;
+            }
         }
         if (!arena.TryReadBoard(rowOrdinal, values)) {
             reason = $"a board read over {topology.CellCount} cells needs a span that long";

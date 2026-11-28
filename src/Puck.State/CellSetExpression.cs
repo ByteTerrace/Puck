@@ -330,27 +330,26 @@ public static class CellSetLowering {
                         arena: arena
                     );
 
-                    if ((elements <= BoardMask.MaxCells) && arena.TryReadBoardPlanes(
-                        lower: board.Low,
-                        mask: out word0,
-                        rowOrdinal: rowOrdinal,
-                        upper: board.High
-                    )) {
-                        word0 &= elements.LowMask<ulong>();
+                    // The board's planes (or a read of every cell, for a board that keeps none) answer the range as
+                    // words, which are the set's own words at its width.
+                    using (var lease = arena.Scratch.Rent<ulong>(length: Math.Max(val1: wordCount, val2: BitWords.WordsFor(members: arena.Layout[rowOrdinal].CellCapacity)))) {
+                        var words = lease.Span;
 
-                        break;
-                    }
-                    for (var cell = 0; (cell < elements); cell++) {
-                        if (
-                            arena.TryReadBoardCell(
-                            cell: cell,
+                        _ = arena.TryReadBoardRange(
+                            lower: board.Low,
+                            mask: words,
                             rowOrdinal: rowOrdinal,
-                            value: out var value
-                        ) &&
-                            (value >= board.Low) &&
-                            (value <= board.High)
-                        ) {
-                            SetBit(position: cell, tail: tail, word0: ref word0, word1: ref word1, word2: ref word2, word3: ref word3);
+                            upper: board.High
+                        );
+                        if ((elements & 63) != 0) {
+                            words[(wordCount - 1)] &= (elements & 63).LowMask<ulong>();
+                        }
+                        word0 = ((wordCount > 0) ? words[0] : 0UL);
+                        word1 = ((wordCount > 1) ? words[1] : 0UL);
+                        word2 = ((wordCount > 2) ? words[2] : 0UL);
+                        word3 = ((wordCount > 3) ? words[3] : 0UL);
+                        if (tail is not null) {
+                            words[4..wordCount].CopyTo(destination: tail);
                         }
                     }
 

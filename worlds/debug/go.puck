@@ -396,10 +396,8 @@ rules "" when goReadPulse == 1 and goHold == goSettleTicks and goReseat == 0 and
 
   // Reduce seeded point ordinals under each difference mask; an empty mask reads -1.
   rule "go-read-board" {
-    transform boardCombine(row: goDiff, operation: Clear)
-    transform writeSet(row: goDiff, set: goChanged, value: 1)
-    transform boardCombine(row: goGap, operation: Clear)
-    transform writeSet(row: goGap, set: goMissing, value: 1)
+    transform boardCombine(row: goDiff, operation: Copy, left: goChanged)
+    transform boardCombine(row: goGap, operation: Copy, left: goMissing)
     goChangedCount = count(goDiff, c -> c != 0)
     goCollisions = count(goCell, atLeast: 0, atMost: goLastPoint) - count(goSeen, c -> c != 0)
     goNewCell = goChangedCount > 0 ? max(goPointIndex, where: goDiff, atLeast: 0, atMost: goLastPoint) : -1
@@ -508,8 +506,7 @@ template goPlay(colour, foe) {
         boundaryLower: goEmpty,
         boundaryUpper: goEmpty
       )
-      transform boardCombine(row: goKoCheck, operation: Clear)
-      transform writeSet(row: goKoCheck, set: goKoDifferent, value: 1)
+      transform boardCombine(row: goKoCheck, operation: Copy, left: goKoDifferent)
       goKo = count(goKoCheck, c -> c != 0) == 0
     }
     if taken >= 0 and (taken > 0 or breath > 0) and goKo == 0 {
@@ -571,8 +568,8 @@ rule "go-pass" {
 
 // ---- Scoring --------------------------------------------------------------------------------------------------------
 // Area scoring: a side's score is its stones plus the empty points that reach its stones and never the other side's.
-// Once the game is over each side's reach is flooded outward from its stones through empty points, one step in every
-// direction a pass, until a pass reaches nothing new.
+// Once the game is over each side's reach is flooded from its stones through the empty points, all the way, in the one
+// firing (boardCombine's Reach), and a point only one side reaches is that side's.
 
 set goOpen: board(goBoard, 0..0)
 set goBlacks: board(goBoard, 1..1)
@@ -580,54 +577,19 @@ set goWhites: board(goBoard, 2..2)
 set goBlackArea: board(goBlackReach, 1..1) & ~board(goWhiteReach, 1..1) & board(goBoard, 0..0)
 set goWhiteArea: board(goWhiteReach, 1..1) & ~board(goBlackReach, 1..1) & board(goBoard, 0..0)
 
-rule "go-score-open" {
-  when goOver == 1 and goScoring == 0
+rule "go-score" {
+  when goOver == 1 and goScored == 0
   mode: Level
-  transform boardCombine(row: goBlackReach, operation: Copy, left: goBlacks)
-  transform boardCombine(row: goWhiteReach, operation: Copy, left: goWhites)
-  goScoring = 1
-  goGrowing = 1
-  goReached = 0
-  goScorePasses = 0
-}
-
-// One side's reach taking one step each way: its members shifted, kept where the point is empty, and added back.
-template goGrow(reach) {
-  rule $"go-{reach}" {
-    transform boardCombine(row: goFrontier, operation: Shift, left: reach, direction: "N")
-    for direction in ["E", "S", "W"] {
-      transform boardCombine(row: goStep, operation: Shift, left: reach, direction: direction)
-      transform boardCombine(row: goFrontier, operation: Or, left: goFrontier, right: goStep)
-    }
-    transform boardCombine(row: goFrontier, operation: And, left: goFrontier, right: goOpen)
-    transform boardCombine(row: reach, operation: Or, left: reach, right: goFrontier)
-  }
-}
-
-stabilize goFlood maxPasses(goPoints + 2) until goScoring != 1 {
-  goGrow(reach: goBlackReach)
-  goGrow(reach: goWhiteReach)
-
-  rule "go-measure" {
-    local reach = count(goBlackReach, c -> c != 0) + count(goWhiteReach, c -> c != 0)
-    goGrowing = reach != goReached
-    goReached = reach
-    goScorePasses += 1
-  }
-}
-
-rule "go-score-tally" {
-  when goScoring == 1 and goGrowing == 0
-  mode: Level
-  transform boardCombine(row: goOwner, operation: Clear)
-  transform writeSet(row: goOwner, set: goBlackArea, value: goBlack)
+  transform boardCombine(row: goBlackReach, operation: Reach, left: goBlacks, right: goOpen)
+  transform boardCombine(row: goWhiteReach, operation: Reach, left: goWhites, right: goOpen)
+  transform boardCombine(row: goOwner, operation: Copy, left: goBlackArea, value: goBlack)
   transform writeSet(row: goOwner, set: goWhiteArea, value: goWhite)
   goTerritory[1] = count(goOwner, c -> c == 1)
   goTerritory[2] = count(goOwner, c -> c == 2)
   goWinner = (
     2 * (goStoneCount[1] + goTerritory[1]) > 2 * (goStoneCount[2] + goTerritory[2]) + goKomiHalves ? goBlack : goWhite
   )
-  goScoring = 2
+  goScored = 1
 }
 
 // ---- Keeping the table to the position ---------------------------------------------------------------------------------
@@ -645,7 +607,7 @@ rule "go-reset" {
   goExhausted = 0
   goPasses = 0
   goOver = 0
-  goScoring = 0
+  goScored = 0
   goWinner = 0
   goMoves = 0
   goReported = 0
@@ -656,7 +618,6 @@ rule "go-reset" {
   goTerritory[1] = 0
   goTerritory[2] = 0
   transform boardCombine(row: goPrevious, operation: Clear)
-  goScorePasses = 0
   goReseat = 1
   goReturnCursor = 0
   goResetAll = 1
@@ -1021,8 +982,8 @@ state {
       domain: cellsOf(topology: goBan)
     }
 
-    // Scoring's boards: each side's reach, the step a flood pass takes, and the owner of every point.
-    for name in ["goBlackReach", "goWhiteReach", "goFrontier", "goStep", "goOwner"] {
+    // Scoring's boards: each side's reach and the owner of every point.
+    for name in ["goBlackReach", "goWhiteReach", "goOwner"] {
       row {
         name: name
         kind: "Int"
@@ -1086,7 +1047,6 @@ state {
       )
     }
     slot goTactic = 0 bounds(-2000..2000)
-    slot goScorePasses = 0 bounds(0..goPoints + 2)
     slot goReseat = 0 bounds(0..1)
     slot goResetAll = 0 bounds(0..1)
     slot goReturnCursor = 0 bounds(0..goStones + goReturnBatch)
@@ -1128,9 +1088,7 @@ state {
     slot goPassRequest = 0 bounds(0..)
     slot goPassApplied = 0 bounds(0..)
     slot goOver = 0 bounds(0..1)
-    slot goScoring = 0 bounds(0..2)
-    slot goGrowing = 0 bounds(0..1)
-    slot goReached = 0 bounds(0..2 * goPoints)
+    slot goScored = 0 bounds(0..1)
     slot goWinner = 0 bounds(0..2)
     slot goAiRevision = 0 bounds(0..)
     slot goAiSide = 2 bounds(0..2)

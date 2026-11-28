@@ -5980,13 +5980,13 @@ shell, each usable alone, each named for what it does.
     gallery and the debug world under the measured figures needs a decision on what the budget bounds (an expectation,
     or a true per-tick bound with each player's inputs counted), since no sound proof within today's model brings them
     under 8.33 ms on the RTX 2060.
-  - The debug world adds Go (about 11 ms on the RTX 2060: the play doors, report, evaluate and score lines are single
-    heavy firings over 361 cells, and the scoring flood), the quest share (`lanternTrail-share`, a firing at each of
-    twelve recipients) and the granary's influence lines, which read moving facts. Go's board kernels are per cell:
-    `boardCombine` reads, combines and writes every cell through the arena's door one at a time
-    (`ArenaTransforms.TryBoardCombine`), where the board's value planes (`StateArena.TryReadBoardPlanes`) would combine
-    a 361-cell board in six words; and its scoring floods one step a tick for up to `goPoints + 2` ticks
-    (`stabilize goFlood`), where a reach operation over the planes would answer in one firing.
+  - The debug world adds Go (about 6 ms on the RTX 2060), the quest share (`lanternTrail-share`, a firing at each of
+    twelve recipients) and the granary's influence lines, which read moving facts. Go's board transforms run on the
+    board's value planes and its scoring is one `Reach` firing; what remains is per-stone sweeps (`go-sync-mark`,
+    `go-sync-keep`, `go-read-stones`, each priced at 361 bindings), the group and liberty floods of the play doors,
+    report and evaluate lines (`board(boundary, …)`, `clearEnclosed`, each bounded by a visit of every cell), and the
+    rule folds over whole boards (`count(goOwner, c -> c == 1)`, `max(goPointIndex, where: goDiff, …)`), which read
+    every cell where the board's planes would answer a range count in six words.
 - [low] A rule sweeping per-seat private piles is refused at compile: `RuleCompiler.RequireTransformControlAudience`
   pairs every candidate a live end can select with every other read, so `transfer(from: hand[$each], to: …)` over a
   family whose members each admit only their own seat reads seat 1's hand into seat 2's audience on paper, though a

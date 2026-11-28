@@ -37,6 +37,93 @@ internal static partial class Subjects {
         return null;
     }
 
+    // Random words of one to seven 64-bit words shifted every signed distance up to two words past their width either
+    // way, every run extracted from them and every set width complemented, against a bit-by-bit copy that calls no
+    // BitWords member.
+    public static string? BitWordsSpanMovesBitOracle() {
+        var random = new Random(Seed: 20261128);
+
+        static bool Raw(ReadOnlySpan<ulong> words, int index) => ((index >= 0) && (index < (words.Length * 64)) && (((words[index / 64] >> (index % 64)) & 1UL) != 0UL));
+
+        for (var length = 1; (length <= 7); length++) {
+            var source = new ulong[length];
+
+            for (var word = 0; (word < length); word++) {
+                source[word] = (ulong)random.NextInt64() ^ ((ulong)random.Next() << 40);
+            }
+            for (var destinationLength = 1; (destinationLength <= (length + 2)); destinationLength++) {
+                var destination = new ulong[destinationLength];
+
+                for (var distance = (-64 * (length + 2)); (distance <= (64 * (length + 2))); distance++) {
+                    BitWords.Shift(destination: destination, distance: distance, source: source);
+                    for (var bit = 0; (bit < (destinationLength * 64)); bit++) {
+                        if (Raw(words: destination, index: bit) != Raw(words: source, index: (bit - distance))) {
+                            return $"{length} words shifted {distance} into {destinationLength}: bit {bit} reads unlike source bit {bit - distance}";
+                        }
+                    }
+                }
+            }
+            for (var start = 0; (start <= ((length * 64) + 3)); start += 5) {
+                for (var count = 0; (count <= ((length * 64) + 70)); count += 7) {
+                    var destination = new ulong[(BitWords.WordsFor(members: count) + 1)];
+
+                    destination.AsSpan().Fill(value: ulong.MaxValue);
+                    BitWords.Extract(count: count, destination: destination, start: start, words: source);
+                    for (var bit = 0; (bit < (destination.Length * 64)); bit++) {
+                        var expected = ((bit < count) && Raw(words: source, index: (start + bit)));
+
+                        if (Raw(words: destination, index: bit) != expected) {
+                            return $"run {start}+{count} of {length} words: bit {bit} reads {!expected}";
+                        }
+                    }
+                }
+            }
+        }
+        for (var members = 0; (members <= 200); members++) {
+            var words = new ulong[(BitWords.WordsFor(members: members) + 1)];
+
+            for (var word = 0; (word < words.Length); word++) {
+                words[word] = (ulong)random.NextInt64() ^ ((ulong)random.Next() << 40);
+            }
+
+            var before = (ulong[])words.Clone();
+
+            BitWords.Complement(members: members, words: words);
+            for (var bit = 0; (bit < (words.Length * 64)); bit++) {
+                var expected = ((bit < members)
+                    ? !Raw(words: before, index: bit)
+                    : ((bit >= (BitWords.WordsFor(members: members) * 64)) && Raw(words: before, index: bit)));
+
+                if (Raw(words: words, index: bit) != expected) {
+                    return $"complement of {members} positions: bit {bit} reads {!expected}";
+                }
+            }
+        }
+        foreach (var refused in (Action[])[
+            () => BitWords.Complement(members: -1, words: new ulong[1]),
+            () => BitWords.Extract(count: 1, destination: new ulong[1], start: -1, words: new ulong[1]),
+            () => BitWords.Extract(count: -1, destination: new ulong[1], start: 0, words: new ulong[1]),
+        ]) {
+            try {
+                refused();
+
+                return "a negative run start or length was accepted";
+            } catch (ArgumentOutOfRangeException) { }
+        }
+        try {
+            BitWords.Extract(count: 65, destination: new ulong[1], start: 0, words: new ulong[2]);
+
+            return "a destination shorter than the run was accepted";
+        } catch (ArgumentException) { }
+        try {
+            BitWords.Complement(members: 65, words: new ulong[1]);
+
+            return "a complement over more positions than its words was accepted";
+        } catch (ArgumentException) { }
+
+        return null;
+    }
+
     private static string? BitWordsAgree(ulong high, ulong low) {
         var mask = new UInt128(upper: high, lower: low);
         ReadOnlySpan<ulong> words = [low, high];

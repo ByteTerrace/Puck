@@ -207,7 +207,9 @@ public sealed class ArenaWordLawTests {
             Assert.True(arena.TryReadBoard(board, scratch));
             for (var lower = -4L; lower <= 7L; lower++) {
                 for (var upper = (lower - 1L); upper <= 7L; upper++) {
-                    Assert.True(arena.TryReadBoardPlanes(board, lower, upper, out var planes), stage);
+                    var words = new ulong[topology.CellWords];
+                    Assert.True(arena.TryReadBoardPlanes(board, lower, upper, words), stage);
+                    var planes = words[0];
                     var expected = BoardQueries.Evaluate(new BoardMaskQuery(topology, lower, upper), scratch, arena.Layout[board].Empty, 0);
                     Assert.True(expected == (long)planes, $"{stage}: {lower}..{upper} planes {planes:X} cells {expected:X}");
                 }

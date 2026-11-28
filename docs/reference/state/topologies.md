@@ -424,15 +424,21 @@ ceiling; it's a consequence of the representation, and there's no multi-word
 set type in the expression language. `board(mask, …)`, the four mask functions,
 and `writeSet` from a mask all refuse a topology of more than 64 cells.
 
-A board of at most 64 cells whose declared values (its `min` and `max`, its enum,
-or a Bool row's two values) and its empty value span at most 64 consecutive
-integers keeps **value planes**: one 64-bit mask per value, which the arena holds
-current at every cell write (`BoardMask.TryPlaneWindow`, `BitmapIndex64`). A
-`board(mask, row, min, max)` over such a board ORs the planes the range covers,
-or the ones outside it when that is fewer, instead of reading all 64 cells, and
-the work sheet prices it at that many planes plus one. Declaring a board's `min`
-and `max` is what lets its masks read this way; a board without them is read
-cell by cell and priced at twice its cell count.
+A board whose declared values (its `min` and `max`, its enum, or a Bool row's two
+values) and its empty value span at most 64 consecutive integers keeps **value
+planes**, whatever its size: one cell set per value, a bit per cell in 64-bit
+words, which the arena holds current at every cell write
+(`BoardMask.TryPlaneWindow`, `BitmapIndex`). A 64-cell board's planes are one
+word each and a 19×19 board's six. The cells holding any range of values are an
+OR of the planes the range covers, or of the ones outside it when that is fewer,
+instead of a read of every cell (`StateArena.TryReadBoardPlanes`, or
+`StateArena.TryReadBoardRange`, which falls back to reading every cell). A
+`board(mask, row, min, max)`, a declared set's `board(row, low..high)` source,
+`boardCombine`'s sources, `clearEnclosed` and the component and boundary queries
+all read a board this way, and the work sheet prices each read at that many
+planes plus one, per word. Declaring a board's `min` and `max` is what lets it
+read this way; a board without them is read cell by cell and priced at its cell
+count.
 
 ### Board masks and board rows
 
@@ -448,12 +454,15 @@ Masks and whole board rows do the same set algebra at different scales.
 
 `boardCombine` treats a cell as a member of a source board when its value
 differs from that board's `empty` value. Its operations are `copy`, `fill`,
-`clear`, `and`, `or`, `xor`, `andNot`, `not`, `shift` (along a direction), and
-`image` (through an element). Every operation except `copy` writes the declared
-member value to each resulting member and the target's `empty` value
-everywhere else. It computes membership and doesn't add cell values. `copy`
-preserves every source value. The member value must be one the target row
-admits and must differ from the target's `empty`. The transform itself is described in [State transforms](transforms.md).
+`clear`, `and`, `or`, `xor`, `andNot`, `not`, `shift` (along a direction),
+`image` (through an element) and `reach` (a flood fill from `left` through
+`right`). Every operation except `copy` writes the declared member value to each
+resulting member and the target's `empty` value everywhere else. It computes
+membership and doesn't add cell values. `copy` preserves every source value. The
+member value must be one the target row admits and must differ from the target's
+`empty`. The sources are read from their planes as cell sets and combined a word
+at a time (`BoardCombination.Members`), and only the cells whose value changes
+are written. The transform itself is described in [State transforms](transforms.md).
 
 ## Declare a named cell set
 
@@ -544,12 +553,13 @@ C# code can evaluate a set against an arena itself with
 | `TopologyCompilation` | Puck.State | Validates, normalizes, compiles, and finds topologies. |
 | `CompiledTopology` | Puck.State | The immutable adjacency, symmetry, and geometry table. |
 | `TilingGenerator`, `TilingFamily`, `PenroseTiles` | Puck.State | Generates tilings and describes Penrose tiles. |
-| `BoardMask` | Puck.State | The 64-cell mask ceiling. |
+| `BoardMask` | Puck.State | The 64-cell mask ceiling and a board's plane window. |
+| `BitmapIndex` | Puck.Maths | A board's value planes: a cell set per value, a word per 64 cells. |
 | `CellSet`, `CellSetExpression`, `CellSetRow` | Puck.State | Named cell sets and their algebra. |
 | `BoardQuery`, `BoardQueryKind` | Puck.State.Topology | The board query cases. |
 | `BoardQueries` | Puck.State.Topology | The query kernel over a span of cell values. |
 | `BoardJumpDistanceQuery` | Puck.State.Topology | The jump-distance query and its search. |
-| `BoardCombination` | Puck.State.Topology | Validates and computes `boardCombine`. |
+| `BoardCombination` | Puck.State.Topology | Validates `boardCombine` and computes its members on cell-set words. |
 | `ArenaBoards` | Puck.State.Topology | Runs board queries and ray reads against an arena. |
 
 ## Next steps

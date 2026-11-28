@@ -37,6 +37,62 @@ public static class TransformWork {
     /// <summary>Returns the work one board cell store costs.</summary>
     public static long BoardWrite => (Door + BoardEntries);
 
+    /// <summary>Returns the most work one set write of a board's cells costs (<see cref="StateArena.TryWriteBoardCells"/>):
+    /// one door that admits the value, the presence and plane words it reads to find the cells that change, and, for
+    /// every cell it can change, a read and the two lanes its store records. Two set writes over disjoint cells (a
+    /// combine's members and the rest) are priced as one door each and the cells once.</summary>
+    /// <param name="cells">The most cells the write can change.</param>
+    /// <param name="words">The words of the board's cell sets.</param>
+    /// <returns>The work units.</returns>
+    public static long BoardCellsWrite(long cells, long words) => (BoardCellsDoor(words: words) + BoardCellStores(cells: cells));
+    /// <summary>Returns the fixed work of one set write of a board's cells: its door and the presence and plane words it
+    /// reads, whatever the cells it changes.</summary>
+    /// <param name="words">The words of the board's cell sets.</param>
+    /// <returns>The work units.</returns>
+    public static long BoardCellsDoor(long words) => (Door + (4L * words));
+    /// <summary>Returns the work the set writes of a board store into at most <paramref name="cells"/> cells: a read and
+    /// the two lanes each store records.</summary>
+    /// <param name="cells">The most cells the writes can change together.</param>
+    /// <returns>The work units.</returns>
+    public static long BoardCellStores(long cells) => (cells * (1L + BoardEntries));
+    /// <summary>Returns the work reading the cells of a board whose value lies in a range costs
+    /// (<see cref="StateArena.TryReadBoardRange"/>): the plane words the range covers when the row's declarations give it
+    /// a plane window (<see cref="BoardMask.TryPlaneWindow"/>), else a read of every cell.</summary>
+    /// <param name="context">The compile context the row resolves against.</param>
+    /// <param name="rowOrdinal">The board row's catalog ordinal.</param>
+    /// <param name="lower">The range's inclusive lower bound.</param>
+    /// <param name="upper">The range's inclusive upper bound.</param>
+    /// <param name="cells">The board's cell count.</param>
+    /// <returns>The work units.</returns>
+    public static long BoardRangeRead(RuleCompileContext context, int rowOrdinal, long lower, long upper, int cells) => (TryPlaneWindow(
+        context: context,
+        lower: out var windowLower,
+        rowOrdinal: rowOrdinal,
+        width: out var width
+    )
+        ? BitmapIndex.RangeReads(lanes: cells, lower: lower, upper: upper, width: width, windowLower: windowLower)
+        : cells);
+    /// <summary>Reads a board row's plane window from its declarations, as the arena keeps its planes.</summary>
+    /// <param name="context">The compile context the row resolves against.</param>
+    /// <param name="rowOrdinal">The board row's catalog ordinal.</param>
+    /// <param name="lower">The window's least value, or zero.</param>
+    /// <param name="width">How many values the window holds, or zero.</param>
+    /// <returns><see langword="true"/> when the row keeps planes.</returns>
+    public static bool TryPlaneWindow(RuleCompileContext context, int rowOrdinal, out long lower, out int width) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        lower = 0L;
+        width = 0;
+
+        return ((context.FindRowAt(rowOrdinal: rowOrdinal) is { } row) && BoardMask.TryPlaneWindow(
+            catalog: context.Catalog,
+            lower: out lower,
+            row: row,
+            rowOrdinal: rowOrdinal,
+            width: out width
+        ));
+    }
+
     /// <summary>Returns the work one live numeric store into a keyed or pool row costs: its number and presence lanes,
     /// the clock lanes a traited row rebases, and the derived boards the stored cell feeds.</summary>
     /// <param name="context">The compile context the row resolves against.</param>

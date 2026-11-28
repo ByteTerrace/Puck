@@ -128,6 +128,21 @@ public readonly struct CellSet : IEquatable<CellSet> {
         );
     }
 
+    /// <summary>Copies the set's members into words, member <c>i</c> as bit <c>i</c>.</summary>
+    /// <param name="destination">The words, at least <see cref="BitWords.WordsFor"/>(<see cref="Length"/>) long; only
+    /// that many are written.</param>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the set's words.</exception>
+    public void CopyTo(Span<ulong> destination) {
+        var words = Length.CeilingDivide(divisor: 64);
+
+        if (destination.Length < words) {
+            throw new ArgumentException(message: $"a set over {Length} positions takes {words} words", paramName: nameof(destination));
+        }
+        for (var word = 0; (word < words); word++) {
+            destination[word] = Word(index: word);
+        }
+    }
+
     internal ulong Word(int index) => index switch {
         0 => m_word0,
         1 => m_word1,

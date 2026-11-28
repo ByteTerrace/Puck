@@ -44,6 +44,10 @@ public enum BoardCombineOp : byte {
     /// <summary>Each member of <c>left</c> carried through the point-group <c>element</c> — the same move
     /// <c>boardImage</c> makes.</summary>
     Image,
+    /// <summary>The members of <c>left</c> and every member of <c>right</c> a path of members of <c>right</c> joins to
+    /// one, stepping in every direction of the topology: a flood fill from <c>left</c> through <c>right</c>, finished in
+    /// the one firing.</summary>
+    Reach,
 }
 /// <summary>The closed set of atomic state transforms. Each folds one candidate document and journals once.</summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
@@ -255,15 +259,17 @@ public abstract record StateTransform {
             writes: [Row.Spelling]
         );
     }
-    /// <summary>Rewrites a board from one or two boards over the same topology, cell by cell, in one journaled
-    /// mutation: the set algebra <c>$board:mask</c> and the bit operators give a board of at most 64 cells, for a board
-    /// of any size. A cell is a member when its value is not its board's <c>empty</c>; every member of the result is
-    /// written as <see cref="Value"/> and every other cell as the board's <c>empty</c>.</summary>
+    /// <summary>Rewrites a board from one or two boards over the same topology in one journaled mutation: the set
+    /// algebra <c>$board:mask</c> and the bit operators give a board of at most 64 cells, for a board of any size,
+    /// computed on the boards' value planes a word at a time. A cell is a member when its value is not its board's
+    /// <c>empty</c>; every member of the result is written as <see cref="Value"/> and every other cell as the board's
+    /// <c>empty</c>, and a cell that already holds what it would be written is left as it stands.</summary>
     /// <param name="Row">The board written.</param>
     /// <param name="Operation">What is written.</param>
     /// <param name="Left">The first source board, over the same topology; absent for <see cref="BoardCombineOp.Fill"/>
     /// and <see cref="BoardCombineOp.Clear"/>.</param>
-    /// <param name="Right">The second source board for the two-board operations.</param>
+    /// <param name="Right">The second source board for the two-board operations, and the cells a
+    /// <see cref="BoardCombineOp.Reach"/> passes through.</param>
     /// <param name="Direction">The direction a <see cref="BoardCombineOp.Shift"/> steps along.</param>
     /// <param name="Element">The point-group element an <see cref="BoardCombineOp.Image"/> carries through.</param>
     /// <param name="Value">The value written to every member; never the board's own <c>empty</c>.</param>

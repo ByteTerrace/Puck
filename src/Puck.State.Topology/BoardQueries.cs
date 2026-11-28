@@ -47,11 +47,30 @@ public static class BoardQueries {
     // depends only on the set of pairs and not on the order cells are walked.
     private static ulong Pair(int ordinal, long value) =>
         ((((ulong)ordinal) * SplitMix64.GoldenGamma) ^ ((ulong)value));
-    private static long Component(BoardComponentQuery query, ReadOnlySpan<long> values, int source, ArenaScratch scratch) {
+    /// <summary>Evaluates a component, boundary, boundary-at or enclosed-at query over the board's member and boundary
+    /// cells, a cell a bit (<see cref="BitWords"/>): the cells whose value lies in the query's member range and in its
+    /// boundary range, as a board's value planes answer them (<see cref="StateArena.TryReadBoardPlanes"/>) without a read
+    /// of every cell. The answer is the one <see cref="Evaluate"/> gives over the board's values.</summary>
+    /// <param name="query">The compiled query.</param>
+    /// <param name="members">The cells whose value lies in the query's member range, <see cref="CompiledTopology.CellWords"/>
+    /// words.</param>
+    /// <param name="boundary">The cells whose value lies in the query's boundary range, as many words.</param>
+    /// <param name="source">The key cell.</param>
+    /// <param name="scratch">The working storage the flood borrows its marks and stack from.</param>
+    /// <returns>The result in the query's documented integer domain.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="query"/> or <paramref name="scratch"/> is
+    /// <see langword="null"/>.</exception>
+    public static long EvaluateComponent(BoardComponentQuery query, ReadOnlySpan<ulong> members, ReadOnlySpan<ulong> boundary, int source, ArenaScratch scratch) {
+        ArgumentNullException.ThrowIfNull(argument: query);
+        ArgumentNullException.ThrowIfNull(argument: scratch);
+
+        if (((uint)source) >= query.Topology.CellCount) {
+            return -1;
+        }
+
         var enclosed = query.Kind == BoardQueryKind.EnclosedAt;
         var placement = enclosed || query.Kind == BoardQueryKind.BoundaryAt;
-        var boundary = (query.BoundaryLower, query.BoundaryUpper);
-        if (placement && !InRange(values[source], boundary)) {
+        if (placement && !BitWords.Contains(words: boundary, index: source)) {
             return -1;
         }
 
@@ -60,7 +79,7 @@ public static class BoardQueries {
         using var visited = scratch.Rent<ulong>(words);
         using var seen = scratch.Rent<ulong>(words);
         using var stack = scratch.Rent<int>(count);
-        var flood = new BoardFlood(query.Topology, values, (query.Lower, query.Upper), boundary, visited.Span[..words], seen.Span[..words], stack.Span, query.MaxVisits);
+        var flood = new BoardFlood(query.Topology, members, boundary, visited.Span[..words], seen.Span[..words], stack.Span, query.MaxVisits);
 
         if (enclosed) {
             return flood.EnclosedBeside(source, default);
@@ -68,26 +87,46 @@ public static class BoardQueries {
         if (!placement && !flood.CanStart(source)) {
             return 0;
         }
-        var members = flood.Visit(source, query.Kind != BoardQueryKind.Component, out var free);
-        return ((members < 0 || query.Kind == BoardQueryKind.Component) ? members : free);
+        var settled = flood.Visit(source, query.Kind != BoardQueryKind.Component, out var free);
+        return ((settled < 0 || query.Kind == BoardQueryKind.Component) ? settled : free);
+    }
+    // A value span's member and boundary cells, as a board's planes would answer them, for a flood over values.
+    private static long Component(BoardComponentQuery query, ReadOnlySpan<long> values, int source, ArenaScratch scratch) {
+        var words = query.Topology.CellWords;
+        using var members = scratch.Rent<ulong>(words);
+        using var boundary = scratch.Rent<ulong>(words);
+
+        RangeCells(cells: members.Span, lower: query.Lower, upper: query.Upper, values: values[..query.Topology.CellCount]);
+        RangeCells(cells: boundary.Span, lower: query.BoundaryLower, upper: query.BoundaryUpper, values: values[..query.Topology.CellCount]);
+
+        return EvaluateComponent(boundary: boundary.Span, members: members.Span, query: query, scratch: scratch, source: source);
+    }
+    private static void RangeCells(ReadOnlySpan<long> values, long lower, long upper, Span<ulong> cells) {
+        for (var cell = 0; (cell < values.Length); cell++) {
+            if (InRange(values[cell], (lower, upper))) {
+                BitWords.Add(index: cell, words: cells);
+            }
+        }
     }
 
     private static bool InRange(long value, (long Lower, long Upper) range) =>
         value >= range.Lower && value <= range.Upper;
 
-    // A flood over word bitsets (BitWords): `visited` marks every member settled, and the origin of an enclosure test,
-    // across groups, so a group reached from two sides floods once; `seen` marks the boundary cells one group counted,
-    // cleared when the next group starts, so a liberty beside two members counts once. The stack holds a group's members
-    // in the order it settles them, which a caller collecting a group reads back.
-    private ref struct BoardFlood(CompiledTopology topology, ReadOnlySpan<long> values, (long, long) members,
-        (long, long) boundary, Span<ulong> visited, Span<ulong> seen, Span<int> stack, int budget) {
-        private readonly ReadOnlySpan<long> m_values = values;
+    // A flood over word bitsets (BitWords): `members` and `boundary` are the cells whose value lies in each range (a
+    // member is tested first, so a cell in both ranges is a member); `visited` marks every member settled, and the origin
+    // of an enclosure test, across groups, so a group reached from two sides floods once; `seen` marks the boundary cells
+    // one group counted, cleared when the next group starts, so a liberty beside two members counts once. The stack holds
+    // a group's members in the order it settles them, which a caller collecting a group reads back.
+    private ref struct BoardFlood(CompiledTopology topology, ReadOnlySpan<ulong> members, ReadOnlySpan<ulong> boundary,
+        Span<ulong> visited, Span<ulong> seen, Span<int> stack, int budget) {
+        private readonly ReadOnlySpan<ulong> m_members = members;
+        private readonly ReadOnlySpan<ulong> m_boundary = boundary;
         private readonly Span<ulong> m_visited = visited;
         private readonly Span<ulong> m_seen = seen;
         private readonly Span<int> m_stack = stack;
         private int m_remaining = budget;
 
-        public bool CanStart(int cell) => cell >= 0 && !BitWords.Contains(words: m_visited, index: cell) && InRange(m_values[cell], members);
+        public bool CanStart(int cell) => cell >= 0 && !BitWords.Contains(words: m_visited, index: cell) && BitWords.Contains(words: m_members, index: cell);
 
         // The members of every group beside the origin with no boundary cell, counted, and set in `cleared` when it is not
         // empty; negative when the visit budget ran out.
@@ -138,11 +177,10 @@ public static class BoardQueries {
                     if (next < 0 || BitWords.Contains(words: m_visited, index: next)) {
                         continue;
                     }
-                    var value = m_values[next];
-                    if (InRange(value, members)) {
+                    if (BitWords.Contains(words: m_members, index: next)) {
                         BitWords.Add(words: m_visited, index: next);
                         m_stack[pending++] = next;
-                    } else if (countsBoundary && !BitWords.Contains(words: m_seen, index: next) && InRange(value, boundary)) {
+                    } else if (countsBoundary && !BitWords.Contains(words: m_seen, index: next) && BitWords.Contains(words: m_boundary, index: next)) {
                         BitWords.Add(words: m_seen, index: next);
                         free++;
                     }
@@ -252,21 +290,19 @@ public static class BoardQueries {
         );
     }
 
-    /// <summary>Finds groups beside a filled cell that have no boundary cells in the given inclusive range, and sets
-    /// their members in <paramref name="cleared"/>, a cell a bit (<see cref="BitWords"/>), so a caller reads them in
-    /// ascending order without sorting.</summary>
+    /// <summary>Finds groups beside a filled cell that have no boundary cells, and sets their members in
+    /// <paramref name="cleared"/>, a cell a bit (<see cref="BitWords"/>), so a caller reads them in ascending order
+    /// without sorting.</summary>
     /// <param name="topology">The compiled topology.</param>
-    /// <param name="values">One value per cell.</param>
+    /// <param name="members">The cells a group may hold, a cell a bit: the cells whose value lies in the group range,
+    /// <see cref="CompiledTopology.CellWords"/> words.</param>
+    /// <param name="boundary">The cells that count as a group's boundary, as many words.</param>
     /// <param name="source">The filled cell the groups lie beside.</param>
-    /// <param name="lower">The inclusive lower bound of a group cell's value.</param>
-    /// <param name="upper">The inclusive upper bound of a group cell's value.</param>
-    /// <param name="boundaryLower">The inclusive lower bound of a boundary cell's value.</param>
-    /// <param name="boundaryUpper">The inclusive upper bound of a boundary cell's value.</param>
-    /// <param name="cleared">The cleared set, at least <c>BitWords.WordsFor(topology.CellCount)</c> words, cleared.</param>
+    /// <param name="cleared">The cleared set, at least <see cref="CompiledTopology.CellWords"/> words, cleared.</param>
     /// <param name="scratch">The working storage the flood borrows its bitsets and stack from.</param>
     /// <returns>The members set.</returns>
-    public static int FindEnclosed(CompiledTopology topology, ReadOnlySpan<long> values, int source, long lower, long upper,
-        long boundaryLower, long boundaryUpper, Span<ulong> cleared, ArenaScratch scratch) {
+    public static int FindEnclosed(CompiledTopology topology, ReadOnlySpan<ulong> members, ReadOnlySpan<ulong> boundary, int source,
+        Span<ulong> cleared, ArenaScratch scratch) {
         ArgumentNullException.ThrowIfNull(argument: topology);
         ArgumentNullException.ThrowIfNull(argument: scratch);
 
@@ -275,7 +311,7 @@ public static class BoardQueries {
         using var visited = scratch.Rent<ulong>(words);
         using var seen = scratch.Rent<ulong>(words);
         using var stack = scratch.Rent<int>(count);
-        var flood = new BoardFlood(topology, values, (lower, upper), (boundaryLower, boundaryUpper), visited.Span[..words], seen.Span[..words], stack.Span, count);
+        var flood = new BoardFlood(topology, members, boundary, visited.Span[..words], seen.Span[..words], stack.Span, count);
         return flood.EnclosedBeside(source, cleared);
     }
 
