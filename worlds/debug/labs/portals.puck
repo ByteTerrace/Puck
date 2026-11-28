@@ -10,7 +10,7 @@
 // two labs, each a document named from this lab's own directory.
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth"
+basis: "../stage"
 documentId: "lab-portals"
 
 // A clear, neutral midday that hardly moves.
