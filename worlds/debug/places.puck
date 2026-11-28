@@ -41,14 +41,15 @@ function groundPlace(name, x0, x1, z0, z1) = {
 // The gallery's places, in the building's frame.
 let galleryPlaces = concat(
   [
-    // The building as one, its forecourt's doorway outside and in, and the lobby inside the entrance.
+    // The building as one, its west entrance outside and in, and the lobby inside it: the west hall's middle under
+    // the bridge, from the doorway to the nave.
     {
       id: "hall"
       at [(galleryWidth / 2), 9.2, ((wingSouth + galleryDepth) / 2)]
       half [(galleryWidth / 2), 9.7, ((galleryDepth - wingSouth) / 2)]
     }
-    { id: "hall-entrance", at [((entranceWest + entranceEast) / 2), 1.5, 0], half [3, 2, 2.5] }
-    storeyPlace("lobby", 0, wingWest, courtWest, galleryWall, naveSouth)
+    { id: "hall-entrance", at [galleryWestOut, 1.5, naveMid], half [2.5, 2, (((entranceNorth - entranceSouth) / 2) + 0.5)] }
+    storeyPlace("lobby", 0, galleryWestIn, naveWest, entranceSouth, entranceNorth)
     // Level 0: the nave between its arcades, the north aisle behind the north one, the west hall under the bridge
     // (the map of the lobby's old furniture: the desktop, the press, the painting into Wonderland), and the painting
     // wing east of the lobby (paintings.puck).
@@ -78,7 +79,8 @@ let galleryPlaces = concat(
     storeyPlace("desktop", 0, galleryWestIn, (galleryWestIn + 3), 10.4, 13)
     storeyPlace("press", 0, galleryWestIn, (galleryWestIn + 4.2), 5.4, 9.6)
     storeyPlace("wonderland-threshold", 0, galleryWestIn, (galleryWestIn + 2), 17, 20)
-    // The south-west stair's well (`stairs`), each corner stair's (`stairs-<corner>`) and the lift's tower, every storey.
+    // The south-west stair's well (`stairs`), each corner stair's (`stairs-<corner>`) and each lift's shaft (`lift`, the
+    // north one, and `lift-south`), every storey.
     {
       id: "stairs"
       at [stairCentreX(galleryStair("south-west")), 9.2, stairCentreZ(galleryStair("south-west"))]
@@ -91,7 +93,13 @@ let galleryPlaces = concat(
         half [(((stair.well.x1 - stair.well.x0) / 2) + 0.2), 9.7, ((stair.well.z1 - stair.well.z0) / 2)]
       }
     }
-    { id: "lift", at [liftX, 9.2, liftZ], half [1.7, 9.7, 1.9] }
+    for car in galleryLifts {
+      {
+        id: ((car.key == 0) ? "lift" : $"lift-{car.id}")
+        at: [((liftShaftBox(car).x0 + liftShaftBox(car).x1) / 2), 9.2, ((liftShaftBox(car).z0 + liftShaftBox(car).z1) / 2)]
+        half: [((liftShaftBox(car).x1 - liftShaftBox(car).x0) / 2), 9.7, ((liftShaftBox(car).z1 - liftShaftBox(car).z0) / 2)]
+      }
+    }
     // On the rope net panel's aisle side (layout.puck's toyLatticeNetBay), from a metre over level 1's floor up and within
     // 1.2 m of the net: a body here has climbed the net a metre or more.
     {
@@ -102,26 +110,26 @@ let galleryPlaces = concat(
     // The board game room: level 2's south gallery and the wing that projects over the forecourt.
     storeyPlace("board-room", wingLevel, wingWest, galleryEast, (wingSouth + galleryWall), naveSouth)
     // The climbing wall (gallery/climbing-wall.puck): the column of the nave over its pad and up its face to the ledge,
-    // and its top, the ledge and the doorway behind it onto level 3, which a climb reaches only by its mantle.
+    // and its top, the ledge over the frame on the east walkway, which a climb reaches only by its mantle.
     {
       id: "climbing-wall"
-      at [climbWallX, ((galleryFloor[0] + climbWallTop) / 2), ((climbWallFace - climbWallPad.depth) + naveNorth) / 2]
+      at [(((climbWallFace - climbWallPad.depth) + galleryEast) / 2), ((galleryFloor[0] + climbWallTop) / 2), climbWallZ]
       half [
-        (climbWallPad.width / 2),
+        ((galleryEast - (climbWallFace - climbWallPad.depth)) / 2),
         (((climbWallTop - galleryFloor[0]) / 2) + 0.5),
-        ((naveNorth - (climbWallFace - climbWallPad.depth)) / 2)
+        (climbWallPad.width / 2)
       ]
     }
     storeyPlace(
       "climbing-wall-top",
       climbWallLevel,
-      (climbWallX - 2.2),
-      (climbWallX + 2.2),
       climbWallFace,
-      climbWallLanding[2]
+      galleryEast,
+      (climbWallZ - climbWallFrameHalf),
+      (climbWallZ + climbWallFrameHalf)
     )
   ],
-  // Each gallery level whole, and the lift landing before the tower's door on it.
+  // Each gallery level whole, and the north lift's landing before its door on it.
   map(
     range(0, 4),
     level => storeyPlace(
@@ -135,7 +143,14 @@ let galleryPlaces = concat(
   ),
   map(
     range(0, 4),
-    level => storeyPlace($"lift-landing-{level}", level, (towerWest + 0.2), (towerEast - 0.2), galleryWall, 3.4)
+    level => storeyPlace(
+      $"lift-landing-{level}",
+      level,
+      liftShaftBox(galleryLifts[0]).x0,
+      liftShaftBox(galleryLifts[0]).x1,
+      galleryLifts[0].edge,
+      (galleryLifts[0].edge + 2.5)
+    )
   )
 )
 
@@ -187,27 +202,26 @@ spawnPoints [
   // it, with the Advanced Brick on her right and the Humble Brick on her left: posed here, she keeps whatever size she
   // was.
   { id: "devices", position [(4 + galleryWestShift), 0.05, 30.5], yawDegrees: 90 }
-  // At the near chair of the gallery's game station (gallery/games.puck), White's side of its holodeck chess board,
-  // inside its engage radius: the context button sits her down. The board game room's tables have places of their own
-  // beside them (go.puck, reversi.puck, alchemy.puck, granaries.puck), and the room's own place is `boardroom`
-  // (gallery/gallery.puck).
+  // At the near chair of the debug world's game station (game-station-deck.puck), White's side of its holodeck chess
+  // board, inside its engage radius: the context button sits her down. The board game room's tables have places of
+  // their own beside them (go.puck, reversi.puck, alchemy.puck, granaries.puck), and the room's own place is
+  // `boardroom` (gallery/gallery.puck).
   { id: "chess", position: gameStationChairAt(galleryGameStations[0], "near"), yawDegrees: 180 }
   // Behind the chair at the desktop computer against the gallery's west wall (desktop.puck), facing its monitor, inside
   // the screen's engage radius.
   { id: "desktop", position [(12.4 + galleryWestShift), 0.05, 23.7], yawDegrees: 90 }
-  // On the nave's floor 2.5 m before the climbing wall's pad (gallery/climbing-wall.puck), between the displays either
-  // side of it and facing the wall, in the building's frame: walk on and she takes the face.
+  // On the nave's floor 2.5 m before the climbing wall's pad (gallery/climbing-wall.puck), on the nave's axis and facing
+  // the wall, in the building's frame: walk on and she takes the face.
   {
     id: "climbing-wall"
     parent: gallery
-    position [climbWallX, galleryFloor[0], ((climbWallFace - climbWallPad.depth) - 2.5)]
-    yawDegrees: 180
+    position [((climbWallFace - climbWallPad.depth) - 2.5), galleryFloor[0], climbWallZ]
+    yawDegrees: 270
   }
-  // On the valley floor in line with the gallery's entrance, 32 m south of it and 4 m short of the avatar studio's north
-  // wall (studio.puck, world z -24), facing it: the benchmark's valley seam (benchmark-route.puck) starts here and walks
-  // into the lobby. The gallery's own places (`gallery`, outside its entrance; `lift`; `stairs`) are the module's
-  // (gallery/gallery.puck).
-  { id: "seam-valley", position: galleryWorld(((entranceWest + entranceEast) / 2), 0.05, -32), yawDegrees: 180 }
+  // On the valley floor in line with the gallery's entrance on the nave's axis, 32 m west of it, facing it: the
+  // benchmark's valley seam (benchmark-route.puck) starts here and walks in through the entrance. The gallery's own
+  // places (`gallery`, outside its entrance; `lift`; `stairs`) are the module's (gallery/gallery.puck).
+  { id: "seam-valley", position: galleryWorld((galleryWestOut - 32), 0.05, naveMid), yawDegrees: 270 }
   // On level 1's north aisle, 1.5 m behind the rope net panel (gallery/shell.puck, layout.puck's toyLatticeNetBay) and
   // facing it across the nave: walking forward takes the net and climbs it. Posed here, she keeps whatever size she was.
   { id: "rope-net", position: galleryWorld(bayX(toyLatticeNetBay), galleryFloor[1], ((naveNorth + balconyInset) + 1.5)), yawDegrees: 0 }

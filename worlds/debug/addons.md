@@ -62,22 +62,22 @@ position; a fall faster than 4 m/s and more than 1 m below the goal records
 are cumulative counters; `waypoint`, `tick`, `done` and `run` describe the
 current pass. A new pass clears `done`; it switches `run` off when done. A miss is a route probe finding,
 not proof of a physics bug: inspect its approach and authored tolerance.
-Before entering the lift it waits for `liftAt` to reach level one's 72
-sixteenth-metre cells. The studio is sealed, so the default pass finishes there;
+Before entering the south lift it waits for that car's `liftAt` cell (key 1)
+to reach level one's 72 sixteenth-metre cells. The studio is sealed, so the default pass finishes there;
 the old connecting goals crossed its continuous front wall. To run the gallery
 pass separately, issue these lines after the studio pass stops:
 
 ```text
 body.stop 53
-body.pose 11.2 0.05 32.5 0 0 0 53
+body.pose 10.175 0.05 19.875 0 0 0 53
 world.state.cell.set traversal start 15
-world.state.cell.set traversal count 23
+world.state.cell.set traversal count 31
 world.state.cell.set traversal run 1
 ```
 
 The host initializes the idle body's starting pose; the guest itself never
 poses a body and walks every goal of each pass. Read `world.state traversal`
-afterward: both passes together reach 23 goals with `done=1`, `missed=0` and
+afterward: both passes together reach 31 goals with `done=1`, `missed=0` and
 `falls=0`. Restore `start=0` and `count=15` and initialize the body at
 (60, 0.05, -30) before another studio pass.
 

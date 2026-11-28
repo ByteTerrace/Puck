@@ -1158,7 +1158,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   height plus the 0.3 m step-up raise). `worlds/debug/gallery/gallery.puck` is the
   worked building: a stair in each corner of 0.25 m risers, finer toward level 1 where a body shrinks (the standard's `switchbackStair` and `spiralStair`
   kit pieces, one copy a storey), slabs holed over each well by `boundsCutAll` (`worlds/standard/bounds.puck`), and
-  a lift.
+  two glass lifts.
 - Input (channel budgets, modes and their release barrier, timed history,
   input patterns, bindings, devices) belongs to the [`input`](../input/SKILL.md)
   skill.
@@ -1173,11 +1173,12 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   `solid`, analytic provider only); a body grounded on it rides its translation
   and yaw through the same narrowphase and slope test as ordinary contact.
   `motion.groundSnap` follows downward surfaces within an authored reach;
-  jump and launch operations release grounding. The gallery
-  lift moves its car body with a rule that `poseCell`s it along a box topology
-  of 1/16 m layers each tick, so its speed and floor stops are exact.
-  The car's platform, cab, doors and buttons attach to the car by its
-  placement's name (`attach { placement: "lift-car" }`), which resolves to the
+  jump and launch operations release grounding. Each of the gallery's
+  lifts moves its car body with a rule that `poseCell`s it along a box topology
+  of 1/16 m layers each tick, so its speed and floor stops are exact; one set of
+  rules over the cars (`forEach: liftAt`) runs both. A car's platform, cab, doors
+  and buttons attach to the car by its placement's name
+  (`attach { placement: "lift-car-north" }`), which resolves to the
   body that placement spawned (`WorldPlacementAttach.TryCarrier`), so no row
   holds a body's index and an import ahead of the gallery moves nothing. An
   attachment by `bodyIndex` still names a slot, which tracks population
@@ -1185,7 +1186,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   is an inhabited placement. The rule's `poseCell` names the building's root as
   its `frame`, so the topology's cells are read in the building's own frame.
 - An attached placement can also `respond` to state: the shown prototype and
-  its colliders swap while its attachment stays intact. The lift's car doors
+  its colliders swap while its attachment stays intact. A lift's car doors
   and indicator use this; `inhabit` and `faceSources` still refuse `respond`.
   A response holds up to `WorldResponseCapacity.MaxEntries` entries, its
   holding a set of entries held as machine words (`WorldResponseHolding`), and

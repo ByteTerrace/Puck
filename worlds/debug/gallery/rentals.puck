@@ -45,12 +45,14 @@ import "layout"
 import "look"
 
 // The stalls, each by its L's corner in the plan and its turn: 0 for the south-east, whose arms run south and east
-// from the corner, 180 for the north-west, turned half round. `sign` turns the stall's own frame into the plan's.
+// from the corner, 180 for the north-west, turned half round. `sign` turns the stall's own frame into the plan's. The
+// south-east stall stands a bay west of its stair's open corner, since the south lift's landing (layout.puck's
+// galleryLifts) opens onto the strip before that stair.
 let rentalStallInset = 0.9
 let rentalStalls = [
   {
     id: "se"
-    x: (galleryStair("south-east").well.x0 - rentalStallInset)
+    x: ((galleryStair("south-east").well.x0 - rentalStallInset) - arcadePitch)
     z: (galleryStair("south-east").well.z1 + rentalStallInset)
     yaw: 0
     sign: 1

@@ -64,30 +64,30 @@ test "on the upper flight her size follows her height" {
   }
 }
 
-test "the lift's ride to level 1 shrinks her, and the ride on to level 2 grows her" {
+test "the north lift's ride to level 1 shrinks her, and the ride on to level 2 grows her" {
   when {
     seat1: body.pose spawn:lift 0
     ticks 30
-    seat1: world.state.cell.set liftCall $value 1
+    seat1: world.state.cell.set liftCall 0 1
     ticks 200
   }
   expect {
-    liftLevel == 1
+    liftLevel[0] == 1
     bodyState(body, 0, size) == 0.15
   }
 }
 
-test "the lift's ride on to level 2 grows her again" {
+test "the north lift's ride on to level 2 grows her again" {
   when {
     seat1: body.pose spawn:lift 0
     ticks 30
-    seat1: world.state.cell.set liftCall $value 1
+    seat1: world.state.cell.set liftCall 0 1
     ticks 200
-    seat1: world.state.cell.set liftCall $value 2
+    seat1: world.state.cell.set liftCall 0 2
     ticks 200
   }
   expect {
-    liftLevel == 2
+    liftLevel[0] == 2
     bodyState(body, 0, size) == 1
   }
 }

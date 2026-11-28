@@ -14,8 +14,9 @@
 //     climbs or descends into the toybox and grows as it leaves; the zones are generated from layout.puck's
 //     `galleryStairs`, so a stair moved there moves its zone, and the same height curve serves a switchback's flights
 //     and a spiral's helix
-//   the lift's shaft, the same two storeys: the car's ride between level 0 (or 2) and level 1 is the transition, so a
-//     body riding it shrinks or grows with the car's height, and an observer outside sees it through the car's glass
+//   each lift's shaft, the same two storeys: the car's ride between level 0 (or 2) and level 1 is the transition, so a
+//     body riding it shrinks or grows with the car's height, and an observer outside sees it through the car's and the
+//     shaft's glass
 //   level 1's floor, the two aisles and the bridge (never the nave's void, which the lattice walls off): Alice's size
 //     throughout
 //
@@ -24,7 +25,7 @@
 // (`setIdentityFact`) would keep it on the character.
 //
 // The lower flight's zone reaches a little above level 1's floor, so a body standing on level 1 at the stair's foot or
-// in the lift's car, its foot a skin above the floor's top, takes Alice's size exactly rather than the upper flight's
+// in a lift's car, its foot a skin above the floor's top, takes Alice's size exactly rather than the upper flight's
 // value a hair above it.
 //
 // The toybox's devices keep out of a small body's reach by the engine's own rule: a screen's and a tabletop's engage
@@ -74,16 +75,16 @@ function wonderShaft(x0, x1, z0, z1) = [
 // Level 1's floor zone: from just under its floor's top to well short of level 2's slab.
 let wonderFloorLow = (galleryFloor[toyboxLevel] - wonderShaftMargin)
 let wonderFloorHigh = (galleryCeiling[toyboxLevel] - 0.5)
-// Only the intended routes in and out (the stairs and the lift) change a body's size. Anywhere outside the zones a body
+// Only the intended routes in and out (the stairs and the lifts) change a body's size. Anywhere outside the zones a body
 // keeps the size it last took (the owner's design): a body that holds no pass meets each level-1 branch's barrier
-// (shell.puck) whatever its size, so the stairs and the lift are its only ways in and out.
+// (shell.puck) whatever its size, so the stairs and the lifts are its only ways in and out.
 let wonderZones = concat(
   flatMap(galleryStairs, stair => wonderShaft(stair.well.x0, stair.well.x1, stair.well.z0, stair.well.z1)),
-  wonderShaft(towerWest, towerEast, towerSouth, 0),
+  flatMap(galleryLifts, car => wonderShaft(liftShaftBox(car).x0, liftShaftBox(car).x1, liftShaftBox(car).z0, liftShaftBox(car).z1)),
   [
-    // The south aisle, from the south wall's outer face (its lift door) to the arcade's plane, where each level-1 tree
-    // branch's barrier stands (shell.puck), so the balcony strip a branch lands on outside its barrier changes no size;
-    // the north aisle, from its arcade's plane to the north wall; and the bridge across the nave's west end.
+    // The south aisle, from the south wall's outer face to the arcade's plane, where each level-1 tree branch's barrier
+    // stands (shell.puck), so the balcony strip a branch lands on outside its barrier, and a lift's landing, change no
+    // size; the north aisle, from its arcade's plane to the north wall; and the bridge across the nave's west end.
     { box: wonderBox(galleryWestOut, galleryWidth, wonderFloorLow, wonderFloorHigh, 0, arcadeSouth), start: "small" }
     {
       box: wonderBox(galleryWestOut, galleryWidth, wonderFloorLow, wonderFloorHigh, arcadeNorth, galleryDepth)
@@ -183,7 +184,7 @@ rule "wonder-small-ask" {
 commands [
   {
     name: "gallery.wonder"
-    help: "The toybox's author shortcuts: pass on|off grants or takes back a body's full-size pass (level 1 keeps its full size, and the tree's barriers let it through, while it holds it); size <s> sets its size directly, which holds wherever no size zone stands (level 1, its stairs and its lift re-size it); small <s> retunes the size level 1 gives a body without the pass."
+    help: "The toybox's author shortcuts: pass on|off grants or takes back a body's full-size pass (level 1 keeps its full size, and the tree's barriers let it through, while it holds it); size <s> sets its size directly, which holds wherever no size zone stands (level 1, its stairs and its lifts re-size it); small <s> retunes the size level 1 gives a body without the pass."
     parameters [
       { name: "setting", kind: Choice, values ["pass", "size", "small"] }
       { name: "value", kind: Text }

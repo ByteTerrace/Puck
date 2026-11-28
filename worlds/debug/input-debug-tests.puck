@@ -62,7 +62,7 @@ test "leaving flight cancels autofly and it does not restart on reentry" {
   }
 }
 
-// The board is the gallery's game station's (`spawn:chess`, its near chair), whose pick grid is `south3Cells`.
+// The board is the gallery's game station's (`spawn:chess`, its near chair), whose pick grid is `a1Cells`.
 test "a board engagement cancels autorun without moving its cursor" {
   when {
     ticks 30
@@ -79,7 +79,7 @@ test "a board engagement cancels autorun without moving its cursor" {
     ticks 10
   }
   expect {
-    board(engaged, south3Cells, 1) == 1
+    board(engaged, a1Cells, 1) == 1
     channel(1, forward) == 0
   }
 }
@@ -96,7 +96,7 @@ test "leaving a board releases its held direction before locomotion resumes" {
     ticks 10
   }
   expect {
-    board(engaged, south3Cells, 1) == 0
+    board(engaged, a1Cells, 1) == 0
     channel(1, forward) == 0
   }
 }

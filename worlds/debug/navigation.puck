@@ -4,7 +4,7 @@
 // across them between two places (places.puck), checked against the contact field the Moth collides with.
 //
 // A surface domain samples one ground per column: the first surface under its probe's start, origin height plus
-// probeUp. The start stands below every lintel a walker passes under (the hall's entrance opening is 3.3 m tall,
+// probeUp. The start stands below every lintel a walker passes under (the hall's entrance opening is 3.4 m tall,
 // Wonderland's doorway 3.05 m, the wing's 3 m) and above the Moth's 2.06 m, so a doorway's cells find its floor rather
 // than starting inside the wall over it. The hall's corner stairs (gallery/layout.puck's `galleryStairs`) repeat every
 // storey, so no one ground per column can hold a level and the treads above and below it, and each storey of each stair
