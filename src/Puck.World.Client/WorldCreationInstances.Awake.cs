@@ -104,6 +104,18 @@ public sealed partial class WorldCreationInstances {
     /// <summary>Wakes the registration at a pool index, so the next pack visits it.</summary>
     private void WakeEntry(int index) => _ = m_awake.Add(index: index);
 
+    /// <summary>Returns whether the pool's next pack would visit nothing of its own accord for a span of its clock: no
+    /// entry is awake (no continuation, no reconcile or emission owes the whole pool), none reads what no journal carries
+    /// (a rig reading another body, a solid's sampled scale), and no replay cursor or cue comes due within the span. A
+    /// body's presented inputs and the state cells the leases hold still wake entries through their journals, which the
+    /// caller checks itself; a held pose a view comes to show wakes at the next pack. Read on the frame thread between
+    /// packs.</summary>
+    /// <param name="seconds">The span of the pool's clock (<see cref="Tick"/>), in seconds, that must pass before any
+    /// cursor or cue comes due.</param>
+    /// <returns><see langword="true"/> when nothing of the pool's own moves within the span.</returns>
+    public bool Rests(double seconds) => (!m_wakeAll && (m_awake.Count == 0) && (m_everyPack.Count == 0) && (m_bodyReaders.Count == 0) &&
+        (m_selectedBodyReaders.Count == 0) && ((m_deadlineCount == 0) || (m_deadlines[0].Due > (m_clockSeconds + seconds))));
+
     // Gathers this pack's visits into m_visits, in pool order. Returns whether the pack visits every entry.
     private bool CollectVisits(IWorldStampSource client, bool everything) {
         // The cursor moves every pack, so a pack that visits everything leaves no body change for the next to repeat.

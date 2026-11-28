@@ -220,7 +220,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// (<see cref="SdfWorldTables.DescribeRegionFlushes"/>), what the raster passes selected of it
     /// (<see cref="SdfWorldTables.DescribeSelection"/>), the motion scopes its passes sign with and why each last moved
     /// (<see cref="SdfWorldTables.DescribeMotion"/>), its presentation's selector
-    /// (<see cref="SdfResidencySelector.Describe"/>) with the background work's one budget, the tables' fixed cost (<see cref="SdfWorldTables.DescribeFixedCost"/>), the lighting's reservation (<see cref="SdfLightingHold.Describe"/>), the background GPU work's buffers
+    /// (<see cref="SdfResidencySelector.Describe"/>) with the background work's one budget, the tables' fixed cost (<see cref="SdfWorldTables.DescribeFixedCost"/>), the lighting's reservation (<see cref="SdfLightingHold.Describe"/>), its parking and its captures (<see cref="DescribeCaptures"/>), the background GPU work's buffers
     /// (<see cref="SdfGpuWork.DescribeBytes"/>), the frame's sampled table (<see cref="SdfWorldTables.DescribeFrameSampled"/>),
     /// the latest program's emission, build and size, and the irradiance
     /// volume's probe cache.</summary>
@@ -245,6 +245,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             (m_tables?.DescribeFixedCost() ?? "fixed-cost=none"),
             (m_tables?.Lighting.Describe() ?? "lighting=none"),
             DescribeParking(),
+            DescribeCaptures(),
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",
             (m_tables?.DescribeFrameSampled() ?? "frame-sampled=none"),
             $"change-history-logical-bytes transforms={(m_frame?.MovedTransforms?.StorageBytes ?? 0)} draws={(m_frame?.DrawRows.Changes?.StorageBytes ?? 0)} dresser-scratch={m_meshDresser.ScratchBytes} staging-runs={(m_tables?.DrawChangeScratchBytes ?? 0)} (array payload; headers excluded)",
@@ -283,9 +284,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// (its minimum): its meshes are arriving (<see cref="MeshesArriving"/>), whose bake plans and lands through a prepared
     /// frame, or its lighting is settling (<see cref="SdfMeshIrradiance.Settling"/>), whose trace a prepared frame stages,
     /// so a world becomes resident and lit before its glass shows. False once both are done, when only a reader prepares
-    /// it, and while it is parked (<see cref="IsParked"/>), when only a reader wakes it. Read on the frame thread; never
-    /// waits.</summary>
-    public bool OwesPreparation => (!m_parked && (MeshesArriving || MeshIrradiance.Settling));
+    /// it; while it is parked (<see cref="IsParked"/>), when only a reader wakes it; and while the presentation's sight
+    /// has let it go (<see cref="SightLetGo"/>): no rendering view sees its glass or is led to it, so nothing shows it
+    /// soon and it parks (<see cref="SdfWorldPasses.BeginFrame"/>) rather than being captured, packed and staged for a
+    /// glass nobody approaches. Read on the frame thread; never waits.</summary>
+    public bool OwesPreparation => (!m_parked && !SightLetGo && (MeshesArriving || MeshIrradiance.Settling));
     /// <summary>Gets whether the latest staging held a draw out of the frame because its mesh had not landed
     /// (<see cref="SdfWorldTables.DrawsAwaitMeshes"/>); <see langword="false"/> before the tables are built.</summary>
     public bool DrawsAwaitMeshes => (m_tables?.DrawsAwaitMeshes ?? false);
@@ -502,6 +505,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_tables?.Dispose();
         m_tables = null;
         m_probeTables = null;
+        ForgetContent();
         ResetReady();
         CancelShaderReload(reason: (deviceLost ? "the device was lost" : "the residency was released"));
         ReleaseShadePipelines();
@@ -898,6 +902,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             objB: m_packedFrame
         )) {
             using (HostFrameWork.Measure(HostFrameWorkPart.Pack)) { tables.Pack(frame: frame); }
+            SignContent(frame: frame, tables: tables);
             m_packedFrame = frame;
             LiveVolumes = frame.Volumes.Count;
         } else {
@@ -1363,7 +1368,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     internal bool BeginCapturePacking(in FrameContext context) {
         if (HoldsFrame) { _ = HostFrame(context: in context); return false; }
         using var work = HostFrameWork.Measure(HostFrameWorkPart.Capture);
-        if (!OpenCapture(context: in context)) { return false; }
+        if (!OpenCapture(context: in context) || TryHoldContent(context: in context)) { return false; }
 
         m_frozenFrame = null;
         var source = (SdfCompositionFrameSource)m_frameSource;
@@ -1387,7 +1392,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         var frame = ((SdfCompositionFrameSource)m_frameSource).FinishCapture(width: m_width, height: m_height,
             deltaSeconds: job.Delta, interpolationAlpha: job.Alpha);
 
-        PublishCaptured(frame: CaptureWriter().CopyFrom(source: frame));
+        PublishCaptured(frame: CaptureWriter().CopyFrom(source: frame), full: true);
     }
 
     private bool OpenCapture(in FrameContext context) {
@@ -1416,16 +1421,18 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     private void Capture(in FrameContext context) {
         using var work = HostFrameWork.Measure(HostFrameWorkPart.Capture);
-        if (!OpenCapture(context: in context)) { return; }
+        if (!OpenCapture(context: in context) || TryHoldContent(context: in context)) { return; }
 
         var converging = HoldsFrame;
         var capture = CaptureWriter();
         SdfFrame frame;
+        var full = true;
 
         if (converging && (m_frozenFrame is { } frozen)) {
             frame = capture.CopyFrom(content: (frozen.Content with { ProgramChanged = false }), source: frozen);
             SourceWaiting = null;
             m_frameSource.PresentHeldFrame();
+            full = false;
         } else {
             if (!converging) {
                 m_frozenFrame = null;
@@ -1452,10 +1459,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 m_frozenFrame = m_frozen.CopyFrom(source: frame);
             }
         }
-        PublishCaptured(frame: frame);
+        PublishCaptured(frame: frame, full: full);
     }
 
-    private void PublishCaptured(SdfFrame frame) {
+    // Publishes a frame the residency's views render from: a full capture of its source (full), or a frame of content it
+    // held (a converging capture's frozen frame, the content hold's fitted views).
+    private void PublishCaptured(SdfFrame frame, bool full) {
         // Every view draws the program's baked meshes, landed first where its views stand.
         MeshDemand.Observe(frame: frame, height: m_height);
         try { frame = m_meshDresser.Dress(frame: frame); } catch (SdfDressFaultException) {
@@ -1467,6 +1476,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_frame = frame;
         m_pendingFrame = null;
         m_programPending |= frame.ProgramChanged;
+        NoteHeldContent(frame: frame, full: full);
 
         var glass = (frame.MeshRows?.GlassCount ?? 0);
 
@@ -1531,6 +1541,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         NoteProgram(program: frame.Program);
         m_packedFrame = null;
         m_programPending = false;
+        ForgetContent();
         Array.Clear(array: m_renderedSignatures);
 
         return true;

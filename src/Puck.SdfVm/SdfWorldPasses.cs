@@ -582,8 +582,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // Parks at most one residency a frame (SdfWorldResidency.Park): of the residencies other than the host that hold
     // tables, the one no reader has asked for longest, once that is SdfWorldResidency.PressedParkAfter while the
     // device's pool stands past its limit (SdfResidencySelector.Excess, less what parks in the last ParkSettleSeconds gave
-    // back and the retirement has yet to dispose) or SdfWorldResidency.IdleParkSeconds otherwise, when its meshes are no
-    // longer making their arrival (SdfWorldResidency.MeshesFirstArriving). The pool's limit follows
+    // back and the retirement has yet to dispose) or while the sight has let the world go (SdfWorldResidency.SightLetGo),
+    // and SdfWorldResidency.IdleParkSeconds otherwise, when its meshes are no longer making their arrival
+    // (SdfWorldResidency.MeshesFirstArriving). The pool's limit follows
     // the system's budget for the process, so a world nobody looks at gives its fixed storage back before the system
     // moves memory a view reads out of the device. Runs after every residency began its frame and before any is
     // captured, so no residency it parks has begun a preparation.
@@ -609,13 +610,18 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         foreach (var residency in m_residencies.Keys) {
             if (residency.IsReleased || ReferenceEquals(objA: residency, objB: m_host) || (residency.Tables is null)) { continue; }
 
+            // A world the sight has let go (SdfWorldResidency.SightLetGo) is behind glass no rendering view sees or is led
+            // to: nothing will show it before a view's approach wants it again, which wakes it, so it parks on the pressed
+            // wait whatever the pool holds, its arrival included (it owes no preparation, so its bake waits for the wake).
+            var letGo = residency.SightLetGo;
+
             // A world still making its arrival is not parked for idleness alone: a park stops its bake (a parked residency
             // owes no preparation), so the glance that comes for it would find holes. Pressure parks it all the same.
-            if (!pressed && residency.MeshesFirstArriving) { continue; }
+            if (!pressed && !letGo && residency.MeshesFirstArriving) { continue; }
 
             var unobserved = residency.UnobservedSeconds();
 
-            if ((unobserved >= (pressed ? residency.PressedParkAfter : SdfWorldResidency.IdleParkSeconds)) && (unobserved > longest)) {
+            if ((unobserved >= ((pressed || letGo) ? residency.PressedParkAfter : SdfWorldResidency.IdleParkSeconds)) && (unobserved > longest)) {
                 candidate = residency;
                 longest = unobserved;
             }
@@ -714,9 +720,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     private readonly List<SdfWorldResidency> m_minimumServed = [];
 
     // Invariant: a residency whose meshes are arriving or whose lighting is settling gets background GPU turns whether or
-    // not any view renders it. Its bake samples and its probes trace only against an upload whose World set binds the
-    // program the bake meshes (SdfWorldTables.BindsBackgroundWork), and a pack alone moves what that set binds without
-    // uploading it, so a residency the minimum only packed (a routed scene seen through a sky or a portal, a world no
+    // not any view renders it, unless the sight has let it go (SdfWorldResidency.OwesPreparation), when it waits parked
+    // for the approach that wants it again. Its bake samples and its probes trace only against an upload whose World set
+    // binds the program the bake meshes (SdfWorldTables.BindsBackgroundWork), and a pack alone moves what that set binds
+    // without uploading it, so a residency the minimum only packed (a routed scene seen through a sky or a portal, a world no
     // view shows yet) never bound its work and never sampled. Enforced here, for every residency the minimum serves:
     // each is staged (SdfWorldResidency.Stage, its upload submitted and its work pumped) after the packs and before any
     // render is scheduled, so its upload reaches the queue ahead of every view of the frame, as the shared mesh region's

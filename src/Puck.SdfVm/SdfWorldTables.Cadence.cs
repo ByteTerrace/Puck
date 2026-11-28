@@ -581,4 +581,40 @@ public sealed partial class SdfWorldTables {
         visual.Add(value: volumes);
         m_visualSignature = visual.Value;
     }
+    /// <summary>Returns the signature of what the packed frame's capture wrote that no view's camera decides: the program,
+    /// the transforms, the draw records and their count, the sampled values, the media, the lights, the sky and its layers,
+    /// the shadows' hand-offs and the screens' surfaces in the tables, and the frame's flow clock, world lanes, exposure,
+    /// tone and occluders. Two captures with one signature composed the same content; what the residency's upkeep moves
+    /// beside a capture (meshes landing, the irradiance volume's publications, the screens' sources and decals) is left
+    /// out, and so are the views. Read after <see cref="Pack"/> on the thread that packed.</summary>
+    /// <param name="frame">The frame the tables packed.</param>
+    /// <returns>The signature.</returns>
+    internal ulong CaptureContentSignature(SdfFrame frame) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+
+        var hash = Fnv1aHash.Create();
+        Span<ulong> values = [
+            m_programRevision,
+            m_dynamicTransformRevision,
+            unchecked((ulong)m_meshRegion.ContentRevision),
+            m_meshDrawCount,
+            m_frameSampledRevision,
+            unchecked((ulong)m_volumeRegion.ContentRevision),
+            unchecked((ulong)m_lightRegion.ContentRevision),
+            unchecked((ulong)m_skyRegion.ContentRevision),
+            unchecked((ulong)m_skyLayerRegion.ContentRevision),
+            XxHash3.HashToUInt64(source: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0))),
+            unchecked((ulong)m_screenSurfaceRegion.ContentRevision),
+        ];
+
+        hash.Add(values: MemoryMarshal.AsBytes(span: values));
+        hash.AddBits(value: SdfFrameBlock.FlowClockOf(frame: frame));
+        hash.AddBits(value: SdfFrameBlock.WorldLanesOf(frame: frame));
+        hash.Add(value: unchecked((uint)frame.Exposure.GetHashCode()));
+        hash.Add(value: unchecked((uint)frame.Tone.GetHashCode()));
+        hash.Add(value: ((uint)frame.Occluders.Count));
+        hash.Add(values: MemoryMarshal.AsBytes(span: frame.Occluders.Records));
+
+        return hash.Value;
+    }
 }

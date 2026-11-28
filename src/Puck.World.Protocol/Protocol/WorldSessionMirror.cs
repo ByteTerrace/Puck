@@ -1487,6 +1487,8 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
     // Closes one journal frame over the delivery just applied and finds the entities it left moving. Under
     // m_snapshotWriteGate.
     private void PublishBodyChanges() {
+        var changed = (m_deliveredWhole || (m_deliveredChanges.Count > 0));
+
         m_bodySerial = m_bodyJournal.Publish(everything: m_deliveredWhole, owed: m_deliveredChanges.Members, rows: m_poses.Capacity);
         m_deliveredChanges.Clear();
         m_deliveredWhole = false;
@@ -1497,7 +1499,20 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
                 m_moving.Add(item: index);
             }
         }
+        if (changed || (m_moving.Count > 0)) { Volatile.Write(location: ref m_bodyRevision, value: (m_bodyRevision + 1)); }
+        Volatile.Write(location: ref m_movingCount, value: m_moving.Count);
     }
+    /// <summary>Gets the counter that moves with each delivery that changed any entity or left any moving: what a
+    /// presentation holding a frame of the destination compares to know that no body has moved since it captured. A
+    /// delivery that changed nothing leaves it standing.</summary>
+    public int BodyRevision => Volatile.Read(location: ref m_bodyRevision);
+    /// <summary>Gets how many entities the latest delivery left moving (<see cref="CopyMovingBodies"/>): the entities whose
+    /// interpolated pose moves with the presentation alpha until the next delivery.</summary>
+    public int MovingBodyCount => Volatile.Read(location: ref m_movingCount);
+
+    // The counters BodyRevision and MovingBodyCount read, written under m_snapshotWriteGate.
+    private int m_bodyRevision;
+    private int m_movingCount;
 
     // The delivery journal (CollectBodyChanges): the entities the delivery in progress changed and whether it owes every
     // entity, the journal, and the entities the latest delivery left moving. Under m_snapshotWriteGate.

@@ -21,7 +21,8 @@ namespace Puck.SdfVm;
 // no tables, and SdfWorldResidency.Staged refuses its recording by name.
 public sealed partial class SdfWorldResidency {
     /// <summary>The seconds a residency must go unobserved before it parks while the device's pool stands past its
-    /// limit (<see cref="SdfResidencySelector.Excess"/>).</summary>
+    /// limit (<see cref="SdfResidencySelector.Excess"/>) or the presentation's sight has let it go
+    /// (<see cref="SightLetGo"/>).</summary>
     public const double PressedParkSeconds = 2d;
     /// <summary>The seconds a residency must go unobserved before it parks when the device's pool fits its limit: a
     /// world no view has shown for this long holds none of its tables, as a world first shown does.</summary>
@@ -53,8 +54,8 @@ public sealed partial class SdfWorldResidency {
     private long m_lightingDrops;
 
     /// <summary>Gets the seconds the residency must go unobserved before it parks while the device's pool stands past
-    /// its limit: <see cref="PressedParkSeconds"/>, longer for a residency that woke soon after its recent parks, and
-    /// never past <see cref="IdleParkSeconds"/>.</summary>
+    /// its limit or the sight has let it go: <see cref="PressedParkSeconds"/>, longer for a residency that woke soon after
+    /// its recent parks, and never past <see cref="IdleParkSeconds"/>.</summary>
     internal double PressedParkAfter => Math.Min(val1: (PressedParkSeconds * m_parkBackoff), val2: IdleParkSeconds);
     // One more for every tables the residency builds, so a view that bound the earlier tables' objects knows to bind again.
     private long m_tablesGeneration;
@@ -168,6 +169,7 @@ public sealed partial class SdfWorldResidency {
         m_parkedAt = (m_clock?.GetTimestamp() ?? 0L);
         m_lightingForgotten = false;
         m_parks++;
+        ForgetContent();
         ResetReady();
         Array.Clear(array: m_renderedSignatures);
         // The clients unwind now, so the lighting's worker waiting on a job the parked tables will never pump lets go
