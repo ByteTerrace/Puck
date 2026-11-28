@@ -218,6 +218,48 @@ let fallHole = 1
 // floor is whole over it and the wing's fall paintings below stand as they are.
 let fallOpen = false
 
+// The lab wing (../lab-wing.puck, labs/README.md): level 0's north aisle, where a door stands for each lab, a small world
+// that tests one behaviour or a set of behaviours together and boots alone in minutes. Each row is one lab: `id` names
+// its door (`lab-<id>`), its spawn point before the door and its destination; `bay` is the arcade bay the door stands
+// in, on the aisle's tile row `labWingRow`, its glass facing the nave; `document` is the lab's world document, named as
+// the debug world's entry names it; `title` and `note` are its plaque. `open` says whether the door leads anywhere: a
+// closed door's glass reads OPENING SOON and its plaque still stands, so a lab whose document lands later opens by
+// setting `open` alone. Adding a lab is one row. The doors keep clear of the corner stairs (bays 0 and 12), and the
+// tree's bay (6) stays open across the aisle, so the wing is a court either side of it.
+let labWingRow = (wallRowNorth - 1)
+let labWingPlan = [
+  {
+    id: "climbing", bay: 2, open: true, document: "labs/climbing"
+    title: "CLIMBING LAB", note: "The Moth's climb on holdable faces, the gallery's rope net, and its climbing wall from the floor to a ledge."
+  }
+  {
+    id: "light", bay: 3, open: true, document: "labs/light"
+    title: "LIGHT LAB", note: "A room a subject: occluders, a dark room of bulbs, a screen and a glowing console, stained glass, the magic barrier, haze."
+  }
+  {
+    id: "surface", bay: 4, open: true, document: "labs/surface"
+    title: "SURFACE LAB", note: "Relief panels near, middle and far, each filtered beside unfiltered, down a long fogged sight line toward a low sun."
+  }
+  {
+    id: "moth", bay: 5, open: true, document: "labs/moth"
+    title: "MOTH LAB", note: "The Moth on a grey stage, then her run, turns, steps, slopes, jumps, dash, climb and flight, and a tight corridor for her camera."
+  }
+  {
+    id: "shapes", bay: 8, open: true, document: "labs/shapes"
+    title: "SHAPE LAB", note: "One display station holding the whole catalog: every exhibit, the blends and the cubic blends among them, a tap away."
+  }
+  {
+    id: "tree", bay: 9, open: false, document: "labs/tree"
+    title: "TREE LAB", note: "The gallery's tree on its own, its treads and branches to walk."
+  }
+  {
+    id: "board-games", bay: 10, open: true, document: "labs/board-games"
+    title: "BOARD GAME LAB", note: "The physical chess table beside a game station playing chess, Klondike and FreeCell, on one floor."
+  }
+]
+// Whether level 0's north wall keeps its bench or planter at plan x `x`: none stands behind a lab's door.
+function labWingClear(x) = (count(labWingPlan, lab => (bayX(lab.bay) == x)) == 0)
+
 // The flaw's route (flaw.puck): the corners of one closed polyline in the building's frame, metres, which the flaw
 // follows with each corner rounded (look.puck's `lookFlaw.bend`). It is one loop that rises through the building and
 // returns down the tree:
@@ -438,6 +480,12 @@ let toyLatticeNet = { strand: 0.035, pitch: 0.3 }
 // `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
 // tile on the nave's axis.
 let toyLatticeLooseBay = 8
+// The rope net panel: the north edge's bay whose frame holds a net that gives and climbs (architecture.puck's `latticeNet`
+// facet, gallery.md "The lattice") rather than a net drawn over a pane. Its frame and its net still close the edge to
+// every body. Kept clear of the toybox's stairs, lift, stations and house, of every tree branch's landing and of the
+// climbing wall's bay (10, below): bay 9 has none of them, standing between the tree's
+// gate (bay 8) and the little house (bay 10), its aisle open to walk up to the net from.
+let toyLatticeNetBay = 9
 
 // The central tree (tree.puck): a giant tree at the hall's exact centre, bay 6 (the middle rest bay) on the nave's
 // centre row, its trunk filling the nine tiles a display's pad does. A spiral of treads climbs its trunk, and two
@@ -557,3 +605,49 @@ function treeBranchAt(b, t) = (let p = quadraticPoint(treeBranchA(b), treeBranch
   (p[1] + galleryFloor[0]),
   (treeZ - p[2])
 ])
+
+// The climbing wall (climbing-wall.puck): a face `climbWallWidth` across standing in front of the north balcony edge in
+// bay `climbWallBay`, from the nave's floor to level `climbWallLevel`, facing the nave. The bay is the nave's last even
+// bay clear of everything an edge already carries: the tree's branches land in bays 4, 6 (its trunk), 7 and 8, the
+// loose lattice panel is bay 8's, and bay 12 is the north-east stair's. The odd bays either side hold displays, whose
+// plinths stand 4.5 m in from the edge and leave the pad more than a metre of floor on each side.
+//
+// The wall stands `climbWallDepth` deep in front of the edge, its back on the edge's line, so its ledge (the frame's
+// coping, level with the floor it tops out at) is deep enough for a mantle to set a body down on it whole: the climb's
+// mantle carries a body 0.8 m in from where it hangs, one body radius off the face, so it lands 0.45 m past the face
+// with its capsule reaching 0.35 m either side, all of it on the ledge and clear of the balustrade. A doorway in that level's
+// balustrade opens behind the ledge (`galleryEdgeDoors`). Before the face a pad `climbWallPad.depth` deep catches a
+// fall, reaching past the frame on each side; the face stands on the pad, and the frame on the floor.
+let climbWallBay = 10
+let climbWallLevel = 3
+let climbWallX = bayX(climbWallBay)
+let climbWallWidth = 4
+let climbWallDepth = 1.1
+let climbWallThickness = 0.2
+let climbWallCoping = 0.3
+let climbWallPad = { width: 5, depth: 2.5, height: 0.25 }
+// The climbing plane's line in the plan (the face's front, where a climber's hands go), the pad's top, the ledge's top
+// and the face's height from the pad to the coping.
+let climbWallFace = (naveNorth - climbWallDepth)
+let climbWallFoot = (galleryFloor[0] + climbWallPad.height)
+let climbWallTop = galleryFloor[climbWallLevel]
+let climbWallFaceHeight = ((climbWallTop - climbWallFoot) - climbWallCoping)
+// A point on the face, `u` metres across from its middle (toward +x) and `v` up from its foot, in the plan, on the
+// climbing plane.
+function climbWallAt(u, v) = [(climbWallX + u), (climbWallFoot + v), climbWallFace]
+// Where a climb starts and ends: on the pad before the face's middle, a step out from it; on the ledge, a body's stance
+// in from the face where the climb's mantle sets it down; and on the floor of its level through the doorway behind.
+let climbWallStart = [climbWallX, climbWallFoot, (climbWallFace - 0.7)]
+let climbWallSummit = [climbWallX, climbWallTop, (climbWallFace + 0.5)]
+let climbWallLanding = [climbWallX, climbWallTop, (naveNorth + 1.5)]
+
+// The doorways in the balustrades of levels 2 and 3, each filling a bay's balcony edge where something meets the floor
+// from over the void: the tree's branches on those levels (`treeLimbs`) and the climbing wall's ledge. Each is
+// { level, side, x }, `x` the bay's centre; the balustrade leaves the bay to the doorway and a short length either side.
+let galleryEdgeDoors = concat(
+  map(filter(treeLimbs, b => (b.level >= 2)), b => { level: b.level, side: b.side, x: b.x }),
+  [{ level: climbWallLevel, side: "north", x: climbWallX }]
+)
+function galleryEdgeDoorsOn(level, side) = filter(galleryEdgeDoors, d => ((d.level == level) and (d.side == side)))
+// Whether the balcony edge at `x` on a level's side is a plain length of balustrade, with no doorway in its bay.
+function galleryEdgeRailed(level, side, x) = (count(galleryEdgeDoorsOn(level, side), d => (d.x == x)) == 0)

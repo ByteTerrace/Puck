@@ -2614,6 +2614,24 @@ in [sweep](#sweep-and-visual-checks).
 
 ### Lighting and GI
 
+Known failures the labs show on settled scenes (RTX 2060, D3D12), each judged in
+its lab:
+
+- **Lamp shadows** (`labs/light.puck`, `debug.go light-occluders`). The
+  pendant is lit, and `world.occluders` keeps all five occluders for the view,
+  but no shadow from the lamp reads on the floor. The room is lit evenly,
+  probably because the lamp's bounce off the ceiling swamps its direct light.
+  The wall-to-wall corners also show small bright smudges.
+- **Screen spill** (`labs/light.puck`, `debug.go light-night`). The
+  test-pattern screen and the cyan panel cast almost no coloured light on the
+  walls and cabinet around them; only the bulb warms its ceiling.
+- **Metal reflection banding** (`labs/shapes.puck`, `gallery.show
+  shape-sphere`, camera at (0,1.5,2.6) looking at (0,1,0.3)). The copper
+  sphere's underside still shows horizontal dark bands and stair-steps after the
+  tangent-plane march. The next suspect is the step-budget fade (`late`), which
+  jumps with the pyramid's power-of-two alignment. The structural fix is a
+  cheaper march near surfaces.
+
 Owner: next lighting batch (rendering, principal-grade review) · high · Next:
 [what the GPU trace still owes](illumination.md#after-the-gpu-trace), the
 plan's step 3: the moving-sun lockstep drain and the outdoor difference from
@@ -5466,6 +5484,9 @@ proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
 
+- Two rule vocabularies spell an engine enum the same way: `WorldKinematicsVocabulary` and `WorldNetVocabulary`
+  (`Puck.World.Schema`) each keep a name array in enum order with `All`, `TryResolve` by `Array.IndexOf` and `KindOf`. One
+  generic name table over the enum (names, resolve, kind) serves both and the next reading a rule takes.
 - Go and Reversi (`worlds/debug/go.puck`, `reversi.puck`) are whole documents of the gallery's board game room, so the board
   games lab (`worlds/debug/labs/board-games.puck`) cannot stand them: each imports the gallery's shape catalog, derives its
   body slots from `galleryPopulation` and the other tables' counts, grants `Drive` over those absolute body indices and

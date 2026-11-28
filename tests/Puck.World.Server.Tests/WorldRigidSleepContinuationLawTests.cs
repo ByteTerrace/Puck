@@ -27,7 +27,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
 
         var live = Arrive();
 
-        population.Restore(checkpoint: captured.Population, defaults: definition.PlayerDefaults, tick: 1200);
+        population.Restore(checkpoint: captured.Population, definition: definition, tick: 1200);
         Assert.Equal(live, Arrive());
 
         byte[] Arrive() {
@@ -68,7 +68,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         var live = new byte[30][];
 
         for (var step = 0; (step < live.Length); step++) { live[step] = Continue(step: step); }
-        population.Restore(checkpoint: captured.Population, defaults: definition.PlayerDefaults, tick: 1200);
+        population.Restore(checkpoint: captured.Population, definition: definition, tick: 1200);
         feed.Restore(checkpoint: captured.EventFeed);
         Assert.Equal(WorldAuthorityCheckpointCodec.Encode(checkpoint: captured), Image());
         for (var step = 0; (step < live.Length); step++) { Assert.Equal(live[step], Continue(step: step)); }
@@ -112,13 +112,13 @@ public sealed class WorldRigidSleepContinuationLawTests {
         Assert.Equal(expected: (rigidSupport ? 2 : 1), actual: captured.SleepingGravity.Count);
         // A sleeping load carries its support as its own contact with the remote body.
         if (remoteSupport && !rigidSupport) { Assert.Contains(collection: captured.Entries.Single(predicate: static entry => (entry.Index == 1)).Body.Contacts.Slots.ToArray(), filter: static slot => (slot.Partner == 0)); }
-        population.Restore(checkpoint: captured, defaults: definition.PlayerDefaults, tick: 1200);
+        population.Restore(checkpoint: captured, definition: definition, tick: 1200);
         Assert.Null(@object: population.EntryBody(index: 0));
         Assert.Equal(0, population.SleepingRigidBodies);
         var restored = RoundTrip(definition, population).Population;
 
         Assert.Empty(collection: restored.SleepingGravity);
-        population.Restore(checkpoint: restored, defaults: definition.PlayerDefaults, tick: 1200);
+        population.Restore(checkpoint: restored, definition: definition, tick: 1200);
         if (remoteSupport) {
             for (var tick = 1200; (tick < 1320); tick++) { Step(definition: definition, population: population, tick: tick); }
             Assert.True(condition: (population.EntryBody(index: 1)!.FixedPosition.Y < FixedQ4816.One));
@@ -149,7 +149,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
 
         Assert.Equal(expected: (WorldEventFamily.CollisionBegin, 0L, 2L), actual: (delivered.Family, delivered.A, delivered.B));
 
-        population.Restore(checkpoint: captured.Population, defaults: definition.PlayerDefaults, tick: 600);
+        population.Restore(checkpoint: captured.Population, definition: definition, tick: 600);
         feed.Restore(checkpoint: captured.EventFeed);
         Assert.Equal(live, Arrive());
 
@@ -168,7 +168,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         var population = SupportedPopulation(definition);
         var height = population.EntryBody(index: 1)!.FixedPosition.Y;
 
-        if (restore) { population.Restore(checkpoint: RoundTrip(definition, population).Population, defaults: definition.PlayerDefaults, tick: 1200); }
+        if (restore) { population.Restore(checkpoint: RoundTrip(definition, population).Population, definition: definition, tick: 1200); }
         Step(definition: definition, population: population, tick: 1200);
         Assert.Equal(height, population.EntryBody(index: 1)!.FixedPosition.Y);
         Assert.Equal(1, population.SleepingRigidBodies);
@@ -254,7 +254,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         var captured = RoundTrip(definition, population).Population;
         var hash = WorldReplaySnapshot.HashState(population: population);
 
-        population.Restore(checkpoint: captured, defaults: definition.PlayerDefaults, tick: 600);
+        population.Restore(checkpoint: captured, definition: definition, tick: 600);
         population.SyncBodyCells(definition: definition);
         Assert.True(condition: population.EntryBody(index: 0)!.IsRigid);
         Assert.Equal(hash, WorldReplaySnapshot.HashState(population: population));
@@ -272,7 +272,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         var hash = WorldReplaySnapshot.HashState(population: population);
 
         population.BindActionStateLane(arena: new StateArena(definition.StateCatalog, definition.StateRaw, ArenaTime.Origin), definition: definition);
-        population.Restore(checkpoint: captured, defaults: definition.PlayerDefaults, tick: 600);
+        population.Restore(checkpoint: captured, definition: definition, tick: 600);
         population.SyncBodyCells(definition: definition);
         Assert.Equal(hash, WorldReplaySnapshot.HashState(population: population));
         Assert.True(condition: population.EntryBody(index: 0)!.Resting);
@@ -357,7 +357,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         Assert.Equal(0, population.SleepingRigidBodies);
         var captured = RoundTrip(definition, population).Population;
 
-        population.Restore(checkpoint: captured, defaults: definition.PlayerDefaults, tick: 1200);
+        population.Restore(checkpoint: captured, definition: definition, tick: 1200);
         Assert.Equal(captured.Entries.Count, population.Capture().Entries.Count);
     }
     // A sleeper joins the sweep through the same bound the pair test applies: an awake body's travel-grown radius. A

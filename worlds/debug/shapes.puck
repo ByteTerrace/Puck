@@ -177,7 +177,7 @@ let galleryDisplayRows = [
 // `floor` the height of its floor in that frame, `site` where the frame stands in the world (a static creation's paints and
 // a terminal's reach are in world coordinates), `parent` the placement that frame is (null for none), and `homes` the groups
 // whose exhibits it is home to (the exhibits whose paints, or whose reach, name the place the exhibit stands at). A world
-// that stands one station of its own gives the station templates its own row (shape-station-root.puck).
+// that stands one station of its own gives the station templates its own row (labs/shapes.puck).
 let galleryDisplays = map(
   galleryDisplayRows,
   display => (display with {
@@ -378,21 +378,24 @@ let galleryCopy = {
   "shape-torus-xz" { title: "TORUS XZ", note: "A torus with X and Z scaled differently." }
   "shape-torus-y" { title: "TORUS Y", note: "A torus with Y alone stretched." }
   "shape-cylinder-xz" { title: "CYLINDER XZ", note: "A cylinder with X and Z scaled differently." }
-  "shape-capsule-xz" { title: "CAPSULE XZ", note: "A capsule with X and Z scaled differently." }
+  "shape-capsule-xz" {
+    title: "CAPSULE XZ"
+    note: "A capsule with X and Z scaled differently: an oval section, and ends that stay round instead of stretching."
+  }
   "shape-ellipsoid-xyz" { title: "ELLIPSOID XYZ", note: "An ellipsoid scaled unevenly." }
   "shape-round-cone-xyz" { title: "ROUND CONE XYZ", note: "A round cone scaled unevenly." }
   "shape-cone-xz" { title: "CONE XZ", note: "A cone with X and Z scaled differently." }
   "shape-superellipsoid-xyz" {
     title: "SUPER XYZ"
-    note: "A stretched capsule, cone and torus cut from a slab: each rim sharp, each wall smooth."
+    note: "A superellipsoid at exponent 3, scaled unevenly on all three axes."
   }
   "shape-stretch-cut" {
     title: "STRETCH CUT"
-    note: "A stretched capsule, cone and torus cut from a slab: each rim sharp, each wall smooth."
+    note: "A stretched capsule, cone and torus cut from a slab: each rim sharp, each wall smooth, the capsule's ends rounded."
   }
   "shape-stretch-smooth" {
     title: "STRETCH SMOOTH"
-    note: "The same three cut smoothly at 0.04 m: each rim's fillet one width all the way round."
+    note: "The same three cut smoothly at 0.04 m. The fillets widen toward each cutter's long axis, where its distance reads short."
   }
   "shape-trapezoid" { title: "TRAPEZOID", note: "A trapezoid profile, extruded." }
   "shape-rounded-rectangle" { title: "ROUNDED RECT", note: "A rounded rectangle profile, extruded." }
@@ -1741,7 +1744,8 @@ let blendExhibits = [
 ]
 
 // A slab with a capsule, a cone and a torus pressed half way into its front face, each scaled apart in its own X and Z
-// (the torus is turned so its ring faces the label). The three stretched primitives whose field is a bound, as cutters.
+// (the torus is turned so its ring faces the label). Each cutter's field is a bound off its surface: the capsule's is its
+// ellipsoid's gauge, the cone's and torus's a generic scale's.
 template stretchPrototype(id, label, blend, smooth) {
   prototype $"{id}" {
     document {

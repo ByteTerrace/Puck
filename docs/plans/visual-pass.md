@@ -27,7 +27,7 @@ builds the missing feature properly.
 
 ## What comes first
 
-The display stations stay as they are; they are iterated in their own root worlds (`shape-station-root.puck`,
+The display stations stay as they are; they are iterated in their own root worlds (`labs/shapes.puck`,
 `game-station-root.puck`).
 
 1. **The tree.** It is already the staircase: its branches are the paths to most of the gallery. The main problem
@@ -52,8 +52,12 @@ The display stations stay as they are; they are iterated in their own root world
    changes no size.
 2. **Foliage, planters and decorations** across the hall.
 3. **The netting** around the toybox playroom: playful and beautiful, never a fence.
-4. **A climbing wall** somewhere in the hall: a designed, tasteful feature that uses the standard package's
-   `climbAbility`.
+4. **The climbing wall** ([gallery.md](../../worlds/debug/gallery.md#the-climbing-wall)) stands in front of the
+   nave's north edge in bay 10, from the floor to a ledge level with level 3, built from the standard's climbing pieces
+   (`worlds/standard/climbing.puck`) and climbed with `climbAbility`. Its look is owed a judgement in a window against
+   the tree pack's climbing pier, from the nave's floor and from level 2 (`gallery.shot climbing-wall`,
+   `climbing-wall-across`): whether the sandstone planes read as canyon rock, the three route colours read as routes
+   from across the nave, and the holds read as where hands go while the Moth climbs.
 5. **The windows:** frames, mullions, shading fans and sills.
 
 ## References

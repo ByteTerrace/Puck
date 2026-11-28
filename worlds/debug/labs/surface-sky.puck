@@ -1,0 +1,35 @@
+// The surface lab's sky (surface.puck): the standard's day cycle held at half past eight, its sun 28 degrees up on the
+// bearing `surfaceSunBearing` (degrees from +X toward +Z), and air at a visible density whose fog scatters the sun's
+// light forward by a Henyey-Greenstein lobe. The bearing lights the panels' faces, which face +Z, at a grazing angle that
+// picks out their relief, and lies 35 degrees off the sight line (+X), so a view along the line takes the glow. A
+// document fragment of its own, since the cycle's template authors `render` and an array-form `state.world`.
+
+import "../../standard/skies"
+
+// The heading that puts the sun at `surfaceSunHour` on `surfaceSunBearing`: skies.puck's `sunDirection` is the
+// horizontal vector (-sin H, -cos H cos E) turned by the heading, so the heading is the bearing less that vector's own.
+let surfaceSunHour = 8.5
+let surfaceNoonElevation = 50
+let surfaceSunBearing = 35
+let surfaceHourAngle = ((surfaceSunHour - 12) * sunRadiansPerHour)
+let surfaceHeading = (surfaceSunBearing - (atan2(
+  (0 - (cosine(surfaceHourAngle) * cosine(surfaceNoonElevation * sunRadiansPerDegree))),
+  (0 - sine(surfaceHourAngle))
+) / sunRadiansPerDegree))
+
+dayCycle(
+  daySeconds: 86400,
+  start: surfaceSunHour,
+  noonElevation: surfaceNoonElevation,
+  heading: surfaceHeading,
+  cloudiness: 0.1
+)
+
+render {
+  atmosphere {
+    fog {
+      density: 0.008
+      anisotropy: 0.6
+    }
+  }
+}

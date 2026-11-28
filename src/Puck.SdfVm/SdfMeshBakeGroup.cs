@@ -51,9 +51,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// or not whole; a dynamic group casts none only while no instance riding its slot casts, and the world group always
     /// casts.</summary>
     public bool CastsNoShadow { get; private set; }
-    /// <summary>Gets the heights a static group of one height field's instance is displaced by as it is drawn
-    /// (<see cref="SdfProgram.HeightFields"/>), with the handle of the program the group was planned of; <see langword="null"/>
-    /// for a group drawn as it was baked. A height field's instance bakes alone: no instance bakes with it.</summary>
+    /// <summary>Gets the displacement a static group of a displaced instance is moved by as it is drawn
+    /// (<see cref="SdfProgram.Displacements"/>), with the handle of the program the group was planned of; <see langword="null"/>
+    /// for a group drawn as it was baked. A displaced instance bakes alone: no instance bakes with it.</summary>
     public SdfMeshDisplacement? Displacement { get; private set; }
 
     /// <summary>Gets each member of the group's union, in the group's frame: a static instance, a dynamic instance, or each
@@ -168,9 +168,29 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <see cref="FinestTier"/> and <see cref="CoarsestTier"/>, whose cell floors every spacing its refinement aims for.
     /// Part of the sealed geometry.</summary>
     public int Tier { get; private set; }
-    /// <summary>Gets the finest tier that changes the group's mesh: the rung at or under the finest spacing any member
-    /// asks (<see cref="SdfMeshTier.Finest"/>).</summary>
+    /// <summary>Gets the finest tier that changes the group's mesh as sealed: the rung at or under the finest spacing any
+    /// member asks (<see cref="SdfMeshTier.Finest"/>), at the group's <see cref="ScaleRungs"/>
+    /// (<see cref="FinestTierAt"/>).</summary>
     public int FinestTier { get; private set; }
+    /// <summary>Gets the rungs the group's slot scale moved the bake's metre spacings by when it was sealed
+    /// (<see cref="SdfMeshTier.ScaleRungs"/>): a dynamic group's slot's, zero for any other. Part of the sealed geometry
+    /// and form where it is not zero.</summary>
+    public int ScaleRungs { get; private set; }
+    /// <summary>Gets the length, in the group's lattice units, of a metre the bake states a spacing in, at its
+    /// <see cref="ScaleRungs"/> (<see cref="SdfMeshTier.Metre"/>).</summary>
+    public float Metre => SdfMeshTier.Metre(scaleRungs: ScaleRungs);
+    // The finest spacing the group's instances declare (Detail, a member's detail, its glyphs'), in its lattice units;
+    // infinity for none. Set when sealed.
+    private float m_declaredFinest = float.PositiveInfinity;
+
+    /// <summary>Returns the finest tier that would change the group's mesh were it sealed at a scale's rungs: the rung at
+    /// or under the finer of the spacing its instances declare and <see cref="SdfMeshPathBake.FineCell"/> at those rungs'
+    /// metre. The demand asks it at the rungs the group's slot stands at now, so a body scaled up can be asked a tier
+    /// finer than the one it was sealed with.</summary>
+    /// <param name="scaleRungs">The rungs (<see cref="SdfMeshTier.ScaleRungs"/>).</param>
+    /// <returns>The tier.</returns>
+    public int FinestTierAt(int scaleRungs) =>
+        SdfMeshTier.Finest(spacing: MathF.Min(x: (SdfMeshPathBake.FineCell * SdfMeshTier.Metre(scaleRungs: scaleRungs)), y: m_declaredFinest));
     /// <summary>Gets the coarsest tier that changes the group's mesh: the last rung whose cell still fits a few times
     /// along its planned box (<see cref="SdfMeshTier.Coarsest"/>), at or past <see cref="FloorTier"/>.</summary>
     public int CoarsestTier { get; private set; }
@@ -377,7 +397,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                     group.Glass &= glass;
                     group.CastsNoShadow &= shadowless;
                 }
-            } else if (instance.BakesWithPrevious && (instance.HeightField is null) && (staticRun is { } run) && !glass && !run.Glass && (shadowless == run.CastsNoShadow) && (run.Displacement is null) && ((-(run.Selector + 1) + run.Instances) == index)) {
+            } else if (instance.BakesWithPrevious && (instance.Displacement is null) && (staticRun is { } run) && !glass && !run.Glass && (shadowless == run.CastsNoShadow) && (run.Displacement is null) && ((-(run.Selector + 1) + run.Instances) == index)) {
                 group = run;
                 group.Instances++;
                 group.Low = Vector3.Min(value1: group.Low, value2: (instance.Center - new Vector3(value: radius)));
@@ -388,7 +408,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                 group.High = (instance.Center + new Vector3(value: radius));
                 group.Glass = glass;
                 group.CastsNoShadow = shadowless;
-                group.Displacement = ((instance.HeightField is null) ? null : DisplacementOf(program: program, instance: index));
+                group.Displacement = ((instance.Displacement is null) ? null : DisplacementOf(program: program, instance: index));
                 groups.Add(item: group);
             }
             if (!instance.IsDynamic) {
@@ -554,19 +574,24 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         // A glass group lands whole and uncollapsed, so its mesh differs from the same shapes' opaque mesh.
         if (Glass) { Geometry.AppendGlass(); }
 
-        var finest = ((Detail > 0f) ? MathF.Min(x: SdfMeshPathBake.FineCell, y: Detail) : SdfMeshPathBake.FineCell);
+        var declared = ((Detail > 0f) ? Detail : float.PositiveInfinity);
 
         foreach (var (_, _, detail, _, _) in Members) {
-            if (detail > 0f) { finest = MathF.Min(x: finest, y: detail); }
+            if (detail > 0f) { declared = MathF.Min(x: declared, y: detail); }
         }
-        if (Glyphs is { Detail: > 0f } glyphs) { finest = MathF.Min(x: finest, y: glyphs.Detail); }
+        if (Glyphs is { Detail: > 0f } glyphs) { declared = MathF.Min(x: declared, y: glyphs.Detail); }
 
         var extent = (High - Low);
         var longest = MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z));
 
-        FinestTier = SdfMeshTier.Finest(spacing: finest);
-        FloorTier = SdfMeshTier.Floor(longestExtent: longest);
-        CoarsestTier = SdfMeshTier.Coarsest(longestExtent: longest);
+        m_declaredFinest = declared;
+        ScaleRungs = ((Dynamic && (Slot >= 0) && (Slot < transforms.Count)) ? SdfMeshTier.ScaleRungs(units: SdfMeshGeometryBuilder.UnitsOf(transform: transforms[Slot])) : 0);
+        // The rungs change what every spacing stated in metres is in the group's units, so the lattice and the ladder
+        // with them: a group of another scale's rungs is another shape.
+        if (ScaleRungs != 0) { Geometry.AppendScaleRungs(rungs: ScaleRungs); }
+        FinestTier = FinestTierAt(scaleRungs: ScaleRungs);
+        FloorTier = SdfMeshTier.Floor(longestExtent: longest, metre: Metre);
+        CoarsestTier = SdfMeshTier.Coarsest(longestExtent: longest, metre: Metre);
         // Read before the tier is asked: the planner decides a group's first tier by whether its shape is new.
         Shape = Geometry.Form;
         Tier = SdfMeshTier.Clamp(coarsest: CoarsestTier, finest: FinestTier, tier: (tier?.Invoke(arg: this) ?? 0));
@@ -603,12 +628,12 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         PoseFirst = first;
         PoseRows = rows;
     }
-    // The displacement of the height field a program's instance draws.
+    // The displacement a program's instance is drawn through.
     private static SdfMeshDisplacement DisplacementOf(SdfProgram program, int instance) {
-        foreach (var binding in program.HeightFields) {
+        foreach (var binding in program.Displacements) {
             if (binding.Instance == instance) { return SdfMeshDisplacement.Of(binding: binding); }
         }
-        throw new InvalidOperationException(message: $"Instance {instance} draws a height field its program binds no handle for.");
+        throw new InvalidOperationException(message: $"Instance {instance} carries a displacement its program binds no handle for.");
     }
     // A position rounded to the steps a metre the geometry rounds a slot's position to.
     private static Vector3 Rounded(Vector3 value) => new(x: Rounded(value: value.X), y: Rounded(value: value.Y), z: Rounded(value: value.Z));

@@ -764,6 +764,9 @@ public interface IWorldInhabitants {
 /// <param name="Turn">The placement's turn facet (see <see cref="WorldPlacementTurn"/>): the row turns about its own up
 /// axis by an angle read from state, a turntable, or <see langword="null"/> for a row that keeps its authored yaw.
 /// Omitted from the wire when null.</param>
+/// <param name="Net">The placement's net facet (see <see cref="WorldPlacementNet"/>): the row's creation is a net of rope
+/// strands the authority steps, that gives under the bodies leaning on it and carries the bodies holding it, or
+/// <see langword="null"/> for a rigid row. Omitted from the wire when null.</param>
 public sealed record WorldPlacement(
     [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Declares)] string Id,
     [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)] string PrototypeId,
@@ -790,7 +793,8 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldResponseHolding Holding = default,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementSurface? Surface = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPointerSurface? Pointer = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementTurn? Turn = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementTurn? Turn = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementNet? Net = null
 ) {
     /// <summary>The body-reference token a rule's <c>placement:$each</c> binds to its <c>forEach</c> key; no placement
     /// may be named it.</summary>
@@ -900,7 +904,8 @@ public static partial class WorldPlacementStamp {
     }
     /// <summary>Returns whether a solid row's colliders live by row in contact's live set, posed every tick, rather
     /// than compiled once into the static set: a creation sized by state (<c>sizeBy</c>), a row riding a body
-    /// (<see cref="WorldPlacement.Attach"/>) or a turning row (<see cref="WorldPlacement.Turn"/>), whose colliders move,
+    /// (<see cref="WorldPlacement.Attach"/>), a turning row (<see cref="WorldPlacement.Turn"/>) or a net
+    /// (<see cref="WorldPlacement.Net"/>), whose colliders move,
     /// and a row some body may pass (<see cref="WorldSolid.Gated"/>), whose colliders one body's sweep leaves out. Both
     /// contact providers read this one predicate, so neither compiles a standing copy of a row the other keeps
     /// live.</summary>
@@ -913,7 +918,7 @@ public static partial class WorldPlacementStamp {
         ArgumentNullException.ThrowIfNull(argument: placement);
         ArgumentNullException.ThrowIfNull(argument: creation);
 
-        return ((creation.Document.SizeBy is not null) || placement.MovesRoot || (placement.Solid?.Gated ?? false));
+        return ((creation.Document.SizeBy is not null) || placement.MovesRoot || (placement.Net is not null) || (placement.Solid?.Gated ?? false));
     }
     /// <summary>Returns the placement's shared reflection plane.</summary>
     public static CreationStampPlane? MirrorFor(WorldPlacement placement) => ((placement.Mirror is { } mirror)

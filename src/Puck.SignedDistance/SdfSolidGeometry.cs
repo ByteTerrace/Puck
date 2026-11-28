@@ -11,7 +11,9 @@ namespace Puck.SignedDistance;
 /// origin to (0, 0.5, 0) — the straight section is <c>0.5·scale.y</c> long and runs up from the shape's position,
 /// <c>scale.x</c>/<c>z</c> is the radius, so the capsule spans y from <c>-radius</c> to
 /// <c>0.5·scale.y + radius</c>, a total height of 2·radius + 0.5·scale.y, and is not centred on its position
-/// (<see cref="Support"/> reads each face where it stands); Cylinder r=1,
+/// (<see cref="Support"/> reads each face where it stands). Scaled unlike in X and Z its section is the ellipse of
+/// radii <c>scale.x</c> and <c>scale.z</c> and its ends are half-ellipsoids whose Y radius is their geometric mean
+/// (<see cref="CapsuleRadii"/>), which is the round capsule when the two are equal; Cylinder r=1,
 /// half-height 1; Cone base r=1, half-height 1 (apex radius 0); Ellipsoid radii
 /// (1,1,1); RoundCone lower r=1, upper r=0.5, height 1; Torus major 1, minor 0.4; Prism bottom half-width,
 /// half-height and extrusion half-depth 1, top half-width given by taper (default 0.5). Changing a value here changes the
@@ -445,9 +447,13 @@ public static class SdfSolidGeometry {
     }
     /// <summary>Emits a primitive at an authored per-axis scale, preferring a native distance spelling over the
     /// renderer-only non-uniform scale transform. Boxes bake their extents, spheres and ellipsoids bake their radii,
-    /// and axially symmetric capsules, cylinders, and cones bake their radial and vertical dimensions. A plane's zero
-    /// set is scale-invariant. Other anisotropic shapes retain the generic transform for rendering, but physical
-    /// field evaluators deliberately refuse that conservative march bound until the VM gains a native spelling.</summary>
+    /// cylinders bake their (circular or elliptic) section and height, a capsule bakes its segment and radius when X and
+    /// Z agree and otherwise its elliptic section (<see cref="CapsuleRadii"/>: the segment elongating the exponent-2
+    /// superellipsoid, whose field is that ellipsoid's 1-Lipschitz gauge, a bound off the surface and exact on it), and
+    /// axially symmetric tori and cones bake their radial and vertical dimensions. A plane's zero set is
+    /// scale-invariant. A torus or cone scaled unlike in X and Z and a round cone scaled unevenly retain the generic
+    /// transform for rendering, but physical field evaluators deliberately refuse that conservative march bound until
+    /// the VM gains a native spelling.</summary>
     /// <param name="chain">The builder chain after translation and rotation.</param>
     /// <param name="type">The primitive to emit.</param>
     /// <param name="scale">The authored per-axis scale. Components use the builder's magnitude/nonzero convention.</param>
@@ -643,6 +649,25 @@ public static class SdfSolidGeometry {
         _ = chain.Ellipse(semiX: radial, semiY: axial, lift: SdfLift.Revolve, liftAmount: 0f, material: material, blend: blend, smooth: smooth, detail: detail);
         return true;
     }
+    /// <summary>Returns a Capsule's radii at a scale: its section's X and Z radii, <c>scale.x</c> and <c>scale.z</c>, and
+    /// the Y radius of its half-ellipsoid ends, the geometric mean of the two, so a capsule scaled alike in X and Z has
+    /// round ends of its radius. The Y radius lies between the other two, which keeps the section the thinnest place
+    /// the solid turns.</summary>
+    /// <param name="scale">The authored per-axis scale.</param>
+    /// <returns>The radii, in the shape's units.</returns>
+    public static Vector3 CapsuleRadii(Vector3 scale) {
+        var effectiveScale = EffectiveScale(scale: scale);
+        var x = (CapsuleRadius * effectiveScale.X);
+        var z = (CapsuleRadius * effectiveScale.Z);
+
+        return new Vector3(x: x, y: ((x == z) ? x : MathF.Sqrt(x: (x * z))), z: z);
+    }
+    /// <summary>Returns half the length of a Capsule's straight segment at a scale: the segment runs from the shape's
+    /// position up its own Y by <c>0.5·scale.y</c>, so its midpoint, and half its length, stand a quarter of the Y scale
+    /// above the position.</summary>
+    /// <param name="scaleY">The authored Y scale.</param>
+    /// <returns>The half-length, in the shape's units.</returns>
+    public static float CapsuleHalfSegment(float scaleY) => (CapsuleEndpoint.Y * 0.5f * EffectiveScale(scale: new Vector3(value: scaleY)).Y);
     /// <summary>Returns whether <see cref="AppendScaledPrimitive"/> emits a primitive as a spheroid's revolved ellipse, a
     /// true distance: a Sphere, Ellipsoid or exponent-2 Superellipsoid whose radii are unequal with two of them tied.
     /// Every other ellipsoid-family shape off a uniform radius emits the scaled gauge, which reads under its
@@ -665,8 +690,10 @@ public static class SdfSolidGeometry {
     /// <summary>Appends a primitive with its scale spelled into its own dimensions, never riding a
     /// <see cref="SdfProgramBuilder.Scale"/> transform: the arms <see cref="AppendScaledPrimitive"/> takes at a non-uniform
     /// scale, callable at any scale. A box packs its scaled half-extents (or a chamfered rectangle when it is chamfered),
-    /// a sphere, an ellipsoid or a superellipsoid its radii, a capsule scaled alike in X and Z its endpoint and radius, a
-    /// plane its unit normal, and a torus, a cylinder or a cone scaled alike in X and Z its revolved section.</summary>
+    /// a sphere, an ellipsoid or a superellipsoid its radii, a capsule scaled alike in X and Z its endpoint and radius
+    /// (one instruction), a capsule scaled unlike in X and Z its segment as a translation and an elongation of the
+    /// exponent-2 superellipsoid of its <see cref="CapsuleRadii"/> (three instructions), a plane its unit normal, a
+    /// cylinder its circular or elliptic section, and a torus or a cone scaled alike in X and Z its revolved section.</summary>
     /// <param name="chain">The builder to emit into.</param>
     /// <param name="type">The primitive.</param>
     /// <param name="effectiveScale">The scale, already through <see cref="EffectiveScale"/>.</param>
@@ -678,7 +705,7 @@ public static class SdfSolidGeometry {
     /// <param name="detail">Whether the shape is a detail shape.</param>
     /// <param name="exponent">The superellipsoid's exponent; ignored by every other primitive.</param>
     /// <returns>The builder, or <see langword="null"/> when the primitive has no native arm at this scale (a prism, a sweep,
-    /// a round cone, or a revolved primitive scaled unlike in X and Z), having emitted nothing.</returns>
+    /// a round cone, or a torus or cone scaled unlike in X and Z), having emitted nothing.</returns>
     public static SdfProgramBuilder? AppendNativePrimitive(SdfProgramBuilder chain, SdfSolidPrimitive type, Vector3 effectiveScale, int material, SdfBlendOp blend, float smooth, float rounding, float chamfer, bool detail, float exponent) {
         ArgumentNullException.ThrowIfNull(chain);
 
@@ -767,6 +794,21 @@ public static class SdfSolidGeometry {
             radius: (CapsuleRadius * effectiveScale.X),
             smooth: smooth
         ),
+            // Scaled unlike in X and Z: the segment swept by the ellipsoid of the capsule's radii. The elongation reads
+            // the ellipsoid's field at the point less its nearest segment point, and the ellipsoid is symmetric about its
+            // equator, so the zero set is exactly the swept solid; the gauge keeps its 1-Lipschitz bound, its
+            // min r / max r gain and the rᵢ / min r dilation of DilationGain.
+            SdfSolidPrimitive.Capsule => chain
+                .Translate(offset: new Vector3(x: 0f, y: CapsuleHalfSegment(scaleY: effectiveScale.Y), z: 0f))
+                .Elongate(extents: new Vector3(x: 0f, y: CapsuleHalfSegment(scaleY: effectiveScale.Y), z: 0f))
+                .Superellipsoid(
+                blend: blend,
+                detail: detail,
+                exponent: SdfProgramBuilder.MinSuperellipsoidExponent,
+                material: material,
+                radii: CapsuleRadii(scale: effectiveScale),
+                smooth: smooth
+            ),
             SdfSolidPrimitive.Cylinder when ((effectiveScale.X == effectiveScale.Z) && (chamfer > 0f)) => chain.ChamferedRectangle(
             blend: blend,
             chamfer: chamfer,
@@ -971,18 +1013,13 @@ public static class SdfSolidGeometry {
 
         var direction = Vector3.Normalize(value: axis);
 
-        // KEEP IN SYNC with AppendScaledPrimitive's Capsule arms. Scaled alike in X and Z the capsule bakes its
-        // dimensions (radius scale.x around the segment to 0.5·scale.y); otherwise it is the unit capsule under a
-        // Scale, whose support along d is the unit capsule's along scale ⊙ d. A capsule is the segment's support plus
-        // its radius times the direction's length.
+        // KEEP IN SYNC with AppendNativePrimitive's Capsule arms: the segment from the origin to 0.5·scale.y swept by
+        // the ellipsoid of CapsuleRadii (a sphere when X and Z agree), whose support is the segment's plus the
+        // ellipsoid's, |radii ⊙ d|.
         if (type == SdfSolidPrimitive.Capsule) {
-            if (effectiveScale.X == effectiveScale.Z) {
-                return (MathF.Max(x: 0f, y: ((CapsuleEndpoint.Y * effectiveScale.Y) * direction.Y)) + (CapsuleRadius * effectiveScale.X));
-            }
+            var radii = CapsuleRadii(scale: scale);
 
-            var stretched = (effectiveScale * direction);
-
-            return (MathF.Max(x: 0f, y: (CapsuleEndpoint.Y * stretched.Y)) + (CapsuleRadius * stretched.Length()));
+            return (MathF.Max(x: 0f, y: ((CapsuleEndpoint.Y * effectiveScale.Y) * direction.Y)) + ((radii.X == radii.Z) ? radii.X : (radii * direction).Length()));
         }
 
         // A RoundCone rides the generic Scale arm: the hull of its base sphere at the origin and its tip sphere at the
@@ -1096,8 +1133,10 @@ public static class SdfSolidGeometry {
     /// <see cref="Support"/> along each principal axis. One where the field <see cref="AppendScaledPrimitive"/> emits is a
     /// true distance outside the solid, a spheroid's revolved ellipse included; past one where it reads under the
     /// distance: the exponent-2 or authored superellipsoid gauge (a Sphere, Ellipsoid or Superellipsoid that is not a
-    /// spheroid; <c>(gauge − 1)·min r</c>) reaches <c>rᵢ / min r</c>, and the generic Scale arm (<c>f(S⁻¹p)·min s</c>, a
-    /// Capsule, Torus or Cone scaled unlike in X and Z, a non-uniform RoundCone) reaches <c>sᵢ / min s</c>.</summary>
+    /// spheroid; <c>(gauge − 1)·min r</c>, and a Capsule scaled unlike in X and Z, whose elongation adds nothing to the
+    /// gauge of its <see cref="CapsuleRadii"/>) reaches <c>rᵢ / min r</c>, and the generic Scale arm
+    /// (<c>f(S⁻¹p)·min s</c>, a Torus or Cone scaled unlike in X and Z, a non-uniform RoundCone) reaches
+    /// <c>sᵢ / min s</c>.</summary>
     /// <param name="type">The primitive.</param>
     /// <param name="scale">The authored per-axis scale.</param>
     /// <param name="exponent">The superellipsoid exponent the primitive emits with; only a Superellipsoid reads it.</param>
@@ -1110,9 +1149,12 @@ public static class SdfSolidGeometry {
         if (type is SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid or SdfSolidPrimitive.Superellipsoid) {
             return (IsSpheroid(effectiveScale: effectiveScale, exponent: exponent, radii: out var radii, type: type) ? Vector3.One : Gain(extents: radii));
         }
+        if (type == SdfSolidPrimitive.Capsule) {
+            return Gain(extents: CapsuleRadii(scale: scale));
+        }
 
         var stretched = (!IsUniform(scale: effectiveScale) && (type switch {
-            SdfSolidPrimitive.Capsule or SdfSolidPrimitive.Torus or SdfSolidPrimitive.Cone => (effectiveScale.X != effectiveScale.Z),
+            SdfSolidPrimitive.Torus or SdfSolidPrimitive.Cone => (effectiveScale.X != effectiveScale.Z),
             SdfSolidPrimitive.RoundCone => true,
             _ => false,
         }));
@@ -1362,7 +1404,8 @@ public static class SdfSolidGeometry {
     }
 
     /// <summary>A primitive's worst-case reach from its local origin at a given scale — the largest scale component's
-    /// magnitude times the primitive's farthest surface point.</summary>
+    /// magnitude times the primitive's farthest surface point, or for a Capsule its segment's length plus its larger
+    /// section radius.</summary>
     /// <param name="type">The primitive.</param>
     /// <param name="scale">The shape's per-axis scale.</param>
     /// <param name="lift">Prism only: extrude or revolve. A revolve reads <c>scale.z</c> as a radial offset rather
@@ -1396,6 +1439,14 @@ public static class SdfSolidGeometry {
             return magnitude.Length();
         }
 
+        // A capsule's segment top plus its largest radius bounds every point of the swept ellipsoid (CapsuleRadii's Y
+        // radius never exceeds the larger of X and Z), and is its farthest point when X and Z agree.
+        if (type == SdfSolidPrimitive.Capsule) {
+            var radii = CapsuleRadii(scale: scale);
+
+            return ((CapsuleEndpoint.Y * magnitude.Y) + MathF.Max(x: radii.X, y: radii.Z));
+        }
+
         var maxScale = MathF.Max(
             x: magnitude.X,
             y: MathF.Max(
@@ -1408,7 +1459,6 @@ public static class SdfSolidGeometry {
             SdfSolidPrimitive.Box => BoxHalfExtents.Length(),
             SdfSolidPrimitive.Torus => (TorusMajor + TorusMinor),
             SdfSolidPrimitive.Cylinder => MathF.Sqrt(x: ((CylinderRadius * CylinderRadius) + (CylinderHalfHeight * CylinderHalfHeight))),
-            SdfSolidPrimitive.Capsule => (CapsuleEndpoint.Length() + CapsuleRadius),
             SdfSolidPrimitive.Ellipsoid => MathF.Max(
             x: EllipsoidRadii.X,
             y: MathF.Max(

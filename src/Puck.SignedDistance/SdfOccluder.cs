@@ -41,10 +41,11 @@ public enum SdfOccluderFit {
 /// fields are the record's layout, whose HLSL declaration <c>puck shaders generate</c> writes from this type. Every
 /// value is in world space and presentation float; nothing here reaches the simulation.
 /// </summary>
-/// <remarks>An occluder adds nothing at a point <see cref="Reach"/> or farther from its center: both its terms are eased
-/// to exactly zero there by a light's window (<c>sdfLightWindow</c>), which is what lets a view and each views tile
-/// leave out an occluder whose sphere of reach misses what they shade (<see cref="SdfLightSelection.SelectOccluders(SdfOccluders, in Puck.Abstractions.Cameras.CameraSnapshot, float)"/>,
-/// <c>sdfViewsTileLights</c>).</remarks>
+/// <remarks>An occluder's ambient term adds nothing at a point <see cref="Reach"/> or farther from its center, eased to
+/// exactly zero there by a light's window (<c>sdfLightWindow</c>), and its shadow toward a light reaches as far as the
+/// light does, zero only where the segment from a point to the light passes its <see cref="BoundingRadius"/> by the
+/// penumbra or more. A view and each views tile leave out an occluder neither term can reach what they shade with
+/// (<see cref="SdfLightSelection.SelectOccluders"/>, <c>sdfOccluderReachesWalk</c>).</remarks>
 [StructLayout(LayoutKind.Explicit, Size = 80)]
 public record struct SdfOccluder {
     /// <summary>The solid's center, in world space.</summary>
@@ -61,8 +62,8 @@ public record struct SdfOccluder {
     [FieldOffset(44)] public float Radius;
     /// <summary>A box's third half axis; zero otherwise.</summary>
     [FieldOffset(48)] public Vector3 AxisZ;
-    /// <summary>The distance from <see cref="Center"/> past which the occluder adds nothing: its bounding radius plus
-    /// the reach its author gave it.</summary>
+    /// <summary>The distance from <see cref="Center"/> past which the occluder takes nothing from the ambient and indirect
+    /// light: its bounding radius plus the reach its author gave it. Its shadow is not bounded by it.</summary>
     [FieldOffset(60)] public float Reach;
     /// <summary>The share, in [0, 1], of a ranged light, screen or emitter face its shadow takes away where it covers the
     /// light whole.</summary>
@@ -165,7 +166,7 @@ public record struct SdfOccluder {
 /// <summary>
 /// A frame's occluders table: up to <see cref="MaxOccluders"/> <see cref="SdfOccluder"/> records, which the tables pack
 /// into the World-group table the views and glass passes read (<see cref="Pack"/>). Each view shades only the occluders
-/// that can reach what it shows (<see cref="SdfLightSelection.SelectOccluders(SdfOccluders, in Puck.Abstractions.Cameras.CameraSnapshot, float)"/>),
+/// that can reach what it shows (<see cref="SdfLightSelection.SelectOccluders"/>),
 /// whose mask its pass block carries one bit a record.
 /// </summary>
 public sealed class SdfOccluders {

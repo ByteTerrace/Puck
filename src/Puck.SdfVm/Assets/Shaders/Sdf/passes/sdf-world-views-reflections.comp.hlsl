@@ -8,14 +8,16 @@
 // screen, clipped to the screen and the near plane, and marched through the reflection pyramid
 // (frame/sdf-reflection-depth.hlsli): its inverse depth is linear along the projection, so a cell of any level the ray
 // crosses in front of the nearest surface it holds is skipped whole and the march climbs a level, and a cell it reaches
-// is entered a level finer, down to the mesh target's own pixels. The hit is the ray's crossing of the reached pixel's
-// tangent plane (sdfReflectCrossing), below the pixel. What the ray reaches is read from the preceding frame's
+// is entered a level finer, down to the mesh target's own pixels, where the ray meets a pixel's surface only by crossing
+// its sample's tangent plane from the front inside the pixel, never a face turned from it (sdfReflectMarch). The hit is
+// that crossing (sdfReflectCrossing), below the pixel. What the ray reaches is read from the preceding frame's
 // history colour where the hit stood then (sdfPreviousPoint) and the history shows it (sdfReflectHistoryShows), read as
 // one filtered sample of the prefiltered level the specular lobe's footprint spans there (sdfReflectColorFootprint), so a
 // rough surface's blur is the same every frame and adds no noise for the resolve to reject in motion; with it, the air's
 // in-scatter the composite added to that pixel and the history does not hold. A ray that passes in front of everything it
-// crosses and ends over a pixel no mesh covers answers the open sky. A hit's share fades toward the screen's edge and over
-// the last steps of the budget, so where rays stop answering the volume takes over smoothly rather than at a line.
+// crosses and ends over a pixel no mesh covers answers the open sky, as far as its end stands from the screen's edge. A
+// hit's share fades toward the screen's edge, over the last steps of the budget and over the pixels a ray walked behind
+// an occluder before it, so where rays stop answering the volume takes over smoothly rather than at a line.
 // Views blends the records over the irradiance volume's reflection, which still answers whatever leaves the screen, hides
 // behind a nearer face, or belongs to a rough surface.
 #define SDF_VIEWS_REFLECTIONS_PASS
@@ -39,10 +41,10 @@ static const float SdfReflectLeast = (1.0 / 256.0);
 // that passes farther behind it passes behind the occluder.
 static const float SdfReflectThickness = 0.15;
 static const float SdfReflectThicknessShare = 0.03;
-// The most pixels in a row a ray walks behind occluders before it gives up: past a thin occluder (a rail, a leg) it walks
+// The most render pixels a ray walks behind occluders before it gives up: past a thin occluder (a rail, a leg) it walks
 // on to what lies behind, while behind a broad one it would take a step a pixel to the budget's end and still find what
-// the screen does not show.
-static const uint SdfReflectBehindPixels = 4u;
+// the screen does not show. A surface met after a walk shares less the farther the walk went (sdfReflectTrace).
+static const float SdfReflectBehindPixels = 4.0;
 // How far past a cell's edge, in render pixels, a step lands, so the next step reads the cell beyond it.
 static const float SdfReflectNudge = 0.005;
 // The share of the screen's shorter side over which a hit fades toward the screen's edge.
@@ -110,24 +112,45 @@ float3 sdfReflectCrossing(float4 rows[6], float3 origin, float3 direction, float
         all(abs((projected - passGroup.jitter) - (float2(hitPixel) + 0.5)) <= 0.5))
         ? (crossing + rows[0].xyz) : surface);
 }
-// Marches a ray's projected segment, from `start` along `delta` in render pixels with inverse forward depth
-// `startInverse` there and `finishInverse` at its end, from where it leaves its own pixel, for at most `budget` reads of
-// the pyramid, and returns the share of the segment at which it meets a surface, or -1 for none. `open` says whether the
-// march passed in front of everything to the segment's end, and `taken` how many reads it took.
-float sdfReflectMarch(float2 start, float2 delta, float startInverse, float finishInverse, uint budget, out bool open, out uint taken) {
+// A mirror ray as the march reads it, relative to the view's eye: where it starts, its direction, its inverse forward
+// depth at the start of its projected segment and that depth's change over the segment, which is linear in the share of
+// the segment, and the scale that gives its travel at a share. A point's screen offset from the start is proportional to
+// its travel over its forward depth, so travel is travelScale * share / (startInverse + rate * share).
+struct SdfReflectRay {
+    float3 origin;
+    float3 direction;
+    float startInverse;
+    float rate;
+    float travelScale;
+};
+// The ray's point at a share of its projected segment, relative to the view's eye.
+float3 sdfReflectRayPoint(SdfReflectRay ray, float share) {
+    return (ray.origin + (ray.direction * ((ray.travelScale * share) / (ray.startInverse + (ray.rate * share)))));
+}
+// Marches a ray's projected segment, from `start` along `delta` in render pixels, from where it leaves its own pixel,
+// for at most `budget` reads of the pyramid, and returns the share of the segment at which it meets a surface, or -1 for
+// none. `open` says whether the march passed in front of everything to the segment's end, `taken` how many reads it took,
+// and `walked` how many render pixels it walked behind occluders just before the surface it met. A cell of a coarse level
+// the ray stays in front of is skipped whole; a render pixel's own surface is its sample's tangent plane (its visibility
+// record's distance along the pixel's ray and normal), which the ray meets where it crosses that plane from the front
+// inside the pixel. A face turned from the ray is never met: the ray passes in front of it, or behind it.
+float sdfReflectMarch(ViewportData view, uint viewIndex, float2 start, float2 delta, SdfReflectRay ray, uint budget, out bool open, out uint taken, out float walked) {
     uint2 dims = passGroup.imageExtent;
+    float2 grid = float2(worldViewDims(view));
     SdfReflectDepthBases bases = sdfReflectDepthBases(dims);
     float2 inverse = float2(((delta.x != 0.0) ? (1.0 / delta.x) : 1.0e30), ((delta.y != 0.0) ? (1.0 / delta.y) : 1.0e30));
     uint2 toward = uint2((delta.x >= 0.0) ? 1u : 0u, (delta.y >= 0.0) ? 1u : 0u);
     float2 nudge = select((delta >= 0.0), SdfReflectNudge.xx, -SdfReflectNudge.xx);
-    float rate = (finishInverse - startInverse);
+    float span = max(abs(delta.x), abs(delta.y));
     float2 leaves = ((floor(start) + float2(toward) + nudge - start) * inverse);
     float share = max(min(leaves.x, leaves.y), 0.0);
+    // Where the ray last went behind an occluder, as a share; negative while it is in front.
+    float behindFrom = -1.0;
     uint level = 0u;
-    uint behind = 0u;
 
     open = false;
     taken = 0u;
+    walked = 0.0;
 
     [loop]
     for (uint step = 0u; ((step < budget) && (share < 1.0)); step++) {
@@ -136,23 +159,52 @@ float sdfReflectMarch(float2 start, float2 delta, float startInverse, float fini
         float cellInverse = ((level == 0u)
             ? sdfReflectDepthPixel(pixel)
             : asfloat(sdfReflectionDepth[sdfReflectDepthWord(sdfReflectDepthBaseOf(bases, level), dims, level, texel)]));
-        float rayInverse = (startInverse + (rate * share));
+        float rayInverse = (ray.startInverse + (ray.rate * share));
         float2 edges = ((float2((texel + toward) << level) + nudge - start) * inverse);
         float leave = min(edges.x, edges.y);
 
         sdfWorkSteps++;
         taken++;
-        if (rayInverse > cellInverse) {
-            // In front of everything the cell holds: the ray leaves it, unless it falls behind the cell's nearest surface
-            // first, where it enters the cell a level finer.
-            behind = 0u;
-            float meets = (((rate < 0.0) && (cellInverse > 0.0)) ? ((cellInverse - startInverse) / rate) : 2.0);
+        if ((level == 0u) && (cellInverse > 0.0)) {
+            // A covered render pixel: the ray's side of its sample's tangent plane where it enters the pixel and where it
+            // leaves it decides.
+            uint record = worldVisibilityRecord(pixel, viewIndex);
+            float3 normal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
+            float3 surface = (cameraRayDirection(view, ((float2(pixel) + 0.5) / grid)) * asfloat(sdfVisibilityRecordBuffer[record + SdfVisibilityTWord]));
+            float approach = dot(ray.direction, normal);
+            float entering = dot((sdfReflectRayPoint(ray, share) - surface), normal);
 
-            if ((meets < leave) && (meets <= 1.0)) {
-                share = max(share, meets);
-                if (level == 0u) {
+            if (entering >= 0.0) {
+                behindFrom = -1.0;
+                if ((approach < 0.0) && (dot((sdfReflectRayPoint(ray, min(leave, 1.0)) - surface), normal) <= 0.0)) {
                     return share;
                 }
+                share = leave;
+                level = 1u;
+                continue;
+            }
+
+            // Behind the plane where it enters: a face toward the ray within the occluder's thickness is met at the
+            // pixel's edge, which the ray crossed it beyond; otherwise the ray passes behind it.
+            float surfaceDepth = (1.0 / cellInverse);
+
+            behindFrom = ((behindFrom < 0.0) ? share : behindFrom);
+            walked = ((share - behindFrom) * span);
+            if ((approach < 0.0) && (((1.0 / rayInverse) - surfaceDepth) <= (SdfReflectThickness + (SdfReflectThicknessShare * surfaceDepth)))) {
+                return share;
+            }
+            if (walked >= SdfReflectBehindPixels) {
+                return -1.0;
+            }
+            share = leave;
+        } else if (rayInverse > cellInverse) {
+            // In front of everything the cell holds: the ray leaves it, unless it falls behind the cell's nearest surface
+            // first, where it enters the cell a level finer. An uncovered render pixel holds nothing.
+            behindFrom = -1.0;
+            float meets = (((ray.rate < 0.0) && (cellInverse > 0.0)) ? ((cellInverse - ray.startInverse) / ray.rate) : 2.0);
+
+            if ((level > 0u) && (meets < leave) && (meets <= 1.0)) {
+                share = max(share, meets);
                 level--;
             } else {
                 share = leave;
@@ -161,15 +213,6 @@ float sdfReflectMarch(float2 start, float2 delta, float startInverse, float fini
         } else if (level > 0u) {
             level--;
         } else {
-            // Behind a pixel's surface: within the occluder's thickness the ray meets it; farther behind, it passes behind.
-            float surfaceDepth = (1.0 / cellInverse);
-
-            if (((1.0 / rayInverse) - surfaceDepth) <= (SdfReflectThickness + (SdfReflectThicknessShare * surfaceDepth))) {
-                return share;
-            }
-            if (++behind > SdfReflectBehindPixels) {
-                return -1.0;
-            }
             share = leave;
         }
     }
@@ -248,8 +291,18 @@ uint4 sdfReflectTrace(SdfPixel p) {
     clip = ((delta.x > 0.0) ? min(clip, (((dims.x - 0.5) - start.x) / delta.x)) : ((delta.x < 0.0) ? min(clip, ((0.5 - start.x) / delta.x)) : clip));
     clip = ((delta.y > 0.0) ? min(clip, (((dims.y - 0.5) - start.y) / delta.y)) : ((delta.y < 0.0) ? min(clip, ((0.5 - start.y) / delta.y)) : clip));
     clip = max(clip, 0.0);
+
+    SdfReflectRay ray;
+
+    ray.origin = origin;
+    ray.direction = direction;
+    ray.startInverse = startInverse;
+    // A point's screen offset is proportional to its travel over its forward depth, so the clipped segment's share s
+    // stands at travel u with u * (1/z(u)) = s * clip * reach / z(reach).
+    ray.travelScale = ((clip * reach) * finishInverse);
     delta *= clip;
     finishInverse = lerp(startInverse, finishInverse, clip);
+    ray.rate = (finishInverse - startInverse);
 
     if (max(abs(delta.x), abs(delta.y)) < 1.0) {
         return traced;
@@ -257,12 +310,19 @@ uint4 sdfReflectTrace(SdfPixel p) {
 
     bool open;
     uint taken;
-    float hitShare = sdfReflectMarch(start, delta, startInverse, finishInverse, passGroup.reflectionSteps, open, taken);
+    float walked;
+    float hitShare = sdfReflectMarch(p.view, p.viewIndex, start, delta, ray, passGroup.reflectionSteps, open, taken, walked);
 
     if (hitShare < 0.0) {
-        // A ray that passed in front of everything it crossed and ended over open sky, away from the eye, sees the sky.
-        return ((open && !towardEye && (sdfReflectDepthPixel((uint2)clamp((start + delta), float2(0.0, 0.0), (dims - 1.0))) <= 0.0))
-            ? sdfViewsReflectionPack(float3(0.0, 0.0, 0.0), 0.0, saturate(glossy), normalWord, plane) : traced);
+        // A ray that passed in front of everything it crossed and ended over open sky, away from the eye, sees the sky,
+        // as far as its end stands from the screen's edge: a ray the edge cut short leaves the screen toward what it does
+        // not show, so the volume answers it, and the share falls to that smoothly as a ray's end nears the edge.
+        float2 end = (start + delta);
+        float2 endEdge = (min(end, (dims - end)) / (SdfReflectEdge * min(dims.x, dims.y)));
+        float sky = (glossy * smoothstep(0.0, 1.0, saturate(min(endEdge.x, endEdge.y))));
+
+        return ((open && !towardEye && (sky > 0.0) && (sdfReflectDepthPixel((uint2)clamp(end, float2(0.0, 0.0), (dims - 1.0))) <= 0.0))
+            ? sdfViewsReflectionPack(float3(0.0, 0.0, 0.0), 0.0, saturate(sky), normalWord, plane) : traced);
     }
 
     float2 at = (start + (delta * hitShare));
@@ -313,7 +373,10 @@ uint4 sdfReflectTrace(SdfPixel p) {
     float2 edge = (min(at, (dims - at)) / (SdfReflectEdge * min(dims.x, dims.y)));
     float budget = float(max(passGroup.reflectionSteps, 1u));
     float late = smoothstep((SdfReflectBudgetFade * budget), budget, float(taken));
-    float confidence = (glossy * smoothstep(0.0, 1.0, saturate(min(edge.x, edge.y))) * (1.0 - late));
+    // The farther a ray walked behind an occluder before what it met, the likelier the occluder is thicker than taken and
+    // hides that surface: its share falls to none where the march gives such a ray up.
+    float hidden = smoothstep(0.0, SdfReflectBehindPixels, walked);
+    float confidence = (glossy * smoothstep(0.0, 1.0, saturate(min(edge.x, edge.y))) * (1.0 - late) * (1.0 - hidden));
     float coverage = saturate(sum.a);
 
     if (!all(isfinite(sum)) || (confidence <= 0.0)) {

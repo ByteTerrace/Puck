@@ -21,7 +21,8 @@ namespace Puck.World.Server;
 /// <para>Single-pass-per-iteration relaxation (up to <c>MaxIterations</c>): two adjacent solid boxes can push a body
 /// back and forth within one tick. Accepted at authoring scale; the fix (push-order by penetration depth) is cheap and
 /// additive. Boxes retain the drawn fillet through <see cref="FixedStaticCollider.RoundedBox"/>; chamfered Boxes
-/// and Superellipsoids use their exact convex support maps, and a round capsule is the rounded box around its segment. Spheres and plain circular cylinders
+/// and Superellipsoids use their exact convex support maps, a round capsule is the rounded box around its segment, and a
+/// capsule scaled unlike in X and Z is the superellipsoid elongated along its segment. Spheres and plain circular cylinders
 /// use their closest-point geometry; rounded/chamfered circular rims use contained cores with computed error bounds.
 /// A creation whose shapes carve, smooth or otherwise blend each other, or that carries relief, collides as its composed
 /// field (<see cref="CollidesAsField"/>); any other finite primitive uses its oriented bounding box
@@ -266,6 +267,8 @@ public sealed partial class WorldColliderSet : IContactField {
         m_previousAttachedRotations = new FixedQuaternion[attachedRows.Count];
         m_attachedResolved = new bool[attachedRows.Count];
         m_previousAttachedResolved = new bool[attachedRows.Count];
+        m_attachedNetRevisions = new int[attachedRows.Count];
+        m_previousAttachedNetRevisions = new int[attachedRows.Count];
         m_solver = new FixedStaticContactSolver(
             ContactSkin: tuning.ContactSkin,
             GroundedThreshold: tuning.GroundedThreshold,
@@ -444,18 +447,18 @@ public sealed partial class WorldColliderSet : IContactField {
         hash.Add(value: collider.Radius.Value);
         hash.Add(value: collider.Chamfer.Value);
         hash.Add(value: collider.Exponent.Value);
+        hash.Add(value: collider.Elongation.Value);
         hash.Add(value: collider.Rotation.X.Value);
         hash.Add(value: collider.Rotation.Y.Value);
         hash.Add(value: collider.Rotation.Z.Value);
         hash.Add(value: collider.Rotation.W.Value);
     }
 
-    // Boxes retain their authored rounding (sharp without one), and circular cylinders and ellipsoids their surface; other
-    // finite primitives retain a bound.
+    // Boxes retain their authored rounding (sharp without one), and circular cylinders, capsules and ellipsoids their
+    // surface; other finite primitives retain a bound.
     private static readonly FixedQ4816 SqrtTwo = FixedQ4816.Sqrt(value: FixedQ4816.FromInteger(value: 2));
     private static readonly FixedQ4816 BevelFactor = (FixedQ4816.FromInteger(value: 2) - SqrtTwo);
-    // A capsule's half segment per unit of its scale.y: the segment is 0.5·scale.y long.
-    private static readonly FixedQ4816 CapsuleHalfSegment = FixedQ4816.FromDouble(value: 0.25);
+    private static readonly FixedQ4816 EllipsoidColliderExponent = FixedQ4816.FromDouble(value: SdfProgramBuilder.MinSuperellipsoidExponent);
 
     // The one collider a solid row compiles for a creation's primitive copy, static and attached rows alike: a plane a
     // half-space, an exponent-2 ellipsoid-family shape scaled alike on every axis a sphere, anything else its finite
@@ -517,20 +520,21 @@ public sealed partial class WorldColliderSet : IContactField {
             }
             return FixedStaticCollider.RoundedBox(copy.Center, copy.Rotation, inner, (radius + margin));
         }
-        if ((copy.Shape.Type == SdfSolidPrimitive.Capsule) && (MathF.Abs(x: copy.Shape.Scale.X) == MathF.Abs(x: copy.Shape.Scale.Z))) {
-            // A capsule is a rounded box whose inner box is its segment, which runs 0.5·scale.y from the shape's position
-            // along its own Y (SdfSolidGeometry's unit law): scale.y stretches the segment, never the radius. The copy's
-            // centre is its box's (SdfSolidGeometry.LocalBox), the segment's midpoint, and its X half-extent the radius.
-            var segmentScale = FixedQ4816.Max(x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.Y)),
-                y: FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale));
-            var halfSegment = ((segmentScale * copy.StampScale) * CapsuleHalfSegment);
+        if (copy.Shape.Type == SdfSolidPrimitive.Capsule) {
+            // A capsule is its segment, which runs 0.5·scale.y from the shape's position along its own Y (SdfSolidGeometry's
+            // unit law), swept by the ellipsoid of its radii (SdfSolidGeometry.CapsuleRadii); the copy's centre is its box's
+            // (SdfSolidGeometry.LocalBox), the segment's midpoint. Scaled alike in X and Z the ellipsoid is a ball and the
+            // capsule a rounded box whose inner box is the segment; otherwise it is the elongated ellipsoid the field draws,
+            // whose distance contact measures outside it, inside the field's margined gauge.
+            var radii = (FixedVector3.FromVector3(value: SdfSolidGeometry.CapsuleRadii(scale: copy.Shape.Scale)) * copy.StampScale);
+            var halfSegment = (FixedQ4816.FromDouble(value: SdfSolidGeometry.CapsuleHalfSegment(scaleY: copy.Shape.Scale.Y)) * copy.StampScale);
 
-            return FixedStaticCollider.RoundedBox(
-                copy.Center,
-                copy.Rotation,
-                new FixedVector3(X: FixedQ4816.Zero, Y: halfSegment, Z: FixedQ4816.Zero),
-                (copy.LocalHalfExtents.X + margin)
-            );
+            if (radii.X == radii.Z) {
+                return FixedStaticCollider.RoundedBox(copy.Center, copy.Rotation,
+                    new FixedVector3(X: FixedQ4816.Zero, Y: halfSegment, Z: FixedQ4816.Zero), (radii.X + margin));
+            }
+            return FixedStaticCollider.Superellipsoid(center: copy.Center, elongation: halfSegment, exponent: EllipsoidColliderExponent,
+                radii: radii, rotation: copy.Rotation) with { Radius = margin };
         }
         if (EllipsoidExponent(copy: in copy) is { } exponent) {
             // Its radii swept by the margin. At exponent two the collider measures the ellipsoid's true distance, which is
@@ -1006,6 +1010,7 @@ public sealed partial class WorldColliderSet : IContactField {
         (m_previousAttachedOrigins, m_attachedOrigins) = (m_attachedOrigins, m_previousAttachedOrigins);
         (m_previousAttachedRotations, m_attachedRotations) = (m_attachedRotations, m_previousAttachedRotations);
         (m_previousAttachedResolved, m_attachedResolved) = (m_attachedResolved, m_previousAttachedResolved);
+        (m_previousAttachedNetRevisions, m_attachedNetRevisions) = (m_attachedNetRevisions, m_previousAttachedNetRevisions);
         m_attachedColliders.Clear();
         m_attachedColliderRows.Clear();
         m_movingHoldable.Clear(); m_movingGripOverrides.Clear();
@@ -1064,9 +1069,63 @@ public sealed partial class WorldColliderSet : IContactField {
         }
     }
 
-    // A row moved when it resolves at one refresh and not the other, or at another origin or rotation at both.
+    // A row moved when it resolves at one refresh and not the other, or at another origin, rotation, size or net pose at
+    // both.
     private bool AttachedRowMoved(int row) => ((m_attachedResolved[row] != m_previousAttachedResolved[row]) ||
-        (m_attachedResolved[row] && ((m_attachedOrigins[row] != m_previousAttachedOrigins[row]) || (m_attachedRotations[row] != m_previousAttachedRotations[row]) || (m_attachedScales[row] != m_previousAttachedScales[row]))));
+        (m_attachedResolved[row] && ((m_attachedOrigins[row] != m_previousAttachedOrigins[row]) || (m_attachedRotations[row] != m_previousAttachedRotations[row]) ||
+        (m_attachedScales[row] != m_previousAttachedScales[row]) || (m_attachedNetRevisions[row] != m_previousAttachedNetRevisions[row]))));
+
+    /// <summary>Gets or sets the authority's nets, which a net row's colliders are posed from (<see cref="WorldNets"/>);
+    /// a set with no nets poses a net row at rest. Set by the population as it installs the set.</summary>
+    internal WorldNets Nets { get; set; } = WorldNets.Empty;
+    // Each row's net revision at the latest refresh and the one before it: the net row moved when they differ.
+    private int[] m_attachedNetRevisions;
+    private int[] m_previousAttachedNetRevisions;
+
+    // A net row's movement over its latest step at a point on it, or null for a row that is no net or a point off it.
+    private FixedVector3? NetDisplacement(int row, in FixedVector3 point, ulong stepTicks) {
+        if ((m_attachedRows[row].Placement.Net is null) || !Nets.TryPanel(id: m_attachedRows[row].Placement.Id, panel: out var panel) ||
+            !panel.TryLocate(column: out var column, contactReach: ContactReach, point: in point, row: out var gridRow)) {
+            return null;
+        }
+        return panel.Net.DisplacementAt(column: column, row: gridRow, stepTicks: stepTicks);
+    }
+    /// <summary>Returns how far the net a body holds moved under its hold's anchor over its latest step: what the body
+    /// rides before its own step, as a body standing on a carrier rides it (<see cref="TryRideDisplacement"/>).</summary>
+    /// <param name="anchor">The hold's anchor.</param>
+    /// <param name="stepTicks">The step's length, in engine ticks.</param>
+    /// <param name="displacement">The displacement, in metres.</param>
+    /// <param name="supportRow">The net row the anchor lies on.</param>
+    /// <returns>Whether the anchor lies on a net row that moved it.</returns>
+    public bool TryHeldDisplacement(in FixedVector3 anchor, ulong stepTicks, out FixedVector3 displacement, out int supportRow) {
+        for (var row = 0; (row < m_attachedRows.Count); row++) {
+            if (Excludes(row: row) || (NetDisplacement(row: row, point: in anchor, stepTicks: stepTicks) is not { } moved)) { continue; }
+            displacement = moved;
+            supportRow = row;
+            return (moved != FixedVector3.Zero);
+        }
+        displacement = FixedVector3.Zero;
+        supportRow = -1;
+        return false;
+    }
+
+    // Records a net row's cell colliders as its net stands, or the row's rest layout when the set holds no net for it.
+    private void RecordNetColliders(int row, WorldPlacementNet facet, FixedQ4816 scale) {
+        var placement = m_attachedRows[row].Placement;
+
+        if (Nets.TryPanel(id: placement.Id, panel: out var panel)) {
+            m_attachedNetRevisions[row] = panel.Net.Revision;
+            foreach (ref readonly var collider in panel.Colliders()) { RecordAttachedCollider(attached: collider); }
+            return;
+        }
+        var moving = m_attachedRows[row];
+        var rest = new FixedNet(spec: facet.SpecAt(origin: moving.Origin, rotation: moving.Rotation, scale: (FixedQ4816.FromDouble(value: placement.Scale) * scale)));
+        var colliders = new FixedStaticCollider[rest.CellCount];
+
+        rest.CellColliders(destination: colliders, radius: ((FixedQ4816.FromDouble(value: facet.Strand) * FixedQ4816.FromDouble(value: placement.Scale)) / FixedQ4816.FromInteger(value: 2)));
+        m_attachedNetRevisions[row] = 0;
+        foreach (var collider in colliders) { RecordAttachedCollider(attached: collider); }
+    }
     private void FoldAttachedMoves(List<FixedStaticCollider> colliders, List<int> rows) {
         for (var index = 0; (index < colliders.Count); index++) {
             if (AttachedRowMoved(row: rows[index])) { m_attachedMoves.Fold(collider: colliders[index]); }
@@ -1204,11 +1263,13 @@ public sealed partial class WorldColliderSet : IContactField {
     /// <param name="orientation">The body's orientation.</param>
     /// <param name="up">The body's unit up axis.</param>
     /// <param name="volumes">The body's scaled collider volumes.</param>
-    /// <param name="displacement">The foot point's displacement under the carrier's translation and yaw.</param>
+    /// <param name="displacement">The foot point's displacement under the carrier's translation and yaw, or, on a net
+    /// row, the net's own movement under the foot over its latest step.</param>
     /// <param name="supportRow">The moving row whose material surface supplies the displacement.</param>
+    /// <param name="stepTicks">The step's length, in engine ticks, over which a net's movement is read.</param>
     /// <returns>Whether a moving support was found.</returns>
     public bool TryRideDisplacement(FixedVector3 position, in FixedQuaternion orientation, in FixedVector3 up,
-        ReadOnlySpan<FixedBodyColliderVolume> volumes, out FixedVector3 displacement, out int supportRow) {
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, ulong stepTicks, out FixedVector3 displacement, out int supportRow) {
         displacement = FixedVector3.Zero;
         supportRow = -1;
         var found = false;
@@ -1231,6 +1292,13 @@ public sealed partial class WorldColliderSet : IContactField {
                 }
                 var carriedPoint = position;
 
+                if (NetDisplacement(row: row, point: (position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal)), stepTicks: stepTicks) is { } carried) {
+                    found = true;
+                    supportRow = row;
+                    bestDepth = push.Penetration;
+                    displacement = carried;
+                    continue;
+                }
                 if (m_attachedScales[row] != m_previousAttachedScales[row]) {
                     var probe = (position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal));
 

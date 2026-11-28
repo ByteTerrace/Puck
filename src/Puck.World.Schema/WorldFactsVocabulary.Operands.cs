@@ -63,6 +63,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.BodyPositionPrefix}<bodyRef>:x|y|z",
             $"{WorldRuleFacts.BodyForwardPrefix}<bodyRef>:x|y|z",
             $"{WorldRuleFacts.KinematicsPrefix}<bodyRef>:<witness>",
+            $"{WorldRuleFacts.NetPrefix}<placementId>:<reading>",
             $"{WorldRuleFacts.EngagedPrefix}<bodyRef>:<screen>",
             $"{WorldRuleFacts.BodyStatePrefix}<bodyRef>:<slot>",
             $"{WorldRuleFacts.IdentityPrefix}<bodyRef>:<fact>",
@@ -781,6 +782,30 @@ public static partial class WorldFactsVocabulary {
                 }
 
                 fact = new WorldRegionOccupancyOperand(placementId: placementId);
+            } else if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.NetPrefix
+            )) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+
+                var suffix = name[WorldRuleFacts.NetPrefix.Length..];
+                var separator = suffix.LastIndexOf(value: ':');
+
+                if ((separator <= 0) || !world.HasNet(placementId: suffix[..separator]) ||
+                    !WorldNetVocabulary.TryResolve(name: suffix[(separator + 1)..], reading: out var reading)) {
+                    throw new RuleException(
+                        detail: $"'{name}' does not spell '{WorldRuleFacts.NetPrefix}<placementId>:<reading>' naming a placement that carries a net and one of {string.Join(separator: ", ", values: WorldNetVocabulary.All)}",
+                        refusal: WorldRuleRefusal.NetMalformed,
+                        ruleName: ruleName
+                    );
+                }
+
+                fact = new WorldNetOperand(placementId: suffix[..separator], reading: reading);
             } else if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: WorldRuleFacts.MachinePrefix

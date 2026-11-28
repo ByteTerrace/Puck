@@ -101,6 +101,11 @@ public sealed partial class WorldServer {
     public void ConstrainTransferAuthorities(WorldTransferBoundary boundary) => m_tick.ConstrainTransferAuthorities(boundary: boundary);
     /// <inheritdoc cref="WorldTick.DescribeFields"/>
     public string DescribeFields() => m_tick.DescribeFields();
+    /// <summary>Describes the authority's nets for a console read-back (<see cref="WorldNets.Describe"/>).</summary>
+    /// <returns>One line per net, under a header, or a none line.</returns>
+    public string DescribeNets() {
+        lock (AuthorityGate) { return Population.Nets.Describe(); }
+    }
     /// <inheritdoc cref="WorldTick.DescribeMusicClock"/>
     public string DescribeMusicClock() => m_tick.DescribeMusicClock();
     /// <inheritdoc cref="WorldTick.DescribePlacements"/>

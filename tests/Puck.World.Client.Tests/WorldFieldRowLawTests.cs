@@ -345,7 +345,7 @@ public sealed class WorldFieldRowLawTests {
         emitter.PrepareFrame();
 
         // The first frame publishes the zero lattice: no column raised, so every reference voxel is the empty-space bound.
-        var field = Assert.Single(collection: Emitted(emitter: emitter).HeightFields).Field;
+        var field = (SdfHeightField)Assert.Single(collection: Emitted(emitter: emitter).Displacements).Displacement;
         var flat = field.Reference.Current;
         var level = field.Heights.Current;
 
@@ -371,7 +371,7 @@ public sealed class WorldFieldRowLawTests {
         // A column raised from nothing keys a new reference; its height moves the heights.
         Assert.NotSame(expected: flat, actual: raised);
         Assert.NotSame(expected: level, actual: risen);
-        Assert.Same(expected: field, actual: Assert.Single(collection: Emitted(emitter: emitter).HeightFields).Field);
+        Assert.Same(expected: field, actual: (SdfHeightField)Assert.Single(collection: Emitted(emitter: emitter).Displacements).Displacement);
         // Cell 5 is column (x 1, z 1), raised; the voxel at its centre on the origin layer is inside it.
         Assert.Contains(collection: raised.Values.ToArray(), filter: static voxel => (voxel < 0f));
         Assert.Contains(collection: risen.Values.ToArray(), filter: static height => (height > 0f));

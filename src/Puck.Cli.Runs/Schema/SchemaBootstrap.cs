@@ -6,8 +6,16 @@ namespace Puck.Cli.Schema;
 public static class SchemaBootstrap {
     private const string Project = "src/Puck.Cli/Puck.Cli.csproj";
     private const string Artifact = CliPaths.ToolAssembly;
+    /// <summary>The bootstrap build's artifacts directory, relative to the checkout: kept between runs, so a bootstrap
+    /// after the first rebuilds only what changed, and beside the checkout's own <c>obj</c> outputs, whose build lock
+    /// serializes it. Its name is short so its deepest intermediate path is no longer than an ordinary build's in the
+    /// same checkout (<c>src/&lt;project&gt;/obj/Release/net11.0</c>), which keeps a long worktree path under
+    /// <c>MAX_PATH</c> wherever an ordinary build fits.</summary>
+    public const string ArtifactsDirectory = "obj/sb";
 
-    private static readonly TimeSpan BuildBudget = TimeSpan.FromMinutes(value: 10);
+    // A build that is making progress prints a line as each project finishes; one silent this long has stopped, while a
+    // cold build of the whole closure on a busy machine may run far longer than any fixed budget.
+    private static readonly TimeSpan BuildQuiet = TimeSpan.FromMinutes(value: 10);
     private static readonly TimeSpan SchemaBudget = TimeSpan.FromMinutes(value: 2);
 
     public static bool IsBootstrap =>
@@ -25,10 +33,12 @@ public static class SchemaBootstrap {
         ));
     }
 
-    // Injectable only at the existing process boundary: the build, required artifact and retained logs remain real.
+    // Injectable only at the existing process boundary: the build, required artifact and retained logs remain real. An
+    // injected runner stands in for both processes; without one the build runs with no wall budget, stopped only when it
+    // writes nothing for BuildQuiet.
     public static int RunInDirectory(string repositoryRoot, string directory, bool bundle, bool check, string? output,
         TimeProvider clock, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? runner = null) {
-        var artifacts = Path.Combine(path1: directory, path2: "artifacts");
+        var artifacts = Path.Combine(path1: repositoryRoot, path2: ArtifactsDirectory);
         var binaries = Path.Combine(path1: directory, path2: "cli");
         var logs = Path.Combine(path1: directory, path2: "logs");
         var capture = (runner ?? ((arguments, timeout) => CliProcess.RunCaptured(
@@ -38,13 +48,13 @@ public static class SchemaBootstrap {
 
         if (!CliProjectBuild.TryBuild(
             repositoryRoot: repositoryRoot, project: Project, outputDirectory: binaries, logDirectory: logs,
-            timeout: BuildBudget, build: out _, error: out var error, artifactName: Artifact,
-            runner: (arguments, timeout) => capture([
-                .. arguments,
+            timeout: Timeout.InfiniteTimeSpan, quiet: BuildQuiet, build: out _, error: out var error, artifactName: Artifact,
+            properties: [
                 "-p:PuckSchemaBootstrap=true",
                 "-p:UseArtifactsOutput=true",
                 $"-p:ArtifactsPath={PuckPaths.Normalize(path: artifacts)}"
-            ], timeout)
+            ],
+            runner: runner
         )) {
             return CliExit.Refuse(verb: "schema", what: "bootstrap build", why: error);
         }

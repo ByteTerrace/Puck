@@ -1392,10 +1392,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
     /// <inheritdoc/>
     public float? SolidScale(string placementId) => m_solidScales.Read(alpha: m_solidScaleAlpha, placementId: placementId);
+    private readonly WorldNetMirror m_nets = new();
+    /// <summary>Reads a net's node offsets at the presentation's interpolation fraction, as its body poses are read.</summary>
+    /// <param name="placementId">The placement carrying the net.</param>
+    /// <param name="destination">Receives one offset per node, row by row.</param>
+    public void NetOffsets(string placementId, Span<System.Numerics.Vector3> destination) => m_nets.Read(alpha: m_solidScaleAlpha, destination: destination, placementId: placementId);
     /// <inheritdoc/>
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         m_solidScaleAlpha = 1f;
         m_solidScales.Deliver(sizes: snapshot.SolidScales.Span);
+        m_nets.Deliver(nodes: snapshot.Nets.Span);
         m_poses.Begin();
 
         // Field and document row cells are state the snapshot carries beside the document; the mirror re-reads the

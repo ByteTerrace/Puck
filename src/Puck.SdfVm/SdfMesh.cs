@@ -355,21 +355,21 @@ public sealed record SdfMeshLevel {
 /// <param name="Orientation">How it was turned there. A vertex riding the member is carried into the slot's frame by the
 /// inverse of this pose, then out by the slot's transform in the frame that draws it.</param>
 public readonly record struct SdfMeshMember(int SlotOffset, Vector3 Position, Quaternion Orientation);
-/// <summary>The heights a height field's draw is displaced by as it is drawn (<see cref="SdfHeightField"/>): the handle
-/// the frame's sampled table holds them at (<see cref="SdfProgram.HeightFields"/>), and the band of object-space heights
-/// every displaced point lies in, which the draw's box holds in place of its baked reference's.</summary>
-/// <param name="Handle">The heights' handle in the frame's program.</param>
-/// <param name="Low">The least object-space height a displaced point takes.</param>
-/// <param name="High">The greatest object-space height a displaced point takes.</param>
-public readonly record struct SdfMeshDisplacement(int Handle, float Low, float High) {
-    /// <summary>Returns the displacement of a program's height field.</summary>
-    /// <param name="binding">The height field's binding.</param>
+/// <summary>The displacement a draw is moved by as it is drawn (<see cref="SdfDisplacement"/>: a height field's heights, a
+/// sheet's node offsets): the handle the frame's sampled table holds its values at (<see cref="SdfProgram.Displacements"/>),
+/// and the displacement itself, whose <see cref="SdfDisplacement.Bound"/> widens the draw's box to every point it can
+/// move a vertex to. Two are equal when they name one handle of one displacement.</summary>
+/// <param name="Handle">The values' handle in the frame's program.</param>
+/// <param name="Source">The displacement.</param>
+public readonly record struct SdfMeshDisplacement(int Handle, SdfDisplacement Source) {
+    /// <summary>Returns the displacement a program's instance is drawn through.</summary>
+    /// <param name="binding">The instance's binding.</param>
     /// <returns>The displacement.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="binding"/> is <see langword="null"/>.</exception>
-    public static SdfMeshDisplacement Of(SdfHeightFieldBinding binding) {
+    public static SdfMeshDisplacement Of(SdfDisplacementBinding binding) {
         ArgumentNullException.ThrowIfNull(argument: binding);
 
-        return new(Handle: binding.Handle, High: binding.Field.DrawnHigh, Low: binding.Field.DrawnLow);
+        return new(Handle: binding.Handle, Source: binding.Displacement);
     }
 }
 /// <summary>One placement of an <see cref="SdfMesh"/> in a frame.</summary>
@@ -482,7 +482,7 @@ public readonly record struct SdfMeshDraw {
     /// shadow map hold while nothing in its staged record changes: an opaque draw of a mesh whose placement is not
     /// <see cref="IsDynamic"/> and whose surface reads nothing that moves outside its record. A skinned mesh
     /// (<see cref="SdfMesh.VertexMembers"/>), which reads its members' live slots, and a displaced draw
-    /// (<see cref="Displacement"/>), which reads the frame's sampled heights, are never static, whatever
+    /// (<see cref="Displacement"/>), which reads the frame's sampled values, are never static, whatever
     /// <see cref="IsDynamic"/> says. Glass neither blocks nor bounces the probes' rays, and a draw without a mesh draws
     /// nothing.</summary>
     public bool IsStatic => ((Mesh is { } mesh) && mesh.VertexMembers.IsEmpty && (Displacement is null) && !IsDynamic && !Glass && (Audience == SdfMeshAudience.Neutral));
@@ -555,7 +555,8 @@ public readonly record struct SdfMeshDraw {
     /// negative is not drawn, in any view or shadow. Zero, the default, draws everything; a body straddling a portal's
     /// glass is drawn clipped to the glass's front on each side.</summary>
     public Vector4 ClipPlane { get; init; }
-    /// <summary>Gets the heights the draw's mesh, a height field's baked reference, is displaced by as it is drawn, or
+    /// <summary>Gets the displacement the draw's mesh is moved by as it is drawn (a height field's heights over its baked
+    /// reference, a sheet's node offsets over a mesh baked at rest), or
     /// <see langword="null"/> for a draw drawn as its mesh was baked.</summary>
     public SdfMeshDisplacement? Displacement { get; init; }
     /// <summary>Gets which of its bake group's resident detail tiers the draw stands for (<see cref="SdfMeshBand"/>):

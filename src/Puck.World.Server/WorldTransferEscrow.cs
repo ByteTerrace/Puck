@@ -1589,6 +1589,25 @@ public sealed partial class WorldTransferEscrow {
             (arrival.Request.Members[index].Companion is null) &&
             (m_server.Account.FindById(id: projection.Id) is { Document: not null } owned)
         ) {
+            // A re-drive lands the identity as the commit carried it, in the re-drive's one detached identity for its
+            // id: the account may have moved since (another world wrote it after this arrival), and what this world
+            // reads of the traveller is what the recording read, never what the account holds now.
+            if (m_relandOutcome is not null) {
+                return (TryBindDetached(detached: out var detached, reason: out var reason, taped: in projection)
+                    ? detached
+                    : throw ReplayRefusal.ArrivalRefused.Raise(message: $"identity '{projection.Id}' could not reproduce the arrival it carried — {reason}"));
+            }
+            // Live, the owned identity is the one the traveller left as, so it already holds what the projection carries.
+            // A replay's account copy stands as it did when this authority's replay started; what another row wrote to
+            // the traveller's facts and crossing pools since then (a mark left at home) reaches it as the projection
+            // carried it, so the copy adopts that before the traveller binds it.
+            // A copy that already holds what was carried adopts nothing, so it keeps the revision the live identity kept.
+            if (m_server.Account.IsReplayCopy &&
+                (WorldIdentity.FromProjection(defaults: m_server.Definition.PlayerDefaults, projection: in projection) is var carried) &&
+                !owned.HoldsWhatCarries(carried: carried)) {
+                _ = owned.TryAdopt(carried: carried, reason: out _);
+            }
+
             return owned;
         }
 

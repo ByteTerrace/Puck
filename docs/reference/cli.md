@@ -4422,11 +4422,14 @@ After any edit to a document-model type, and when a rename leaves
 `WorldModelShape.generated.cs` referring to a removed member, run `schema --bootstrap`
 from an existing CLI copy. It builds the current
 source with `PuckSchemaBootstrap=true`, excluding only that generated table,
-using a private artifacts directory for the whole build closure. The temporary
+into a private artifacts directory for the whole build closure
+(`SchemaBootstrap.ArtifactsDirectory`, under the checkout's `obj`), which it keeps
+so a later bootstrap rebuilds only what changed. The build has no wall budget:
+it is stopped only when it writes nothing for ten minutes. The temporary
 CLI accepts only `schema`; a model-table read refuses explicitly. It runs the
 existing reflection generator, with `--check`, `--bundle` and `--output` forwarded
 when supplied. A failed build or generation keeps its run directory and logs.
-Normal `obj` and `bin` outputs are untouched. After regeneration, rebuild normally
+The projects' own `obj` and `bin` outputs are untouched. After regeneration, rebuild normally
 and run `schema --check` from the newly built CLI.
 
 Written to `src/Puck.World.Schema/Schemas/puck.world.definition.v1.schema.json` (root)

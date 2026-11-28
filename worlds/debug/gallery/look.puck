@@ -298,7 +298,8 @@ let lookAfternoon = 0.62
 // the arcade, the end wall's wide bays, a balcony edge, the floor and the ceiling, the furniture, and the two concept
 // paintings' views of the entrance and the outside. `toybox` looks from level 2's north balcony down across the void
 // into level 1's south stations, as a player drawn in from another level sees them, and `toybox-across` from level 1's
-// south balcony edge across to its north stations.
+// south balcony edge across to its north stations. `climbing-wall` looks up the climbing wall from the nave's floor
+// before its pad, and `climbing-wall-across` at it from level 2's south gallery, across the void.
 let lookShots = [
   { name: "hall", eye [34.5, 1.6, 19], aim [60, 3.9, 19], fov: 70 }
   { name: "hall-side", eye [32, 1.6, 10.2], aim [54, 4.6, 26], fov: 78 }
@@ -313,7 +314,30 @@ let lookShots = [
   { name: "outside", eye [44, 2.2, -30], aim [36, 8.5, 0], fov: 68 }
   { name: "toybox", eye [34.7, 10.65, 29.8], aim [34.7, 6.2, 3.6], fov: 70 }
   { name: "toybox-across", eye [34.7, 6.15, 7.2], aim [34.7, 6.2, 33.2], fov: 70 }
+  { name: "climbing-wall", eye [49.7, 1.6, 17.5], aim [49.7, 7.4, 28.5], fov: 70 }
+  { name: "climbing-wall-across", eye [49.7, 10.65, 7.2], aim [49.7, 8.6, 28.5], fov: 62 }
 ]
+
+// The climbing wall (climbing-wall.puck), in the standard's slots (climbing.puck): its face is sandstone panels in four
+// warm tones the valley's canyon walls wear, from sand to coral, over seams of a soft teal; its frame the hall's cream
+// under a band of warm timber that is the ledge at its top; its pad two sages. Its holds are three route families, each
+// one saturated colour so a route reads at a glance from across the nave: sunflower jugs and slopers up the middle (the
+// gentlest line), teal crimps and pinches up the west side, and berry slopers and pinches up the east side (the
+// hardest), with two pastel volumes on the face, mint and butter, which every route shares. The bolts are dark steel.
+let lookClimb = {
+  panels ["#F3D5A8", "#EFB48C", "#E7998A", "#F2C6B0"]
+  seam: "#5FA39A"
+  frame: lookCream
+  coping: "#D49A4A"
+  pad ["#8DAE88", "#7C9E79"]
+  bolt: "#2B2E33"
+  routes {
+    sunflower: "#E8A21E"
+    teal: "#13858C"
+    berry: "#D8457A"
+  }
+  volumes ["#B9E2CF", "#F7E3A1"]
+}
 
 // The flaw (flaw.puck): the one light that weaves through every floor, a long diffuse emitter like a fluorescent tube
 // that looks like neon, a saturated core glowing through a frosted sleeve. `core` and `sleeve` are the two radii in

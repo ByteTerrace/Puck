@@ -335,6 +335,13 @@ its own recursive `Directory.Delete`; only best-effort teardown uses `RunDirecto
 The remaining strict-path depth limitation is tracked in
 [open items](../plans/open-items.md#test-runner-and-replay).
 
+On Windows, a build under a long worktree path (`.claude/worktrees/agent-<id>`)
+runs closer to `MAX_PATH` than one in the main checkout, and a build placed under
+`TEMP` adds that path's length too (CS2012 names a file it could not write). A
+build a verb runs into a directory of its own keeps that directory inside the
+checkout and its name short, as `puck schema --bootstrap` keeps its artifacts in
+`obj/sb`, so it fits wherever an ordinary build of the checkout fits.
+
 ## Build output and hard links
 
 Every project copies its dependency closure into its own `bin`, so a built

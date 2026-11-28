@@ -321,23 +321,25 @@ public sealed partial class WorldBody {
     // Carries a body that stood on an attached solid last tick along with it: the field reports how far the platform's
     // carrier moved between its last two refreshes, and the body moves by the same before its own step, so a rising
     // platform lifts it without a push and a falling one keeps it standing rather than dropping it a tick at a time.
-    // Only a grounded locomotion body rides; a rigid or carried body has its own contact path.
-    internal void RideAttachedSupport(WorldColliderSet field) {
-        if (
-            !m_grounded ||
-            (m_collider is null) ||
-            IsRigid ||
-            (m_carriedByIndex >= 0) ||
-            m_sweepRefusedThisTick ||
-            !field.TryRideDisplacement(
-                up: in m_up,
-                displacement: out var displacement,
-                supportRow: out var supportRow,
-                orientation: in m_orientation,
-                position: m_position,
-                volumes: ScaledColliderVolumes()
-            )
-        ) {
+    // Only a grounded locomotion body rides, or one a pull holds on a net's face, which rides the net's movement under
+    // its hold's anchor (WorldColliderSet.TryHeldDisplacement) and carries the anchor with it; a rigid or carried body has
+    // its own contact path.
+    internal void RideAttachedSupport(WorldColliderSet field, ulong stepTicks) {
+        if ((m_collider is null) || IsRigid || (m_carriedByIndex >= 0) || m_sweepRefusedThisTick) { return; }
+
+        FixedVector3 displacement;
+        int supportRow;
+        var held = false;
+
+        if (m_grounded) {
+            if (!field.TryRideDisplacement(displacement: out displacement, orientation: in m_orientation, position: m_position,
+                stepTicks: stepTicks, supportRow: out supportRow, up: in m_up, volumes: ScaledColliderVolumes())) {
+                return;
+            }
+        } else if (Holding && (HeldRow.Kind == Puck.Physics.Motion.BodyHoldKind.Pull) && (m_holdNormal != FixedVector3.Zero) &&
+            field.TryHeldDisplacement(anchor: in m_holdAnchor, displacement: out displacement, stepTicks: stepTicks, supportRow: out supportRow)) {
+            held = true;
+        } else {
             return;
         }
 
@@ -351,6 +353,7 @@ public sealed partial class WorldBody {
         }
         if (resolution.Refusal != ContactRefusal.None) { NoteSweepRefusal(refusal: resolution.Refusal); return; }
         WakeUp();
+        if (held) { m_holdAnchor += (next - m_position); }
         m_position = next;
     }
 

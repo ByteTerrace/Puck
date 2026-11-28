@@ -103,8 +103,8 @@ internal static class WorldShapeDetail {
     }
 
     // The radius of a shape's own round section, in creation units: a strand's (its thicker end's: a lock tapers to a tip
-    // that is a small part of it), a capsule's or a sphere's, an ellipsoid's middle radius, tightened as a superellipsoid's
-    // exponent squares it off, a cylinder's or a cone's outline's tightest bend (EllipseBend), a torus's tube, or an
+    // that is a small part of it), a sphere's, an ellipsoid's middle radius, tightened as a superellipsoid's exponent
+    // squares it off, a cylinder's, a cone's or a capsule's outline's tightest bend (EllipseBend), a torus's tube, or an
     // elliptic prism's outline's tightest bend. The middle radius is a finger's or a limb's girth, where its surface turns
     // all the way round; a flattened ellipsoid turns tightly only along its rim, an edge the contour keeps as a crease, as
     // it does a box's or a polygonal prism's. Zero for none.
@@ -117,8 +117,9 @@ internal static class WorldShapeDetail {
             SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid => middle,
             SdfSolidPrimitive.Superellipsoid => (middle * (SdfProgramBuilder.MinSuperellipsoidExponent / ShapeDocument.EffectiveExponent(exponent: shape.Exponent))),
             SdfSolidPrimitive.Prism when (shape.Profile is { Kind: SdfPrismProfileKind.Ellipse }) => EllipseBend(a: size.X, b: size.Y),
-            SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Cone => EllipseBend(a: size.X, b: size.Z),
-            SdfSolidPrimitive.Capsule => size.X,
+            // A capsule's ends (SdfSolidGeometry.CapsuleRadii) turn no tighter than its section, whose Y radius lies
+            // between the section's two.
+            SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Cone or SdfSolidPrimitive.Capsule => EllipseBend(a: size.X, b: size.Z),
             SdfSolidPrimitive.RoundCone => (0.5f * size.X),
             SdfSolidPrimitive.Torus => (0.4f * size.X),
             _ => 0f,
@@ -126,7 +127,12 @@ internal static class WorldShapeDetail {
     }
     // An ellipse's tightest bend: its smaller radius squared over its larger, at the larger radius's ends. An elliptic
     // prism's wall turns round it, and so does the crease it carves when it cuts (an eye socket in a face).
-    private static float EllipseBend(float a, float b) => ((MathF.Max(x: a, y: b) > 0f) ? ((MathF.Min(x: a, y: b) * MathF.Min(x: a, y: b)) / MathF.Max(x: a, y: b)) : 0f);
+    // Emission reads a scale's magnitude, so this does too.
+    private static float EllipseBend(float a, float b) {
+        var (small, large) = (MathF.Min(x: MathF.Abs(x: a), y: MathF.Abs(x: b)), MathF.Max(x: MathF.Abs(x: a), y: MathF.Abs(x: b)));
+
+        return ((large > 0f) ? ((small * small) / large) : 0f);
+    }
     // A rounded-rectangle or convex prism profile's corner radius, in creation units, its rounding included for a convex
     // one as the builder clamps it; zero for another profile.
     private static float ProfileCorner(ShapeDocument shape, Vector3 size) {

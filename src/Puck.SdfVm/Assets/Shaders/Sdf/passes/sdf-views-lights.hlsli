@@ -14,9 +14,10 @@
 // cone's angle; a screen lights only what lies in front of its face's plane, and nothing while its mean luminance is zero
 // (sdfLightResponse); and a point, spot or screen light fades to exactly zero where its light falls under the view's
 // cutoff (sdfLightCutoffFade), so one whose bound over a box stays under it adds nothing there. Every other kind (a
-// directional, a rim) reaches everything and is kept. An analytic occluder adds nothing at and past its Reach from its
-// center (frame/sdf-occluders.hlsli), so the tile keeps those whose sphere of reach meets a box
-// (sdfOccluderReachesBox). The boxes hold every hit point of the tile exactly, the same point the light stage shades
+// directional, a rim) reaches everything and is kept. An analytic occluder's ambient adds nothing at and past its Reach
+// from its center, and its shadow nothing outside the hull of its grown bounding sphere and the light it falls from
+// (frame/sdf-occluders.hlsli), so the tile keeps, once its lights and screens stand, those whose sphere of reach meets a
+// box or whose shadow toward one of them can (sdfOccluderReachesWalk). The boxes hold every hit point of the tile exactly, the same point the light stage shades
 // (the views stage passes the one it forms), so the only difference from walking the view's whole masks is the rounding
 // of a response within SdfLightReachMargin of where it falls to zero (sdfLightReachesBox).
 //
@@ -288,9 +289,18 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
                 }
             }
         }
+    }
+    GroupMemoryBarrierWithGroupSync();
 
-        // An occluder a lane, striding by the group's lanes: each of the view's whose sphere of reach meets a box
-        // (sdfOccluderReachesBox), past which it adds nothing.
+    // An occluder a lane, striding by the group's lanes, once the tile's lights and screens stand: each of the view's whose
+    // ambient or whose shadow toward one of them can reach a box (sdfOccluderReachesWalk), elsewhere adding nothing.
+    if (nearHeld || farHeld) {
+        float3 nearLow = float3(puckFloatFromOrdered(sdfViewsLightBoxes[0]), puckFloatFromOrdered(sdfViewsLightBoxes[1]), puckFloatFromOrdered(sdfViewsLightBoxes[2]));
+        float3 nearHigh = float3(puckFloatFromOrdered(sdfViewsLightBoxes[3]), puckFloatFromOrdered(sdfViewsLightBoxes[4]), puckFloatFromOrdered(sdfViewsLightBoxes[5]));
+        float3 farLow = float3(puckFloatFromOrdered(sdfViewsLightBoxes[6]), puckFloatFromOrdered(sdfViewsLightBoxes[7]), puckFloatFromOrdered(sdfViewsLightBoxes[8]));
+        float3 farHigh = float3(puckFloatFromOrdered(sdfViewsLightBoxes[9]), puckFloatFromOrdered(sdfViewsLightBoxes[10]), puckFloatFromOrdered(sdfViewsLightBoxes[11]));
+        uint4 tileLights = uint4(sdfViewsLightTile[0], sdfViewsLightTile[1], sdfViewsLightTile[2], sdfViewsLightTile[3]);
+        uint4 tileScreens = uint4(sdfViewsLightTile[4], sdfViewsLightTile[5], sdfViewsLightTile[6], sdfViewsLightTile[7]);
         uint occluders = worldOccluderCount();
 
         [loop]
@@ -304,12 +314,12 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
 
             SdfOccluder record = sdfOccluders[occluder];
 
-            if ((nearHeld && sdfOccluderReachesBox(record, nearLow, nearHigh)) || (farHeld && sdfOccluderReachesBox(record, farLow, farHigh))) {
+            if ((nearHeld && sdfOccluderReachesWalk(record, tileLights, tileScreens, nearLow, nearHigh))
+                || (farHeld && sdfOccluderReachesWalk(record, tileLights, tileScreens, farLow, farHigh))) {
                 InterlockedOr(sdfViewsLightTile[8u + occluderWord], occluderBit);
             }
         }
     }
-    GroupMemoryBarrierWithGroupSync();
 
     // The traced lights the tile kept, the same on every lane, so a tile that kept none (the open valley) reads no probe
     // record here. The tile's pixels blend the tile's own cells and the ring of cells about them, a cell a lane; a pixel

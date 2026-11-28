@@ -19,7 +19,7 @@ public sealed class CreationCommandTests {
         name: "moth.world.json"
     );
 
-    /// <summary>Schema and render admission cannot stand in for contact compilation. A capsule scaled apart in X and Z
+    /// <summary>Schema and render admission cannot stand in for contact compilation. A cone scaled apart in X and Z
     /// leaves a residual Scale; nonuniform values must fail only when it is actually placed as a solid.</summary>
     [Theory]
     [InlineData(true, true, 2)]
@@ -32,8 +32,8 @@ public sealed class CreationCommandTests {
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path));
         var shape = new ShapeDocument(
             Id: 0,
-            Name: "capsule",
-            Type: SdfSolidPrimitive.Capsule,
+            Name: "cone",
+            Type: SdfSolidPrimitive.Cone,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             Scale: (nonuniform

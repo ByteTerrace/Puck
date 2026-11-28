@@ -1,29 +1,35 @@
-// One shape station on a bare floor, booted alone so a change to the station, its console or an exhibit boots and bakes
-// without the building. It is the station the gallery stands twelve of: shapes.puck's plinth, turntable and console, and
-// shape-station.puck's terminal and rules, expanded here for one display whose console lists the whole catalog. Boot it
-// with `--world worlds/debug/shape-station-root.puck`; shapes.md says how to iterate on it.
+// The shape lab (README.md): one shape station on a bare floor, booted alone so a change to the station, its console or
+// an exhibit boots and bakes without the building. It is the station the gallery stands twelve of: shapes.puck's
+// plinth, turntable and console, and shape-station.puck's terminal and rules, expanded here for one display whose
+// console lists the whole catalog, so `gallery.show <exhibit>` reaches every exhibit, the blends and cubic blends among
+// them. Boot it with `--world worlds/debug/labs/shapes.puck`; shapes.md says how to iterate on it. The gallery's lab wing
+// reaches it through its door `lab-shapes`, and the `arrival` frame behind the station's console leads back there.
 //
 // The seat boots at the console, on the `hero` spawn point (one `gallery` too, and one per exhibit, which `gallery.go`
 // walks to): stand there, press the context button (E, or the pad's RB) and the camera eases to the station view. Every
 // exhibit of the catalog is one tap on the console's list away.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
-documentId: "shape-station"
+basis: "../avatars/moth"
+documentId: "lab-shapes"
 
 // A clear, neutral midday that hardly moves.
-import "still-noon"
-import "../standard/contexts/modes"
-import "set-controls"
-import "noclip"
-import "ship-rows"
-import "shapes"
-import "shape-station"
+import "../still-noon"
+import "../../standard/contexts/modes"
+import "../set-controls"
+import "../noclip"
+import "../ship-rows"
+import "../shapes"
+import "../shape-station"
+import "lab-kit"
 
 metadata {
-  title: "Shape Station"
+  title: "Shape lab"
   description: "One of the shape gallery's display stations on a bare floor, for iterating on the station and its exhibits."
 }
+
+// The way back stands 8 m before the console, facing it, so a body walks out of it toward the station.
+labWayBack(id: "shapes", at: [0, 0, 8], yaw: 0)
 
 // The one station: the display the gallery repeats, standing at the floor's centre in the world's own frame (no parent and
 // no site), its console facing +z. It is home to every exhibit, so the exhibits that stand a paint or a reach at the place
@@ -50,7 +56,14 @@ spawnPoints: concat(
   stationSpawns(stations)
 )
 
-commands: galleryCommands
+commands: concat(
+  galleryCommands,
+  [
+    goCommand(
+      help: "Poses a body at one of the shape lab's places (hero and gallery at the console, an exhibit's name before it, or any spawn point) and returns the view to the play layout's chase camera."
+    )
+  ]
+)
 
 bodies {
   capacity: (seatPopulation + visitorPopulation)
@@ -70,18 +83,7 @@ inputModes {
 }
 
 // The font the plinth labels and the console emboss and draw in, as the debug world declares it.
-text {
-  defaultFont: "inter"
-  fonts [
-    {
-      name: "inter"
-      source: "fonts/inter-regular.ttf"
-      hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
-      // ASCII, and the signs the learn panel typesets formulas with (middle dot, minus, root, ≤ and ≥).
-      codePointRanges ["U+0020-U+007E", "U+00B7", "U+2212", "U+221A", "U+2264-U+2265"]
-    }
-  ]
-}
+labText()
 
 state {
   world {

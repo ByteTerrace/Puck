@@ -139,7 +139,17 @@ public sealed class SdfPhotometryLawTests {
         // No strength, or no reach, adds nothing and is refused.
         Assert.False(condition: occluders.TryAdd(occluder: new SdfOccluder { Center = Vector3.Zero, Radius = 1f, Reach = 2f }));
         Assert.False(condition: occluders.TryAdd(occluder: new SdfOccluder { Center = Vector3.Zero, Radius = 1f, Strength = 1f }));
-        Assert.Equal(expected: ((UInt128)0b101), actual: SdfLightSelection.SelectOccluders(camera: in camera, far: 100f, occluders: occluders));
+        Assert.Equal(expected: ((UInt128)0b101), actual: SdfLightSelection.SelectOccluders(camera: in camera, exposure: 0f, far: 100f, lightMask: UInt128.Zero, lights: new SdfLights(), occluders: occluders));
+
+        // An occluder behind the view whose shadow toward a lamp behind it falls before the view is kept for that shadow,
+        // and only while the view shades the lamp.
+        var lamp = new SdfLights();
+        var behind = new SdfOccluders();
+
+        lamp.Set(index: 0, light: new SdfLight(Color: Vector3.One, Direction: new Vector3(x: 0f, y: 0f, z: 12f), Kind: SdfLightKind.Point, Param: 30f, Shadows: false, Weight: 1f));
+        Assert.True(condition: behind.TryAdd(occluder: new SdfOccluder { Center = new Vector3(x: 0f, y: 0f, z: 10f), Radius = 1f, Reach = 2f, Shadow = 1f }));
+        Assert.Equal(expected: UInt128.Zero, actual: SdfLightSelection.SelectOccluders(camera: in camera, exposure: 0f, far: 100f, lightMask: UInt128.Zero, lights: lamp, occluders: behind));
+        Assert.Equal(expected: UInt128.One, actual: SdfLightSelection.SelectOccluders(camera: in camera, exposure: 0f, far: 100f, lightMask: UInt128.One, lights: lamp, occluders: behind));
 
         Assert.Equal(expected: SdfOccluderShape.Sphere, actual: SdfOccluder.Fit(fit: SdfOccluderFit.Auto, high: new Vector3(x: 0.5f, y: 1.1f, z: 0.5f), low: new Vector3(x: -0.5f, y: 0f, z: -0.5f))!.Value.Shape);
         var capsule = SdfOccluder.Fit(fit: SdfOccluderFit.Auto, high: new Vector3(x: 0.4f, y: 2f, z: 0.25f), low: new Vector3(x: -0.4f, y: 0f, z: -0.25f))!.Value;

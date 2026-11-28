@@ -11132,6 +11132,10 @@ export type WorldPlacement = {
    * The placement's turn facet (see WorldPlacementTurn): the row turns about its own up axis by an angle read from state, a turntable, or null for a row that keeps its authored yaw. Omitted from the wire when null.
    */
   turn?: WorldPlacementTurn | null;
+  /**
+   * The placement's net facet (see WorldPlacementNet): the row's creation is a net of rope strands the authority steps, that gives under the bodies leaning on it and carries the bodies holding it, or null for a rigid row. Omitted from the wire when null.
+   */
+  net?: WorldPlacementNet | null;
 };
 
 /**
@@ -11376,6 +11380,92 @@ export type WorldPlacementMirror = {
    * The signed plane offset along the normalized Normal.
    */
   offset: number;
+};
+
+/**
+ * A placement's net facet: the row's creation is a net of rope strands that gives under the bodies that lean on it and carries the bodies that hold it (a climbing net, a rope bridge, a hammock, a cargo net, a banner, a sail). The authority keeps a coarse grid of nodes over the parallelogram Origin + s·Across + t·Up in the row's frame, steps it in fixed point every tick it is awake (Puck.Physics.FixedNet: its strands' caps, its pins, its reach), and lets it sleep when nothing touches it. The net collides as a sheet of thin boxes over its node cells, posed every tick, a body holding it rides it and loads it with its weight, and a body leaning on it pushes its nodes out; presentation draws the creation baked once at rest and displaces each vertex by the nodes' offsets about it, so a net that moves rebuilds no program and keys no mesh.
+ */
+export type WorldPlacementNet = {
+  /**
+   * The nodes along Across, 2 to MaxNodesPerEdge.
+   */
+  columns: number;
+  /**
+   * The nodes along Up, 2 to MaxNodesPerEdge.
+   */
+  rows: number;
+  /**
+   * The rest position of node (0, 0), in the row's frame.
+   */
+  origin: DocumentVector3;
+  /**
+   * The rest edge from node (0, 0) to the last column's, in the row's frame.
+   */
+  across: DocumentVector3;
+  /**
+   * The rest edge from node (0, 0) to the last row's, in the row's frame; not parallel to Across.
+   */
+  up: DocumentVector3;
+  /**
+   * Whether the first column, along Up at the origin, is held to the frame.
+   */
+  pinLeft?: boolean;
+  /**
+   * Whether the last column is held to the frame.
+   */
+  pinRight?: boolean;
+  /**
+   * Whether the first row, along Across at the origin, is held to the frame.
+   */
+  pinBottom?: boolean;
+  /**
+   * Whether the last row is held to the frame. At least one edge is held.
+   */
+  pinTop?: boolean;
+  /**
+   * The mass one free node carries, in kilograms; positive.
+   */
+  nodeMass?: number;
+  /**
+   * One strand's stiffness against stretch past its length, in newtons per metre; positive.
+   */
+  stiffness?: number;
+  /**
+   * The share of a node's speed lost each second; non-negative.
+   */
+  damping?: number;
+  /**
+   * The slack each strand carries past its rest spacing, as a share of it, in [0, 1].
+   */
+  sag?: number;
+  /**
+   * The farthest a node moves from rest, in metres before the row's scale; positive.
+   */
+  reach?: number;
+  /**
+   * The projection passes a step makes over every strand, 1 to MaxIterations.
+   */
+  iterations?: number;
+  /**
+   * The thickness the net collides at, in metres before the row's scale: each node cell is a box this thick about the nodes' surface, and a body leaning on the net pushes its nodes until they stand this far beyond the box's face; positive.
+   */
+  strand?: number;
+  /**
+   * The mass, in kilograms, a body of authored size loads the net with while it holds it, scaled by the cube of the body's size; non-negative.
+   */
+  bodyMass?: number;
+  /**
+   * The speed, in metres a second, under which every node counts as still; non-negative.
+   */
+  restSpeed?: number;
+  /**
+   * The seconds every node must stay still, untouched, before the net sleeps; non-negative.
+   */
+  sleepSeconds?: number;
+  /**
+   * The acceleration every free node falls at along world down, in metres a second squared; non-negative.
+   */
+  gravity?: number;
 };
 
 export type WorldPlacementPolicyDefaults = {
@@ -12109,7 +12199,7 @@ export type WorldPrototypeOcclusion = {
    */
   shadow?: number | null;
   /**
-   * How far past the occluder's bounding sphere, in the creation's units, it still darkens and shadows, eased to nothing there; the bounding sphere's own radius by default.
+   * How far past the occluder's bounding sphere, in the creation's units, it still darkens the ambient and indirect light, eased to nothing there; the bounding sphere's own radius by default. It bounds only that darkening: the shadow toward a light reaches as far as the light does.
    */
   reach?: number | null;
   /**

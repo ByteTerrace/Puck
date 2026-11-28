@@ -64,6 +64,8 @@ public sealed partial class WorldColliderSet {
         m_attachedOrigins[row] = origin; m_attachedRotations[row] = rotation; m_attachedResolved[row] = true; m_attachedScales[row] = scale;
         if (scale <= FixedQ4816.Zero) { return; }
         m_refreshMargin = (FixedQ4816.FromDouble(value: placement.Solid!.Margin) * scale); m_refreshRow = row;
+        // Before the creation's own colliders, so a field row's early return below keeps them.
+        if (placement.Net is { } net) { RecordNetColliders(facet: net, row: row, scale: scale); }
         m_liveFields[row] = PosedAttachedField(origin: origin, rotation: rotation, row: row, scale: scale);
         if (m_fieldContactRows[row]) {
             if (m_liveFields[row] is { } field) { RecordAttachedCollider(attached: field); }

@@ -1098,11 +1098,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   that lights behind its face) widens the tile test in the same change, or
   tiles cut its light off. `SdfLightMasks` carries a third mask, the analytic
   occluders (`SdfOccluder`, `frame/sdf-occluders.hlsli`), culled by the same
-  boxes on the same rule: an occluder adds nothing at or past its `Reach` from
-  its centre, because `sdfOccludersAmbient` and `sdfOccludersShadow`, its only
-  readers, multiply by `sdfOccluderWindow`. A new occluder term that reaches
-  farther widens `sdfOccluderReachesBox` and the view selection in the same
-  change. An occluder takes from the ambient, indirect and environment terms and
+  boxes once a tile's lights and screens stand (`sdfOccluderReachesWalk`): its
+  ambient adds nothing at or past its `Reach` from its centre
+  (`sdfOccludersAmbient` multiplies by `sdfOccluderWindow`), and its shadow,
+  which reaches as far as its light does, nothing outside the hull of the light
+  and its bounding sphere grown by the penumbra (`sdfOccluderShadowsBox`, the
+  host's `SdfLightSelection.ShadowMaySee`). A new occluder term, or a wider
+  penumbra in `sdfOccludersShadow`, widens those tests and the view selection in
+  the same change. An occluder takes from the ambient, indirect and environment terms and
   from a ranged light's, screen's or emitter face's visibility in
   `sdfLightInputs`, never from a directional's, and never from a body's own
   surfaces (`SdfOccluder.OwnSlot` against the surface's frame slot). A binned
@@ -1384,14 +1387,21 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the pyramid pass writes beside the occlusion's pyramid in a reflecting fragment;
   level zero is the mesh target itself. Levels above a group's own are gathered with
   atomics into words the recorder clears (`SdfWorldPackage.ReflectionDepthWordsBelow`,
-  the C# twin of `sdfReflectDepthBase`). A ray walks at most a few pixels behind
-  occluders before it gives up, and at most `passGroup.reflectionSteps` reads; a hit's
-  share fades over the budget's last quarter (`SdfReflectBudgetFade`) and toward the
-  screen's edge, so where rays stop answering the volume takes over with no line. The
-  march only finds the pixel a ray meets, at its edge or its depth taken flat across it;
-  the hit is the ray's crossing of that pixel's tangent plane where it projects inside the
-  pixel (`sdfReflectCrossing`), so what a ray reads moves continuously rather than a
-  render pixel at a time along a reflected silhouette. What it
+  the C# twin of `sdfReflectDepthBase`). A ray walks at most `SdfReflectBehindPixels`
+  render pixels behind occluders before it gives up, and at most `passGroup.reflectionSteps`
+  reads; a hit's share fades over the budget's last quarter (`SdfReflectBudgetFade`), over
+  the pixels it walked behind an occluder before it and toward the screen's edge, and an
+  open-sky answer fades as the ray's end nears the edge, so where rays stop answering the
+  volume takes over with no line. Every per-cell answer must stay continuous in the ray's
+  direction: on a smooth mirror neighbouring cells trace nearly the same ray, and an answer
+  that switches whole between them (a toward-eye test, a count of pixels) shows as
+  stair-steps and streaks along the switch. At level zero the march judges a covered pixel
+  by its sample's tangent plane (`sdfReflectMarch`, the record's distance and normal, the
+  ray's travel at a share from `SdfReflectRay`): it meets the pixel only where it crosses
+  that plane from the front inside the pixel, and a face turned from the ray is never met,
+  so a ray leaving a curved surface walks past its own neighbouring pixels rather than
+  stopping on them. The hit is that crossing (`sdfReflectCrossing`), so what a ray reads
+  moves continuously rather than a render pixel at a time along a reflected silhouette. What it
   reaches is read from the preceding frame's history colour (a `PreviousFrame` port,
   bound through `SdfHistoryPorts`) at the hit's previous position (`sdfPreviousPoint`),
   as one filtered sample of the level of that colour the specular lobe's footprint spans:
@@ -2026,13 +2036,22 @@ wrong. The contracts that bite most often:
   its own `sdfSampledValues` table, so a lattice never samples a newer publication; never
   put sampled values back into program words or a shared GPU buffer the bake reads
   ([sampled fields](../../../docs/rendering/sdf/handbook/sampled-fields.md)).
-- **A height field moves as it is drawn.** `SdfHeightField` bakes a reference (every raised
-  column at `ReferenceCells` above the origin) and names its heights as the instance's
-  displacement; the frame's sampled table (`sdfFrameSampled`) carries the heights, and every
-  vertex read (`sdfMeshWorldPosition`, `sdfMeshWorldNormal`, `sdfMeshPreviousPosition`)
-  displaces through `sdfMeshDisplaced`. A new reader of mesh vertices goes through that
-  resolver, or it draws the reference; a draw's box spans `SdfMeshDisplacement.Low`/`High`,
-  and a displaced draw is `IsDynamic`, out of the irradiance volume's static scene.
+- **A displaced draw moves as it is drawn.** An instance's `SdfInstanceRange.Displacement`
+  (`SdfDisplacement`) moves its draws' vertices with no rebake: a height field
+  (`SdfHeightField`) bakes a reference (every raised column at `ReferenceCells` above the
+  origin) and displaces it by its heights; a sheet (`SdfSheetDisplacement`, a placed net,
+  emitted inside `SdfProgramBuilder.BeginDisplaced`) bakes its creation at rest and moves each
+  vertex by the bilinear blend of its cell's node offsets. Instances carrying one
+  displacement share its handle (`SdfProgram.Displacements`). The frame's sampled table
+  (`sdfFrameSampled`) carries each entry's header (`SdfDisplacement.WriteHeader`, its kind
+  first) and values, and every vertex read (`sdfMeshWorldPosition`, `sdfMeshWorldNormal`,
+  `sdfMeshPreviousPosition`) displaces through `sdfMeshDisplaced`, which switches on the
+  kind. A new reader of mesh vertices goes through that resolver, or it draws the rest
+  mesh; a draw's box is `SdfDisplacement.Bound` of its mesh's (a sheet grows by its
+  reach, to which every published offset is clamped), and a displaced draw is
+  `IsDynamic`, out of the irradiance volume's static scene. A pack that moved displacement
+  values notes every static displaced row as moved where it stands (`NoteDisplacedRows`,
+  `conceals`), so the world's shadows redraw its rectangle though its box stood.
 - **A mesh is a function of its geometry.** Groups are keyed by
   `SdfMeshGeometryBuilder`; anything the bake samples that the instructions do
   not hold leaves a stale mesh drawing after an edit until the builder hashes

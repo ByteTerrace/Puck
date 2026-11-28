@@ -42,12 +42,12 @@ for seat in range(0, 4) {
 }
 
 // The lantern trail's garden steps (lantern-trail.puck): a character that took up lanternLit before the painting
-// finishes its first step past the arrival frame, and one following lanternKept finishes it at the obelisk.
+// finishes its first step on the ground before the arrival frame (place-garden-arrival), and one following lanternKept finishes it at the obelisk.
 import "../standard/quests"
 
 rule "lantern-trail-arrival" {
-  forEach: $players
-  when questAt("lanternLit", 0) and bodyPosition(each, z) < -8
+  forEach: region("place-garden-arrival")
+  when questAt("lanternLit", 0)
   mode: Edge
   questAdvance(questId: "lanternLit", fromStep: 0, steps: 2)
 }

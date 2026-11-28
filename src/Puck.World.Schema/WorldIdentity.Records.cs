@@ -193,6 +193,19 @@ public sealed partial class WorldIdentity {
 
     // A document replaced by an edit that kept every pool (a fact write, a rate) holds a new store section with the same
     // pools; the stage still describes it.
+    /// <summary>Returns whether this identity already holds everything <paramref name="carried"/> would adopt: the same
+    /// facts and the same crossing pools, so <see cref="TryAdopt"/> would change nothing.</summary>
+    /// <param name="carried">The identity a traveller arrived as.</param>
+    /// <returns><see langword="true"/> when the facts and the travelling records are equal.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="carried"/> is <see langword="null"/>.</exception>
+    public bool HoldsWhatCarries(WorldIdentity carried) {
+        ArgumentNullException.ThrowIfNull(argument: carried);
+
+        return ((Facts?.Cells ?? []).SequenceEqual(second: (carried.Facts?.Cells ?? [])) &&
+            ((RecordState?.Pools ?? []).SequenceEqual(second: (carried.RecordState?.Pools ?? []))) &&
+            ((RecordState?.PairPools ?? []).SequenceEqual(second: (carried.RecordState?.PairPools ?? []))));
+    }
+
     private static bool SameStore(WorldStateSection? left, WorldStateSection? right) => (
         (left is not null) &&
         (right is not null) &&

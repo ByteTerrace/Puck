@@ -69,6 +69,8 @@ import "skirmish"
 import "paintings"
 // The lantern trail, the quest that walks the painting wing into the garden and back (lantern-trail.puck).
 import "lantern-trail"
+// The lab wing (lab-wing.puck): a door in the north aisle onto each lab under labs/.
+import "lab-wing"
 import "moon-beacon"
 // The sun (sun.puck): the switch this world owns and the sun's light and mass as they reach the valley.
 import "sun-watch"

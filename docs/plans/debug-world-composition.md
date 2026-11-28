@@ -273,8 +273,9 @@ memo and the weather decision reach them.
 - **Time of day varies, and the sun's direction is authored.** The valley's
   light runs through an authored cycle rather than one fixed sun. Lane C10 and
   the terrain pass's lighting-direction step take it.
-- **The Moth climbs:** an indoor rock-climbing wall near the lift is a
-  must-have, and it joins lane C2's hall work. Climbability scales from one
+- **The Moth climbs:** an indoor rock-climbing wall is a must-have; it stands
+  in the nave before the north edge in bay 10 and climbs to level 3
+  ([the climbing wall](../../worlds/debug/gallery.md#the-climbing-wall)). Climbability scales from one
   wall to a whole world, because the owner expects some worlds to be fully
   climbable. It is authored policy resolved from contact, with precedence:
   - a world default (the debug world: not climbable; a fully climbable world:

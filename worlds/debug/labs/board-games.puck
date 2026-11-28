@@ -32,6 +32,7 @@ import "../set-controls"
 import "../../standard/skies"
 import "../../standard/inputs"
 import "../game-stations"
+import "lab-kit"
 
 metadata {
   title: "Board games lab"
@@ -44,6 +45,8 @@ gameStationRoom(stations: [rootStation])
 spawnPoints [
   { id: "board-games", position [-2, 0, -3], yawDegrees: 180 }
 ]
+
+labWayBack(id: "board-games", at: [-3, 0, -7.5], yaw: 180)
 
 state {
   // The chess game's vocabularies (../game-stations.puck's header).

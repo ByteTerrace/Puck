@@ -307,7 +307,7 @@ public static class FixedConvexContact {
         var (center, extent) = (bounds.Center, bounds.Extent);
         var padding = (collider.Radius + skin);
         var shapeExtent = ((collider.Kind == FixedStaticColliderKind.Sphere)
-            ? new FixedVector3(X: collider.Extent.X, Y: collider.Extent.X, Z: collider.Extent.X) : collider.Extent);
+            ? new FixedVector3(X: collider.Extent.X, Y: collider.Extent.X, Z: collider.Extent.X) : collider.CoreExtent);
         var limit = ((shapeExtent + extent) + new FixedVector3(X: padding, Y: padding, Z: padding));
 
         if ((FixedQ4816.Abs(value: center.X) > limit.X) || (FixedQ4816.Abs(value: center.Y) > limit.Y) || (FixedQ4816.Abs(value: center.Z) > limit.Z)) {
@@ -353,8 +353,10 @@ public static class FixedConvexContact {
 
         push = default;
         // A centre past the radii and the reach on any axis is clear without a projection.
-        if ((FixedQ4816.Abs(value: local.X) > (collider.Extent.X + reach)) || (FixedQ4816.Abs(value: local.Y) > (collider.Extent.Y + reach)) ||
-            (FixedQ4816.Abs(value: local.Z) > (collider.Extent.Z + reach))) {
+        var core = collider.CoreExtent;
+
+        if ((FixedQ4816.Abs(value: local.X) > (core.X + reach)) || (FixedQ4816.Abs(value: local.Y) > (core.Y + reach)) ||
+            (FixedQ4816.Abs(value: local.Z) > (core.Z + reach))) {
             return false;
         }
 

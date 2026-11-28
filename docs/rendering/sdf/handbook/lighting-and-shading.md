@@ -418,12 +418,16 @@ on the pixel grid, and a surface farther than the radius in front casts no halo.
 
 The estimate is decorrelated per pixel and filtered. Each pixel turns and
 spaces its taps by its cell of a 4×4 ordered-dither tile (`sdfMeshPattern`),
-and a temporal view steps the pattern within the tile's strata by its sample
-index. Views (`sdfViewsFilter` in `passes/sdf-views-filter.hlsli`) averages the 4×4 window
-around each pixel, which holds all sixteen patterns once, keeping only
-neighbors on the pixel's tangent plane, so no screen-locked pattern survives
-with temporal reconstruction off, and a converged temporal view averages 128
-patterns. `world.debug-view ao` shows the result.
+and a temporal view moves every pixel two cells along the tile at each sample of
+its period, stepping the pattern within the tile's strata by the sample index.
+Views (`sdfViewsFilter` in `passes/sdf-views-filter.hlsli`) averages the 4×4 window
+around each pixel, which holds all sixteen patterns once in every sample,
+keeping only neighbors on the pixel's tangent plane, so no screen-locked pattern
+survives on an open surface with temporal reconstruction off. Beside a crease or
+a silhouette the window keeps only part of the tile; a converged temporal view
+still averages eight rotations an eighth of a turn apart at every pixel there,
+so the part's bias leaves no staircase along the edge. `world.debug-view ao`
+shows the result.
 
 Two rules give it its shape. It multiplies into **ambient light only, never
 direct**—folding occlusion into the whole lighting equation causes ghosting;
@@ -473,14 +477,23 @@ presentation float:
   authored light phase both read it. **A directional light is never touched**:
   its cascades shadow it.
 
-Both terms are eased to exactly zero at the occluder's `Reach` from its centre,
-by the window a point light's falloff takes (`sdfLightWindow`), so the culling
-is the lights' own: each view's pass block carries a mask of the occluders whose
-sphere of reach its frustum may see (`SdfLightSelection.SelectOccluders`,
-`SdfWorldTables.OccluderMaskOf`), each views tile narrows it to those whose
-sphere meets one of the tile's two boxes (`sdfViewsTileLights`, the third mask of
-`SdfLightMasks`, written into the shade bins for a binned view), and glass
-narrows it by its wave's box (`sdfWaveLightMasks`). A view whose mask is empty
+The ambient term is eased to exactly zero at the occluder's `Reach` from its
+centre, by the window a point light's falloff takes (`sdfLightWindow`). The
+shadow reaches as far as its light does, and is exactly zero wherever the
+segment from the surface to the light passes the occluder's bounding sphere by
+the penumbra or more, so it falls only inside the hull of the light and that
+sphere grown by the penumbra (`sdfOccluderShadowsBox`). The culling is the
+lights' own on those two rules: each view's pass block carries a mask of the
+occluders whose sphere of reach its frustum may see, or whose shadow toward a
+point, spot or line light the view shades may fall where it sees
+(`SdfLightSelection.SelectOccluders`, `SdfWorldTables.OccluderMaskOf`); each
+views tile, once its lights and screens stand, narrows it to those whose sphere
+meets one of the tile's two boxes or whose shadow toward one of them can
+(`sdfOccluderReachesWalk` in `sdfViewsTileLights`, the third mask of
+`SdfLightMasks`, written into the shade bins for a binned view); and glass
+narrows it the same way by its wave's box (`sdfWaveLightMasks`). The host's
+view mask weighs no screen's or emitter face's shadow: one from an occluder
+whose reach the view does not see is left out. A view whose mask is empty
 reads no occluder record, and a view stands while every occluder its mask keeps
 stands (their records fold into its lighting inputs).
 

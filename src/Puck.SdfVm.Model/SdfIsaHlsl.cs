@@ -458,9 +458,11 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_MOST_CLUSTERS", value: SdfMeshRecord.MostClusters);
         declarations.Count(name: "SDF_MESH_MOST_CLUSTER_LEVELS", value: SdfMeshRecord.MostClusterLevels);
         declarations.Count(name: "SDF_MESH_BAND_WORD", value: SdfMeshRecord.BandWord);
-        declarations.Section(title: "The frame's sampled table (SdfFrameSampled): a handle with no entry, a height field entry's header, and the reference height its baked reference stands at.");
+        declarations.Section(title: "The frame's sampled table (SdfFrameSampled): a handle with no entry, a displacement entry's header and its kinds, and the reference height a height field's baked reference stands at.");
         declarations.Bits(name: "SDF_FRAME_SAMPLED_NONE", value: SdfFrameSampled.None);
         declarations.Count(name: "SDF_FRAME_SAMPLED_HEADER_WORDS", value: SdfFrameSampled.HeaderWords);
+        declarations.Bits(name: "SDF_DISPLACEMENT_HEIGHT_FIELD", value: SdfFrameSampled.HeightFieldKind);
+        declarations.Bits(name: "SDF_DISPLACEMENT_SHEET", value: SdfFrameSampled.SheetKind);
         declarations.Count(name: "SDF_HEIGHT_FIELD_REFERENCE_CELLS", value: SdfFrameSampled.ReferenceCells);
         declarations.Count(name: "SDF_MESH_LEVEL_SHIFT", value: SdfKernelInterfaces.MeshLevelShift);
         declarations.Count(name: "SDF_MESH_SELECTION_GROUP_SIZE", value: SdfKernelInterfaces.MeshSelectionGroupSize);
