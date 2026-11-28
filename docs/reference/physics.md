@@ -596,7 +596,9 @@ integrates the free nodes under gravity and the caller's `FixedNetLoad`s (a forc
 and a mass at a grid point, spread bilinearly; the mass rides the nodes under it,
 so a body's weight bellies the net by what the strands give rather than flinging
 a light node), solves every strand's cap once through `SolvePair`, pushes the
-nodes out of the `FixedNetPusher`s (capsules), then holds each node within
+strands out of the `FixedNetPusher`s (capsules) across the net's plane only, so
+a body leaning into an opening bulges the net and never spreads its strands,
+then holds each node within
 `Reach` of rest through `Solve`, whose projection never lands a raw past the
 cap. A negative `Sag` strings the net taut, which makes a load's belly
 proportional to the load. The nodes are solved in net units, metres times
@@ -608,7 +610,12 @@ near the net neither wakes it nor keeps it awake. A net whose touch (its loads
 and pushers, fingerprinted) stays the same while its nodes stay under
 `RestSpeed` for `SleepTicks` sleeps, held or not; a sleeping net handed the
 same touch costs one fingerprint, and a change to the touch it sleeps under
-wakes it. `CellColliders` writes a
+wakes it. `StrandColliders` writes a rounded box along each strand with a free
+node, what bodies meet, so a body narrower than `Opening` passes between them;
+`CellColliders` writes the sheet over the cells that a hold takes, and the
+analytic provider leaves that sheet out for a body narrower than the opening
+(the hold probe's girth), so a body that fits the mesh slips through rather than
+climbing. `CellColliders` writes a
 rounded box over each cell, `TryGrid` and `OffsetAt` locate a point on the net,
 `DisplacementAt` gives the net's movement under it over its latest step, and
 `TakeChanged`, `Capture`, `Restore` and `AppendStateHash` serve delivery,

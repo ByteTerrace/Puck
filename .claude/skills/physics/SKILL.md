@@ -299,7 +299,10 @@ witness after `kinematics:`. `worlds/debug/tree-walk-tests.puck` plays the
   its hold keeps it its standoff from the face it rides, so a push would ratchet the
   face to the reach. Any other body's volumes push nodes to their radius plus the net's
   strand and the contact reach, the band a body resting on the net's cell colliders
-  stands in, so leaning moves nodes and standing near does not. The kernel solves in net
+  stands in, so leaning moves strands and standing near does not; a push moves strands across the net's plane only.
+  Bodies meet the strands (`FixedNet.StrandColliders`), so a body narrower than the mesh's opening passes; holds take
+  the cell sheet (`CellColliders`), which the analytic provider's holdable cast skips for a body whose girth fits the
+  opening (`WorldColliderSet`'s `OpeningFilter`). The kernel solves in net
   units (`FixedNet.UnitsPerMetre`), since a slice's motion is below a metre's Q48.16 step.
 - **A live row that stood still costs a copy.** `WorldColliderSet.RestoreAttachedRow`
   replays a row's last posing while its origin, rotation, size and net revision stand

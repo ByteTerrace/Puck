@@ -222,7 +222,20 @@ public sealed partial class WorldBody {
         private HoldCast m_first;
     }
 
-    private readonly record struct HoldCast(FixedVector3 Origin, FixedVector3 Direction, FixedQ4816 MaxDistance, bool Hit, FixedSurfaceAttachCandidate Candidate);
+    private readonly record struct HoldCast(FixedVector3 Origin, FixedVector3 Direction, FixedQ4816 MaxDistance, FixedQ4816 Girth, bool Hit, FixedSurfaceAttachCandidate Candidate);
+
+    // The body's girth as a hold probe asks with it: the widest of its volumes' least widths, scaled, the narrowest
+    // opening the whole body could pass.
+    private FixedQ4816 HoldGirth {
+        get {
+            var girth = FixedQ4816.Zero;
+
+            foreach (ref readonly var volume in ScaledColliderVolumes()) {
+                girth = FixedQ4816.Max(x: girth, y: (FixedColliderBounds.MinimumSupportRadius(volume: in volume) * FixedQ4816.FromInteger(value: 2)));
+            }
+            return girth;
+        }
+    }
 
     // Casts for the first holdable surface along a ray, answering a probe the memo holds from its record.
     private bool TryCastHoldable(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate) {
@@ -233,12 +246,13 @@ public sealed partial class WorldBody {
         }
 
         var keeps = m_holdCasts.Admit(field: field);
+        var girth = HoldGirth;
 
         if (keeps) {
             for (var index = 0; (index < m_holdCasts.Count); index++) {
                 ref readonly var cast = ref m_holdCasts.Entries[index];
 
-                if ((cast.Origin == origin) && (cast.Direction == direction) && (cast.MaxDistance == maxDistance)) {
+                if ((cast.Origin == origin) && (cast.Direction == direction) && (cast.MaxDistance == maxDistance) && (cast.Girth == girth)) {
                     candidate = cast.Candidate;
                     return cast.Hit;
                 }
@@ -248,6 +262,7 @@ public sealed partial class WorldBody {
         var hit = field.TryHoldableSurfaceAlongDirection(
             candidate: out candidate,
             direction: in direction,
+            girth: girth,
             grantedByOverride: out _,
             maxDistance: maxDistance,
             origin: in origin
@@ -262,7 +277,7 @@ public sealed partial class WorldBody {
                 slot = m_holdCasts.Next;
                 m_holdCasts.Next = ((m_holdCasts.Next + 1) & 3);
             }
-            m_holdCasts.Entries[slot] = new HoldCast(Candidate: candidate, Direction: direction, Hit: hit, MaxDistance: maxDistance, Origin: origin);
+            m_holdCasts.Entries[slot] = new HoldCast(Candidate: candidate, Direction: direction, Girth: girth, Hit: hit, MaxDistance: maxDistance, Origin: origin);
         }
         return hit;
     }

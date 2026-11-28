@@ -167,16 +167,30 @@ public static class FixedDynamicBodyContacts {
     /// <returns>The exact closest-point delta, first segment minus second, rounded once per component to nearest,
     /// ties to even. Parameters and endpoint differences retain full precision.</returns>
     /// <exception cref="OverflowException">A component of the rounded delta cannot fit Q48.16.</exception>
-    public static FixedVector3 ClosestDelta(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2) {
+    public static FixedVector3 ClosestDelta(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2) =>
+        ClosestDelta(firstParameter: out _, p1: p1, p2: p2, q1: q1, q2: q2);
+    /// <summary>Computes the vector from segment <c>[p2, q2]</c>'s closest point to segment <c>[p1, q1]</c>'s, as
+    /// <see cref="ClosestDelta(FixedVector3, FixedVector3, FixedVector3, FixedVector3)"/> does, and where along the first
+    /// segment its closest point lies.</summary>
+    /// <param name="p1">The first segment's start.</param>
+    /// <param name="q1">The first segment's end (equal to <paramref name="p1"/> for a point).</param>
+    /// <param name="p2">The second segment's start.</param>
+    /// <param name="q2">The second segment's end (equal to <paramref name="p2"/> for a point).</param>
+    /// <param name="firstParameter">The first segment's closest point as a share of the way from <paramref name="p1"/>
+    /// to <paramref name="q1"/>, in <c>[0, 1]</c>, rounded toward zero.</param>
+    /// <returns>The exact closest-point delta, first segment minus second, rounded once per component to nearest,
+    /// ties to even.</returns>
+    /// <exception cref="OverflowException">A component of the rounded delta cannot fit Q48.16.</exception>
+    public static FixedVector3 ClosestDelta(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2, out FixedQ4816 firstParameter) {
         try {
-            return ClosestDelta<Int128>(p1: p1, p2: p2, q1: q1, q2: q2);
+            return ClosestDelta<Int128>(firstParameter: out firstParameter, p1: p1, p2: p2, q1: q1, q2: q2);
         } catch (OverflowException) {
             // The same solve, widened rather than rescaled: extreme endpoints must not lose low bits.
-            return ClosestDelta<BigInteger>(p1: p1, p2: p2, q1: q1, q2: q2);
+            return ClosestDelta<BigInteger>(firstParameter: out firstParameter, p1: p1, p2: p2, q1: q1, q2: q2);
         }
     }
 
-    private static FixedVector3 ClosestDelta<T>(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2)
+    private static FixedVector3 ClosestDelta<T>(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2, out FixedQ4816 firstParameter)
         where T : IBinaryInteger<T> {
         checked {
             // Widen BEFORE subtracting, including for a degenerate segment at an extreme coordinate.
@@ -236,6 +250,7 @@ public static class FixedDynamicBodyContacts {
                     t = ((a * f) - (b * c));
                 }
             }
+            firstParameter = FixedQ4816.FromRawBits(value: long.CreateChecked(value: ((s << FixedQ4816.FractionBitCount) / denominator)));
             // Form the displacement directly, rather than rounding two world-space witnesses separately.
             var x = (((rx * denominator) + (ux * s)) - (vx * t));
             var y = (((ry * denominator) + (uy * s)) - (vy * t));

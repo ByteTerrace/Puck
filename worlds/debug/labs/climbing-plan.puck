@@ -36,3 +36,6 @@ let climbNetHeight = 4
 let climbNetCells = (galleryBayTiles * (galleryTile / toyLatticePitch))
 let climbNetPanel = "climb-net-slot"
 let climbLabNetBefore = [climbBayX[1], 0, (climbFaceZ - 1.5)]
+// Where a walk through the net starts: 1.5 m before it, a metre and a half along it from its middle, so the walk meets
+// the mesh between its strands rather than on a knot line.
+let climbLabNetSlipBefore = [(climbBayX[1] + 1.5), 0, (climbFaceZ - 1.5)]

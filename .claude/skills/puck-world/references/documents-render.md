@@ -643,9 +643,12 @@ What runs:
   (`FixedNet.Pressers`). Still for `sleepSeconds` under an unchanged touch (no
   one, or a climber hanging still), it sleeps, and a sleeping net costs one
   fingerprint a tick; a body far from every net costs one box test.
-- It collides as a sheet of rounded boxes over its cells, posed every tick in
-  the analytic provider's live set (`WorldColliderSet.RecordNetColliders`), and a
-  `grip { holdable: true }` row is climbable. A body standing on it or holding
+- Bodies meet its strands, rounded boxes from node to node posed in the analytic
+  provider's live set (`WorldColliderSet.RecordNetColliders`), so a body
+  narrower than the mesh's opening (`WorldNets.Panel.Opening`) passes through
+  it. A `grip { holdable: true }` row is climbable through a sheet over its
+  cells, which a hold probe asks for only on behalf of a body too wide for the
+  opening (the probe's girth, `IContactField.TryHoldableSurfaceAlongDirection`). A body standing on it or holding
   it rides its movement (`TryRideDisplacement`, `TryHeldDisplacement`).
 - Its nodes ride the population checkpoint and the authoritative hash
   (`WorldNets`), and reach clients on the snapshot (`WorldSnapshot.Nets`,

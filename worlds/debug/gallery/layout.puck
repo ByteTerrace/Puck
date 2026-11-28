@@ -563,22 +563,20 @@ let mouseHouseDoorway = [0, 0, (0 - (mouseHouse.depth / 2))]
 let mouseHouseInside = [0, 0, ((0 - (mouseHouse.depth / 2)) + 0.3)]
 let mouseHouseCake = [0, 0, ((mouseHouse.depth / 2) - 0.3)]
 
-// Level 1's lattice (shell.puck): a toy construction panel along every edge level 1 shares with the nave's void,
-// standing on the floor and reaching into the fascia (or the slab) above, so no body flies or jumps into the toybox
-// from the void or drops out of it. Its uprights stand a
-// sixteenth of a tile apart, so a four-tile bay holds 63 of them, one fold's worth, and the gap between two is narrower
-// than the smallest body the world sizes: the Moth's capsule is 0.7 m across, a tenth of that at the bottom of the size
-// envelope (size.puck), and Alice's 0.15 is wider still. The panels stand on the balustrades' line (`balconyInset`).
+// Level 1's lattice (shell.puck): a toy construction frame along every edge level 1 shares with the nave's void,
+// standing on the floor and reaching into the fascia (or the slab) above, its opening filled by a rope net, so no
+// full-size body flies or jumps into the toybox from the void or drops out of it, while a body at Alice's size slips
+// through the mesh. The frames are measured in a sixteenth of a tile (`toyLatticePitch`), so a four-tile bay is 64 of
+// them. The panels stand on the balustrades' line (`balconyInset`).
 let toyLatticePitch = (galleryTile / 16)
 let toyLatticeBar = 0.025
-// The toybox's net: the lattice's bars and rails give way to a diamond net of rope strands (architecture.puck's `lattice`
-// net): 3.5 cm rope, knot to knot every 30 cm, a climbing net's mesh rather than a fence's. Every panel's net is a real
-// one (the placement's `latticeNet` facet) but the loose panels', which is drawn over a clear pane.
-let toyLatticeNet = { strand: 0.035, pitch: 0.3 }
-// The loose panels: panels a rule can open, move or swap (gallery.md, "The lattice"), each named
-// `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: the south edge's bay 8 (the north edge's is the
-// tree's gate) and the bridge's middle tile on the nave's axis.
-let toyLatticeLooseBay = 8
+// The toybox's nets (architecture.puck's `lattice` net and `latticeNet` facet): 4 cm rope, which reads as rope from
+// across the void and as a thick cable to a body at Alice's size. The strands across stand at most 0.42 m apart, so an
+// opening is at most 0.38 m wide: narrower than the slimmest full-size body (the Moth out of her suit, 0.5 m across, so
+// a quarter to spare) and four times as wide as a body at Alice's size (look.puck's `lookWonderSize`, 0.15: the suited
+// Moth 0.105 m across). The strands up stand about 0.48 m apart, so an opening is about 0.44 m tall, with a third to
+// spare over the suited Moth's 0.31 m at Alice's size. No sill crosses the opening, so she walks straight through.
+let toyLatticeNet = { strand: 0.04, across: 0.42, up: 0.48 }
 // The rope net the benchmark climbs and `debug.go rope-net` stands a body before: the north edge's net in bay 9
 // (gallery.md "The lattice"). Kept clear of the toybox's stairs, lifts, stations and house and of every tree branch's
 // landing: bay 9 has none of them, standing between the tree's gate (bay 8) and the little house (bay 10), its aisle

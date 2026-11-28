@@ -438,6 +438,8 @@ public static class FixedSurfaceQuery {
     /// <param name="maxDistance">The non-negative length of the ray.</param>
     /// <param name="candidate">The surface point the ray meets, its outward normal and its distance along the ray, or
     /// <see langword="default"/> when the ray meets none. Its index is the collider's own in its span.</param>
+    /// <param name="dynamicCandidates">The per-tick colliders the cast may meet (<see cref="FixedStaticColliderSet.Candidates"/>
+    /// for <see cref="CastReach"/>), or the default value, which tests every per-tick collider's bounds.</param>
     /// <returns><see langword="true"/> when the ray meets a surface facing it within <paramref name="maxDistance"/>.
     /// A ray that grazes a face without closing on it, or that starts inside a collider, meets none.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="colliders"/> or <paramref name="dynamicColliders"/> is
@@ -450,7 +452,8 @@ public static class FixedSurfaceQuery {
         in FixedVector3 origin,
         in FixedVector3 direction,
         FixedQ4816 maxDistance,
-        out FixedSurfaceAttachCandidate candidate
+        out FixedSurfaceAttachCandidate candidate,
+        FixedColliderCandidates dynamicCandidates = default
     ) {
         ArgumentNullException.ThrowIfNull(argument: colliders);
         ArgumentNullException.ThrowIfNull(argument: dynamicColliders);
@@ -468,7 +471,8 @@ public static class FixedSurfaceQuery {
         }
 
         var cast = new CastGather(origin: origin, unitDirection: unitDirection, maxDistance: maxDistance);
-        var capacity = ((candidates.IsActive ? candidates.Indices.Length : colliders.Count) + dynamicColliders.Count);
+        var capacity = ((candidates.IsActive ? candidates.Indices.Length : colliders.Count) +
+            (dynamicCandidates.IsActive ? dynamicCandidates.Indices.Length : dynamicColliders.Count));
         CastCollider[]? rented = null;
         var kept = ((capacity <= CastStackColliders)
             ? stackalloc CastCollider[CastStackColliders]
@@ -484,7 +488,13 @@ public static class FixedSurfaceQuery {
             } else {
                 cast.ConsiderWithin(boxes: colliders.Boxes, colliders: colliders.Colliders, kept: kept, reach: in reach, source: FixedSurfaceColliderSource.Static);
             }
-            cast.ConsiderWithin(boxes: dynamicColliders.Boxes, colliders: dynamicColliders.Colliders, kept: kept, reach: in reach, source: FixedSurfaceColliderSource.Dynamic);
+            if (dynamicCandidates.IsActive) {
+                foreach (var index in dynamicCandidates.Indices) {
+                    cast.Consider(box: in dynamicColliders.Boxes[index], collider: in dynamicColliders.Colliders[index], index: index, kept: kept, source: FixedSurfaceColliderSource.Dynamic);
+                }
+            } else {
+                cast.ConsiderWithin(boxes: dynamicColliders.Boxes, colliders: dynamicColliders.Colliders, kept: kept, reach: in reach, source: FixedSurfaceColliderSource.Dynamic);
+            }
             if (cast.Inside) {
                 return false;
             }

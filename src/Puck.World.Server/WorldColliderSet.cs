@@ -260,6 +260,7 @@ public sealed partial class WorldColliderSet : IContactField {
         }
         m_attachedVisitor = RecordAttachedCopy;
         m_keepsRow = row => !Excludes(row: row);
+        m_rowOpenings = new FixedQ4816[attachedRows.Count];
         m_posedRows = new PosedRow[attachedRows.Count];
         for (var row = 0; (row < attachedRows.Count); row++) { m_posedRows[row] = new PosedRow(); }
         m_attachedScales = new FixedQ4816[attachedRows.Count];
@@ -1080,7 +1081,25 @@ public sealed partial class WorldColliderSet : IContactField {
 
     /// <summary>Gets or sets the authority's nets, which a net row's colliders are posed from (<see cref="WorldNets"/>);
     /// a set with no nets poses a net row at rest. Set by the population as it installs the set.</summary>
-    internal WorldNets Nets { get; set; } = WorldNets.Empty;
+    internal WorldNets Nets {
+        get;
+        set {
+            field = value;
+            for (var row = 0; (row < m_attachedRows.Count); row++) {
+                var placement = m_attachedRows[row].Placement;
+
+                m_rowOpenings[row] = (((placement.Net is not null) && value.TryPanel(id: placement.Id, panel: out var panel)) ? panel.Opening : FixedQ4816.Zero);
+            }
+        }
+    } = WorldNets.Empty;
+    // Each attached row's mesh opening (WorldNets.Panel.Opening), zero for a row that is no net: what a body narrower
+    // than it passes through.
+    private readonly FixedQ4816[] m_rowOpenings;
+
+    // Keeps a holdable group unless it is a net whose opening is wider than the asking body's girth.
+    private readonly record struct OpeningFilter(FixedQ4816 Girth, FixedQ4816[] Openings) : IColliderGroupFilter {
+        public bool Keeps(int key) => (Openings[key] <= Girth);
+    }
     // Each row's net revision at the latest refresh and the one before it: the net row moved when they differ.
     private int[] m_attachedNetRevisions;
     private int[] m_previousAttachedNetRevisions;
@@ -1113,21 +1132,28 @@ public sealed partial class WorldColliderSet : IContactField {
     }
 
     // Records a net row's cell colliders as its net stands, or the row's rest layout when the set holds no net for it.
+    // Records a net row's colliders as its net stands, or its rest layout when the set holds no net for it: its strands,
+    // which bodies meet and pass between, and the sheet over its cells, which a hold takes (WorldNets.Panel).
     private void RecordNetColliders(int row, WorldPlacementNet facet, FixedQ4816 scale) {
         var placement = m_attachedRows[row].Placement;
 
         if (Nets.TryPanel(id: placement.Id, panel: out var panel)) {
             m_attachedNetRevisions[row] = panel.Net.Revision;
-            foreach (ref readonly var collider in panel.Colliders()) { RecordAttachedCollider(attached: collider); }
+            foreach (ref readonly var collider in panel.Colliders()) { RecordAttachedCollider(attached: collider, holdable: false); }
+            foreach (ref readonly var collider in panel.HoldColliders()) { RecordAttachedCollider(attached: collider, contact: false); }
             return;
         }
         var moving = m_attachedRows[row];
         var rest = new FixedNet(spec: facet.SpecAt(origin: moving.Origin, rotation: moving.Rotation, scale: (FixedQ4816.FromDouble(value: placement.Scale) * scale)));
-        var colliders = new FixedStaticCollider[rest.CellCount];
+        var radius = ((FixedQ4816.FromDouble(value: facet.Strand) * FixedQ4816.FromDouble(value: placement.Scale)) / FixedQ4816.FromInteger(value: 2));
+        var strands = new FixedStaticCollider[rest.FreeStrandCount];
+        var cells = new FixedStaticCollider[rest.CellCount];
 
-        rest.CellColliders(destination: colliders, radius: ((FixedQ4816.FromDouble(value: facet.Strand) * FixedQ4816.FromDouble(value: placement.Scale)) / FixedQ4816.FromInteger(value: 2)));
+        rest.StrandColliders(destination: strands, radius: radius);
+        rest.CellColliders(destination: cells, radius: radius);
         m_attachedNetRevisions[row] = 0;
-        foreach (var collider in colliders) { RecordAttachedCollider(attached: collider); }
+        foreach (var collider in strands) { RecordAttachedCollider(attached: collider, holdable: false); }
+        foreach (var collider in cells) { RecordAttachedCollider(attached: collider, contact: false); }
     }
     private void FoldAttachedMoves(List<FixedStaticCollider> colliders, List<int> rows) {
         for (var index = 0; (index < colliders.Count); index++) {
@@ -1151,13 +1177,18 @@ public sealed partial class WorldColliderSet : IContactField {
     private void RecordAttachedCopy(FixedCreationStampPrimitiveCopy copy) {
         RecordAttachedCollider(attached: CopyCollider(copy: copy, margin: m_refreshMargin));
     }
-    private void RecordAttachedCollider(FixedStaticCollider attached) {
-        if (attached.Field is not null) { m_liveFields[m_refreshRow] = attached; }
-        m_attachedColliders.Add(item: attached);
-        m_attachedColliderRows.Add(item: m_refreshRow);
-        if (MovingHoldable(grantedByOverride: out var grantedByOverride, row: m_refreshRow)) {
+    // Records one of the refreshing row's colliders: as one bodies meet (`contact`), and as one a hold takes where the
+    // row's grip is holdable (`holdable`). A collider recorded while a posing is captured joins its record.
+    private void RecordAttachedCollider(FixedStaticCollider attached, bool contact = true, bool holdable = true) {
+        if (contact) {
+            if (attached.Field is not null) { m_liveFields[m_refreshRow] = attached; }
+            m_attachedColliders.Add(item: attached);
+            m_attachedColliderRows.Add(item: m_refreshRow);
+        }
+        if (holdable && MovingHoldable(grantedByOverride: out var grantedByOverride, row: m_refreshRow)) {
             m_movingHoldable.Add(item: attached); m_movingHoldableRows.Add(item: m_refreshRow); m_movingGripOverrides.Add(item: grantedByOverride);
         }
+        m_capturing?.Record(collider: in attached, contact: contact, holdable: holdable);
     }
 
     /// <summary>Returns every attached solid row its carrier resolved at the latest refresh, at the pose that refresh
@@ -1392,12 +1423,14 @@ public sealed partial class WorldColliderSet : IContactField {
             reach: reach, up: in up, volumes: volumes);
     /// <inheritdoc/>
     // A ray cast over the static and sampled moving holdable subsets: the first holdable surface the ray meets,
-    // whatever angle it meets it at, as the field provider's march answers.
-    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
+    // whatever angle it meets it at, as the field provider's march answers. A net row whose mesh opens wider than the
+    // asking body's girth is passed over (OpeningFilter), so a body small enough to slip through a net never takes it.
+    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 girth, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
         if (!m_holdable.TryCast(
             candidate: out candidate,
             direction: in direction,
             dynamicColliders: (m_excluding ? m_excludedHoldableSet : m_movingHoldableSet),
+            filter: new OpeningFilter(Girth: girth, Openings: m_rowOpenings),
             maxDistance: maxDistance,
             origin: in origin
         )) {

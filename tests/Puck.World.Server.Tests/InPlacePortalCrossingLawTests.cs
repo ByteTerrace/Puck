@@ -681,7 +681,7 @@ public sealed class InPlacePortalCrossingLawTests {
 
         Assert.True(condition: field.TryUp(position: FixedVector3.Zero, up: out var up));
         Assert.Equal(expected: FixedVector3.UnitY, actual: up);
-        Assert.False(condition: field.TryHoldableSurfaceAlongDirection(candidate: out _, direction: -FixedVector3.UnitY, grantedByOverride: out _, maxDistance: FixedQ4816.One, origin: FixedVector3.Zero));
+        Assert.False(condition: field.TryHoldableSurfaceAlongDirection(candidate: out _, direction: -FixedVector3.UnitY, girth: FixedQ4816.Zero, grantedByOverride: out _, maxDistance: FixedQ4816.One, origin: FixedVector3.Zero));
         Assert.False(condition: field.TryNearestSurfaceAlongDirection(assistHalfAngle: FixedQ4816.Zero, candidate: out _, direction: -FixedVector3.UnitY, maxDistance: FixedQ4816.One, origin: FixedVector3.Zero));
 
         static ContactResolution Resolve(IContactField field, ref FixedVector3 position, ref FixedVector3 velocity, bool sweep, FixedBodyColliderVolume[]? volumes = null) => (sweep

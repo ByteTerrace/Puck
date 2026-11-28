@@ -994,12 +994,6 @@ state {
     table liftArrow capacity(liftCars) bounds(0..2) = map(galleryLifts, car => 0)
     table liftOpenReq capacity(liftCars) bounds(0..1) = map(galleryLifts, car => 0)
     table liftCloseReq capacity(liftCars) bounds(0..1) = map(galleryLifts, car => 0)
-    // Level 1's loose lattice panels (shell.puck's `gallery-lattice-loose-<edge>`): 1 swaps a panel to its open
-    // form, which keeps its frame and crossbars and drops its uprights and sill.
-    table toyboxSlats {
-      south = 0
-      bridge = 0
-    }
     // Each car's landing calls and floor calls pending, a member a car keyed by level.
     table liftHallOf[liftCars] capacity(4) = [0, 0, 0, 0]
     table liftCarCallOf[liftCars] capacity(4) = [0, 0, 0, 0]

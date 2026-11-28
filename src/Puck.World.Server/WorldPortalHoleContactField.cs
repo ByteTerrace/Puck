@@ -280,11 +280,12 @@ public sealed class WorldPortalHoleContactField : IContactField {
     /// <remarks>A surface the ray reaches through an open door's glass is not answered: the wall a door hangs on
     /// stands behind its glass, and a body walking into the door would otherwise take hold of it there and climb it
     /// instead of walking through.</remarks>
-    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
+    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 girth, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
         if (
             m_inner.TryHoldableSurfaceAlongDirection(
                 candidate: out candidate,
                 direction: in direction,
+                girth: girth,
                 grantedByOverride: out grantedByOverride,
                 maxDistance: maxDistance,
                 origin: in origin
