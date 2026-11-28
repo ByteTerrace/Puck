@@ -715,10 +715,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                         }
                     }
                     if (borrowed is { } acquisition) {
-                        resource.BorrowedOwnership = acquisition.Ownership;
                         if (acquisition.Buffer.SizeBytes < sizeBytes) {
                             throw new InvalidDataException(message: $"Borrowed buffer '{declaration.Name}' holds {acquisition.Buffer.SizeBytes} bytes, requires {sizeBytes}.");
                         }
+                        resource.BorrowedOwnership = acquisition.Buffer.Lend();
                         resource.Borrowed = true;
                         resource.BorrowedRequiredBytes = sizeBytes;
                         Array.Fill(array: resource.Buffers, value: acquisition.Buffer);

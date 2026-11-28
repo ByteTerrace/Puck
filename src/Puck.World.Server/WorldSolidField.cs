@@ -541,8 +541,9 @@ public sealed class WorldSolidField : IContactField {
     /// <remarks>A ray, not a nearest-point search: the field's own deterministic march reports the FIRST surface
     /// along the direction, which is what makes a grip immune to the nearer geometry beside it (the floor under a
     /// wall's foot, the underside of the ledge above). A hit inside geometry cannot arise from a grip that never
-    /// lets itself embed, so no inside-out case is invented here.</remarks>
-    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
+    /// lets itself embed, so no inside-out case is invented here. The march meets a net's strands as drawn, so the
+    /// girth chooses nothing here.</remarks>
+    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 girth, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
         candidate = default;
         grantedByOverride = false;
 

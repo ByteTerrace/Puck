@@ -21,6 +21,10 @@ public sealed partial class CompiledTopology {
     private readonly FixedQ4816 m_layerHeight;
     private readonly TopologyWrap m_wrap;
     private readonly FixedVector3 m_origin;
+    // The board's heading about +Y (a unit rotor, exact at quarter turns), and whether it is anything but the
+    // identity: an unturned board resolves positions on the world axes with no rotation at all.
+    private readonly FixedComplex m_heading;
+    private readonly bool m_turned;
     private readonly FixedQ4816 m_cellSize;
     private readonly FixedQ4816 m_band;
     // Authored centres relative to the origin, present for a Graph or Tiling alone; every other kind derives its centres.
@@ -41,8 +45,10 @@ public sealed partial class CompiledTopology {
     internal CompiledTopology(LatticeTopology source, TopologyKind kind, int count, int directions, int[] neighbours, int[] opposite,
         int width, int depth, int radius, TopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band,
         int[][] images, string[] elementNames, int layers, FixedQ4816 layerHeight, string[] directionNames, FixedVector3[]? cellCentres = null,
-        (int X, int Y, int Z)[]? coordinates = null) {
+        (int X, int Y, int Z)[]? coordinates = null, FixedComplex? heading = null) {
         Source = source;
+        m_heading = (heading ?? FixedComplex.MultiplicativeIdentity);
+        m_turned = (m_heading != FixedComplex.MultiplicativeIdentity);
         m_cellCentres = cellCentres;
         m_coordinates = coordinates;
         if (coordinates is not null) {
@@ -136,8 +142,8 @@ public sealed partial class CompiledTopology {
     public CellName NameOf(int cell) => m_names[cell];
 
     /// <summary>Gets the authored topology this compiled from. Two compiles of one authored topology differ only in
-    /// the world origin an anchor translates them by, so this is the board's identity across anchorings and is what
-    /// a reader compares to decide that a query and a row address the same board.</summary>
+    /// the frame an anchor places them in (its world origin and heading), so this is the board's identity across
+    /// anchorings and is what a reader compares to decide that a query and a row address the same board.</summary>
     public LatticeTopology Source { get; }
     /// <summary>Gets the shape.</summary>
     public TopologyKind Kind { get; }
@@ -145,10 +151,25 @@ public sealed partial class CompiledTopology {
     public int CellCount { get; }
     /// <summary>Gets the number of directions at each cell.</summary>
     public int DirectionCount { get; }
-    /// <summary>Gets the anchored origin <see cref="CellCentre"/> and <see cref="TryCellOf"/> resolve against: a grid
-    /// or box's minimum corner, a hex's origin-cell lattice point, and the point a graph's or tiling's authored
-    /// centres are relative to.</summary>
+    /// <summary>Gets the anchored origin <see cref="CellCentre"/> and <see cref="TryCellOf"/> resolve against, in
+    /// world units: a grid or box's minimum corner, a hex's origin-cell lattice point, and the point a graph's or
+    /// tiling's authored centres are relative to. The board's own axes turn about it by <see cref="Heading"/>.</summary>
     public FixedVector3 Origin => m_origin;
+    /// <summary>Gets the board's heading about +Y: the unit rotation (<see cref="FixedComplex.RotateAboutY"/>) carrying
+    /// the board's own axes (columns along its +X, rows along its +Z) onto the world's, its anchor's yaw. Exact at a
+    /// whole number of quarter turns (<see cref="FixedComplex.FromAngleCardinal"/>), and the identity for an unanchored
+    /// board.</summary>
+    public FixedComplex Heading => m_heading;
+    /// <summary>Carries an offset in the board's own frame to the world's: the offset turned by <see cref="Heading"/>.
+    /// Add <see cref="Origin"/> to place a board point.</summary>
+    /// <param name="offset">The offset along the board's own axes, in world units.</param>
+    /// <returns>The same offset along the world's axes; exactly <paramref name="offset"/> on an unturned board.</returns>
+    public FixedVector3 Turn(in FixedVector3 offset) => (m_turned ? m_heading.RotateAboutY(vector: offset) : offset);
+    /// <summary>Carries an offset along the world's axes into the board's own frame, the inverse of
+    /// <see cref="Turn"/>.</summary>
+    /// <param name="offset">The offset along the world's axes, in world units (a world point less <see cref="Origin"/>).</param>
+    /// <returns>The same offset along the board's own axes; exactly <paramref name="offset"/> on an unturned board.</returns>
+    public FixedVector3 Unturn(in FixedVector3 offset) => (m_turned ? m_heading.Conjugate().RotateAboutY(vector: offset) : offset);
     /// <summary>Gets the declared cell edge, world units.</summary>
     public FixedQ4816 CellSize => m_cellSize;
     /// <summary>Gets the cell count along +X.</summary>
@@ -163,22 +184,24 @@ public sealed partial class CompiledTopology {
     private static readonly FixedQ4816 HexRowSpacing = FixedQ4816.FromDouble(value: 0.8660254037844386);
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
 
-    /// <summary>Returns the centre of a cell: a grid or box cell's square (or cube) centre, a hex cell's lattice
-    /// point, in the topology's anchored frame.</summary>
+    /// <summary>Returns the centre of a cell in world units: a grid or box cell's square (or cube) centre, a hex cell's
+    /// lattice point, placed in the topology's anchored frame (<see cref="Origin"/> plus its
+    /// <see cref="LocalCellCentre"/> turned by <see cref="Heading"/>).</summary>
     /// <param name="cell">The cell ordinal.</param>
-    public FixedVector3 CellCentre(int cell) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="cell"/> is not a cell of the topology.</exception>
+    public FixedVector3 CellCentre(int cell) => (m_origin + Turn(offset: LocalCellCentre(cell: cell)));
+    /// <summary>Returns the centre of a cell in the board's own frame: its offset from <see cref="Origin"/> along the
+    /// board's axes, columns along +X and rows along +Z, before <see cref="Heading"/> turns it.</summary>
+    /// <param name="cell">The cell ordinal.</param>
+    /// <returns>The offset, in world units.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="cell"/> is not a cell of the topology.</exception>
+    public FixedVector3 LocalCellCentre(int cell) {
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
             value: ((uint)cell),
             other: ((uint)CellCount)
         );
         if (m_cellCentres is { } centres) {
-            var centre = centres[cell];
-
-            return new FixedVector3(
-                X: (m_origin.X + centre.X),
-                Y: (m_origin.Y + centre.Y),
-                Z: (m_origin.Z + centre.Z)
-            );
+            return centres[cell];
         }
         if (Kind == TopologyKind.Hex) {
             var coordinate = new HexagonalIndex(value: cell).ToCoordinate();
@@ -186,30 +209,36 @@ public sealed partial class CompiledTopology {
             var r = FixedQ4816.FromInteger(value: coordinate.R);
 
             return new FixedVector3(
-                X: (m_origin.X + (m_cellSize * (q - (r * Half)))),
-                Y: m_origin.Y,
-                Z: (m_origin.Z + (m_cellSize * (r * HexRowSpacing)))
+                X: (m_cellSize * (q - (r * Half))),
+                Y: FixedQ4816.Zero,
+                Z: (m_cellSize * (r * HexRowSpacing))
             );
         }
         var planar = (cell % (m_width * m_depth));
         var layer = (cell / (m_width * m_depth));
 
         return new FixedVector3(
-            X: (m_origin.X + (m_cellSize * (FixedQ4816.FromInteger(value: (planar % m_width)) + Half))),
-            Y: (m_origin.Y + (m_layerHeight * FixedQ4816.FromInteger(value: layer))),
-            Z: (m_origin.Z + (m_cellSize * (FixedQ4816.FromInteger(value: (planar / m_width)) + Half)))
+            X: (m_cellSize * (FixedQ4816.FromInteger(value: (planar % m_width)) + Half)),
+            Y: (m_layerHeight * FixedQ4816.FromInteger(value: layer)),
+            Z: (m_cellSize * (FixedQ4816.FromInteger(value: (planar / m_width)) + Half))
         );
     }
-    /// <summary>Resolves the cell a world position falls in. A <see cref="TopologyKind.Grid"/> resolves X/Z, within
-    /// its vertical band when it declares one; a <see cref="TopologyKind.Box"/> also resolves the layer from Y; a
-    /// <see cref="TopologyKind.Hex"/> rounds X/Z to the nearest axial coordinate within its radius and band; a
+    /// <summary>Resolves the cell a world position falls in, read in the board's own frame (the position less
+    /// <see cref="Origin"/>, turned back by <see cref="Heading"/>). A <see cref="TopologyKind.Grid"/> resolves X/Z,
+    /// within its vertical band when it declares one; a <see cref="TopologyKind.Box"/> also resolves the layer from
+    /// Y; a <see cref="TopologyKind.Hex"/> rounds X/Z to the nearest axial coordinate within its radius and band; a
     /// <see cref="TopologyKind.Graph"/> or <see cref="TopologyKind.Tiling"/> takes the nearest authored centre within
     /// half a cell size, the lowest ordinal on a tie. A <see cref="TopologyKind.Ring"/> has no spatial frame and
     /// answers <see langword="false"/>.</summary>
     /// <param name="position">The world position (a body's resolved pose).</param>
     /// <param name="cell">The resolved cell ordinal.</param>
     /// <returns>Whether the position lies over a declared cell.</returns>
-    public bool TryCellOf(in FixedVector3 position, out int cell) {
+    public bool TryCellOf(in FixedVector3 position, out int cell) => TryUnturnedCellOf(
+        cell: out cell,
+        position: (m_turned ? (m_origin + Unturn(offset: (position - m_origin))) : position)
+    );
+    // Resolves a position already carried onto the board's own axes, so the origin's offsets are along columns and rows.
+    private bool TryUnturnedCellOf(in FixedVector3 position, out int cell) {
         cell = -1;
         if (m_cellCentres is { } centres) {
             return TryNearestCellOf(

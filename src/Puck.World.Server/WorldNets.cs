@@ -16,7 +16,8 @@ public sealed record WorldNetCheckpoint(string Placement, FixedNetState State);
 /// carries every node.
 /// </summary>
 /// <remarks>Invariant: a panel's colliders are a function of its net's nodes and its strand, cached by the net's
-/// <see cref="FixedNet.Revision"/>, which every writer of a node moves; <see cref="Panel.Colliders"/> is the one reader.</remarks>
+/// <see cref="FixedNet.Revision"/>, which every writer of a node moves; <see cref="Panel.Colliders"/> and
+/// <see cref="Panel.HoldColliders"/> are the readers.</remarks>
 public sealed class WorldNets {
     private readonly Panel[] m_panels;
     private readonly Dictionary<string, int> m_byId;
@@ -25,6 +26,8 @@ public sealed class WorldNets {
     public sealed class Panel {
         private FixedStaticCollider[] m_colliders = [];
         private int m_collidersRevision = -1;
+        private FixedStaticCollider[] m_holdColliders = [];
+        private int m_holdCollidersRevision = -1;
 
         internal Panel(WorldPlacement placement, WorldPlacementNet facet, FixedNet net, FixedQ4816 contactReach) {
             Id = placement.Id;
@@ -36,6 +39,7 @@ public sealed class WorldNets {
             Strand = (FixedQ4816.FromDouble(value: facet.Strand) * scale);
             Gravity = new FixedVector3(X: FixedQ4816.Zero, Y: -FixedQ4816.FromDouble(value: facet.Gravity), Z: FixedQ4816.Zero);
             Near = net.RestBox.Grow(margin: ((net.Spec.Reach + Strand) + contactReach));
+            Opening = FixedQ4816.Max(x: FixedQ4816.Zero, y: net.Opening(strand: Strand));
         }
 
         /// <summary>Gets the placement's id.</summary>
@@ -46,6 +50,10 @@ public sealed class WorldNets {
         public FixedNet Net { get; }
         /// <summary>Gets the thickness the net collides at, in metres, the row's scale applied.</summary>
         public FixedQ4816 Strand { get; }
+        /// <summary>Gets the widest a body may be and pass through the net's mesh at rest, in metres
+        /// (<see cref="FixedNet.Opening"/>): a body that narrow meets the openings between the strands, and no hold
+        /// takes the net for it.</summary>
+        public FixedQ4816 Opening { get; }
         /// <summary>Gets the acceleration the net's free nodes fall at.</summary>
         public FixedVector3 Gravity { get; }
         /// <summary>Gets the box a body's foot point lies in, grown by the body's broadphase radius, whenever the body can
@@ -84,16 +92,26 @@ public sealed class WorldNets {
             return (FixedQ4816.Abs(value: (height - surface)) <= ((Net.Spec.Reach + Strand) + contactReach));
         }
 
-        /// <summary>Returns the net's cell colliders as it stands (<see cref="FixedNet.CellColliders"/>), each rounded by
-        /// half the strand, recomputed only when a node moved.</summary>
+        /// <summary>Returns the colliders bodies meet as the net stands: its strands (<see cref="FixedNet.StrandColliders"/>),
+        /// each rounded by half the strand, recomputed only when a node moved.</summary>
+        /// <returns>The colliders, in strand order, borrowed until the net next moves.</returns>
+        public ReadOnlySpan<FixedStaticCollider> Colliders() => Posed(cache: ref m_colliders, revision: ref m_collidersRevision, strands: true);
+        /// <summary>Returns the surface a hold takes as the net stands: a sheet over its cells (<see cref="FixedNet.CellColliders"/>),
+        /// so a climber's hands find the net between its strands as on them, recomputed only when a node moved. Bodies
+        /// do not meet it.</summary>
         /// <returns>The colliders, row by row, borrowed until the net next moves.</returns>
-        public ReadOnlySpan<FixedStaticCollider> Colliders() {
-            if (m_collidersRevision != Net.Revision) {
-                if (m_colliders.Length != Net.CellCount) { m_colliders = new FixedStaticCollider[Net.CellCount]; }
-                Net.CellColliders(destination: m_colliders, radius: (Strand / FixedQ4816.FromInteger(value: 2)));
-                m_collidersRevision = Net.Revision;
+        public ReadOnlySpan<FixedStaticCollider> HoldColliders() => Posed(cache: ref m_holdColliders, revision: ref m_holdCollidersRevision, strands: false);
+        // One of the net's collider sets as it stands, rounded by half the strand, posed again only when a node moved.
+        private ReadOnlySpan<FixedStaticCollider> Posed(ref FixedStaticCollider[] cache, ref int revision, bool strands) {
+            if (revision != Net.Revision) {
+                var count = (strands ? Net.FreeStrandCount : Net.CellCount);
+                var radius = (Strand / FixedQ4816.FromInteger(value: 2));
+
+                if (cache.Length != count) { cache = new FixedStaticCollider[count]; }
+                if (strands) { Net.StrandColliders(destination: cache, radius: radius); } else { Net.CellColliders(destination: cache, radius: radius); }
+                revision = Net.Revision;
             }
-            return m_colliders;
+            return cache;
         }
     }
 

@@ -5584,7 +5584,7 @@ the bake being what sets a session's peak. That is five eighths of the machine: 
 private-byte peak is the private working-set fallback until the profile's private working set is measured. The ordinary host samplers feed this same tracker,
 including during a benchmark; no separate admission or sampling service runs.
 Pre-process reservations remain local and expire when a matching process appears
-or after `HostStartTracker.ReservationHold`. The wait is the same bounded, heartbeat-printing one, and a start the bound refuses fails with `HostAdmissionRefusedException`, which a verb reports as it reports any process that would not start. Every World joins a job the operating system ends with the CLI on Windows, so a killed verb leaves no World running. The in-process World boots of `bench` and `determinism` pass the admission through `WorldAdmission.WaitInProcess`.
+or after `HostStartTracker.ReservationHold`. The wait is the same bounded, heartbeat-printing one, and a start the bound refuses fails with `HostAdmissionRefusedException`, which a verb reports as it reports any process that would not start. Every World joins a job the operating system ends with the CLI on Windows, so a killed verb leaves no World running. The in-process World boots of `bench` and `determinism` pass the admission through `WorldAdmission.WaitInProcess`, which returns the World's reservation: it shows no process to answer it, so it holds the World's expected peak until the World is disposed, and a row of Worlds booted one after another never stacks.
 
 ### `puck lease list`—who holds what and who waits
 

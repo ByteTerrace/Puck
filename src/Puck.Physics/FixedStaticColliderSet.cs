@@ -70,6 +70,20 @@ public readonly record struct FixedColliderFrame(FixedVector3 AxisX, FixedVector
             (FixedQ4816.Abs(value: FixedVector3.Dot(left: axis, right: offset)) - (reach + FixedVector3.Dot(left: FixedVector3.Abs(value: axis), right: bodyExtent)));
     }
 }
+/// <summary>Chooses which groups of a <see cref="FixedStaticColliderSet"/> a query visits, by each group's key.</summary>
+public interface IColliderGroupFilter {
+    /// <summary>Returns whether a query visits the group with this key.</summary>
+    /// <param name="key">The group's key, as its owner refreshed the set with.</param>
+    /// <returns><see langword="true"/> to visit the group.</returns>
+    bool Keeps(int key);
+}
+
+/// <summary>A filter that keeps every group: a query that visits the whole set.</summary>
+public readonly struct KeepsEveryGroup : IColliderGroupFilter {
+    /// <inheritdoc/>
+    public bool Keeps(int key) => true;
+}
+
 /// <summary>Colliders with their <see cref="FixedStaticCollider.WorldBox"/> bounds and <see cref="FixedColliderFrame"/> certificates,
 /// computed from the colliders themselves: the only form in which <see cref="FixedStaticContactSolver"/> takes colliders,
 /// so every bound it culls by is the collider's own and no caller supplies one. A set is either compiled once over an
@@ -187,7 +201,21 @@ public sealed class FixedStaticColliderSet {
     /// <param name="scratch">The caller's list the indices are written into; the result reads it until the next call.</param>
     /// <returns>The candidates, or the default value (every collider) for an empty set.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="scratch"/> is <see langword="null"/>.</exception>
-    public FixedColliderCandidates Candidates(FixedAabb region, FixedQ4816 skin, List<int> scratch) {
+    public FixedColliderCandidates Candidates(FixedAabb region, FixedQ4816 skin, List<int> scratch) =>
+        Candidates(filter: default(KeepsEveryGroup), region: region, scratch: scratch, skin: skin);
+    /// <summary>Lists the colliders whose bounds meet a region grown by the contact skin, as
+    /// <see cref="Candidates(FixedAabb, FixedQ4816, List{int})"/> does, among the groups a filter keeps. A group the
+    /// filter refuses is left out even where the query's body leaves the region, so the candidates are always active
+    /// for a set that holds colliders.</summary>
+    /// <typeparam name="TFilter">The filter's type.</typeparam>
+    /// <param name="region">The region a query's body stays inside.</param>
+    /// <param name="skin">The contact skin a collider acts across.</param>
+    /// <param name="scratch">The caller's list the indices are written into; the result reads it until the next call.</param>
+    /// <param name="filter">The filter that chooses the groups visited.</param>
+    /// <returns>The candidates, or the default value (every collider) for an empty set.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="scratch"/> is <see langword="null"/>.</exception>
+    public FixedColliderCandidates Candidates<TFilter>(FixedAabb region, FixedQ4816 skin, List<int> scratch, TFilter filter)
+        where TFilter : struct, IColliderGroupFilter {
         ArgumentNullException.ThrowIfNull(argument: scratch);
         if (m_count == 0) { return default; }
 
@@ -195,7 +223,7 @@ public sealed class FixedStaticColliderSet {
 
         scratch.Clear();
         for (var group = 0; (group < m_groupCount); group++) {
-            if (!m_groupBoxes[group].Intersects(other: in reach)) { continue; }
+            if (!m_groupBoxes[group].Intersects(other: in reach) || !filter.Keeps(key: m_groupKeys[group])) { continue; }
             for (var index = m_groupStarts[group]; (index < m_groupStarts[(group + 1)]); index++) {
                 if (m_boxes[index].Intersects(other: in reach)) { scratch.Add(item: index); }
             }

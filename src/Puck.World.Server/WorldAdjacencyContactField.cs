@@ -405,9 +405,10 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
         in FixedBodyColliderVolume volume, in FixedVector3 up) =>
         m_inner.SupportWitness(contacts: contacts, orientation: in orientation, position: in position, up: in up, volume: in volume);
     /// <inheritdoc/>
-    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) => m_inner.TryHoldableSurfaceAlongDirection(
+    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 girth, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) => m_inner.TryHoldableSurfaceAlongDirection(
         candidate: out candidate,
         direction: in direction,
+        girth: girth,
         grantedByOverride: out grantedByOverride,
         maxDistance: maxDistance,
         origin: in origin

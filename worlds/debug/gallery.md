@@ -38,6 +38,15 @@ The owner walked the gallery and ruled its shape:
    aim is a standardized system that pushes the Puck language, finds engine
    gaps, makes performance follow from composition (a feature left out costs
    nothing), and leaves artists free to compose.
+8. **The whole gallery scales with one value**, as an SVG group does. The
+   building places every module through one frame (position, yaw and a uniform
+   scale), and its physics follows that scale (gravity, walking and jumping
+   speeds, step heights, reach), so moving through a scaled gallery feels
+   exactly as it does at full size. The windows deliberately give the scale
+   away: they show the outside world at its true size, so a grown or shrunk
+   gallery reads only through the glass. This is the lifts' Wonderland idea
+   seen from the other side: shrinking the rider and growing the building are
+   one transform.
 
 ## The plan
 
@@ -324,37 +333,49 @@ there, or the decks it films stand on the frame they stopped at.
 ### The lattice
 
 The owner's ruling: every floor can be reached by jetpack except the
-Wonderland floor, which is walled off, so its puzzles can turn on size without
-a way to cheat. A body enters level 1 by its corner stairs or the lifts, and
-shrinks on the way unless it holds the full-size pass ("The size of level 1",
-below).
+Wonderland floor, which is walled off from full-size bodies, so its puzzles
+can turn on size without a way to cheat. A body enters level 1 by its corner
+stairs or the lifts, and shrinks on the way unless it holds the full-size pass
+("The size of level 1", below).
 
 So every edge level 1 shares with the nave's void stands behind a toy
 construction lattice (the standard's `lattice`,
 [architecture.puck](../standard/architecture.puck)) whose frame holds a real
-rope net. A panel stands in each arcade bay along the south and north edges, a
-half-tile panel closes each to the east wall, and five panels run along the
-bridge's edge. Each stands on level 1's floor and reaches into the fascia under
-level 2's edge, and neighbouring posts overlap at every joint and corner.
+rope net. A panel fills each arcade bay along the south and north edges from
+pier to pier, but the lifts' bay, which the shafts close, and the tree's gate
+bays, which a barrier fills; a half-tile panel closes each edge to the east
+wall; and four equal panels fill the bridge's edge, meeting on the nave's axis.
+Each stands on level 1's floor and reaches into the fascia under level 2's
+edge, and neighbouring posts overlap at every joint and corner.
 
 **The nets.** The owner ruled, after trying the first one: "Replace the whole
 level with the net. Make sure it is proper colorful, not garish, but properly
-complementary/bold." So every panel but the two loose ones (below) drops its
-pane and carries the standard's `latticeNet` facet (architecture.puck,
-`ropeNet`'s material): a grid of nodes from post to post and sill to head (12
-by 9 in a full panel, 3 by 9 in a half one), pinned at all four members, that
-the authority steps as rope (the engine's net,
+complementary/bold." And then: "I wanted shrunken players to slip through the
+nets." So every panel carries the standard's `latticeNet` facet
+(architecture.puck, `ropeNet`'s material), a mesh of knots from post to post
+and from the floor to the head, pinned at the frame, that the authority steps
+as rope (the engine's net,
 [the decision](../../docs/decisions/engine-design.md#a-net-is-a-node-grid-the-authority-steps-drawn-by-displacing-one-rest-mesh)).
-Each net is a diamond mesh (layout.puck's `toyLatticeNet`: 3.5 cm rope, knot to
-knot every 30 cm) whose drawn strands and knots move with its nodes. It holds
-every body, so no body flies or jumps in from the void and none drops out, and
-no body climbs over one, since its head meets the fascia. But it gives: a body
-leaning on it bulges it, a body that walks into it takes it and climbs it like
-a park climbing net (the standard's climb, in or out of the Moth's suit), and
-its weight bellies the net under its hands in proportion to the weight, about a
-fifth of a metre under a full-size climber and barely a dimple under a shrunk
-one, with a bounce and a ripple outward. It settles and sleeps when no one
-touches it, and a net held still by a climber who hangs on sleeps too.
+Bodies meet its strands, and the openings between them are real: the strands
+across stand at most 0.42 m apart and the strands up about 0.48 m apart
+(layout.puck's `toyLatticeNet`, 4 cm rope), so an opening is narrower than the
+slimmest full-size body, the Moth out of her suit at 0.5 m across, and four
+times as wide as a body at Alice's size, with no sill across its foot.
+
+- **At full size** a body is held: it cannot fly or jump in from the void or
+  drop out, and none climbs over a net, since its head meets the fascia. A
+  body that walks into a net takes it and climbs it like a park climbing net
+  (the standard's climb, in or out of the Moth's suit), and its weight bellies
+  the net under its hands in proportion to the weight, about a fifth of a
+  metre, with a bounce and a ripple outward. A body leaning on a net bulges
+  it.
+- **At Alice's size** a body walks straight through a net's mesh, brushing
+  aside any strand it touches, and never takes the net: a hold only takes a
+  net a body cannot pass. Beyond the net lies the void.
+
+A net's drawn strands and knots move with its nodes. It settles and sleeps
+when no one touches it, and a net held still by a climber who hangs on sleeps
+too.
 
 The colours are bold rather than pastel (look.puck's `lookToyNet`). Every frame
 wears one cobalt, a step deeper than the floor's, which grounds the nets against
@@ -368,19 +389,9 @@ piers' pastels are, and continue round the bridge.
 `debug.go rope-net` stands a body before the net of the north edge's bay 9
 (layout.puck's `toyLatticeNetBay`); `world.nets` reads every net's nodes,
 deflection, holders and leaners; `world.benchmark run net-climb` plays a climb
-there, and the [climbing lab](labs/README.md#climbing) holds a copy of a panel
-and plays the same climb headless in [net-tests.puck](net-tests.puck).
-
-**Hooks for puzzles.** Two panels are loose: `gallery-lattice-loose-south`
-(the south edge's bay 8, layout.puck's `toyLatticeLooseBay`; the north edge's
-bay 8 is the tree's gate) and `gallery-lattice-loose-bridge` (the bridge's
-middle tile, on the nave's axis). Each follows its cell of the `toyboxSlats`
-table (`south`, `bridge`, both 0). Closed, it is the same net drawn over a
-clear pane, which holds every body but does not give: a net facet has no open
-state yet. At 1 the panel swaps to its open form, which keeps its frame and
-crossbars and drops its uprights and sill, so only a body small enough to pass
-between two crossbars (about 0.6 m apart) slips through. No rule sets them yet;
-`world.state.cell.set toyboxSlats south 1` opens one by hand.
+there, and the [climbing lab](labs/README.md#climbing) holds a copy of a panel,
+plays the same climb headless in [net-tests.puck](net-tests.puck), and walks a
+body into it at both sizes (`net-slip`).
 
 **The tree's barriers.** Each level-1 branch ([the central tree](#the-central-tree))
 ends at a magic barrier filling the arch behind its bay (architecture.puck's
@@ -985,8 +996,10 @@ first match winning:
 
 Outside these zones a body keeps the size it last took (the owner's design):
 the stairs and the lifts are the routes that size a body, and a body with no
-pass meets each level-1 branch's barrier whatever its size, so it cannot leave
-level 1 another way.
+pass meets each level-1 branch's barrier whatever its size. The other way off
+level 1 is through a net ([the lattice](#the-lattice)): at Alice's size a body
+slips through the mesh into the void, and keeps that size until a stair or a
+lift sizes it again.
 
 **The passes.** A body holding either of the wonder passes (layout.puck's
 `wonderPasses`) nonzero takes its full size in every zone, so level 1, its

@@ -2155,7 +2155,12 @@ displacement, the runtime uses the last submission of the frame, ordered after
 every reader, and polls its completion even when the producer stands. The
 submitter's existing slot lifetime records completion before its fence is reused
 or disposed. A standalone node keeps the reader-lag fallback. The graph never
-takes or directly disposes those borrowed allocations.
+disposes those borrowed allocations directly: a package lends each one as a
+`GpuLentBuffer`, the node takes its own loan on every allocation it adopts
+(`RenderGraphBorrowedBuffer` carries nothing else), and its retirement returns
+the loan, so a package that lets its allocation go (an SDF residency's park
+disposing its tables) leaves the buffer live while a graph still records or
+publishes it.
 
 - A reload, an edit of the `views.graphs` row and a resize replace the graph.
   They are not steps. The paused instance builds and installs the new graph as

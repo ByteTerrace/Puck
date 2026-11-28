@@ -9,7 +9,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     public void ABorrowedProducerReacquiresConsumerWritesEvenWhenItsFirstPassSkips() {
         const ulong Bytes = (1024 * 1024);
         var gpu = new FakePipelineGpu { Recording = true };
-        using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new GpuObjectName("test", "cache"));
+        using var buffer = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new GpuObjectName("test", "cache")));
         var recorders = new Recorders();
         var producer = new BorrowedPackage(buffer: buffer);
         var view = new BufferViewPackage(bytes: Bytes);
@@ -48,7 +48,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Theory]
     public void AMutableEdgeRefusesHistoryAndGraphOwnedBufferRings(bool previous, bool borrowed) {
         var gpu = new FakeGpuDevice();
-        using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(4096, GpuBufferUsage.Storage, new GpuObjectName("test", "cache"));
+        using var buffer = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(4096, GpuBufferUsage.Storage, new GpuObjectName("test", "cache")));
         var recorders = new Recorders("cache.update", Over);
 
         recorders.Registry.Register(factory: new BorrowedPackage(buffer: buffer) { OwnsAllocation = borrowed }, package: BufferPackage);
@@ -62,7 +62,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Fact]
     public void AMutableInputCannotStandOnAnUnchangedPackageSignature() {
         var gpu = new FakePipelineGpu();
-        using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(4096, GpuBufferUsage.Storage, new GpuObjectName("test", "cache"));
+        using var buffer = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(4096, GpuBufferUsage.Storage, new GpuObjectName("test", "cache")));
         var recorders = new Recorders("cache.update", Over);
         var producer = new BorrowedPackage(buffer: buffer);
 
@@ -87,9 +87,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Fact]
     public void AReadOnlyConsumerCannotStandWhileAnotherConsumerMutatesAProducerAlias() {
         var gpu = new FakePipelineGpu();
-        using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", "shared"));
+        using var buffer = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", "shared")));
         var producer = new NamedBufferPackage {
-            Buffers = new Dictionary<string, IGpuBuffer>(comparer: StringComparer.Ordinal) {
+            Buffers = new Dictionary<string, GpuLentBuffer>(comparer: StringComparer.Ordinal) {
                 ["primary"] = buffer,
                 ["secondary"] = buffer,
                 ["private"] = buffer,
@@ -135,7 +135,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Fact]
     public void NamedBufferPublicationTracksItsOwnWritesBesideAForwardedImage() {
         var gpu = new FakePipelineGpu();
-        using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", "published"));
+        using var buffer = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", "published")));
         var producer = new PublicationBufferWriter(buffer: buffer);
         var recorders = new Recorders(Camera, "cache.read", Over);
         var reader = new Counter { CadenceSignature = 1 };
@@ -185,7 +185,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.Equal(actual: reader.Records, expected: (records + 3));
     }
 
-    private sealed class PublicationBufferWriter(IGpuBuffer buffer) : IRenderGraphPackageFactory {
+    private sealed class PublicationBufferWriter(GpuLentBuffer buffer) : IRenderGraphPackageFactory {
         public ulong? Signature;
         public int Writes;
 

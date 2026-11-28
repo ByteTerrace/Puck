@@ -14,14 +14,27 @@ public static class WorldAdmission {
     /// <param name="admit">The admission, or <see langword="null"/> to admit every start at once in a test.</param>
     public static void Install(HostAdmit? admit) => Installed = admit;
     /// <summary>Waits until the host can take a headless World booted inside this process, at most the admission's own
-    /// bound, and prints what holds it back on standard error.</summary>
+    /// bound, and prints what holds it back on standard error. The World shows no process of its own, so its reservation of
+    /// the World's expected peak lasts until the returned admission is disposed, which the World's holder does when it
+    /// disposes the World.</summary>
     /// <param name="step">The step's name, for the wait lines.</param>
     /// <param name="cancellationToken">Stops the wait.</param>
+    /// <returns>The admission, which gives the reservation back when disposed; disposing it twice is harmless, and it holds
+    /// nothing when no admission is installed.</returns>
     /// <exception cref="HostAdmissionRefusedException">The bound passed first.</exception>
-    public static void WaitInProcess(string step, CancellationToken cancellationToken = default) {
-        if (!TryAdmitAsync(bound: null, cancellationToken: cancellationToken, device: false, heavySuite: false, kind: HostStartKind.HeadlessWorld, reserve: true, stage: null, step: step).GetAwaiter().GetResult()) {
+    public static IDisposable WaitInProcess(string step, CancellationToken cancellationToken = default) {
+        IDisposable? reservation = null;
+
+        if (!TryAdmitAsync(bound: null, cancellationToken: cancellationToken, device: false, heavySuite: false, kind: HostStartKind.HeadlessWorld, reserve: true, stage: null, step: step, reserved: (held => reservation = held)).GetAwaiter().GetResult()) {
             throw new HostAdmissionRefusedException(step: step);
         }
+
+        return (reservation ?? EmptyAdmission.Instance);
+    }
+    private sealed class EmptyAdmission : IDisposable {
+        public static readonly EmptyAdmission Instance = new();
+
+        public void Dispose() { }
     }
 
     /// <summary>Waits until the host can take a start, at most <paramref name="bound"/>, printing what holds it back on
@@ -36,12 +49,14 @@ public static class WorldAdmission {
     /// <param name="stage">Receives what the wait is on, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Stops the wait.</param>
     /// <param name="checkout">The start's checkout, or null for the current checkout.</param>
+    /// <param name="reserved">Receives the reservation of a start that runs inside this process (<see cref="HostAdmit"/>), or
+    /// <see langword="null"/>.</param>
     /// <returns><see langword="true"/> once admitted; <see langword="false"/> when the bound passed first.</returns>
-    internal static Task<bool> TryAdmitAsync(string step, bool device, bool heavySuite, HostStartProfile kind, TimeSpan? bound, bool reserve, Action<string>? stage, CancellationToken cancellationToken, string? checkout = null) {
+    internal static Task<bool> TryAdmitAsync(string step, bool device, bool heavySuite, HostStartProfile kind, TimeSpan? bound, bool reserve, Action<string>? stage, CancellationToken cancellationToken, string? checkout = null, Action<IDisposable>? reserved = null) {
         if (Installed is not { } admit) { return Task.FromResult(result: true); }
 
         checkout ??= (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory);
 
-        return admit(checkout: checkout, step: step, device: device, heavySuite: heavySuite, profile: kind, bound: bound, reserve: reserve, progress: Console.Error, stage: stage, cancellationToken: cancellationToken);
+        return admit(checkout: checkout, step: step, device: device, heavySuite: heavySuite, profile: kind, bound: bound, reserve: reserve, progress: Console.Error, stage: stage, cancellationToken: cancellationToken, reserved: reserved);
     }
 }

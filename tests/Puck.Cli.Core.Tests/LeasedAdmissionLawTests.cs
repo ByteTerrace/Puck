@@ -21,7 +21,7 @@ public sealed class LeasedAdmissionLawTests : IDisposable {
         var clear = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var preflights = 0;
         var reservations = 0;
-        HostAdmit admit = async (_, _, _, _, _, bound, reserve, _, _, token) => {
+        HostAdmit admit = async (_, _, _, _, _, bound, reserve, _, _, token, _) => {
             if (reserve) {
                 Assert.Equal(TimeSpan.Zero, bound);
                 Assert.True(CliLease.Inspect(m_root, resource, clock.GetUtcNow()).HolderAlive);
@@ -66,7 +66,7 @@ public sealed class LeasedAdmissionLawTests : IDisposable {
     [Fact]
     public async Task CancellationAndFailedReservationReleaseTheGuardAndRemoveBlockedTickets() {
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Token);
-        HostAdmit admit = (_, _, _, _, _, _, reserve, _, _, _) => reserve ? throw new OperationCanceledException(cancel.Token) : Task.FromResult(true);
+        HostAdmit admit = (_, _, _, _, _, _, reserve, _, _, _, _) => reserve ? throw new OperationCanceledException(cancel.Token) : Task.FromResult(true);
         await Assert.ThrowsAsync<OperationCanceledException>(() => LeasedAdmission.AcquireAsync(m_root, "heavy", "a", "a", admit,
             m_root, "law", false, true, HostStartKind.Step, TimeProvider.System, TimeSpan.Zero, TextWriter.Null, null, cancel.Token));
         Assert.False(CliLease.Inspect(m_root, "heavy", DateTimeOffset.UtcNow).HolderAlive);
@@ -82,7 +82,7 @@ public sealed class LeasedAdmissionLawTests : IDisposable {
     [Theory]
     public async Task AdmittedHoldsShareTheLeaseWhileExclusiveAndQuietHoldsWaitForAllToDrain(string resource) {
         var gpu = (resource == "gpu");
-        HostAdmit admit = (_, _, _, _, _, _, _, _, _, _) => Task.FromResult(true);
+        HostAdmit admit = (_, _, _, _, _, _, _, _, _, _, _) => Task.FromResult(true);
         Task<CliLease> Take(string lane, TimeSpan wait, bool exclusive = false, bool device = false) => LeasedAdmission.AcquireAsync(m_root, resource, lane + " run", lane, admit,
             m_root, lane, (gpu || device), !gpu, new HostStartProfile(HostStartKind.ReproduceReplica, Device: "vulkan", Store: StoreWarmth.Cold), TimeProvider.System, wait, TextWriter.Null, null, Token, exclusive);
 
@@ -108,7 +108,7 @@ public sealed class LeasedAdmissionLawTests : IDisposable {
     // judges the work it covers by what that profile has measured.
     [Fact]
     public async Task AHoldRecordsItsProfileForOtherProcessesAdmission() {
-        HostAdmit admit = (_, _, _, _, _, _, _, _, _, _) => Task.FromResult(true);
+        HostAdmit admit = (_, _, _, _, _, _, _, _, _, _, _) => Task.FromResult(true);
         var cold = new HostStartProfile(HostStartKind.WindowedWorld, Device: "directx", Store: StoreWarmth.Cold);
 
         using var hold = await LeasedAdmission.AcquireAsync(m_root, "gpu", "a run", "a", admit, m_root, "a", true, false, cold, TimeProvider.System, TimeSpan.Zero, TextWriter.Null, null, Token);

@@ -681,9 +681,8 @@ internal static class WorldBenchmarks {
 
         using (var host = new BenchHostRecorder(sample: sampleHost)) {
             // A build's engine runs in its own load context, where no admission is installed: admit the run once here.
-            if (artifact is not null) {
-                WorldAdmission.WaitInProcess(step: "bench world");
-            }
+            using var admission = ((artifact is not null) ? WorldAdmission.WaitInProcess(step: "bench world") : null);
+
             payload = ((artifact is null) ? MeasureRepeats(path: path, repeats: repeats) : BenchArtifactContext.MeasureRepeats(artifact: artifact, path: path, repeats: repeats));
             load = host.Finish();
         }

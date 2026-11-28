@@ -88,11 +88,12 @@ public sealed partial class WorldPopulation {
         panel.Loads.Add(item: new FixedNetLoad(Column: column, Force: (weight + pull), Mass: mass, Row: row));
         return true;
     }
-    // Each collider volume of the body pushes the net's nodes out to its radius plus the strand and the contact reach.
+    // Each collider volume of the body pushes the strands it meets until they stand its radius, half the strand and the
+    // contact reach off it: the band a body resting against a strand stands in.
     private void CollectPushers(WorldBody body, WorldNets.Panel panel) {
         var position = body.FixedPosition;
         var orientation = body.FixedOrientation;
-        var margin = (panel.Strand + m_contactReach);
+        var margin = ((panel.Strand / FixedQ4816.FromInteger(value: 2)) + m_contactReach);
 
         foreach (ref readonly var volume in body.ScaledColliderVolumes()) {
             var start = (position + orientation.Rotate(vector: volume.Center));

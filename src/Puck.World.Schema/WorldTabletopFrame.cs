@@ -7,21 +7,22 @@ namespace Puck.World;
 /// The frame a seat engaged at a tabletop plays in, computed in fixed point from the document alone so the
 /// simulation's rule reads (<c>board(pointer, …)</c>, <c>board(side, …)</c>) and the presentation's board view agree:
 /// the board's footprint and centre, the side of the board a seat plays from, and the cell a pointer ray meets on
-/// the playing surface. A board's anchored topology is world-axis-aligned (<see cref="WorldTopologyCompilation"/>), so
-/// its sides are the world's: columns run +X and rows +Z.
+/// the playing surface. Every side, chair and footprint is read in the board's own frame, which turns with the
+/// placement that anchors it (<see cref="WorldTopologyCompilation"/>, <see cref="CompiledTopology.Heading"/>): its
+/// columns run along its own +X and its rows along its own +Z, so a table placed at any yaw plays as it does unturned.
 /// <para>A seat at a side looks across the board toward the opposite edge, and its right is that forward crossed
-/// with world up, the camera basis <c>CameraSnapshot.Create</c> builds: from the -Z side ahead is +Z and right is -X,
-/// and each side round the board (+X, +Z, -X) turns both a quarter. The standard seat library's board steps
+/// with up, the camera basis <c>CameraSnapshot.Create</c> builds: from the board's -Z side ahead is its +Z and right
+/// its -X, and each side round the board (+X, +Z, -X) turns both a quarter. The standard seat library's board steps
 /// (<c>worlds/standard/contexts/tabletop.puck</c>) turn a seat's presses into columns and rows by the same rule.</para>
 /// </summary>
 public static class WorldTabletopFrame {
-    /// <summary>The side of a board whose edge faces -Z: a seat there looks toward +Z.</summary>
+    /// <summary>The side of a board whose edge faces the board's own -Z: a seat there looks toward its +Z.</summary>
     public const int SideNegativeZ = 0;
-    /// <summary>The side of a board whose edge faces +X: a seat there looks toward -X.</summary>
+    /// <summary>The side of a board whose edge faces the board's own +X: a seat there looks toward its -X.</summary>
     public const int SidePositiveX = 1;
-    /// <summary>The side of a board whose edge faces +Z: a seat there looks toward -Z.</summary>
+    /// <summary>The side of a board whose edge faces the board's own +Z: a seat there looks toward its -Z.</summary>
     public const int SidePositiveZ = 2;
-    /// <summary>The side of a board whose edge faces -X: a seat there looks toward +X.</summary>
+    /// <summary>The side of a board whose edge faces the board's own -X: a seat there looks toward its +X.</summary>
     public const int SideNegativeX = 3;
 
     // A pointer ray meeting the surface farther than this many world units along its own direction length is a graze
@@ -62,10 +63,12 @@ public static class WorldTabletopFrame {
 
         return false;
     }
-    /// <summary>Returns the board's footprint on the ground plane: the smallest box holding every cell's centre, grown
-    /// by half a cell on X and Z, at the topology origin's height.</summary>
+    /// <summary>Returns the board's footprint in its own frame: the smallest box holding every cell's centre
+    /// (<see cref="CompiledTopology.LocalCellCentre"/>), grown by half a cell along the board's X and Z, flat at the
+    /// topology origin's height. Its extents are the board's own width and depth whatever its heading.</summary>
     /// <param name="topology">The anchored topology.</param>
-    /// <returns>The footprint, in world units, flat at the topology origin's height.</returns>
+    /// <returns>The footprint, in world units along the board's own axes, relative to
+    /// <see cref="CompiledTopology.Origin"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="topology"/> is <see langword="null"/>.</exception>
     public static FixedAabb Bounds(CompiledTopology topology) {
         ArgumentNullException.ThrowIfNull(argument: topology);
@@ -75,15 +78,36 @@ public static class WorldTabletopFrame {
             derive: static compiled => Measure(topology: compiled)
         ).Box;
     }
-    /// <summary>Returns the centre of the board's footprint (<see cref="Bounds"/>), at the topology origin's height.</summary>
+    /// <summary>Returns the centre of the board's footprint (<see cref="Bounds"/>) in the world, at the topology
+    /// origin's height.</summary>
     /// <param name="topology">The anchored topology.</param>
-    /// <returns>The centre, in world units: the footprint's midpoint, rounded to nearest with ties to even.</returns>
-    public static FixedVector3 Centre(CompiledTopology topology) => Bounds(topology: topology).Center;
+    /// <returns>The centre, in world units: the footprint's midpoint, rounded to nearest with ties to even, placed by
+    /// the board's origin and heading.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="topology"/> is <see langword="null"/>.</exception>
+    public static FixedVector3 Centre(CompiledTopology topology) => (topology.Origin + topology.Turn(offset: Bounds(topology: topology).Center));
+    /// <summary>Returns the world direction from the board's centre out across one of its edges, the way a seat at that
+    /// side looks back from: the board's own axis the side names, turned by its heading.</summary>
+    /// <param name="topology">The anchored topology.</param>
+    /// <param name="side">The side, 0 through 3 (<see cref="SideNegativeZ"/>, <see cref="SidePositiveX"/>,
+    /// <see cref="SidePositiveZ"/>, <see cref="SideNegativeX"/>); any other value reads as <see cref="SideNegativeZ"/>.</param>
+    /// <returns>The unit direction, level, in the world's axes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="topology"/> is <see langword="null"/>.</exception>
+    public static FixedVector3 Outward(CompiledTopology topology, int side) {
+        ArgumentNullException.ThrowIfNull(argument: topology);
+
+        return topology.Turn(offset: side switch {
+            SidePositiveX => FixedVector3.UnitX,
+            SidePositiveZ => FixedVector3.UnitZ,
+            SideNegativeX => -FixedVector3.UnitX,
+            _ => -FixedVector3.UnitZ,
+        });
+    }
     /// <summary>Returns the side of the board a seat standing at a position plays from: the edge of the authored chair
     /// (<see cref="WorldTabletopEngage.Seats"/>) that faces the position most squarely from the board's centre, the
     /// first authored on a tie, or, for a table with no chairs authored, the edge of the four facing the position (a
-    /// position exactly on a diagonal takes the Z side). The board view frames the board from this side and the rules
-    /// read it as <c>board(side, …)</c>, so the two agree on which way is up the board.</summary>
+    /// position exactly on a diagonal takes the Z side), all read in the board's own frame. The board view frames the
+    /// board from this side and the rules read it as <c>board(side, …)</c>, so the two agree on which way is up the
+    /// board.</summary>
     /// <param name="engage">The board's engagement, whose chairs the seat chooses among.</param>
     /// <param name="topology">The anchored topology.</param>
     /// <param name="position">The seat's body position, in world units.</param>
@@ -94,9 +118,10 @@ public static class WorldTabletopFrame {
     public static int SeatSide(WorldTabletopEngage engage, CompiledTopology topology, in FixedVector3 position) {
         ArgumentNullException.ThrowIfNull(argument: engage);
 
-        var centre = Centre(topology: topology);
-        var dx = (position.X - centre.X);
-        var dz = (position.Z - centre.Z);
+        // The position's offset from the footprint's centre, along the board's own axes.
+        var offset = (topology.Unturn(offset: (position - topology.Origin)) - Bounds(topology: topology).Center);
+        var dx = offset.X;
+        var dz = offset.Z;
         var chosen = -1;
         var squarest = FixedQ4816.Zero;
 
@@ -131,10 +156,10 @@ public static class WorldTabletopFrame {
                 dz: dz
             ));
     }
-    /// <summary>Resolves the edge a chair facing <paramref name="yawDegrees"/> sits at: the facing convention of a spawn
-    /// point and a body, where 0 faces -Z, so a chair at yaw 0 sits at the +Z edge, 90 at +X, 180 at -Z and 270 at
-    /// -X.</summary>
-    /// <param name="yawDegrees">The chair's facing, in degrees.</param>
+    /// <summary>Resolves the edge a chair facing <paramref name="yawDegrees"/> sits at, in the board's own frame: the
+    /// facing convention of a spawn point and a body, where 0 faces the board's -Z, so a chair at yaw 0 sits at its +Z
+    /// edge, 90 at +X, 180 at -Z and 270 at -X. A chair's world facing is its yaw plus the board placement's.</summary>
+    /// <param name="yawDegrees">The chair's facing relative to the board, in degrees.</param>
     /// <param name="side">The edge, 0 through 3, or -1 when the facing is not a whole number of quarter turns.</param>
     /// <returns><see langword="true"/> when <paramref name="yawDegrees"/> is a finite whole number of quarter turns.</returns>
     public static bool TrySideOfYaw(double yawDegrees, out int side) {
@@ -158,7 +183,8 @@ public static class WorldTabletopFrame {
     }
     /// <summary>Resolves the cell a pointer ray meets on the board's playing surface: the horizontal plane
     /// <paramref name="surface"/> above the topology's origin, met travelling down from above it, then resolved like a
-    /// body standing there (<see cref="CompiledTopology.TryCellOf"/>).</summary>
+    /// body standing there (<see cref="CompiledTopology.TryCellOf"/>, which reads the hit in the board's own
+    /// frame).</summary>
     /// <param name="topology">The anchored topology.</param>
     /// <param name="surface">The playing surface's height above the topology origin, in world units.</param>
     /// <param name="ray">The pointer ray, in world units; its direction need not be unit length.</param>
@@ -213,9 +239,9 @@ public static class WorldTabletopFrame {
         var centres = FixedAabb.Empty;
 
         for (var cell = 0; (cell < topology.CellCount); cell++) {
-            var centre = topology.CellCentre(cell: cell);
+            var centre = topology.LocalCellCentre(cell: cell);
 
-            centres = centres.Enclose(point: centre with { Y = topology.Origin.Y });
+            centres = centres.Enclose(point: centre with { Y = FixedQ4816.Zero });
         }
 
         var reach = (topology.CellSize * Half);

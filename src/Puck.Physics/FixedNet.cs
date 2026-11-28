@@ -67,12 +67,12 @@ public readonly record struct FixedNetSpec(
 /// <param name="Mass">The mass the point carries, in kilograms; non-negative.</param>
 public readonly record struct FixedNetLoad(FixedQ4816 Column, FixedQ4816 Row, FixedVector3 Force, FixedQ4816 Mass);
 
-/// <summary>A capsule that pushes the net's nodes out of it: every node closer than <paramref name="Radius"/> to the
-/// segment from <paramref name="Start"/> to <paramref name="End"/> moves out to that distance. A body leaning on the net
-/// is one.</summary>
+/// <summary>A capsule that pushes the net's strands out of it: every strand closer than <paramref name="Radius"/> to the
+/// segment from <paramref name="Start"/> to <paramref name="End"/> moves across the net's plane until it stands that far
+/// off. A body leaning on the net, or brushing through its mesh, is one.</summary>
 /// <param name="Start">The segment's start, in metres.</param>
 /// <param name="End">The segment's end, in metres.</param>
-/// <param name="Radius">The distance, in metres, a node is held off the segment.</param>
+/// <param name="Radius">The distance, in metres, a strand is held off the segment.</param>
 public readonly record struct FixedNetPusher(FixedVector3 Start, FixedVector3 End, FixedQ4816 Radius);
 
 /// <summary>The complete deterministic state of a <see cref="FixedNet"/>: each node's offset from its rest position and
@@ -92,7 +92,7 @@ public sealed record FixedNetState(FixedVector3[] Offsets, FixedVector3[] Veloci
 /// each step is cut into <see cref="FixedNetSpec.Substeps"/> slices, and each slice integrates the free nodes under
 /// gravity and the loads it is handed, solves every strand's cap between neighbouring nodes once
 /// (<see cref="FixedTetherConstraint.SolvePair"/>, compliant, so a strand may go slack but stretches past its length only
-/// as its stiffness allows), pushes the nodes out of the pushers, and holds each node within its reach of rest
+/// as its stiffness allows), pushes the strands out of the pushers, and holds each node within its reach of rest
 /// (<see cref="FixedTetherConstraint.Solve"/>, the bound every reader of the net's extent relies on). Small slices with
 /// one pass each converge a stiff net where many passes over one long step do not (XPBD's substepping), and a load's
 /// mass rides the nodes under it, so a body's weight bellies the net by as much as the strands give under it rather than
@@ -155,6 +155,8 @@ public sealed class FixedNet {
     private FixedNetPusher[] m_pushers = [];
     private readonly FixedQ4816 m_acrossCap;
     private readonly FixedQ4816 m_upCap;
+    // The narrower of the two rest spacings between neighbouring nodes, in metres.
+    private readonly FixedQ4816 m_spacing;
     private readonly FixedTetherConstraint m_reach;
     private readonly FixedVector3 m_normal;
     // The rest layout's frame: X along Across, Y along Up made square to it, Z along the normal.
@@ -214,6 +216,7 @@ public sealed class FixedNet {
 
         m_acrossCap = ((acrossStep.Length * slack) * Units);
         m_upCap = ((upStep.Length * slack) * Units);
+        m_spacing = FixedQ4816.Min(x: acrossStep.Length, y: upStep.Length);
         m_reach = new FixedTetherConstraint(length: (spec.Reach * Units), minLength: FixedQ4816.Zero);
 
         var inverse = (FixedQ4816.One / spec.NodeMass);
@@ -240,6 +243,10 @@ public sealed class FixedNet {
             }
         }
         m_restBox = new FixedAabb(Minimum: low, Maximum: high);
+        for (var node = 0; (node < NodeCount); node++) {
+            if (((node % spec.Columns) < (spec.Columns - 1)) && !(IsPinned(node: node) && IsPinned(node: (node + 1)))) { FreeStrandCount++; }
+            if ((node < (NodeCount - spec.Columns)) && !(IsPinned(node: node) && IsPinned(node: (node + spec.Columns)))) { FreeStrandCount++; }
+        }
     }
 
     /// <summary>Gets the net's layout and material.</summary>
@@ -512,7 +519,45 @@ public sealed class FixedNet {
 
     /// <summary>Gets the cell count, one fewer than the nodes along each edge multiplied.</summary>
     public int CellCount => ((Spec.Columns - 1) * (Spec.Rows - 1));
-    /// <summary>Writes the net's colliders as it stands: a rounded box over each cell of four nodes, centred on their mean,
+    /// <summary>Gets the strands a body meets: every strand with a free node, the ones between two pinned nodes lying
+    /// along the frame.</summary>
+    public int FreeStrandCount { get; }
+    /// <summary>Gets the widest a body may be and still pass through the net's mesh at rest, in metres: the clear width
+    /// between two strands across the narrower spacing, less a strand's thickness.</summary>
+    /// <param name="strand">The strand's thickness, in metres.</param>
+    /// <returns>The opening, in metres; zero or less for a mesh no body passes.</returns>
+    public FixedQ4816 Opening(FixedQ4816 strand) => (m_spacing - strand);
+    /// <summary>Writes the colliders a body meets as the net stands: a rounded box along each strand with a free node,
+    /// from node to node, rounded by <paramref name="radius"/>, so a body meets the strands and passes the openings
+    /// between them.</summary>
+    /// <param name="radius">The rounding, in metres: half the strand's thickness.</param>
+    /// <param name="destination">Receives one collider per strand with a free node, in strand order; at least
+    /// <see cref="FreeStrandCount"/> long.</param>
+    public void StrandColliders(FixedQ4816 radius, Span<FixedStaticCollider> destination) {
+        var columns = Spec.Columns;
+        var written = 0;
+
+        for (var node = 0; (node < NodeCount); node++) {
+            if (((node % columns) < (columns - 1)) && !(IsPinned(node: node) && IsPinned(node: (node + 1)))) {
+                destination[written++] = StrandCollider(first: node, radius: radius, second: (node + 1));
+            }
+            if ((node < (NodeCount - columns)) && !(IsPinned(node: node) && IsPinned(node: (node + columns)))) {
+                destination[written++] = StrandCollider(first: node, radius: radius, second: (node + columns));
+            }
+        }
+    }
+    private FixedStaticCollider StrandCollider(int first, int second, FixedQ4816 radius) {
+        var a = Position(node: first);
+        var b = Position(node: second);
+        var span = (b - a);
+        var length = span.Length;
+        var rotation = ((length == FixedQ4816.Zero) ? FixedQuaternion.Identity : FixedQuaternion.FromTo(from: FixedVector3.UnitX, to: (span / length)));
+
+        return FixedStaticCollider.RoundedBox(center: ((a + b) / FixedQ4816.FromInteger(value: 2)),
+            innerHalfExtents: new FixedVector3(X: (length / FixedQ4816.FromInteger(value: 2)), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
+            radius: radius, rotation: rotation);
+    }
+    /// <summary>Writes the sheet a hold takes the net by, as it stands: a rounded box over each cell of four nodes, centred on their mean,
     /// turned from the rest layout's frame by the least rotation that carries the rest normal onto the cell's own
     /// (the cross product of its two diagonal sums), and sized to hold all four nodes, then rounded by
     /// <paramref name="radius"/>. Neighbouring cells share their edge nodes, so the boxes overlap along every edge and the
@@ -693,36 +738,68 @@ public sealed class FixedNet {
         }
         return pressing;
     }
-    // Whether the pusher reaches a free node of the step's positions: one closer to its segment than its radius. With
-    // `move`, every such node moves out to that radius, along the line from the segment's nearest point, or along the
-    // rest normal for a node on the segment itself.
+    // Whether the pusher meets a strand of the step's positions: one whose segment comes closer to the pusher's than the
+    // pusher's radius. With `move`, every such strand moves along the net's normal, away from the pusher's side, until it
+    // stands that radius off, its two nodes sharing the move by where along the strand it is met (a pinned node takes
+    // none). A push only ever moves strands across the net's plane, never along it, so a body leaning into a mesh
+    // opening bulges the net but never spreads its strands to fit through; a body small enough for the opening meets no
+    // strand at all, or brushes one aside.
     private bool Push(in FixedNetPusher pusher, bool move) {
-        var segment = (pusher.End - pusher.Start);
         var reach = new FixedAabb(Minimum: FixedVector3.Min(left: pusher.Start, right: pusher.End), Maximum: FixedVector3.Max(left: pusher.Start, right: pusher.End)).Grow(margin: pusher.Radius);
+        var columns = Spec.Columns;
         var pressed = false;
 
         for (var node = 0; (node < NodeCount); node++) {
-            if (m_inverseMass[node] == FixedQ4816.Zero) { continue; }
-            var position = m_positions[node];
+            var column = (node % columns);
 
-            if (!reach.Contains(point: position)) { continue; }
-
-            var along = FixedVector3.SegmentParameter(point: (position - pusher.Start), segment: segment);
-            var nearest = (pusher.Start + (segment * along));
-            var away = (position - nearest);
-
-            if (away.CompareLengthTo(other: new FixedVector3(X: pusher.Radius, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)) >= 0) { continue; }
-            pressed = true;
-            if (!move) { return true; }
-
-            var direction = away.Normalize();
-
-            if (direction == FixedVector3.Zero) {
-                direction = ((FixedVector3.Dot(left: (m_local[node] - nearest), right: m_normal) >= FixedQ4816.Zero) ? m_normal : -m_normal);
+            if (column < (columns - 1)) {
+                pressed |= PushStrand(first: node, move: move, pusher: in pusher, reach: in reach, second: (node + 1));
             }
-            m_positions[node] = (nearest + (direction * pusher.Radius));
+            if (node < (NodeCount - columns)) {
+                pressed |= PushStrand(first: node, move: move, pusher: in pusher, reach: in reach, second: (node + columns));
+            }
+            if (pressed && !move) { return true; }
         }
         return pressed;
+    }
+    private bool PushStrand(int first, int second, in FixedNetPusher pusher, in FixedAabb reach, bool move) {
+        var wa = m_inverseMass[first];
+        var wb = m_inverseMass[second];
+
+        if ((wa == FixedQ4816.Zero) && (wb == FixedQ4816.Zero)) { return false; }
+
+        var a = m_positions[first];
+        var b = m_positions[second];
+
+        if (!reach.Intersects(other: new FixedAabb(Minimum: FixedVector3.Min(left: a, right: b), Maximum: FixedVector3.Max(left: a, right: b)))) { return false; }
+
+        var delta = FixedDynamicBodyContacts.ClosestDelta(firstParameter: out var u, p1: a, p2: pusher.Start, q1: b, q2: pusher.End);
+
+        if (!delta.IsWithin(radius: pusher.Radius)) { return false; }
+        if (!move) { return true; }
+
+        // The strand's offset from the pusher across the plane, and along it: the push keeps the along part and sets the
+        // across part to what clears the radius, on the side the strand stands (or rests) on.
+        var across = FixedVector3.Dot(left: delta, right: m_normal);
+        var along = (delta - (m_normal * across));
+        var room = ((pusher.Radius * pusher.Radius) - along.LengthSquared);
+
+        if (room <= FixedQ4816.Zero) { return true; }
+
+        var side = ((across != FixedQ4816.Zero)
+            ? across
+            : FixedVector3.Dot(left: (((m_local[first] + m_local[second]) / FixedQ4816.FromInteger(value: 2)) - pusher.Start), right: m_normal));
+        var clear = FixedQ4816.Sqrt(value: room);
+        var move3 = (m_normal * (((side >= FixedQ4816.Zero) ? clear : -clear) - across));
+        // Each free node's share of the contact point's weights, normalized so the point moves by the whole push; a
+        // point beside a pinned end moves its free node by at most four times the push, since a strand is stiff there.
+        var shareA = ((wa == FixedQ4816.Zero) ? FixedQ4816.Zero : (FixedQ4816.One - u));
+        var shareB = ((wb == FixedQ4816.Zero) ? FixedQ4816.Zero : u);
+        var norm = FixedQ4816.Max(x: ((shareA * shareA) + (shareB * shareB)), y: FixedQ4816.FromRawBits(value: (FixedQ4816.One.Value / 4L)));
+
+        m_positions[first] += (move3 * (shareA / norm));
+        m_positions[second] += (move3 * (shareB / norm));
+        return true;
     }
     // The node at the grid cell's low corner holding a point, and the point's fraction across that cell; the point is
     // clamped onto the grid.

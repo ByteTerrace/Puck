@@ -17,7 +17,7 @@
 //   each lift's shaft, the same two storeys: the car's ride between level 0 (or 2) and level 1 is the transition, so a
 //     body riding it shrinks or grows with the car's height, and an observer outside sees it through the car's and the
 //     shaft's glass
-//   level 1's floor, the two aisles and the bridge (never the nave's void, which the lattice walls off): Alice's size
+//   level 1's floor, the two aisles and the bridge (never the nave's void beyond the lattice's nets): Alice's size
 //     throughout
 //
 // A body holding a pass takes its full size in every zone. A pass is a body register, so it belongs to the body and

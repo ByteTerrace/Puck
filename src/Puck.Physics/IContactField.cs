@@ -108,13 +108,15 @@ public interface IContactField {
     /// <param name="origin">The world-space probe origin (a body's own mid-height).</param>
     /// <param name="direction">The probe direction; need not be pre-normalized.</param>
     /// <param name="maxDistance">The non-negative maximum distance a result may sit from <paramref name="origin"/>.</param>
+    /// <param name="girth">The asking body's girth, in metres: a holdable surface with openings wider than it (a net's
+    /// mesh) is no surface for that body, which passes through, and the probe answers what stands beyond.</param>
     /// <param name="candidate">The nearest holdable surface along the direction, or <see langword="default"/> when
     /// none qualifies.</param>
     /// <param name="grantedByOverride">Whether a per-surface override (rather than the provider's own default grip
     /// policy) is what made <paramref name="candidate"/> holdable. Meaningless when this returns
     /// <see langword="false"/>.</param>
     /// <returns><see langword="true"/> when a qualifying holdable surface lies along the direction.</returns>
-    bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
+    bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 girth, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
         candidate = default;
         grantedByOverride = false;
 

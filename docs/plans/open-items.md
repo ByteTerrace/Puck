@@ -2133,7 +2133,7 @@ Remaining detailed findings and smaller cuts in this area:
 - [low · unconfirmed] A group's material place list
   (`SdfMeshGeometryBuilder.Materials`) holds only the base material each shape
   names, not the ids a positional recolor reaches (`CellJitter`,
-  `RepeatPolar`, `WallpaperFold` strides), so `SdfMeshLibrary.Renumber` maps
+  `RepeatPolar`, `WallpaperFold` strides), so `SdfMeshLibrary.TryRenumber` maps
   only the listed ids. Check whether a recolored group taken from the library
   draws another palette's rows.
 

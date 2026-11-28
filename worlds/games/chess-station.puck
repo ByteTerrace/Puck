@@ -23,7 +23,8 @@
 // settled bodies into the cells, the play and the doors write the cells, and the holodeck runs after every writer of a
 // cell, standing each body where its cell says. ../../debug/game-stations.puck is the worked order.
 //
-// The board is 15 cm squares centred on the board area, its columns running +X and its rows +Z from the near chair, so
+// The board is 15 cm squares centred on the board area, its columns running the station's +X and its rows its +Z from
+// the near chair (its board placement takes the station's yaw, so the board turns with the table), so
 // a square's cell is the chess board's own (8 * row + column): rank 1 nearest the near chair and the a-file (column 7)
 // at its left, White's side. The near chair plays White and the far chair Black; the computer plays whichever side no
 // one sits for (Black when no one sits at all, and neither while both chairs are taken). Anyone else watches. A square
@@ -147,13 +148,16 @@ function chessStationSquarePaints(station, index, cell) = [
     [0.073, 0.073],
     ((chessStationParity[cell] == 0) ? $"state.chessStationBoardInkOf{index}.light" :
       $"state.chessStationBoardInkOf{index}.dark"),
-    0.004
+    0.004,
+    gameStationReading(station)
   )
   displayRing(
     gameStationWorld(station, chessStationSquareAt(cell)[0], chessStationSquareAt(cell)[1]),
     [0.066, 0.066],
     $"state.chessStationRingInkOf{index}.{cell}",
-    0.009
+    0.009,
+    0.25,
+    gameStationReading(station)
   )
 ]
 
@@ -221,6 +225,7 @@ template chessStationBoard(station, index) {
       topology: $"chessBoard{index}"
     }
     position: station.at
+    yawDegrees: gameStationYaw(station)
   }
   holodeckPool(
     bodies: chessStationBodies(station),

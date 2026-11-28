@@ -673,6 +673,49 @@
     ]
   },
   {
+    "Id": "complex.cardinal-yaw",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "FromAngleCardinal"
+      },
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "RotateAboutY"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromAngleCardinal answers the exact cardinal unit (1, 0), (0, 1), (\u22121, 0) or (0, \u22121) for every quarter count k in \u22128..8 at the exact k\u00B7\u03C0/2 raw and at offsets of \u00B11 and \u00B116 raw from it, the unit chosen by k modulo 4; at \u00B117 raw it answers FromAngle bit-for-bit. A yaw composed of three rounded quarter turns (FromDegrees(90) added three times, one raw from the nearest 3\u03C0/2) answers the exact (0, \u22121)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "RotateAboutY by each cardinal unit permutes a ladder of vectors exactly: a quarter turn sends (x, y, z) to (z, y, \u2212x), a half turn to (\u2212x, y, \u2212z), three quarters to (\u2212z, y, x), and the identity leaves each unchanged; Y is never touched",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "RotateAboutY by FromAngle(\u03B8) over a ladder of seven angles and three vectors no longer than 1.7 units",
+        "Against": "FixedQuaternion.FromAxisAngle(UnitY, \u03B8).Rotate, within 8 raw per component",
+        "Shared": "",
+        "Citation": "pins the yaw convention (counterclockwise about +Y, so +X turns toward \u2212Z) against the quaternion rotation every placement frame uses; the tolerance covers the two kernels' independent roundings at unit-scale vectors",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "complex.rotate-vs-oracle",
     "Tier": "Default",
     "Members": [

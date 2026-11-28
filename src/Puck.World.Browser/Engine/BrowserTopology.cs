@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Text.Json;
 
 namespace Puck.World.Browser.Engine;
@@ -51,8 +50,7 @@ public static class BrowserTopology {
         }
 
         var compiled = TopologyCompilation.Compile(
-            topology: topology,
-            anchorOffset: Vector3.Zero
+            topology: topology
         );
         var result = new BrowserCellGeometry[compiled.CellCount];
 

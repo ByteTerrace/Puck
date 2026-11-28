@@ -16,5 +16,8 @@ namespace Puck.Cli;
 /// <param name="stage">Receives what the wait is on, as a phrase, on every reading while it waits; <see langword="null"/> to
 /// ignore it.</param>
 /// <param name="cancellationToken">Stops the wait.</param>
+/// <param name="reserved">Receives the admitted start's reservation when the start runs inside the caller's process, which
+/// has no process of its own to end the reservation: the reservation holds the start's expected peak until the caller disposes
+/// it. <see langword="null"/> for a start whose own process ends it.</param>
 /// <returns><see langword="true"/> once the host can take the step; <see langword="false"/> when the bound passed first.</returns>
-public delegate Task<bool> HostAdmit(string checkout, string step, bool device, bool heavySuite, HostStartProfile profile, TimeSpan? bound, bool reserve, TextWriter progress, Action<string>? stage, CancellationToken cancellationToken);
+public delegate Task<bool> HostAdmit(string checkout, string step, bool device, bool heavySuite, HostStartProfile profile, TimeSpan? bound, bool reserve, TextWriter progress, Action<string>? stage, CancellationToken cancellationToken, Action<IDisposable>? reserved);

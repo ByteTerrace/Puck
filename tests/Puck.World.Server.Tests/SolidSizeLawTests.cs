@@ -68,7 +68,7 @@ public sealed class SolidSizeLawTests {
         var contact = (field ? (IContactField)fixture.Server.Population.SolidField! : WorldColliderSet.Build(fixture.Server.Definition));
 
         if (contact is WorldColliderSet analytic) { analytic.RefreshAttached(fixture.Server.Population, fixture.Server.Definition, 1, 1); }
-        Assert.True(condition: contact.TryHoldableSurfaceAlongDirection(from, -FixedVector3.UnitY, FixedQ4816.FromInteger(value: 5), out var grip, out _));
+        Assert.True(condition: contact.TryHoldableSurfaceAlongDirection(from, -FixedVector3.UnitY, FixedQ4816.FromInteger(value: 5), FixedQ4816.Zero, out var grip, out _));
         Assert.InRange(((double)grip.Point.Y), (0.99 + (margin / 2)), (1.01 + (margin / 2)));
         Assert.True(condition: contact.TryNearestSurfaceAlongDirection(from, -FixedVector3.UnitY, FixedQ4816.FromInteger(value: 5), FixedQ4816.Zero, out _));
         if (field) {
