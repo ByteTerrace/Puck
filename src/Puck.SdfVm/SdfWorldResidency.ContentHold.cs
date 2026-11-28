@@ -67,7 +67,8 @@ public sealed partial class SdfWorldResidency {
         m_heldSeconds = since;
         // The next full capture advances its world by the frames answered from held content, as by frames nothing read.
         m_skippedSeconds += context.FrameDeltaSeconds;
-        if ((settings == held.Settings) && SameViews(views: views)) {
+        // Views equal by value and in order to those the held frame was dressed or fitted with.
+        if ((settings == held.Settings) && views.SequenceEqual(second: m_heldViews)) {
             m_contentHolds++;
             SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.ContentHeld);
             return true;
@@ -79,14 +80,6 @@ public sealed partial class SdfWorldResidency {
         m_contentRefits++;
         SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.ContentRefit);
         PublishCaptured(frame: writer.Write(settings: in settings), full: false);
-        return true;
-    }
-    // Whether the views equal, by value and in order, the ones the held frame was dressed or fitted with.
-    private bool SameViews(IReadOnlyList<SdfViewSnapshot> views) {
-        if (views.Count != m_heldViews.Count) { return false; }
-        for (var index = 0; (index < views.Count); index++) {
-            if (views[index] != m_heldViews[index]) { return false; }
-        }
         return true;
     }
     // Notes a published frame for the hold: its views by value, and for a full capture, that its pack reads the content

@@ -617,7 +617,7 @@ that day. Nothing else waits for a bet.
 
 | Bet | Time box | When it starts |
 |---|---|---|
-| 1. A view that has not changed keeps its picture, decided from the change records the client already reads | Prototype 7 days | [The memo](rendering-research/bet1-client-records.md) is written. The prototype only if the breakdown of produce shows that capturing a shown, unchanged world is a real cost |
+| 1. A view that has not changed keeps its picture, decided from the change records the client already reads | Prototype 7 days | [The memo](rendering-research/bet1-client-records.md) is written, and a narrower form stands for routed scenes behind windows ([the first bet](#the-first-bet-stands-on-the-clients-records)). The rest only if its counts show capturing a shown, unchanged session screen or infinity view is a real cost |
 | 2. A portal crossing prepared ahead | 7 days | When decision 2's minimums exist |
 | 3. Worlds merged into one view, and crowds built from shared parts | Memo 4 days, prototype 10 | The memo any time. The prototype when the instance table takes rows from several worlds (decision 11) |
 | 4. Products shared by a name that says what they mean | Memo 4 days, prototype 8 | Now on the desktop: the owner confirmed the design. The exchange between GPU vendors has its own box when the hardware is on hand |
@@ -846,6 +846,23 @@ wrongly keeps its picture also lowers the count the work is judged by.
 - Nothing forces a future reader of a new input to add a record. The
   audit is the only check for that, so the shortcut stays under
   adversarial review ([hazards](../development/hazards.md#silent-invariants)).
+
+A narrower form of the shortcut stands for a routed scene shown through
+windows alone (`SdfWorldResidency.TryHoldContent`). It keys on a late record
+instead of the second vector: two full captures in a row that composed one
+content (`SdfWorldTables.CaptureContentSignature`), with the presented tick,
+the clocks and the environment moving as they do. Beside it stand the early
+records the scene already has (`WorldRoutedScene.TryRefit`: the delivered
+document and revisions, the state mirror's counters, a body delivery counter,
+the stamp pool's rest, the levers). A view that moves is fitted again on the
+held content instead of composing it. A full capture at least
+`SdfWorldResidency.ContentHoldHertz` times a second re-signs the content, so
+that capture is the audit, and a change the records miss shows at most one
+period late. The count the prototype's first step asks for is on
+`world.counters sdf.captures` (`content-held`, `content-refit`,
+`content-still` against `run`) and on each residency's `captures` line in
+`world.residency`. The session screen and the infinity view are not
+candidates yet.
 
 Checked for this section: the three projects' lack of any `StateArena`
 reference, the mirror's summary and its refresh from the stamp's moved

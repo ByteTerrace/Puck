@@ -551,7 +551,8 @@ included, into `SdfWorldPipelineCatalog.RetiredBuilds` and waits for none; a los
 itself before that table, in its holdings and in its loss.
 A residency no reader asked for parks on a live device (`SdfWorldResidency.Park`, decided once a frame by
 `SdfWorldPasses.ParkUnobserved` from `SdfResidencySelector.Excess`, the device pool past its limit, which follows the
-system's budget less the usage the ledgers do not hold): `m_tables` is cleared between frames and the tables go to the
+system's budget less the usage the ledgers do not hold, or at once on the pressed wait when the sight has let its world
+go, `SdfWorldResidency.SightLetGo`): `m_tables` is cleared between frames and the tables go to the
 device's retirement, keeping the bake, the lighting's measured words (for `SdfWorldResidency.ForgetLightingSeconds`, after which the residency's upkeep disposes the volume and a wake lights the world from nothing), the frame and the leased pipeline set. Every
 path that reaches the tables goes through `m_tables`, so a reader that comes for a parked residency prepares it, which
 builds new tables, and its views keep their last images while `SdfWorldResidency.Waking` stands. Every staging
@@ -2275,7 +2276,17 @@ counts in `sdf.transforms`, never in `records.posed`.
   asks `IsUnchanged` of those alone. The reader walk shares the scheduler's cadence and demand calculation. A rated
   view only asks for its residency when it is due. A graph installed mid-frame still stages
   late (`SdfWorldResidency.Staged`, counted). `world.counters sdf.captures` reads residencies held against captures
-  run, the minimums served and held, and the residencies packed and uploaded beside others.
+  run, the minimums served and held, and the residencies packed and uploaded beside others. A world the sight has let
+  go (`SdfWorldResidency.SightLetGo`) owes no minimum and parks on the pressed wait, its arrival included.
+- **A still world behind a window is not composed again.** A routed scene shown through windows alone answers a
+  capture from the content it holds while the invariant in `SdfWorldResidency.ContentHold.cs` holds: two full
+  captures in a row composed one content (`SdfWorldTables.CaptureContentSignature`, read after the pack), no early
+  record of the frame source or its dresser moved (`SdfCompositionFrameSource.TryRefit`, `WorldRoutedScene.TryRefit`),
+  and the latest full capture is younger than one period of `SdfWorldResidency.ContentHoldHertz`. A frame whose views
+  stand reuses the packed frame; one whose window moved is the held content with the fitted views
+  (`ISdfRefitDresser`), packed as any frame. `world.rates off` turns it off with the views lever. A new input a routed
+  scene's dress reads joins `WorldRoutedScene`'s `DressRecord`, or it shows up to one period late. Each residency's
+  `captures` line in `world.residency` and `sdf.captures.content-held|content-refit|content-still` count it.
 - **Residencies pack and upload on the pool.** A captured residency's frame is packed in
   `SdfWorldPasses.ReadsPrepared` and its upload recorded in `SdfWorldPasses.RendersScheduled`, each as one
   `JobClass.Frame` fork with a residency a partition; the steps before and after each fork stay on the frame thread
