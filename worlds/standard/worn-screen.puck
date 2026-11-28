@@ -15,8 +15,7 @@
 //   wornScreen(mount: myMount, side: side, isRight: isRight, ids: [<three free shape ids>], materials: { bezel, cover, screen })
 //
 // lists `wornScreenGlass(...)` as the glass's palette slot (one slot a side), splices `wornScreenSwings(...)` into its
-// upper arm's and forearm's swings, and lists `wornScreenDrivers` among its drivers; its look's lane 0 lights the glass
-// as an arm rises (`maximum(menuRaiseLeft[$body], menuRaiseRight[$body])`). Its chase camera takes
+// upper arm's and forearm's swings, and lists `wornScreenDrivers` among its drivers. Its chase camera takes
 // `focus: wornScreenFocus()`.
 import "camera"
 import "mirror"
@@ -81,8 +80,8 @@ template wornScreen(mount, side, isRight, ids, materials, shape = wornScreenShap
   }
 }
 
-// One side's glass, a palette slot lettered with the menu's interface (menu.puck's `menuScreenPaints`) and lit by lane 0
-// as the cover opens. `kinds` are the roster's.
+// One side's glass, a palette slot lettered with the menu's interface (menu.puck's `menuScreenPaints`), which its cover
+// hides while the menu is shut. `kinds` are the roster's.
 function wornScreenGlass(side, kinds, shape = wornScreenShape) = (menuGlass with {
   paints: menuScreenPaints(parent: $"wornScreenGlass-{side}", half: shape.screen.half, kinds: kinds)
 })
@@ -110,7 +109,7 @@ let wornScreenDrivers = flatMap([["left", "Left"], ["right", "Right"]], s => [
 
 // The chase camera's focus while the menu is open (camera.puck's `focusFraming`): it eases in toward the side whose arm
 // rises, as far as that arm rises (all the way in the focused read, part way in the glance read).
-function wornScreenFocus(distance = 1.9, pitch = 0.45, pivotOffset = [0.3, 1.35, 0.1]) = focusFraming(
+function wornScreenFocus(distance = 1.9, pitch = 0.45, pivotOffset = [-0.2, 1.35, -0.3]) = focusFraming(
   left: "menuRaiseLeft",
   right: "menuRaiseRight",
   distance: distance,
