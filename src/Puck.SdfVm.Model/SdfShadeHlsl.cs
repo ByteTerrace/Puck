@@ -156,7 +156,7 @@ void sdfShadeInterpret(uint2 slice, uint2 parameters, uint phase, SdfShadeStamp 
             }
             text.Append(value: "        } break;\n");
         }
-        text.Append(value: "        }\n        sdfShadeWriteRegister(regs, op.y, value);\n        sdfShadeWriteOutputs(outputs, op.z >> 8u, value);\n        sdfWorkSteps++;\n    }\n}\n");
+        text.Append(value: "        }\n        sdfShadeWriteRegister(regs, op.y, value);\n        sdfShadeWriteOutputs(outputs, op.z >> 8u, value);\n        sdfWorkShadeOperations++;\n    }\n}\n");
         text.Append(value: """
 uint sdfShadeArm(uint2 slice) { return 0u; }
 bool sdfShadeHas(SdfShadeBinding binding, uint phase) { return binding.range.y != 0u && (phase == 0u || !binding.unstyled) && sdfShadeRead(binding.range.xy, phase).y != 0u; }
@@ -337,7 +337,7 @@ void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, S
             _ => $"{Function(op: value.Op, types: value.Operands.Select(selector: a => a.Type).ToArray())}(slice, stamp, {value.Immediate}u, {string.Join(", ", args)})",
         };
 
-        text.Append(System.Globalization.CultureInfo.InvariantCulture, $"precise {Type(result.Type)} v{result.Index} = {expression};\nsdfWorkSteps++;\n");
+        text.Append(System.Globalization.CultureInfo.InvariantCulture, $"precise {Type(result.Type)} v{result.Index} = {expression};\nsdfWorkShadeOperations++;\n");
     }
     private static string Function(SdfShadeOp op, SdfShadeType[] types) => $"sdfShade_{op}_{Signature(types: types)}";
     private static uint Signature(SdfShadeType[] types) { var value = 0U; for (var i = 0; (i < types.Length); i++) { value |= (((uint)types[i]) << (4 * i)); } return value; }

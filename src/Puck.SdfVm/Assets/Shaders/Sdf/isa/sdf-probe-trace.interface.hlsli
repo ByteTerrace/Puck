@@ -28,9 +28,9 @@ void puckCountFragmentWork(uint steps, uint texels) {
 }
 void puckCountRejectedHit() {
 }
-void puckCountSky(uint evaluations, uint loads) {
-}
 void puckCountLights(uint visits, uint faces) {
+}
+void puckCountShading(uint operations, uint lookups) {
 }
 
 #endif // PUCK_SHADER_INTERFACE_SDF_PROBE_TRACE

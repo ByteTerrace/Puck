@@ -45,20 +45,35 @@ uint4 sdfViewsReflectionPack(float3 color, float hit, float open, uint normalWor
 }
 
 #if !defined(SDF_VIEWS_REFLECTIONS_PASS)
-// The environment a views pixel reflects: the volume's reflection (`fallback`, sdfViewsReflectionSeen) where no ray answers
-// it, the colour the rays reached on screen and the open sky (`sky`, worldEnvironmentReflection) by the shares their
-// records hold, and the volume's alone in a view whose fragment holds no reflection pass (passGroup.screenReflections).
-// A pixel weighs the 2x2 cells about it by a tent of one cell's width about each cell's representative this frame, so
-// along each axis its own representative counts whole and two a pixel either side count alike, and by how nearly each
-// representative lies on its own surface: on its tangent plane and facing as it does, falling smoothly to nothing at the
-// probe lookup's tolerances (sdfViewsProbeTolerance, SdfViewsProbeFacing). A reflection so never crosses a depth or
-// crease edge the records show, and a cell's ray never switches whole between counting and not. `surfacePoint` is the
-// pixel's, `normal` its geometric normal (the visibility record's) and `t` its ray distance.
-float3 sdfViewsScreenReflection(SdfPixel p, float3 surfacePoint, float3 normal, float t, float3 sky, float3 fallback) {
+// What the reflection records answer at a pixel: the shares of the reflection the colour the rays reached (`hit`) and the
+// open sky (`open`) answer, and the colour weighed by its share. `kept` is false where no record answers (a view whose
+// fragment holds no reflection pass, or no cell on the pixel's surface), and the volume's reflection stands whole.
+struct SdfViewsScreenRead {
+    bool kept;
+    float hit;
+    float open;
+    float3 color;
+};
+
+// A views pixel's read of the reflection records. A pixel weighs the 2x2 cells about it by a tent of one cell's width about
+// each cell's representative this frame, so along each axis its own representative counts whole and two a pixel either
+// side count alike, and by how nearly each representative lies on its own surface: on its tangent plane and facing as it
+// does, falling smoothly to nothing at the probe lookup's tolerances (sdfViewsProbeTolerance, SdfViewsProbeFacing). A
+// reflection so never crosses a depth or crease edge the records show, and a cell's ray never switches whole between
+// counting and not. `surfacePoint` is the pixel's, `normal` its geometric normal (the visibility record's) and `t` its
+// ray distance.
+SdfViewsScreenRead sdfViewsScreenRead(SdfPixel p, float3 surfacePoint, float3 normal, float t) {
+    SdfViewsScreenRead none;
+
+    none.kept = false;
+    none.hit = 0.0;
+    none.open = 0.0;
+    none.color = float3(0.0, 0.0, 0.0);
+
     uint cellEdge = passGroup.screenReflections;
 
     if (cellEdge == 0u) {
-        return fallback;
+        return none;
     }
 
     int2 phase = int2(sdfViewsReflectionPhase(passGroup.historyFrames, cellEdge));
@@ -113,16 +128,38 @@ float3 sdfViewsScreenReflection(SdfPixel p, float3 surfacePoint, float3 normal, 
         color += (cellHit * float3(f16tof32(record.x), f16tof32(record.x >> 16u), f16tof32(record.y)));
     }
     if (kept <= 0.0) {
-        return fallback;
+        return none;
     }
 
     // The shares the kept cells answer, easing to the volume's alone as the weight kept falls below half the tent's.
     float answered = (saturate(2.0 * kept) / kept);
+    SdfViewsScreenRead read;
 
-    hit *= answered;
-    open *= answered;
-    color *= (answered / scale);
-    return (((fallback * saturate(1.0 - (hit + open))) + color) + (sky * open));
+    read.kept = true;
+    read.hit = (hit * answered);
+    read.open = (open * answered);
+    read.color = (color * (answered / scale));
+    return read;
+}
+// Whether the reflection takes any of the sky: its open share, or the volume's share of it where the records leave the
+// volume a share. An exactly zero weight means the sky is not read at all, so the caller evaluates it only when this is
+// true.
+bool sdfViewsReflectionReadsSky(SdfViewsScreenRead read, SdfReflectionShare share) {
+    if (!read.kept) {
+        return (share.sky != 0.0);
+    }
+    return ((read.open != 0.0) || ((share.sky != 0.0) && (saturate(1.0 - (read.hit + read.open)) != 0.0)));
+}
+// The environment a views pixel reflects: the volume's reflection (`share`, sdfViewsReflectionShare) where no ray answers
+// it, the colour the rays reached on screen and the open sky (`sky`, worldEnvironmentReflection) by the shares the records
+// hold. `sky` may be zero when sdfViewsReflectionReadsSky is false.
+float3 sdfViewsScreenReflection(SdfViewsScreenRead read, SdfReflectionShare share, float3 sky) {
+    float3 fallback = ((sky * share.sky) + share.added);
+
+    if (!read.kept) {
+        return fallback;
+    }
+    return (((fallback * saturate(1.0 - (read.hit + read.open))) + read.color) + (sky * read.open));
 }
 #endif
 

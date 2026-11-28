@@ -1360,7 +1360,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   receives and the radiance a reflection adds, a shared-exponent word a face, and the
   sky shares), its traced lights' agreement, and the lights its corners disagree on with
   each one's share; a views pixel reads its cubes along its shading normal and mirror
-  direction (`sdfViewsIndirectSeen`, `sdfViewsReflectionSeen`) and a traced light's
+  direction (`sdfViewsIndirectSeen`, `sdfViewsReflectionShare`) and a traced light's
   visibility from the agreement and that list (`sdfViewsLightVisibility`). No views
   kernel includes a reader of a probe's corners: one pixel that read sixteen corners
   made its whole wave pay for them, and the gather's arrays set every kernel's
@@ -1472,9 +1472,15 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   representative lies on its own surface, falling smoothly to nothing at the probe
   lookup's tolerances (`sdfViewsScreenReflection`); never accept or reject a cell whole,
   which turns a silhouette into steps of a cell as the representatives take turns. The volume
-  (`sdfViewsReflectionSeen`) still answers what no kept ray reaches, and a view whose
+  (`sdfViewsReflectionShare`, the sky share it keeps and the radiance it adds) still answers what
+  no kept ray reaches, and a view whose
   fragment holds no pass (`passGroup.screenReflections` zero) reflects the volume
-  alone. The records' cell is read back from their allocation
+  alone. The light stage reads the records (`sdfViewsScreenRead`) and the probes' share before it
+  reads the sky: when the sky's total weight in the answer is exactly zero
+  (`sdfViewsReflectionReadsSky`: no open-sky share, and the volume keeps none of it or the
+  rays answered the whole reflection) `worldEnvironmentReflection` is never evaluated, with no
+  threshold, so an interior whose probes see no sky pays no sky lookup. A new term that
+  takes sky weight in `sdfViewsScreenReflection` widens that test in the same change. The records' cell is read back from their allocation
   (`SdfWorldPackage.ReflectionCellOf`), never from the frame, since a graph built for one
   cell records until its replacement installs. The history holds light at the epoch's
   stored scale, which a scale step restarts, so the pass reads nothing while
