@@ -105,8 +105,8 @@
       },
       "Parlot": {
         "type": "Transitive",
-        "resolved": "2.3.1",
-        "contentHash": "wCNWERk46ATkXor8SK43dgpO8GCuH5BQnvwuVogEVWrYilDKA7QituNhq17iYyL0RAHTuIIyczfuV0AWSe8ZLw=="
+        "resolved": "2.5.1",
+        "contentHash": "85yu455mmWgH6p/5LZhKDFqCC41+1fACeS3r2ruTO1AmsjrxEnZ9A9ly6NBlX8eRONQSGyjCB3XlWSD1mbYgRw=="
       },
       "System.CommandLine": {
         "type": "Transitive",
