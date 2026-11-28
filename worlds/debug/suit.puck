@@ -50,12 +50,15 @@ kits {
       offset: 0
       step: 0
     }
-    select {
-      bodyState: "suit"
-      cases [
-        { value: 0, row: "pilot" }
-      ]
-    }
+    select [
+      {
+        name: "form"
+        bodyState: "suit"
+        cases [
+          { value: 0, row: "pilot" }
+        ]
+      }
+    ]
   }
   rows [
     // The woman inside the suit: 1.68 m tall and as quick on foot, walking and running, with one jump and no flight pack,
@@ -105,12 +108,15 @@ kits {
 
 looks {
   assignment {
-    select {
-      bodyState: "suit"
-      cases [
-        { value: 0, row: "moth-pilot" }
-      ]
-    }
+    select [
+      {
+        name: "form"
+        bodyState: "suit"
+        cases [
+          { value: 0, row: "moth-pilot" }
+        ]
+      }
+    ]
   }
   rows [
     {

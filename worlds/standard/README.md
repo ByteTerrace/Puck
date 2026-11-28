@@ -49,6 +49,15 @@ pinned driver ([addons/companion.wat](addons/companion.wat)) flies the body.
 `companionUnlock` and `companionSight` keep what it learns on its owner's
 identity. The debug world's faerie is one (`../debug/companion.puck`).
 
+[journal.puck](journal.puck) is the journal, which is also the menu: `journalPlay(kinds)` opens it on the journal key,
+chooses a pause or an action read each tick, turns its pages (the menagerie first) and swaps the active companion.
+[wrist-panel.puck](wrist-panel.puck) is the panel that wears it on a forearm: an avatar or a suit names a mount and
+its palette slots, and the panel brings its geometry, flap, screen, the arm's raise and the camera's focus.
+[menagerie.puck](menagerie.puck) is the companions a character keeps, one active at a time: `menagerie(kinds,
+granted)` keeps them on body registers saved as the character's facts and records, and dresses a companion
+(`companion(menagerie: true)`) as the active kind. The debug world set's Moth wears all three
+(`../debug/avatars/moth.puck`), and its lab is `../debug/labs/journal.puck`.
+
 [lockon.puck](lockon.puck) is lock-on targeting: `lockOn(targets)` declares what
 can be targeted (the `lockable` row), the lock and cycle keys, the rules that pick
 a target with the engine's target query (`target(…)`), and a seat framing that

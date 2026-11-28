@@ -40,7 +40,8 @@ companionDesign(
   population: (galleryPopulation + 2 + boardRoomBodies + cardBodies),
   interests: companionAttractions
 )
-companion(owner: 0, slot: companionBody, position: [-1.2, 1.52, 1])
+// Her companion wears whichever kind of her menagerie is active (avatars/moth.puck's menagerie).
+companion(owner: 0, slot: companionBody, position: [-1.2, 1.52, 1], menagerie: true)
 // The garden's obelisk teaches the Moth's companion sight (garden.puck); here it reaches farther once she carries it.
 companionSight(owner: 0)
 // It flies to whatever she locks onto, and to her group's pings (targeting.puck).
@@ -50,7 +51,7 @@ companionMarks(owner: 0, capacity: seatPopulation)
 state {
   world [
     // The cue edges the gallery's sounds are heard at: the guide's spoken arrival and the lift's door.
-    { name: "companionCue", kind: "Int", cells: [{ key: "guide", value: -1 }, { key: "door", value: 1 }] }
+    { name: "companionCue", kind: "Int", cells [{ key: "guide", value: -1 }, { key: "door", value: 1 }] }
   ]
 }
 

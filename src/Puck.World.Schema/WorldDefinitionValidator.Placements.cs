@@ -2272,11 +2272,24 @@ public static partial class WorldDefinitionValidator {
         }
     }
     private static void ValidateRowAssignment(WorldDefinition definition, WorldRowAssignment assignment, string section, string rowNoun, HashSet<string> rowNames, List<string> errors) {
-        if (assignment.Select is { } select) {
+        var selectorNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < assignment.Selectors.Count); index++) {
+            if (assignment.Selectors[index] is not { } select) {
+                errors.Add(item: $"{section}.select[{index}] is required.");
+
+                continue;
+            }
+            if (string.IsNullOrEmpty(value: select.Name)) {
+                errors.Add(item: $"{section}.select[{index}].name is required.");
+            } else if (!selectorNames.Add(item: select.Name)) {
+                errors.Add(item: $"{section}.select[{index}] repeats selector name '{select.Name}'.");
+            }
+
             ValidateRowSelector(
                 definition: definition,
                 errors: errors,
-                path: $"{section}.select",
+                path: $"{section}.select[{index}]",
                 rowNames: rowNames,
                 rowNoun: rowNoun,
                 select: select

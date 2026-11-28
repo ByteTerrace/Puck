@@ -1,0 +1,101 @@
+// The menagerie: the companions a character keeps, one of them active at a time (docs/decisions/play.md, "Companions
+// live in the journal's menagerie"). A library: it hands its importers a template and emits no document, and it names
+// no kind of companion: which kinds a world set offers, what each looks like and which a character starts with are the
+// importing world's.
+//
+// A kind is { kind, id, name, prototype }: `kind` its number, 1 or more (0 is no kind: the companion wears its world's
+// own look); `id` a name for rows and looks; `name` what the journal calls it; `prototype` the creation a companion of
+// that kind wears.
+//
+// What a character keeps is its body's registers, which cross into every world the body enters:
+//
+//   menagerieKeeps<kind>   1 while the body keeps a companion of that kind
+//   companionActive        the kind of the active companion, 0 for none
+//
+// The character's own list is the identity's `menagerie` record pool (identity.puck), a crossing pool the account
+// carries across worlds. Nothing writes it yet: keeping a kind's record once, and reading the pool back with `record(…)`
+// as the standard's marks do (marks.puck), waits for a way to meet and befriend a companion; until then a character
+// starts each session with the granted kinds. Saving through identity facts was tried and set aside: in the debug world
+// it priced the rules past the tick's work budget.
+//
+// A companion's body wears its kind's look while its own `companionKind` register names the kind: the look
+// assignment's `companion` selector reads it (companion.puck's `companion(menagerie: true)` keeps it in step with its
+// owner's `companionActive`). Swapping the active companion is one write of `companionActive` (the journal's
+// menagerie page does it), and the companion changes what it wears on the next tick.
+//
+//   import "../standard/menagerie"
+//   menagerie(kinds: [{ kind: 1, id: "wisp", name: "Wisp", prototype: "wisp" }], granted: [1])
+
+// The most kinds a menagerie offers: the active register's range.
+let menagerieLimit = 255
+
+// The menagerie of `kinds`. `granted` lists the kinds every player's character starts with: a body that does not keep
+// one is given it, and the first granted kind becomes its active companion while it has none.
+template menagerie(kinds, granted = []) {
+  let first = (length(granted) > 0) ? granted[0] : 0
+
+  state {
+    body: concat(
+      [
+        // The kind a companion's body wears, 0 for its world's own look.
+        {
+          name: "companionKind"
+          kind: "Counter"
+          initial: 0
+          envelope { $type: "range", minimum: 0, maximum: menagerieLimit }
+        }
+        {
+          name: "companionActive"
+          kind: "Counter"
+          initial: 0
+          envelope { $type: "range", minimum: 0, maximum: menagerieLimit }
+        }
+      ],
+      map(
+        kinds,
+        k => { name: $"menagerieKeeps{k.kind}", kind: "Counter", initial: 0, envelope { $type: "set", values [0, 1] } }
+      )
+    )
+  }
+
+  // A companion's body wears its kind's look while its register names the kind.
+  looks {
+    assignment {
+      select [
+        {
+          name: "companion"
+          bodyState: "companionKind"
+          cases: map(kinds, k => { value: k.kind, row: $"companion-{k.id}" })
+        }
+      ]
+    }
+    rows: map(kinds, k => {
+      name: $"companion-{k.id}"
+      scale: 1
+      source: creation(prototypeId: k.prototype)
+      motion {
+        gaitAmplitude: 0
+        replayFrames: false
+        secondsPerFrame: 0
+      }
+    })
+  }
+
+  // Every player's body is given the granted kinds it does not keep, and the first of them while nothing is active.
+  for kindNumber in granted {
+    rule $"menagerie-grant-{kindNumber}" {
+      forEach: $players
+      when bodyState(each, $"menagerieKeeps{kindNumber}") == 0
+      mode: Level
+      setBodyState(key: $each, state: $"menagerieKeeps{kindNumber}", expression: 1)
+    }
+  }
+  if first != 0 {
+    rule "menagerie-first" {
+      forEach: $players
+      when bodyState(each, companionActive) == 0 and bodyState(each, $"menagerieKeeps{first}") == 1
+      mode: Level
+      setBodyState(key: $each, state: "companionActive", expression: first)
+    }
+  }
+}

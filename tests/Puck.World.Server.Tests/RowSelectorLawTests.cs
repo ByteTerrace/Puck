@@ -23,6 +23,7 @@ public sealed class RowSelectorLawTests {
     private const float BornSuit = 5f;
 
     private static WorldRowSelector Selector(string first, string second) => new(
+        Name: "form",
         BodyState: Suit,
         Cases: [
             new WorldRowSelectorCase(
@@ -60,7 +61,7 @@ public sealed class RowSelectorLawTests {
 
         return source with {
             KitsRaw = new WorldKitsSection(
-                Assignment: (source.Assignment with { Select = (kitSelect ?? Selector(first: seatKit.Name, second: SlowKit)) }),
+                Assignment: (source.Assignment with { Select = [(kitSelect ?? Selector(first: seatKit.Name, second: SlowKit))] }),
                 Rows: [
                     seatKit,
                     (seatKit with {
@@ -70,7 +71,7 @@ public sealed class RowSelectorLawTests {
                 ]
             ),
             LooksRaw = new WorldLooksSection(
-                Assignment: (source.LookAssignment with { Select = (lookSelect ?? Selector(first: SuitedLook, second: PilotLook)) }),
+                Assignment: (source.LookAssignment with { Select = [(lookSelect ?? Selector(first: SuitedLook, second: PilotLook))] }),
                 Rows: [
                     new WorldLook(
                         Name: SuitedLook,
@@ -440,11 +441,11 @@ public sealed class RowSelectorLawTests {
     [Fact]
     public void TheValidatorRefusesAnUndeclaredRowOrRegisterByName() {
         Assert.Contains(
-            expectedSubstring: "looks.assignment.select.cases[1].row",
+            expectedSubstring: "looks.assignment.select[0].cases[1].row",
             actualString: Refusal(definition: Document(lookSelect: Selector(first: SuitedLook, second: "moth-pilot")))
         );
         Assert.Contains(
-            expectedSubstring: "kits.assignment.select.cases[1].row",
+            expectedSubstring: "kits.assignment.select[0].cases[1].row",
             actualString: Refusal(definition: Document(kitSelect: Selector(first: Fixtures.SeatKitName, second: "pilot")))
         );
         Assert.Contains(
@@ -506,22 +507,24 @@ public sealed class RowSelectorLawTests {
     [Fact]
     public void TheValidatorRefusesACaseNamingTheRegistersInitialValue() {
         var atInitial = new WorldRowSelector(
+            Name: "form",
             BodyState: Suit,
             Cases: [new WorldRowSelectorCase(Row: PilotLook, Value: 5L)]
         );
 
         Assert.Contains(
-            expectedSubstring: "looks.assignment.select.cases[0] value 5 is register 'suit' initial value",
+            expectedSubstring: "looks.assignment.select[0].cases[0] value 5 is register 'suit' initial value",
             actualString: Refusal(definition: Document(lookSelect: atInitial))
         );
         Assert.Contains(
-            expectedSubstring: "kits.assignment.select.cases[0] value 5 is register 'suit' initial value",
+            expectedSubstring: "kits.assignment.select[0].cases[0] value 5 is register 'suit' initial value",
             actualString: Refusal(definition: Document(kitSelect: (atInitial with { Cases = [new WorldRowSelectorCase(Row: SlowKit, Value: 5L)] })))
         );
     }
     [Fact]
     public void TheValidatorRefusesAMisshapenSelector() {
         var repeated = new WorldRowSelector(
+            Name: "form",
             BodyState: Suit,
             Cases: [
                 new WorldRowSelectorCase(Row: SuitedLook, Value: 1L),
@@ -530,20 +533,20 @@ public sealed class RowSelectorLawTests {
         );
 
         Assert.Contains(
-            expectedSubstring: "looks.assignment.select.cases[1] repeats value 1",
+            expectedSubstring: "looks.assignment.select[0].cases[1] repeats value 1",
             actualString: Refusal(definition: Document(lookSelect: repeated))
         );
         Assert.Contains(
-            expectedSubstring: "looks.assignment.select.bodyState is required",
+            expectedSubstring: "looks.assignment.select[0].bodyState is required",
             actualString: Refusal(definition: Document(lookSelect: (Selector(first: SuitedLook, second: PilotLook) with { BodyState = "" })))
         );
         Assert.Contains(
-            expectedSubstring: "looks.assignment.select.cases[0] is required",
-            actualString: Refusal(definition: Document(lookSelect: new WorldRowSelector(BodyState: Suit, Cases: [null!])))
+            expectedSubstring: "looks.assignment.select[0].cases[0] is required",
+            actualString: Refusal(definition: Document(lookSelect: new WorldRowSelector(Name: "form", BodyState: Suit, Cases: [null!])))
         );
         Assert.Contains(
-            expectedSubstring: "looks.assignment.select.cases must name at least one value",
-            actualString: Refusal(definition: Document(lookSelect: new WorldRowSelector(BodyState: Suit, Cases: [])))
+            expectedSubstring: "looks.assignment.select[0].cases must name at least one value",
+            actualString: Refusal(definition: Document(lookSelect: new WorldRowSelector(Name: "form", BodyState: Suit, Cases: [])))
         );
     }
 }

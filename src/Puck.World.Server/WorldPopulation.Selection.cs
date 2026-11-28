@@ -13,17 +13,16 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>Reads the kit selected by the open arena transaction without changing the installed body kit.</summary>
     public string CandidateKitName(int bodyIndex, WorldDefinition definition) {
-        var selected = SelectRow(WorldBodyStateReads.PlanFor(definition: definition).KitSelect, definition.Assignment.Select, true, bodyIndex);
+        var selected = SelectRow(WorldBodyStateReads.PlanFor(definition: definition).KitSelect, definition.Assignment.Selectors, true, bodyIndex);
 
         return m_kitRows[((selected >= 0) ? selected : (UsesSeatKit(index: bodyIndex) ? m_seatKit : m_entries[bodyIndex].KitIndex))].Name;
     }
     /// <summary>Resolves a replacement definition's kit against staged named register values before installing it.</summary>
     public string PreviewKitName(int bodyIndex, WorldDefinition definition, Func<string, FixedQ4816?> counter) {
-        if ((definition.Assignment.Select is { } selector) && (counter(selector.BodyState) is { } value) &&
-            ((value.Value & ((1L << FixedQ4816.FractionBitCount) - 1)) == 0)) {
-            foreach (var row in selector.Cases) {
-                if (row.Value == (value.Value >> FixedQ4816.FractionBitCount)) { return row.Row; }
-            }
+        var selectors = definition.Assignment.Selectors;
+
+        if (WorldRowSelector.Match(registers: new StagedRegisters(Counter: counter, Selectors: selectors), selectors: selectors) is { } selected) {
+            return selected;
         }
         if ((bodyIndex < definition.Population.LocalSeats) || ((((uint)bodyIndex) < ((uint)m_entries.Length)) && m_entries[bodyIndex].IsRemoteHuman)) { return definition.DefaultSeatKit; }
         var rows = ResolveRows(assignment: definition.Assignment, resolve: name => checked((byte)definition.Kits.ToList().FindIndex(match: kit => (kit.Name == name))));
@@ -77,7 +76,7 @@ public sealed partial class WorldPopulation {
         var rebound = (!ReferenceEquals(objA: m_bodyCellDefinition, objB: definition) || (m_bodyCellBinding != m_actionStateLane.Binding));
 
         if (rebound) {
-            m_bodyCellsWatched = m_actionStateLane.WatchTouches(slots: [plan.Scale, plan.KitSelect, plan.LookSelect], watch: m_bodyCellTouches);
+            m_bodyCellsWatched = m_actionStateLane.WatchTouches(slots: plan.Watched, watch: m_bodyCellTouches);
             m_bodyCellDefinition = definition;
             m_bodyCellBinding = m_actionStateLane.Binding;
         }
@@ -89,7 +88,7 @@ public sealed partial class WorldPopulation {
             SyncBodyScale(definition: definition);
             SyncBodySelections(definition: definition);
         } else {
-            var selecting = ((plan.KitSelect >= 0) || (plan.LookSelect >= 0));
+            var selecting = plan.Selecting;
             var moved = false;
 
             for (var at = 0; (at < touched); at++) {
@@ -122,10 +121,7 @@ public sealed partial class WorldPopulation {
     public void SyncBodySelections(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var selecting = (
-            (definition.Assignment.Select is not null) ||
-            (definition.LookAssignment.Select is not null)
-        );
+        var selecting = ((definition.Assignment.Selectors.Count > 0) || (definition.LookAssignment.Selectors.Count > 0));
 
         if (!selecting && !m_selecting) {
             return;
@@ -204,52 +200,44 @@ public sealed partial class WorldPopulation {
             SelectBody(definition: definition, index: index, plan: plan);
         }
     }
-    // Writes the rows one body's registers select: a body whose register holds a value a case names takes that case's
-    // row, and every other body, and a value no case names, none (-1). The validator admits only a state.body Counter
-    // and a case value is a whole number, so a register holding a fraction selects nothing.
+    // Writes the rows one body's registers select: the first selector whose register holds a value one of its cases
+    // names gives that case's row, and a body no selector picks for takes none (-1). The validator admits only a
+    // state.body Counter and a case value is a whole number, so a register holding a fraction selects nothing.
     private void SelectBody(int index, WorldDefinition definition, BodyRegisterPlan plan) {
         var entry = m_entries[index];
 
-        entry.SelectedKit = SelectRow(bodyIndex: index, kits: true, select: definition.Assignment.Select, slot: plan.KitSelect);
-        entry.SelectedLook = SelectRow(bodyIndex: index, kits: false, select: definition.LookAssignment.Select, slot: plan.LookSelect);
+        entry.SelectedKit = SelectRow(bodyIndex: index, kits: true, selectors: definition.Assignment.Selectors, slots: plan.KitSelect);
+        entry.SelectedLook = SelectRow(bodyIndex: index, kits: false, selectors: definition.LookAssignment.Selectors, slots: plan.LookSelect);
     }
-    private int SelectRow(int slot, WorldRowSelector? select, bool kits, int bodyIndex) {
-        if (
-            (select is null) ||
-            !m_entries[bodyIndex].Active ||
-            (slot < 0)
-        ) {
+    private int SelectRow(int[] slots, IReadOnlyList<WorldRowSelector> selectors, bool kits, int bodyIndex) {
+        if ((selectors.Count == 0) || !m_entries[bodyIndex].Active) {
+            return -1;
+        }
+        if (WorldRowSelector.Match(registers: new BodyRegisters(Body: bodyIndex, Lane: m_actionStateLane, Slots: slots), selectors: selectors) is not { } row) {
             return -1;
         }
 
-        const long Fraction = ((1L << FixedQ4816.FractionBitCount) - 1L);
+        return ((kits ? ResolveKitOrNull(name: row) : ResolveLookOrNull(name: row)) ?? -1);
+    }
 
-        var raw = m_actionStateLane.Read(
-            ordinal: bodyIndex,
-            slot: slot
-        );
+    // A body's selector registers, read from the live action-state lane by the plan's slots.
+    private readonly record struct BodyRegisters(WorldActionStateLane Lane, int[] Slots, int Body) : WorldRowSelector.IRegisters {
+        public bool TryRead(int selector, out long raw) {
+            var slot = Slots[selector];
 
-        if ((raw & Fraction) != 0L) {
-            return -1;
+            raw = ((slot >= 0) ? Lane.Read(ordinal: Body, slot: slot) : 0L);
+
+            return (slot >= 0);
         }
+    }
+    // A replacement document's selector registers, read from the values a preview stages by name.
+    private readonly record struct StagedRegisters(Func<string, FixedQ4816?> Counter, IReadOnlyList<WorldRowSelector> Selectors) : WorldRowSelector.IRegisters {
+        public bool TryRead(int selector, out long raw) {
+            var value = Counter(arg: Selectors[selector].BodyState);
 
-        var value = (raw >> FixedQ4816.FractionBitCount);
+            raw = (value?.Value ?? 0L);
 
-        var cases = select.Cases;
-
-        for (var caseIndex = 0; (caseIndex < cases.Count); caseIndex++) {
-            var selectCase = cases[caseIndex];
-
-            if (selectCase.Value != value) {
-                continue;
-            }
-
-            return ((kits
-                ? ResolveKitOrNull(name: selectCase.Row)
-                : ResolveLookOrNull(name: selectCase.Row)
-            ) ?? -1);
-
+            return value.HasValue;
         }
-        return -1;
     }
 }

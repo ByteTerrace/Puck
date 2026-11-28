@@ -6,11 +6,16 @@ namespace Puck.World;
 
 /// <summary>The counter registers one document's kit and look selectors and its <c>bodies.scale</c> name, each resolved
 /// once to its slot in the register file, or -1 when nothing names one or it is not a declared counter (the only kind
-/// any of the three admits).</summary>
-/// <param name="KitSelect">The kit assignment's selector register.</param>
-/// <param name="LookSelect">The look assignment's selector register.</param>
+/// any of them admits).</summary>
+/// <param name="KitSelect">The kit assignment's selectors' registers, one a selector in its assignment's order.</param>
+/// <param name="LookSelect">The look assignment's selectors' registers, one a selector in its assignment's order.</param>
 /// <param name="Scale">The register <c>bodies.scale</c> names.</param>
-public sealed record BodyRegisterPlan(int KitSelect, int LookSelect, int Scale);
+public sealed record BodyRegisterPlan(int[] KitSelect, int[] LookSelect, int Scale) {
+    /// <summary>Gets every register the plan watches: the scale and each selector's, -1 entries included.</summary>
+    public int[] Watched { get; } = [Scale, .. KitSelect, .. LookSelect];
+    /// <summary>Gets whether either assignment carries a selector.</summary>
+    public bool Selecting => ((KitSelect.Length > 0) || (LookSelect.Length > 0));
+}
 /// <summary>The one definition of what reading a body's named action-state slot answers, shared by a world rule's
 /// <see cref="WorldRuleFacts.BodyStatePrefix"/> read and a look's render lane: which slot a name resolves to, and the
 /// number a stored slot presents.</summary>
@@ -51,12 +56,21 @@ public static class WorldBodyStateReads {
 
         return Plans.GetValue(
             derive: static document => new BodyRegisterPlan(
-                KitSelect: CounterSlot(definition: document, name: document.Assignment.Select?.BodyState),
-                LookSelect: CounterSlot(definition: document, name: document.LookAssignment.Select?.BodyState),
+                KitSelect: SelectorSlots(definition: document, selectors: document.Assignment.Selectors),
+                LookSelect: SelectorSlots(definition: document, selectors: document.LookAssignment.Selectors),
                 Scale: CounterSlot(definition: document, name: document.Population.Scale)
             ),
             definition: definition
         );
+    }
+    private static int[] SelectorSlots(WorldDefinition definition, IReadOnlyList<WorldRowSelector> selectors) {
+        var slots = new int[selectors.Count];
+
+        for (var index = 0; (index < slots.Length); index++) {
+            slots[index] = CounterSlot(definition: definition, name: selectors[index].BodyState);
+        }
+
+        return slots;
     }
     private static int CounterSlot(WorldDefinition definition, string? name) => (((name is not null) &&
         TryResolveSlot(definition: definition, kind: out var kind, name: name, slot: out var slot) &&
