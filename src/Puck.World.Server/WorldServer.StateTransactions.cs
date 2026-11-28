@@ -80,12 +80,11 @@ public sealed partial class WorldServer {
     public void RewindStateTransaction(int mark) => m_arena.Rewind(mark: mark);
     /// <summary>Checks live grants and bound presentation values against the complete open transaction.</summary>
     /// <remarks>Input selections are checked for the owners of the bodies whose selection registers the transaction
-    /// touched. A transaction that wrote a row a document value binds revalidates the whole document for the authority,
-    /// which reads it whole; for a recipient it validates every check of each unit the written rows reach
-    /// (<see cref="TryValidateWrittenBindings"/>), so a registered unit enters the verdict only when the write reaches
-    /// it. Every bound value is read at <see cref="DeliveryTime"/>, the clock the write takes effect at. A write into
-    /// a row a creation's id or a look's name is bound to renames an entity other units refer to, and is validated
-    /// whole for every writer.</remarks>
+    /// touched. A transaction that wrote a row a document value binds validates every check of each unit the written
+    /// rows reach (<see cref="TryValidateWrittenBindings"/>), so a registered unit enters the verdict only when the write
+    /// reaches it and a rule firing never revalidates the whole document on the tick. Every bound value is read at
+    /// <see cref="DeliveryTime"/>, the clock the write takes effect at. A write into a row a creation's id or a look's
+    /// name is bound to renames an entity other units refer to, and is validated whole for every writer.</remarks>
     /// <param name="principal">The principal whose transaction is open.</param>
     /// <param name="reason">The refusal, or empty when the transaction may commit.</param>
     /// <param name="reads">The open preparation's read access, whose fault the caller publishes as its own refusal, or
@@ -130,18 +129,17 @@ public sealed partial class WorldServer {
                 ? !Input.TryPrepareBodies(bodies: m_transactionBodies, reason: out reason)
                 : !Input.TryPrepareAll(reason: out reason)) { return false; }
             if (validateBindings) {
+                if (RenamesIdentity()) { return TryValidateWholeAtDelivery(reason: out reason); }
                 var view = WriteView(principal);
-                if (!view.IsAuthority && !RenamesIdentity()) {
-                    var access = reads ?? ReadForWrite(view);
-                    try {
-                        return TryValidateWrittenBindings(access, out reason);
-                    } catch (StateUnavailableException) when ((reads is null) && access.Failed) {
-                        reason = view.Refusal("mutation", nameof(WorldSection.State).ToLowerInvariant());
-                        undisclosed = true;
-                        return false;
-                    }
+                if (view.IsAuthority) { return TryValidateWrittenBindings(access: null, out reason); }
+                var access = reads ?? ReadForWrite(view);
+                try {
+                    return TryValidateWrittenBindings(access, out reason);
+                } catch (StateUnavailableException) when ((reads is null) && access.Failed) {
+                    reason = view.Refusal("mutation", nameof(WorldSection.State).ToLowerInvariant());
+                    undisclosed = true;
+                    return false;
                 }
-                return TryValidateWholeAtDelivery(reason: out reason);
             }
             return true;
         } finally { ClearTransactionRows(); }
@@ -170,8 +168,14 @@ public sealed partial class WorldServer {
         }
         return false;
     }
-    // Each partition resolves only the units reached by a written row, at the delivery clock.
-    private bool TryValidateWrittenBindings(StateReadAccess access, out string reason) {
+    // Each written row's holders must read the cell the write left, and every registered unit whose values read a
+    // written row is validated with every check its partition makes of it, resolved at the delivery clock; nothing
+    // else is read, so the cost is the units the write reaches. A recipient's write reads each row through its access
+    // first (a withheld row faults it) and validates the whole document when a written row is bound outside every
+    // registered unit. The authority's (a rule firing, the console, an addon's batch: access null) stops at its
+    // holders there: such a value is judged by its holder's own reading, as a clock moves one each tick unjudged, so
+    // no ordinary write by the authority compiles and prices the whole document on the tick.
+    private bool TryValidateWrittenBindings(StateReadAccess? access, out string reason) {
         reason = string.Empty;
         var definition = m_document.Definition;
         var bound = DocumentValueRows();
@@ -183,7 +187,7 @@ public sealed partial class WorldServer {
             if (ordinal >= m_documentRowCount) { continue; }
             var name = m_arena.Catalog.Descriptors[ordinal].Name;
             if (!bound.Contains(item: name)) { continue; }
-            _ = access.ResolveRow(name);
+            _ = access?.ResolveRow(name);
             if (!WorldStateDocumentValues.TryCheckBound(definition, name, m_arena, time, out _)) {
                 reason = $"state '{name}' holds a value a binding of it cannot read";
                 return false;
@@ -193,16 +197,18 @@ public sealed partial class WorldServer {
             }
             whole |= remaining;
         }
-        if (whole && !TryValidateWholeAtDelivery(reason: out var wholeReason)) {
+        if (whole && (access is not null) && !TryValidateWholeAtDelivery(reason: out var wholeReason)) {
             reason = $"the write leaves the document invalid: {wholeReason}";
             return false;
         }
         return true;
 
         object? Literal(object value) {
-            universe.Clear();
-            WorldStateDocumentValues.CollectReferencedRows(value, universe);
-            foreach (var read in universe) { _ = access.ResolveRow(read); }
+            if (access is not null) {
+                universe.Clear();
+                WorldStateDocumentValues.CollectReferencedRows(value, universe);
+                foreach (var read in universe) { _ = access.ResolveRow(read); }
+            }
             return WorldStateDocumentValues.TryFlatten(arena: m_arena, flattened: out var literal, graph: value, reason: out _,
                 source: definition, time: time) ? literal : null;
         }

@@ -137,11 +137,16 @@ public static class RuleBounds {
     public static ValueBounds Of(ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, RuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
+        return Of(context: context, kind: kind, locals: new(comparer: ReferenceEqualityComparer.Instance), program: program);
+    }
+    // One bounding, every local it reaches bounded once however many reads of it the program and the locals before it
+    // hold: a chain of locals that each read the one before twice is bounded in one pass, not one a path.
+    private static ValueBounds Of(ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, RuleCompileContext context, Dictionary<CompiledRuleLocal, ValueBounds> locals) {
         var assignments = new Assignments(context: context);
 
         return ((Template.Build(assignments: assignments, kind: kind, program: program) is { } template)
             ? assignments.Enumerate(template: template)
-            : Range(context: context, kind: kind, program: program));
+            : Range(context: context, kind: kind, locals: locals, program: program));
     }
 
     // The distinct reads of a program and the programs its locals bind, each with its declared values. Two reads the
@@ -150,6 +155,12 @@ public static class RuleBounds {
         private readonly List<object> m_variables = [];
         private readonly List<long[]> m_domains = [];
         private long m_count = 1L;
+
+        // Each local's template, built once however many reads of it the programs hold; null for one that cannot be.
+        public Dictionary<CompiledRuleLocal, Template?> Locals { get; } = new(comparer: ReferenceEqualityComparer.Instance);
+        // The assignment being evaluated, which a template's answer is kept for, so a local read at many sites is
+        // evaluated once an assignment.
+        public long Assignment { get; private set; }
 
         // The variable a read is, or -1 when its declared values are no finite set or the product outgrows the limit.
         public int Variable(IRuleOperand operand) {
@@ -185,7 +196,8 @@ public static class RuleBounds {
                 for (var variable = 0; (variable < values.Length); variable++) {
                     values[variable] = m_domains[variable][at[variable]];
                 }
-                if (!template.Evaluate(values: values).TryFinite(raw: out var answer)) {
+                Assignment++;
+                if (!template.Evaluate(assignment: Assignment, values: values).TryFinite(raw: out var answer)) {
                     return ValueBounds.Unbounded;
                 }
 
@@ -221,24 +233,35 @@ public static class RuleBounds {
 
             return (template.Collect(assignments: assignments, tokens: template.m_tokens) ? template : null);
         }
-        public Outcome Evaluate(ReadOnlySpan<long> values) {
+        // The answer at the assignment last evaluated, kept so a template read at many sites runs once an assignment.
+        private long m_assignment;
+        private Outcome m_answer;
+
+        public Outcome Evaluate(long assignment, ReadOnlySpan<long> values) {
+            if (m_assignment == assignment) { return m_answer; }
             foreach (var (tokens, index, variable, local) in m_sites) {
                 var raw = 0L;
 
                 if (local is null) {
                     raw = values[variable];
                 } else {
-                    var bound = local.Evaluate(values: values);
+                    var bound = local.Evaluate(assignment: assignment, values: values);
 
                     if (!bound.TryFinite(raw: out raw)) {
-                        return bound;
+                        return Keep(answer: bound);
                     }
                 }
 
                 tokens[index] = new CompiledExpressionToken(Constant: raw, Operation: ExpressionOp.Constant);
             }
 
-            return RuleExpressions.EvaluateDetached(kind: m_kind, program: new ReadOnlySpan<CompiledExpressionToken>(array: m_tokens), reader: null);
+            return Keep(answer: RuleExpressions.EvaluateDetached(kind: m_kind, program: new ReadOnlySpan<CompiledExpressionToken>(array: m_tokens), reader: null));
+
+            Outcome Keep(Outcome answer) {
+                m_assignment = assignment;
+                m_answer = answer;
+                return answer;
+            }
         }
 
         private bool Collect(CompiledExpressionToken[] tokens, Assignments assignments) {
@@ -269,7 +292,14 @@ public static class RuleBounds {
                     return false;
                 }
                 if (operand is LocalOperand local) {
-                    if ((local.Source is not { } source) || (Build(assignments: assignments, kind: source.CarrierKind, program: source.Expression) is not { } bound)) {
+                    if (local.Source is not { } source) {
+                        return false;
+                    }
+                    if (!assignments.Locals.TryGetValue(key: source, value: out var bound)) {
+                        bound = Build(assignments: assignments, kind: source.CarrierKind, program: source.Expression);
+                        assignments.Locals[source] = bound;
+                    }
+                    if (bound is null) {
                         return false;
                     }
 
@@ -293,7 +323,7 @@ public static class RuleBounds {
 
     // The range form: one walk of the program over closed intervals of the real values its slots hold (a whole number
     // for an Int slot, the Q48.16 value for a Fixed one), so one interval algebra serves both kinds.
-    private static ValueBounds Range(ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, RuleCompileContext context) {
+    private static ValueBounds Range(ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, RuleCompileContext context, Dictionary<CompiledRuleLocal, ValueBounds> locals) {
         if (program.IsEmpty) {
             return ValueBounds.Unbounded;
         }
@@ -323,7 +353,7 @@ public static class RuleBounds {
             var (a, b, c) = (stack[top], stack[Math.Min(val1: (top + 1), val2: (stack.Length - 1))], stack[Math.Min(val1: (top + 2), val2: (stack.Length - 1))]);
             var pushed = (token.Operation switch {
                 ExpressionOp.Constant => (Real(kind: carrier, lower: token.Constant, upper: token.Constant), carrier),
-                ExpressionOp.Operand => Read(context: context, operand: token.Operand!),
+                ExpressionOp.Operand => Read(context: context, locals: locals, operand: token.Operand!),
                 ExpressionOp.Add => ((a.Value + b.Value), a.Kind),
                 ExpressionOp.Subtract => ((a.Value - b.Value), a.Kind),
                 ExpressionOp.Multiply => ((a.Value * b.Value), a.Kind),
@@ -360,14 +390,21 @@ public static class RuleBounds {
             ? ValueBounds.Between(lower: answer.Lower.Value, upper: answer.Upper.Value)
             : ValueBounds.Between(lower: (answer.Lower.Value >> FixedQ4816.FractionBitCount), upper: (answer.Upper.Value >> FixedQ4816.FractionBitCount)));
 
-        static (FixedInterval, CellKind) Read(IRuleOperand operand, RuleCompileContext context) {
+        static (FixedInterval, CellKind) Read(IRuleOperand operand, RuleCompileContext context, Dictionary<CompiledRuleLocal, ValueBounds> locals) {
             if (RuleExpressions.FeedCount(operand: operand) != 0) {
                 return (FixedInterval.Entire, operand.ValueKind);
             }
 
-            var bounds = (((operand is LocalOperand { Source: { } source })
-                ? Of(context: context, kind: source.CarrierKind, program: source.Expression)
-                : context.ReadBounds(operand: operand, variable: out _)));
+            ValueBounds bounds;
+
+            if (operand is LocalOperand { Source: { } source }) {
+                if (!locals.TryGetValue(key: source, value: out bounds)) {
+                    bounds = Of(context: context, kind: source.CarrierKind, locals: locals, program: source.Expression);
+                    locals[source] = bounds;
+                }
+            } else {
+                bounds = context.ReadBounds(operand: operand, variable: out _);
+            }
             var read = ((operand.ValueKind == CellKind.Fixed) ? CellKind.Fixed : CellKind.Int);
 
             return ((bounds.IsUnbounded ? FixedInterval.Entire : Real(kind: read, lower: bounds.Lower, upper: bounds.Upper)), read);

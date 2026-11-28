@@ -354,14 +354,17 @@ public static partial class WorldDocumentEmitter {
         return true;
     }
 
-    // Row references already carry their row/key split. Only a declared family needs source binding here;
-    // ordinary references take no parser or builder allocation.
+    // Row references already carry their row/key split. Only a reference whose head names a declared family needs
+    // source binding here; any other reference keeps its key as written, which the operand binder would read as an
+    // expression and parenthesize, so a literal key `row[$"k"]` would write the cell `(k)`.
     // A refusal the binding draws (an index at a family gap) is reported at the span the reference was written at.
     private static string BindRowReference(string text, SourceSpan span, DocumentScope scope) {
         if (scope.TryQualify(qualified: out var instanceRow, reference: text)) {
             return instanceRow;
         }
-        if ((GetOrCreateStateFamilies(scope: scope).Count == 0) || !text.Contains(value: '[')) {
+        var open = text.IndexOf(value: '[');
+
+        if ((open <= 0) || !GetOrCreateStateFamilies(scope: scope).ContainsKey(key: text[..open])) {
             return text;
         }
         var operand = Puck.Transpiler.Parsing.PuckParser.CreateOperand(
