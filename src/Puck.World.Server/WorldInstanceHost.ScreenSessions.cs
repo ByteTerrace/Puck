@@ -135,7 +135,7 @@ public sealed partial class WorldInstanceHost {
                 (row.Source is WorldScreenSource.Session session) &&
                 (closures?.IsClosed(placementId: row.PlacementId, face: row.FaceName) != true)
             ) {
-                declared[new WorldObservationSite.Screen(Index: row.ScreenIndex)] = session;
+                declared[new WorldObservationSite.Screen(Index: row.ScreenIndex)] = (RoutedSession(closures: closures, definition: definition, row: in row) ?? session);
             }
         }
 
@@ -146,6 +146,20 @@ public sealed partial class WorldInstanceHost {
         }
 
         return declared;
+    }
+    // The session a routed face observes on the route the door scan last recorded for it (WorldPortalClosures), or null
+    // for a face with no routes, or one no scan has read yet, which observes its own source.
+    private static WorldScreenSource.Session? RoutedSession(WorldDefinition definition, WorldPortalClosures? closures, in WorldFaceRow row) {
+        if (
+            (closures is null) ||
+            !closures.TryRoute(face: row.FaceName, placementId: row.PlacementId, route: out var route) ||
+            (WorldDefinitionRows.FindPlacement(id: row.PlacementId, placements: definition.Placements) is not { } placement) ||
+            (WorldDefinitionRows.FindPlacementFace(face: row.FaceName, placement: placement) is not { Routes: not null } face)
+        ) {
+            return null;
+        }
+
+        return (WorldFaceRouting.On(face: face, route: route).Source as WorldScreenSource.Session);
     }
     // A value-only state write publishes a new definition every tick. Observation declarations depend only on
     // these immutable sections, including the effective face catalog (which changes when a bound face changes).
@@ -489,10 +503,11 @@ public sealed partial class WorldInstanceHost {
             if (
                 stepped &&
                 engagement.TryPortalFace(
-                face: out var face,
+                face: out var authored,
                 screenIndex: physical.Index
             )
             ) {
+                var face = authored.On(destination: session.Source.Destination);
                 var forwards = engagement.PortalForwards;
 
                 for (var forwardIndex = 0; (forwardIndex < forwards.Count); forwardIndex++) {

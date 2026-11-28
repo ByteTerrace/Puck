@@ -993,6 +993,73 @@ public static partial class WorldDefinitionValidator {
                     portalFaceName = source.Face;
                 }
             }
+
+            if (source.Routes is { } routes) {
+                ValidateFaceRoutes(definition: definition, destinationNames: destinationNames, errors: errors, face: source, path: $"{facePath}.routes", routes: routes);
+            }
+        }
+    }
+    // A face's routes: a numeric cell chooses among destinations, and the face on each route (WorldFaceRouting.On) is
+    // judged as an authored face would be, so a route can lead nowhere a fixed door could not.
+    private static void ValidateFaceRoutes(WorldDefinition definition, WorldPlacementFace face, WorldFaceRoutes routes, HashSet<string> destinationNames, string path, List<string> errors) {
+        if (
+            (face.Portal is null) &&
+            (face.Source is not WorldScreenSource.Session)
+        ) {
+            errors.Add(item: $"{path} needs the face to carry a portal or a session source — a route replaces where a door leads and what its window shows, and this face has neither.");
+        }
+        if (face.Portal?.Open is not null) {
+            errors.Add(item: $"{path} is refused beside portal.open — a routed door closes when its cell names no route, so one cell decides both.");
+        }
+        if (ValidateStateCell(
+            definition: definition,
+            entryPath: $"{path}.state",
+            errors: errors,
+            key: routes.Key,
+            row: routes.State
+        ) is CellKind.Text) {
+            errors.Add(item: $"{path}.state '{routes.State}' is a Text row; a route is chosen by a number.");
+        }
+        if (routes.Entries is not { Count: > 0 } entries) {
+            errors.Add(item: $"{path}.entries must name at least one route.");
+
+            return;
+        }
+        if (entries.Count > WorldFaceRoutes.MaxEntries) {
+            errors.Add(item: $"{path}.entries holds {entries.Count} routes; a face carries at most {WorldFaceRoutes.MaxEntries}.");
+        }
+
+        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < entries.Count); index++) {
+            var entryPath = $"{path}.entries[{index}]";
+
+            if (entries[index] is not { Destination: { Length: > 0 } destination }) {
+                errors.Add(item: $"{entryPath}.destination is required.");
+
+                continue;
+            }
+            if (!seen.Add(item: destination)) {
+                errors.Add(item: $"{entryPath}.destination '{destination}' is routed to twice — a window's session names its route by destination, so each route leads somewhere else.");
+            }
+
+            var routed = WorldFaceRouting.On(face: face, route: index);
+
+            if (routed.Portal is { } portal) {
+                ValidatePortal(destinationNames: destinationNames, errors: errors, path: entryPath, portal: portal);
+            } else if (entries[index].Counterpart is not null) {
+                errors.Add(item: $"{entryPath}.counterpart is authored but the face carries no portal to land through it.");
+            }
+            if (routed.Source is WorldScreenSource.Session session) {
+                ValidateSessionSource(destinationNames: destinationNames, errors: errors, path: entryPath, portal: routed.Portal, session: session);
+            } else {
+                if (face.Portal is not null) {
+                    RequireDeclaredListing(declaredSet: destinationNames, errors: errors, rowNoun: "destinations row", subject: $"{entryPath}.destination '{destination}'", value: destination);
+                }
+                if (entries[index].Fallback is not null) {
+                    errors.Add(item: $"{entryPath}.fallback is authored but the face's source is no session to show it.");
+                }
+            }
         }
     }
     // The INHABIT facet: the kit must resolve (its explicit kit name OR the creation's Locomotion token as a kit name),

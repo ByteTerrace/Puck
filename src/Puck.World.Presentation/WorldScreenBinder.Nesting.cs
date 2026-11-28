@@ -501,7 +501,8 @@ public sealed partial class WorldScreenBinder {
     // Opens a nested session feed over the session the authority holds for a screen of a level's world, keeps it while the
     // authority holds that same session, and closes it, with every level beneath it, when the screen moves on.
     private sealed class NestedSessions(WorldScreenBinder binder) : IWorldNestedSessions<SessionFeed> {
-        // The session the authority holds for a level's screen, when it holds one for this very source.
+        // The session the authority holds for a level's screen, when it holds one for this very source, or for a route of a
+        // face that carries routes (ShowsRoute).
         private WorldObservedSession? Hosted(WorldNestedScreens<SessionFeed> screens, int screen, WorldScreenSource.Session source) => ((
             binder.m_nestedOwners.TryGetValue(
                 key: screens,
@@ -513,7 +514,7 @@ public sealed partial class WorldScreenBinder {
                 owner: owner.Instance,
                 screen: screen
             ) is { } hosted) &&
-            (hosted.Source == source) &&
+            ((hosted.Source == source) || ShowsRoute(definition: owner.Local(), index: screen, session: hosted.Source)) &&
             (hosted.Observation is { Ended: false }) &&
             (hosted.InstanceName is not null)
         )
@@ -529,6 +530,9 @@ public sealed partial class WorldScreenBinder {
             ) is not { } hosted) {
                 return null;
             }
+
+            // A routed face observes the route the authority chose, which names the destination its window maps through.
+            source = hosted.Source;
 
             var owner = binder.m_nestedOwners[screens];
             var feed = new SessionFeed(

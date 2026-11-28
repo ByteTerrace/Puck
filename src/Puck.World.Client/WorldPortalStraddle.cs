@@ -189,7 +189,10 @@ public static class WorldPortalStraddle {
 
         foreach (var placement in definition.Placements) {
             foreach (var face in (placement?.FaceSources ?? [])) {
+                // A routed face's destination is state the door scan reads, not a fact of the document this derivation
+                // is built once for, so it clips no straddling body.
                 if (
+                    (face?.Routes is not null) ||
                     (face?.Portal is not { Arrival: WorldPortalArrival.Mapped } portal) ||
                     !SameWorld(definition: definition, destination: portal.Destination) ||
                     !catalog.TryFind(placementId: placement!.Id, faceName: face.Face, out var row) ||

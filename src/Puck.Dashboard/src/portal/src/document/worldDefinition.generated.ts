@@ -8435,6 +8435,42 @@ export type WorldExports = {
   bindings?: (string | null)[] | null;
 };
 
+/**
+ * One of a face's WorldFaceRoutes: where the face leads and what its window shows while the route is chosen.
+ */
+export type WorldFaceRoute = {
+  /**
+   * The Name of the destinations row the face's portal and its session source lead to and observe on this route.
+   */
+  destination: string;
+  /**
+   * The destination document's border face a mapped arrival lands out of on this route (Counterpart's spelling), or null for the face's own portal's.
+   */
+  counterpart?: string | null;
+  /**
+   * The colour the window shows past the deepest nesting on this route, as #RRGGBB, or null for the face's own session's.
+   */
+  fallback?: string | null;
+};
+
+/**
+ * The destinations a face leads to and shows, one at a time (Routes): a list of routes and the state cell that chooses among them, so a door is pointed somewhere else by a rule's write rather than by an edit of the document. The face's own Portal and session Source carry everything a route shares (travel, arrival, gate, projection, attention, ripple); a route replaces only where they lead.
+ */
+export type WorldFaceRoutes = {
+  /**
+   * The numeric state row whose cell chooses the route (never Text).
+   */
+  state: string;
+  /**
+   * The routes, chosen by their 0-based place in this list. At least one, at most MaxEntries; each names a different destination.
+   */
+  entries: (WorldFaceRoute | null)[];
+  /**
+   * The cell inside State, or null for its slot cell.
+   */
+  key?: string | null;
+};
+
 export type WorldFarProduct = {
   /**
    * The side, in metres, of the cells the product gathers its vertices into, so its finest level holds about two triangles a cell of surface; its coarser levels, which a far view's draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent is one metre.
@@ -11312,6 +11348,10 @@ export type WorldPlacementFace = {
    * The id of the screen material the face's screen draws its picture through, as a screen row's Material does, or null for none. Refused on a window. Omitted from the wire when null.
    */
   material?: string | null;
+  /**
+   * The destinations the face's portal and session source lead to and show, chosen by a state cell (WorldFaceRoutes), or null for a face that always leads where its own portal and source say. Omitted from the wire when null.
+   */
+  routes?: WorldFaceRoutes | null;
 };
 
 export type WorldPlacementFaceList = (WorldPlacementFace | null)[];

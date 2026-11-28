@@ -16886,6 +16886,74 @@
       "additionalProperties": false,
       "title": "WorldPlacementPortal"
     },
+    "WorldFaceRoute": {
+      "description": "One of a face\u0027s WorldFaceRoutes: where the face leads and what its window shows while the route is chosen.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "destination": {
+          "description": "The Name of the destinations row the face\u0027s portal and its session source lead to and observe on this route.",
+          "type": "string"
+        },
+        "counterpart": {
+          "description": "The destination document\u0027s border face a mapped arrival lands out of on this route (Counterpart\u0027s spelling), or null for the face\u0027s own portal\u0027s.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fallback": {
+          "description": "The colour the window shows past the deepest nesting on this route, as #RRGGBB, or null for the face\u0027s own session\u0027s.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "destination"
+      ],
+      "additionalProperties": false,
+      "title": "WorldFaceRoute"
+    },
+    "WorldFaceRoutes": {
+      "description": "The destinations a face leads to and shows, one at a time (Routes): a list of routes and the state cell that chooses among them, so a door is pointed somewhere else by a rule\u0027s write rather than by an edit of the document. The face\u0027s own Portal and session Source carry everything a route shares (travel, arrival, gate, projection, attention, ripple); a route replaces only where they lead.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "state": {
+          "description": "The numeric state row whose cell chooses the route (never Text).",
+          "type": "string"
+        },
+        "entries": {
+          "description": "The routes, chosen by their 0-based place in this list. At least one, at most MaxEntries; each names a different destination.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldFaceRoute"
+          }
+        },
+        "key": {
+          "description": "The cell inside State, or null for its slot cell.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "entries"
+      ],
+      "additionalProperties": false,
+      "title": "WorldFaceRoutes"
+    },
     "WorldPlacementFace": {
       "description": "A per-instance override of one declared creation face\u0027s feed \u2014 the face twin of the emission facet\u0027s per-instance override channel.",
       "type": [
@@ -16921,6 +16989,11 @@
             "string",
             "null"
           ],
+          "default": null
+        },
+        "routes": {
+          "$ref": "#/$defs/WorldFaceRoutes",
+          "description": "The destinations the face\u0027s portal and session source lead to and show, chosen by a state cell (WorldFaceRoutes), or null for a face that always leads where its own portal and source say. Omitted from the wire when null.",
           "default": null
         }
       },

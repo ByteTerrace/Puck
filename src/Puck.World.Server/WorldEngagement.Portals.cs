@@ -10,7 +10,17 @@ namespace Puck.World.Server;
 /// <param name="Frame">The face's geometry, the glass a pointer ray must pass through.</param>
 /// <param name="Destination">The destination the face's session observes.</param>
 /// <param name="Counterpart">The destination face the portal maps the glass onto.</param>
-public readonly record struct WorldPortalFace(int ScreenIndex, WorldFaceFrame Frame, string Destination, string Counterpart);
+/// <param name="Routed">The authored face row when it carries routes (<see cref="WorldFaceRoutes"/>), whose destination
+/// and counterpart follow the session the authority opened for it (<see cref="On"/>); <see langword="null"/> otherwise.</param>
+public readonly record struct WorldPortalFace(int ScreenIndex, WorldFaceFrame Frame, string Destination, string Counterpart, WorldPlacementFace? Routed = null) {
+    /// <summary>Returns the face as it leads to <paramref name="destination"/>: a routed face's counterpart on the route
+    /// that observes it, and this face unchanged when it carries no routes or already leads there.</summary>
+    /// <param name="destination">The destination the face's session observes now.</param>
+    /// <returns>The face on that route.</returns>
+    public WorldPortalFace On(string destination) => (((Routed is { } routed) && !string.Equals(a: destination, b: Destination, comparisonType: StringComparison.Ordinal))
+        ? this with { Destination = destination, Counterpart = (WorldFaceRouting.To(destination: destination, face: routed).Portal?.Counterpart ?? Counterpart) }
+        : this);
+}
 /// <summary>One engaged body's input bound through a portal face this tick: where its pointer ray met the glass, the
 /// ray's direction, and its channels, in the world that produced it.</summary>
 /// <param name="ScreenIndex">The portal face's screen index.</param>
@@ -101,7 +111,8 @@ public sealed partial class WorldEngagement {
                         Counterpart: counterpart,
                         Destination: session.Destination,
                         Frame: row.Frame,
-                        ScreenIndex: row.ScreenIndex
+                        ScreenIndex: row.ScreenIndex,
+                        Routed: ((face.Routes is null) ? null : face)
                     );
                 }
             }

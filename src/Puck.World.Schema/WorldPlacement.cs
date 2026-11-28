@@ -426,13 +426,17 @@ public sealed class WorldPlacementInhabitCountJsonConverter : JsonConverter<Worl
 /// <param name="Material">The id of the screen material the face's screen draws its picture through, as a screen row's
 /// <see cref="WorldScreen.Material"/> does, or <see langword="null"/> for none. Refused on a window. Omitted from the
 /// wire when null.</param>
+/// <param name="Routes">The destinations the face's portal and session source lead to and show, chosen by a state cell
+/// (<see cref="WorldFaceRoutes"/>), or <see langword="null"/> for a face that always leads where its own portal and
+/// source say. Omitted from the wire when null.</param>
 public sealed record WorldPlacementFace(
     [property: DocumentText("a creation face name")] string Face,
     WorldScreenSource Source,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementPortal? Portal = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
     [property: DocumentName(WorldNameKind.ScreenMaterial, WorldNameRole.Names, WorldExportFacet.Binding)]
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Material = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Material = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFaceRoutes? Routes = null
 );
 /// <summary>A placement's region facet — a named volume row, not a trigger system: any placement may carry one,
 /// turning its stamp into a sensing volume the world-events feed watches for body enter/exit edges (see

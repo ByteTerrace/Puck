@@ -24,8 +24,9 @@ namespace Puck.World.Client;
 public static class WorldWindowFrustumFit {
 
     // The two face frames a window screen's apertures are: the local face that claims the screen index, and the
-    // counterpart its portal facet names in the destination.
-    private static bool TryResolveFrames(WorldDefinition local, WorldDefinition destination, int screenIndex, out WorldFaceFrame source, out WorldFaceFrame counterpart, out WorldScreenSource? counterpartGlass) {
+    // counterpart its portal facet names in the destination, on the route the window's session observes when the face
+    // carries routes.
+    private static bool TryResolveFrames(WorldDefinition local, WorldDefinition destination, int screenIndex, string? observed, out WorldFaceFrame source, out WorldFaceFrame counterpart, out WorldScreenSource? counterpartGlass) {
         ArgumentNullException.ThrowIfNull(argument: local);
         ArgumentNullException.ThrowIfNull(argument: destination);
 
@@ -49,6 +50,10 @@ public static class WorldWindowFrustumFit {
                 placement: placement
             )
             : null);
+
+        if ((face is not null) && (observed is not null)) {
+            face = WorldFaceRouting.To(destination: observed, face: face);
+        }
 
         if (
             (face?.Portal is not { Arrival: WorldPortalArrival.Mapped, Counterpart: { } named }) ||
@@ -118,9 +123,12 @@ public static class WorldWindowFrustumFit {
     /// <param name="local">Reads the local document, whose face catalog seats the screen, or <see langword="null"/>.</param>
     /// <param name="destination">Reads the destination's document, as its session mirror last delivered it.</param>
     /// <param name="screen">Reads the screen row the window shows on, or <see langword="null"/>.</param>
+    /// <param name="observed">The destination the window's session observes, which names the route a face that carries
+    /// routes shows (<see cref="WorldFaceRouting.To"/>), or <see langword="null"/> for the face's own portal.</param>
     /// <returns>The fit.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static Func<WorldWindowFit?> FitFrom(Func<CameraSnapshot?> viewer, Func<WorldDefinition?> local, Func<WorldDefinition> destination, Func<WorldScreen?> screen) {
+    /// <exception cref="ArgumentNullException"><paramref name="viewer"/>, <paramref name="local"/>,
+    /// <paramref name="destination"/> or <paramref name="screen"/> is <see langword="null"/>.</exception>
+    public static Func<WorldWindowFit?> FitFrom(Func<CameraSnapshot?> viewer, Func<WorldDefinition?> local, Func<WorldDefinition> destination, Func<WorldScreen?> screen, string? observed = null) {
         ArgumentNullException.ThrowIfNull(argument: viewer);
         ArgumentNullException.ThrowIfNull(argument: local);
         ArgumentNullException.ThrowIfNull(argument: destination);
@@ -144,7 +152,7 @@ public static class WorldWindowFrustumFit {
             var apertures = Volatile.Read(location: ref last);
 
             if ((apertures is null) || !apertures.Matches(destination: target, local: document, screenIndex: row.Index)) {
-                apertures = ResolvedApertures.Of(destination: target, local: document, screenIndex: row.Index);
+                apertures = ResolvedApertures.Of(destination: target, local: document, observed: observed, screenIndex: row.Index);
                 Volatile.Write(location: ref last, value: apertures);
             }
 
@@ -251,12 +259,13 @@ public static class WorldWindowFrustumFit {
             ReferenceEquals(objA: LocalCatalog, objB: WorldFaceCatalog.For(definition: local)) &&
             ReferenceEquals(objA: DestinationCatalog, objB: WorldFaceCatalog.For(definition: destination))
         );
-        public static ResolvedApertures Of(WorldDefinition local, WorldDefinition destination, int screenIndex) {
+        public static ResolvedApertures Of(WorldDefinition local, WorldDefinition destination, int screenIndex, string? observed) {
             var resolved = TryResolveFrames(
                 counterpart: out var counterpart,
                 counterpartGlass: out var counterpartGlass,
                 destination: destination,
                 local: local,
+                observed: observed,
                 screenIndex: screenIndex,
                 source: out var source
             );

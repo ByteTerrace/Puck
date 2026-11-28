@@ -126,6 +126,168 @@ public sealed record WorldPortalGate(
         Value: Value
     ).Holds(arena: arena, definition: definition, engineTick: engineTick, tick: tick);
 }
+/// <summary>The destinations a face leads to and shows, one at a time (<see cref="WorldPlacementFace.Routes"/>): a list of
+/// routes and the state cell that chooses among them, so a door is pointed somewhere else by a rule's write rather
+/// than by an edit of the document. The face's own <see cref="WorldPlacementFace.Portal"/> and session
+/// <see cref="WorldPlacementFace.Source"/> carry everything a route shares (travel, arrival, gate, projection, attention,
+/// ripple); a route replaces only where they lead.</summary>
+/// <remarks>
+/// <para>The authority's door scan reads the cell once a tick, between ticks, and records the route it
+/// read beside the door's closure (<c>Puck.World.Server.WorldPortalClosures</c>). The crossing the scan mints, the
+/// session the face's window observes through (<c>WorldInstanceHost.SettleScreenSessions</c>) and so the picture every
+/// presentation draws all follow that one record, so the glass never shows one world while the door leads to another.
+/// A presentation never reads the cell: it draws the session the authority holds for the face's screen.</para>
+/// <para>Before the first scan records a route, the face shows and leads where its own portal and source say. A cell
+/// that holds no whole number naming a route (absent, negative or past the last route) closes the door as an unmet
+/// <see cref="WorldPlacementPortal.Open"/> does: it fires nothing and holds no session.</para>
+/// <para>Everyone sees the route the world's cell holds. A per-viewer route (a player's own screen pointing a door for
+/// that player alone) is a second, viewer-keyed cell read by the presentation for its own viewer's session, beside this
+/// one; nothing here assumes it is absent.</para>
+/// </remarks>
+/// <param name="State">The numeric state row whose cell chooses the route (never <see cref="CellKind.Text"/>).</param>
+/// <param name="Entries">The routes, chosen by their 0-based place in this list. At least one, at most
+/// <see cref="MaxEntries"/>; each names a different destination.</param>
+/// <param name="Key">The cell inside <paramref name="State"/>, or <see langword="null"/> for its slot cell.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldFaceRoutes(
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string State,
+    IReadOnlyList<WorldFaceRoute> Entries,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
+) {
+    /// <summary>The route the scan records for a door whose cell names none: the door stands closed.</summary>
+    public const int Closed = -1;
+    /// <summary>The most routes one face carries: a representation bound, sized for a world's whole library.</summary>
+    public const int MaxEntries = 1024;
+
+    /// <summary>Reads the route the cell chooses: its whole value when it names one of <see cref="Entries"/>, else
+    /// <see cref="Closed"/>.</summary>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="tick">The tick to read the cell as of.</param>
+    /// <param name="engineTick">The engine tick to read the cell as of.</param>
+    /// <param name="arena">The live store.</param>
+    /// <returns>The 0-based route, or <see cref="Closed"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public int Pick(WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena = null) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (
+            !WorldStateReader.TryRead(
+                arena: arena,
+                definition: definition,
+                engineTick: engineTick,
+                key: Key,
+                rawValue: out var raw,
+                row: out var row,
+                rowName: State,
+                text: out _,
+                tick: tick
+            ) ||
+            (raw is not { } rawValue)
+        ) {
+            return Closed;
+        }
+
+        // A Fixed cell holds Q48.16; its whole part chooses.
+        var whole = ((row.Kind == CellKind.Fixed) ? (rawValue >> 16) : rawValue);
+
+        return (((whole >= 0L) && (whole < Entries.Count)) ? ((int)whole) : Closed);
+    }
+}
+/// <summary>One of a face's <see cref="WorldFaceRoutes"/>: where the face leads and what its window shows while the
+/// route is chosen.</summary>
+/// <param name="Destination">The <see cref="WorldDestination.Name"/> of the <c>destinations</c> row the face's portal
+/// and its session source lead to and observe on this route.</param>
+/// <param name="Counterpart">The destination document's border face a mapped arrival lands out of on this route
+/// (<see cref="WorldPlacementPortal.Counterpart"/>'s spelling), or <see langword="null"/> for the face's own portal's.</param>
+/// <param name="Fallback">The colour the window shows past the deepest nesting on this route, as <c>#RRGGBB</c>, or
+/// <see langword="null"/> for the face's own session's.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldFaceRoute(
+    [property: DocumentText("a destination name")] string Destination,
+    [property: DocumentText("a counterpart in the destination world")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Counterpart = null,
+    [property: DocumentText("a fallback color")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fallback = null
+);
+/// <summary>A routed face as it stands on each of its routes: the one derivation every reader of a route takes, so the
+/// door the scan crosses through, the session the authority opens and the counterpart a presentation maps a window
+/// through are the same face.</summary>
+public static class WorldFaceRouting {
+    // Each routed face's faces on its routes, built once per face row: a scan asks every tick, and a row never changes
+    // once built.
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldPlacementFace, WorldPlacementFace[]> Faces = new();
+
+    /// <summary>Returns the face as it stands on route <paramref name="route"/>: its portal leading to the route's
+    /// destination through the route's counterpart, and its session source observing that destination with the
+    /// route's fallback. A face with no routes, or a route outside them, answers the face itself.</summary>
+    /// <param name="face">The authored face row.</param>
+    /// <param name="route">The 0-based route.</param>
+    /// <returns>The face on that route.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="face"/> is <see langword="null"/>.</exception>
+    public static WorldPlacementFace On(WorldPlacementFace face, int route) {
+        ArgumentNullException.ThrowIfNull(argument: face);
+
+        if ((face.Routes is not { } routes) || (route < 0) || (route >= routes.Entries.Count)) {
+            return face;
+        }
+
+        return Faces.GetValue(key: face, derive: Derive)[route];
+    }
+    /// <summary>Returns the face as it stands on the route that leads to <paramref name="destination"/>, or the face
+    /// itself when none does: how a reader holding the session the authority opened finds the route it shows.</summary>
+    /// <param name="face">The authored face row.</param>
+    /// <param name="destination">The destination name the face's session observes.</param>
+    /// <returns>The face on that route.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="face"/> is <see langword="null"/>.</exception>
+    public static WorldPlacementFace To(WorldPlacementFace face, string destination) {
+        ArgumentNullException.ThrowIfNull(argument: face);
+
+        if (face.Routes is not { } routes) {
+            return face;
+        }
+
+        for (var index = 0; (index < routes.Entries.Count); index++) {
+            if (string.Equals(a: routes.Entries[index].Destination, b: destination, comparisonType: StringComparison.Ordinal)) {
+                return On(face: face, route: index);
+            }
+        }
+
+        return face;
+    }
+    /// <summary>Returns whether a session is the one the face shows on its own or on one of its routes: what a
+    /// presentation accepts the authority's session for the face's screen against.</summary>
+    /// <param name="face">The authored face row.</param>
+    /// <param name="session">The session the authority holds for the face's screen.</param>
+    /// <returns><see langword="true"/> when <paramref name="session"/> is one the face shows.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static bool Shows(WorldPlacementFace face, WorldScreenSource.Session session) {
+        ArgumentNullException.ThrowIfNull(argument: face);
+        ArgumentNullException.ThrowIfNull(argument: session);
+
+        return (Equals(objA: face.Source, objB: session) || Equals(objA: To(face: face, destination: session.Destination).Source, objB: session));
+    }
+
+    private static WorldPlacementFace[] Derive(WorldPlacementFace face) {
+        var entries = face.Routes!.Entries;
+        var faces = new WorldPlacementFace[entries.Count];
+
+        for (var index = 0; (index < entries.Count); index++) {
+            var entry = entries[index];
+
+            faces[index] = face with {
+                Portal = ((face.Portal is { } portal)
+                    ? portal with { Destination = entry.Destination, Counterpart = (entry.Counterpart ?? portal.Counterpart) }
+                    : null),
+                Source = ((face.Source is WorldScreenSource.Session session)
+                    ? session with { Destination = entry.Destination, Fallback = (entry.Fallback ?? session.Fallback) }
+                    : face.Source),
+            };
+        }
+
+        return faces;
+    }
+}
 /// <summary>Parses and resolves a <see cref="WorldPlacementPortal.Counterpart"/> string — the one spelling shared by
 /// <see cref="WorldDefinitionValidator"/>'s boot-time format check and <c>Puck.World.WorldInstanceHost</c>'s
 /// transfer-time existence check against the destination's own delivered definition, so the two can never disagree
