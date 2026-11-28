@@ -240,7 +240,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
             DefaultSeatKitRaw = "locomotion",
             KitRowsRaw = [source.Kits[0] with { Name = "locomotion", Rigid = null }, source.Kits[0]],
             AssignmentRaw = new WorldRowAssignment(WorldSequence.IndexDefault, ["locomotion"],
-                Select: new WorldRowSelector(BodyState: "mode", Cases: [new WorldRowSelectorCase(Row: "ball", Value: 1)])),
+                Select: [new WorldRowSelector(Name: "form", BodyState: "mode", Cases: [new WorldRowSelectorCase(Row: "ball", Value: 1)])]),
             StateRaw = new WorldStateSection(Body: [new ActionStateSlot("mode", ActionStateKind.Counter, Initial: 0,
                 Envelope: new ActionStateEnvelope.Range(Maximum: 1, Minimum: 0))]),
         };
@@ -337,7 +337,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
             DefaultSeatKitRaw = "locomotion",
             KitRowsRaw = [source.Kits[0] with { Name = "locomotion", Rigid = null }, source.Kits[0] with { Rigid = source.Kits[0].Rigid! with { Restitution = 0 } }],
             AssignmentRaw = new WorldRowAssignment(WorldSequence.IndexDefault, ["locomotion", "ball"],
-                Select: new WorldRowSelector(BodyState: "mode", Cases: [new WorldRowSelectorCase(Row: "ball", Value: 1)])),
+                Select: [new WorldRowSelector(Name: "form", BodyState: "mode", Cases: [new WorldRowSelectorCase(Row: "ball", Value: 1)])]),
             StateRaw = new WorldStateSection(Body: [new ActionStateSlot("mode", ActionStateKind.Counter, Initial: 0,
                 Envelope: new ActionStateEnvelope.Range(Maximum: 1, Minimum: 0))]),
         };

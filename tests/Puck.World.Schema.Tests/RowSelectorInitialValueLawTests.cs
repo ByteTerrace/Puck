@@ -14,10 +14,11 @@ public sealed class RowSelectorInitialValueLawTests {
         return source with {
             KitsRaw = new WorldKitsSection(
                 Assignment: (source.Assignment with {
-                    Select = new WorldRowSelector(
+                    Select = [new WorldRowSelector(
+                        Name: "form",
                         BodyState: "suit",
                         Cases: [new WorldRowSelectorCase(Value: caseValue, Row: kit.Name)]
-                    ),
+                    )],
                 }),
                 Rows: [kit]
             ),
@@ -38,7 +39,7 @@ public sealed class RowSelectorInitialValueLawTests {
             reason: out var reason
         ));
         Assert.Contains(
-            expectedSubstring: "kits.assignment.select.cases[0] value 3 is register 'suit' initial value",
+            expectedSubstring: "kits.assignment.select[0].cases[0] value 3 is register 'suit' initial value",
             actualString: reason
         );
         Assert.True(

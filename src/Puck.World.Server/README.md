@@ -395,7 +395,7 @@ rows (`StateArena.FlagOpenRows` with a written list); validation checks the
 edit grant of those rows only, the token-domain relations whose member or
 domain row was written, and input selection only for the owners routing a body
 whose selection registers (a body-state selector's counter, or the kit
-assignment's selector register) the transaction touched
+assignment's selectors' registers) the transaction touched
 (`WorldInputRuntime.TouchedSelectionBodies`, over
 `StateArena.CollectOpenLaneOrdinals`) or whose drive-gate cells it wrote
 (`StateArena.TryCollectOpenKeys`). The commit resynchronizes those owners

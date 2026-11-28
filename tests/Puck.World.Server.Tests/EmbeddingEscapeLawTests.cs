@@ -63,13 +63,14 @@ public sealed class EmbeddingEscapeLawTests {
             )],
             KitsRaw = new WorldKitsSection(
                 Assignment: (document.Assignment with {
-                    Select = new WorldRowSelector(
+                    Select = [new WorldRowSelector(
+                        Name: "form",
                         BodyState: Form,
                         Cases: [
                             new WorldRowSelectorCase(Value: 1L, Row: GhostKit),
                             new WorldRowSelectorCase(Value: 2L, Row: TallKit),
                         ]
-                    ),
+                    )],
                 }),
                 Rows: [
                     seat,

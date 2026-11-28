@@ -16,8 +16,32 @@ import "moth-climb"
 import "moth-camera"
 import "../../standard/stars"
 import "../../standard/occlusion"
+import "../../standard/journal"
+import "../../standard/wrist-panel"
+import "../../standard/menagerie"
+import "../menagerie"
 
 walkMotion()
+
+// Her journal, worn on her wrist (../../standard/journal.puck, ../../standard/wrist-panel.puck), and the companions she
+// keeps in its menagerie (../menagerie.puck): every character of the set starts with Mintstitch and Tangerine. The
+// panel mounts on her forearms (`mothWristMount` below).
+journalPlay(kinds: menagerieKinds)
+menagerie(kinds: menagerieKinds, granted: [1, 2])
+menagerieCreatures()
+
+// The font her journal's screen letters in.
+text {
+  defaultFont: "inter"
+  fonts [
+    {
+      name: "inter"
+      source: "../fonts/inter-regular.ttf"
+      hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
+      codePointRanges ["U+0020-U+007E"]
+    }
+  ]
+}
 
 // Her real head, about 0.26 m from crown to chin, sits recessed in the unchanged hood with dark lining round it.
 let headScale = 0.7
@@ -68,7 +92,9 @@ let bootCyan = 25 // #1F9BAE the heel lenses' idle pilot light
 let bootGlow = 26 // #D8FDFF the heel lenses' pale cores
 let pistonSteel = 27 // satin steel piston cylinders
 let torsoSuit = 28 // segmented charcoal fabric between the chest and belt
-// Slots 6 (cyan), 29 and 30 (lavender) are free.
+let journalScreenLeft = 29 // the left journal panel's glass, whose paints are the journal's interface
+let journalScreenRight = 30 // the right journal panel's glass
+// Slot 6 (cyan) is free.
 
 // Wear is a faint floor on a pristine suit: its coverage stays under the primer's threshold except at the tightest
 // edges, where pale primer shows first, then the dark alloy.
@@ -201,6 +227,16 @@ template braidChain(chainIdx, baseId, positions, rotations) {
   }
 }
 
+// Where her journal's wrist panel (../../standard/wrist-panel.puck) mounts, in the left side's frame: on each forearm,
+// the middle of its gauntlet's outer face, raised about her shoulder and elbow. The panel's shape, flap, screen, raise
+// and camera focus are the panel module's; a suit carrying the panel names its own mount.
+let mothWristMount = {
+  part: "forearm"
+  at [-0.513, 0.995, 0]
+  shoulder [-0.295, 1.4515, 0]
+  elbow [-0.336, 1.2201, -0.004]
+}
+
 // Both sides of the body: the left side is written out, and `standard/mirror` gives the right side its values from it.
 // `side` is "left" or "right" and `isRight` 0 or 1.
 
@@ -253,6 +289,7 @@ template mothLimbs(side, isRight) {
       }
       // On a wall both arms reach forward and up to it; the hand effectors plant each palm in turn as she climbs.
       swing("cling", [-1, 0, 0], -2.2, mirrorX(isRight, [-0.295, 1.4515, 0])) with { wave: "constant" }
+      for s in wristPanelSwings("upper", mothWristMount, side, isRight) { s }
     ]
   }
 
@@ -371,6 +408,7 @@ template mothLimbs(side, isRight) {
         0.05,
         mirrorX(isRight, [-0.336, 1.2201, -0.004])
       ) with { wave: "linear" }
+      for s in wristPanelSwings("fore", mothWristMount, side, isRight) { s }
     ]
   }
 
@@ -407,6 +445,14 @@ template mothLimbs(side, isRight) {
     parent: $"forearm-{side}"
     rounding: 0.003
   }
+
+  wristPanel(
+    mount: mothWristMount,
+    side: side,
+    isRight: isRight,
+    ids: [2000 + isRight * 68, 2001 + isRight * 68, 2002 + isRight * 68],
+    materials: { bezel: charcoal, flap: violet, screen: bySide(isRight, journalScreenLeft, journalScreenRight) }
+  )
 
   shape Capsule $"elbowRod-{side}" {
     id: 156 + isRight * 68
@@ -2366,11 +2412,11 @@ looks {
         gaitAmplitude: 0
         replayFrames: false
         secondsPerFrame: 0
-        // Lane 1 is the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as she
-        // flies. Lane 2 is flight mode itself, the heel and nozzle glows it lights. Lane 3 is the
-        // boot jets' flame under the air jump.
+        // Lane 0 is her journal's glass, lit as its arm rises. Lane 1 is the jets: dark out of flight mode, a pilot
+        // flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is flight mode itself, the heel and
+        // nozzle glows it lights. Lane 3 is the boot jets' flame under the air jump.
         lanes [
-          0
+          maximum(journalRaiseLeft[$body], journalRaiseRight[$body])
           maximum(bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body]), dashPose[$body])
           maximum(bodyState($body, flightFuel) / 1000, dashPose[$body])
           bootBoost[$body]
@@ -3106,20 +3152,9 @@ prototypes {
             }
           ]
         }
-        {
-          color: lavenderPlate
-          toonSelect: mothStyles
-          roughness: 0.32
-          specular: 0.08
-          coat: 0.3
-        }
-        {
-          color: lavenderPlate
-          toonSelect: mothStyles
-          roughness: 0.34
-          specular: 0.08
-          coat: 0.28
-        }
+        // The journal panels' glass (the wrist panel's), lettered with the journal's interface and lit as a flap opens.
+        wristPanelGlass("left", menagerieKinds)
+        wristPanelGlass("right", menagerieKinds)
       ]
       shape Superellipsoid "pelvis" {
         id: 1
@@ -3552,6 +3587,8 @@ prototypes {
           blendOutSeconds: 0
           when ["always"]
         }
+        // Her wrist panel's arm raise and flaps.
+        for driver in wristPanelDrivers { driver }
         // Her pace in metres per second, the X every gait curve reads.
         {
           name: "pace"

@@ -16253,12 +16253,16 @@
       "title": "WorldRowSelectorCase"
     },
     "WorldRowSelector": {
-      "description": "A per-body row selector inside a WorldRowAssignment: each body\u0027s own value of a state.body counter picks the row the case for that value names. A body whose register holds a value no case names keeps the row the assignment\u0027s sequence gives it. The register is body state, so the choice is the body\u0027s and goes where the body goes: a kit action or a rule\u0027s setBodyState moves the row, a replay moves it at the same tick, a checkpoint restores it with the register, and a crossing to another world carries the register with the body (a destination declaring the same register under the same kind selects by the carried value). The look assignment\u0027s selector changes only what a body wears; the kit assignment\u0027s selector changes how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.",
+      "description": "A per-body row selector inside a WorldRowAssignment: each body\u0027s own value of a state.body counter picks the row the case for that value names. A body whose register holds a value no case of any selector names keeps the row the assignment\u0027s sequence gives it. The register is body state, so the choice is the body\u0027s and goes where the body goes: a kit action or a rule\u0027s setBodyState moves the row, a replay moves it at the same tick, a checkpoint restores it with the register, and a crossing to another world carries the register with the body (a destination declaring the same register under the same kind selects by the carried value). The look assignment\u0027s selectors change only what a body wears; the kit assignment\u0027s selectors change how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
+        "name": {
+          "description": "The selector\u0027s name, unique within its assignment: the key a document importing another refines or drops this selector by.",
+          "type": "string"
+        },
         "bodyState": {
           "description": "The state.body counter whose value selects.",
           "type": "string"
@@ -16272,11 +16276,21 @@
         }
       },
       "required": [
+        "name",
         "bodyState",
         "cases"
       ],
       "additionalProperties": false,
       "title": "WorldRowSelector"
+    },
+    "WorldRowSelectorList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldRowSelector"
+      }
     },
     "DocumentIdentifierList": {
       "type": "array",
@@ -16286,7 +16300,7 @@
       }
     },
     "WorldRowAssignment": {
-      "description": "The row-to-entity assignment declaration \u2014 nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry\u0027s fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own state.body register maps to a row, and follows that register as the simulation writes it.",
+      "description": "The row-to-entity assignment declaration \u2014 nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry\u0027s fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own state.body registers map to a row, and follows them as the simulation writes them: its selectors are read in order, and the first whose register holds a value one of its cases names picks the row (Match\u0060\u00601). Selectors are rows keyed by name, so a document that imports another refines one of its selectors by name and adds selectors of its own beside it.",
       "type": "object",
       "properties": {
         "sequence": {
@@ -16294,8 +16308,8 @@
           "description": "The sequence that selects a row."
         },
         "select": {
-          "$ref": "#/$defs/WorldRowSelector",
-          "description": "The per-body selector, or null for the sequence alone.",
+          "$ref": "#/$defs/WorldRowSelectorList",
+          "description": "The per-body selectors in the order they are read, or null for the sequence alone.",
           "default": null
         },
         "rows": {
