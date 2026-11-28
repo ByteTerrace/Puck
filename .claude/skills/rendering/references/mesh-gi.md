@@ -811,9 +811,10 @@ read again is refilled and republished whole.
   reference keeps the full hits too. `world.budget` derives the retained block
   cost from those types. A level's cache holds its window grown by the
   window's band (`MarginOf`, dims/8 a side) on every side: when the window moves,
-  `ProbeCache.Retain` publishes a compacted table of the cells inside that box once
-  the cache holds more probes than the box has cells (at Medium 92,800 probes over
-  the three levels). `world.residency`'s `probe-cache-*` line reads it. A batch's
+  the staging asks for that box (`ProbeCache.AskRetain`), and once the cache holds
+  more probes than the box has cells (at Medium 92,800 probes over the three
+  levels) the caches' upkeep publishes a compacted table of the cells inside it and
+  moves the kept entries in, a bounded run of slots for each hold of the gate. `world.residency`'s `probe-cache-*` line reads it. A batch's
   depth/sky and light blocks stay alive while any kept probe names them, so
   bytes per kept probe can exceed their nominal payload.
   The cache uses table-owned publication arenas, with no publication object per

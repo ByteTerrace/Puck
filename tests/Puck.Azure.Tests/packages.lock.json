@@ -148,18 +148,18 @@
       },
       "Azure.Storage.Blobs": {
         "type": "Transitive",
-        "resolved": "12.30.1",
-        "contentHash": "ywPqtDHLH5MY0Cp/wfLQgqhHOuJmD+bYVJawjXudtaQr9aJB+9orhk8oE6hHPy5s8H5bzq2q/mDkESf8w1rzBg==",
+        "resolved": "12.30.2",
+        "contentHash": "7c0H70SRY3Axty6YunsEFqw0k9KYzEgpmi4iRROAM325S2Ou5tyF1VvPw7imyjmopzhSqFx5LvwuE4/CLBDhng==",
         "dependencies": {
           "Apache.Arrow": "22.1.0",
           "Azure.Core": "1.60.0",
-          "Azure.Storage.Common": "12.29.0"
+          "Azure.Storage.Common": "12.29.1"
         }
       },
       "Azure.Storage.Common": {
         "type": "Transitive",
-        "resolved": "12.29.0",
-        "contentHash": "0VqPcAinzXFJDAELqC+VPFUL6AaU1mmIpDAHarr7DVw3zcJrlo4k3Xc3TCTVBkDgY6YUOjJ00Fd9ZB9En5H2Jg==",
+        "resolved": "12.29.1",
+        "contentHash": "T0CHonZVqUhIze/357Sbbg2ite4YM41rIvf+cEJMas/uRp5YiPGq3MV1E8/nvdWClJrzmmorXv4bg3qu1FuXIg==",
         "dependencies": {
           "Azure.Core": "1.60.0",
           "System.IO.Hashing": "10.0.9"
@@ -307,8 +307,8 @@
       },
       "Microsoft.Azure.Functions.Worker.Extensions.Storage.Blobs": {
         "type": "Transitive",
-        "resolved": "6.8.2",
-        "contentHash": "kVbZcVS8EFaffD3WevNEka99toLwsl9VsGgRuFO7nUCIhBqkkN0ehS3CUO51Zeiy8I5xdXsZN50f/DcfFS6Isg==",
+        "resolved": "6.8.3",
+        "contentHash": "ZmfbR4tKRmwbUmUwsnLRY5vuNQcIeLcl+WX3rqTs6atlAOQjt3Kdc6yURceOwGIG1KkDT+HLm4yx8W8W7mA4Eg==",
         "dependencies": {
           "Azure.Storage.Blobs": "12.23.0",
           "Microsoft.Azure.Functions.Worker.Core": "1.20.0",
@@ -385,8 +385,8 @@
       },
       "Microsoft.Extensions.Caching.Hybrid": {
         "type": "Transitive",
-        "resolved": "11.0.0",
-        "contentHash": "SB0COfE5ZlYNouaQicXTFp4rcLNkNjTcstFdUvqEVERYIh5amqXuDsl7yblotT5Am9XXlAjmLKP9SLBz0VYJAA==",
+        "resolved": "11.0.1",
+        "contentHash": "U1I093qKyPJpYTJ7ifgEarejzWFLNIwjeBev5ccsAhYqutLceKDeLhaLi6PgaThxV+Uoca6PaFrGCj0+ZLGxMQ==",
         "dependencies": {
           "Microsoft.Extensions.Caching.Memory": "11.0.0"
         }
@@ -626,8 +626,8 @@
       },
       "Microsoft.Graph": {
         "type": "Transitive",
-        "resolved": "6.10.0",
-        "contentHash": "hmSO3zNrzc3poitbCDnWOC4vP3z6f2nianaZEscX+/ItVlmxEzIbZ9dDLJ79MTfc5+4hoQT5rbX7FpZW9GNN0g==",
+        "resolved": "6.11.1",
+        "contentHash": "CptS36T3Ci/xQTJ1aH7BCoyW3ZudRwJE7eDj4w25A+MWrIEZJdQSsg0+EbdjXQxKwfVuDAReWhJ84dW64jBoYQ==",
         "dependencies": {
           "Microsoft.Graph.Core": "4.0.1"
         }

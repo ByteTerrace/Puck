@@ -1479,14 +1479,13 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
 - [high] Remaining managed allocation churn, read on the windowed Release
   debug World with `dotnet-trace --profile gc-verbose`; zero steady gen0 is
   not reached. In measured order:
-  - Steady frame: `ProbeCache.Retain` replaces the probe cache's table whole
-    and `Grow` again as probes land (what the cache keeps is the streaming
-    plan's lighting step's). Publication now uses table-owned dense arenas:
-    inserts within capacity allocate no per-key objects, and idle retired
-    values release their blocks on retirement or the next write/accounting
-    visit after their readers leave. Table replacement still allocates arrays;
-    its byte report includes arena machinery, held retired values and block
-    headers.
+  - Steady frame: a probe cache's retention and growth still replace its
+    table (what the cache keeps is the streaming plan's lighting step's). The
+    replacement is published at once and the volume's upkeep moves the old
+    table's entries a bounded run of slots a hold, off the frame, from a table
+    it allocated ahead (`SdfMeshIrradiance.ProbeCache`); a table that comes
+    back from the reader epochs is kept as the spare, but a replacement of
+    another size still allocates native arrays.
     On the bake writer thread `CacheRetention.EnforceSetsCore` enumerates the
     store on every write. Small: `BindingBarSeatComposer.PlacedSlots`
     enumerating `CompiledBindingBarLayout.Banks.Values` once a slot,

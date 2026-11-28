@@ -17,6 +17,10 @@ public enum HostFrameWorkPart {
     Lighting,
     /// <summary>Meters and stages exposure.</summary>
     Exposure,
+    /// <summary>Waits for the irradiance volume's gate while its background work or another reader holds it.</summary>
+    LightingWait,
+    /// <summary>Waits for a mesh bake's demand measure to finish.</summary>
+    DemandWait,
     /// <summary>Builds the graph schedule.</summary>
     Schedule,
     /// <summary>Prepares the scheduled render packages.</summary>

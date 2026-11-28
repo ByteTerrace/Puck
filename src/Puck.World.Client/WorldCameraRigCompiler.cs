@@ -183,6 +183,8 @@ public static class WorldCameraRigCompiler {
             m_mirror = mirror;
             m_program = program;
             m_views = definition.ViewsRaw;
+            // A compile that throws leaves no rig, so the next resolve compiles again rather than returning the old one.
+            m_rig = null;
             m_rig = Compile(
                 definition: definition,
                 domains: domains,

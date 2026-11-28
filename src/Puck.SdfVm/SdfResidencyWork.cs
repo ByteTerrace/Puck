@@ -64,6 +64,13 @@ public static class SdfResidencyWork {
     /// <summary>Counts the frames whose bake found the demand measure the frame before posted still running when it
     /// joined it, so the joining thread waited: zero while the measure ends inside the frame it runs beside.</summary>
     public static readonly WorkKind DemandJoinWaits = new(name: "sdf.residency.demand.join-waits", unit: "frames", workClass: WorkClass.Pacing);
+    /// <summary>Counts the frames whose bake found the demand measure still running and, rather than wait for it, dressed
+    /// the meshes it holds from the latest completed measure, deciding no tier and posting no measure until the running
+    /// one completes.</summary>
+    public static readonly WorkKind DemandFramesStood = new(name: "sdf.residency.demand.frames-stood", unit: "frames", workClass: WorkClass.Pacing);
+    /// <summary>Counts the observations of the demand points held while a measure read the points, each applied once
+    /// that measure completed.</summary>
+    public static readonly WorkKind DemandObservationsHeld = new(name: "sdf.residency.demand.observations-held", unit: "observations", workClass: WorkClass.Pacing);
     /// <summary>Counts the groups the tier decisions read.</summary>
     public static readonly WorkKind TierGroups = new(name: "sdf.residency.tiers.groups", unit: "groups", workClass: WorkClass.Pacing);
     /// <summary>Counts the tier decisions run.</summary>
@@ -82,5 +89,5 @@ public static class SdfResidencyWork {
     public static readonly WorkKind MarkMeshes = new(name: "sdf.residency.marks.meshes", unit: "meshes", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the process's residency counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.residency", kinds: [Prepared, DemandGroups, DemandBoxes, DemandViews, DemandDue, DemandDueTravel, DemandDueScale, DemandWatched, DemandFramed, DemandRenewed, DemandSlots, DemandStood, DemandMoved, DemandCopied, DemandChanges, DemandReached, DemandChanged, DemandRebiased, DemandResets, DemandJoinWaits, TierGroups, TierDecisions, TierStarts, MotionRows, MotionRowsSpared, MotionReaders, MarkMeshes]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.residency", kinds: [Prepared, DemandGroups, DemandBoxes, DemandViews, DemandDue, DemandDueTravel, DemandDueScale, DemandWatched, DemandFramed, DemandRenewed, DemandSlots, DemandStood, DemandMoved, DemandCopied, DemandChanges, DemandReached, DemandChanged, DemandRebiased, DemandResets, DemandJoinWaits, DemandFramesStood, DemandObservationsHeld, TierGroups, TierDecisions, TierStarts, MotionRows, MotionRowsSpared, MotionReaders, MarkMeshes]);
 }

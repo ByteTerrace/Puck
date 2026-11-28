@@ -43,7 +43,7 @@ public sealed partial class SdfMeshIrradiance {
         Vector4[] lighting;
         int words;
         uint[] result;
-        lock (m_gate) {
+        using (EnterStaging()) {
             var count = frame.Views.Count;
             if (m_gpuCameraSampleViewPositions.Length != count) {
                 m_gpuCameraSampleViewPositions = new Vector3[count];

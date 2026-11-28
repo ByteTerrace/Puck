@@ -765,8 +765,16 @@ public sealed partial class SdfMeshPathBake {
     // workers cannot replace/release a landed mesh before the dresser has claimed it. No bake entry calls presentation.
     internal FrameAccess PrepareFrame(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(frame);
+        // A frame whose measure still runs is dressed from what the groups hold, as the latest completed measure left
+        // them, rather than waiting for it (StandsWhileMeasuring).
+        if (StandsWhileMeasuring(frame: frame)) {
+            SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.DemandFramesStood);
+            return new FrameAccess(owner: this, scope: EnterFrameGate(site: BakeGate.Frame));
+        }
         // The measure the frame before posted reads what this frame changes: the group list, the copy index and inputs.
         JoinMeasure();
+        // An observation of the demand points held while that measure read them takes effect before the next is posted.
+        Demand.ApplyStaged();
 
         var scope = EnterFrameGate(site: BakeGate.Frame);
 
@@ -782,6 +790,7 @@ public sealed partial class SdfMeshPathBake {
 
             if (reindexed) { IndexCopies(frame: frame); }
             m_copyCursor.Commit();
+            (m_copyChangesSeen, m_copyChangesSerialSeen) = (frame.MeshCopyChanges, frame.MeshCopyChangesSerial);
             CopyFrameInputs(frame: frame, reindexed: reindexed);
             // The bake reads only the baked handles: a frame whose height fields' heights alone moved changes nothing here.
             // A lost mesh (SdfMeshLibrary.Lose) restarts the bake on the same program, which bakes again only the groups
@@ -817,6 +826,32 @@ public sealed partial class SdfMeshPathBake {
             return new FrameAccess(owner: this, scope: scope);
         } catch { scope.Dispose(); throw; }
     }
+
+    // Invariant: a frame that prepares while the posted measure runs reads and writes nothing the measure reads or writes
+    // (the demand watch, the group list, the copy index and the frame inputs copied in), and the dresser reads through its
+    // access a copy index that describes the frame's copies. Enforced here: such a frame takes only the gate and the
+    // access (no tier decision, landing, promotion, eviction, form, floor judgement or measure; those wait for the first
+    // frame after the measure completes, which joins it), and it stands only while the frame names the program the bake
+    // holds, the library lost nothing since, and the copy journal names no change of the copy layout since the last full
+    // preparation; any other frame joins the measure. Only a frame the host loop's pump prepares stands: a tick-locked
+    // or lighting-converged frame, or one prepared off the pump (a device-free rig, an offline bake), always joins, so
+    // what it draws never depends on how far the measure had got.
+    private bool StandsWhileMeasuring(SdfFrame frame) {
+        if (frame.TickLocked || frame.ConvergesLighting || (Puck.Abstractions.Waiting.HostWaits.PumpAllowance is null)) { return false; }
+        lock (m_measureGate) {
+            if (!m_measurePosted || m_measureLane!.Ready) { return false; }
+        }
+        if (!ReferenceEquals(objA: frame.Program, objB: m_program) || (Library.LostRevision != m_lostRevision)) { return false; }
+        if ((frame.MeshCopyChanges is not { } changes) || !ReferenceEquals(objA: changes, objB: m_copyChangesSeen) || (frame.MeshCopyChangesSerial != m_copyChangesSerialSeen)) { return false; }
+        if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count) || (m_copyTemplateRanges.Length != frame.MeshTemplateRanges.Count)) { return false; }
+        for (var index = 0; (index < m_copyTemplateRanges.Length); index++) { if (m_copyTemplateRanges[index] != frame.MeshTemplateRanges[index]) { return false; } }
+        for (var index = 0; (index < m_copyAssetSlots.Length); index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
+        return true;
+    }
+    // The copy journal and its serial the latest full preparation read through (PrepareFrame), which a frame standing
+    // while a measure runs must still name (StandsWhileMeasuring).
+    private object? m_copyChangesSeen;
+    private long m_copyChangesSerialSeen;
 
     // The groups whose drawn state (their mesh, its tier or trace, or their place in the list) changed since the dresser
     // last read the groups, so the dresser reconciles those alone. Invariant: every change of what the dresser reads of a

@@ -908,6 +908,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             first: m_client.Definition.Cameras,
             second: facets.Cameras
         ));
+        PrewarmNamedCameraRigs(definition: definition);
         m_binder.ReconcileScreens(materials: m_client.Definition.ScreenMaterials, screens: Concat(
             first: m_client.Definition.Screens,
             second: facets.Faces
@@ -1604,6 +1605,20 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         );
 
         return true;
+    }
+    // Compiles every named camera's rig with the delivery that changed what it reads, so the first frame a layout or an
+    // operator cut shows one (view.override camera <name>) only retargets it. A rig that fails to compile here is left
+    // to its first use, which compiles it again and reports the failure where the camera is shown.
+    private void PrewarmNamedCameraRigs(WorldDefinition definition) {
+        var cameras = definition.Cameras;
+
+        for (var index = 0; (index < cameras.Count); index++) {
+            var row = cameras[index];
+
+            try {
+                _ = ResolveNamedCameraRig(definition: definition, name: row.Name, program: row.Rig);
+            } catch (Exception exception) when (exception is InvalidOperationException or ArgumentException or KeyNotFoundException) { }
+        }
     }
     private IWorldCameraProgramRig ResolveNamedCameraRig(WorldDefinition definition, string name, WorldCameraProgram program) {
         if (!m_namedCameraRigCache.TryGetValue(

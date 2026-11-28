@@ -134,17 +134,17 @@
       },
       "Microsoft.Extensions.AI": {
         "type": "Transitive",
-        "resolved": "11.0.0",
-        "contentHash": "Vn8jo7RCYS3+tD7XOYgwtAPtd6CZIfIpzE20wGkbehAezj+tRY0lZWnEgehP0bLEAno/L54aCa4GnretNoGkXQ==",
+        "resolved": "11.0.1",
+        "contentHash": "MP6zzZzPseaXu0DtZFCkPCWPXLTu7JY28ciyxqSoeDOP5Raf+wJT8+HapyLfXaI7F1CXpyr5PgiCQEE0CeVCqw==",
         "dependencies": {
-          "Microsoft.Extensions.AI.Abstractions": "11.0.0",
+          "Microsoft.Extensions.AI.Abstractions": "11.0.1",
           "System.Numerics.Tensors": "11.0.0"
         }
       },
       "Microsoft.Extensions.AI.Abstractions": {
         "type": "Transitive",
-        "resolved": "11.0.0",
-        "contentHash": "UYZTudmTrGykWIRzcO/TKauTx/+L/h4MYpUBODCG7aIybRVkv2y6uhVwG6UHRS6uTzRqg0K8IJprC9/QhMZGsw=="
+        "resolved": "11.0.1",
+        "contentHash": "pG3n1nHRnVcYuMAiqhDPuKefXTtUGAhAtqhBUKpNsZXYef9Vm51iZhUAVfQ2EzYhechFaA5hCcgQgK18jTzuiw=="
       },
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
@@ -371,8 +371,8 @@
       },
       "Parlot": {
         "type": "Transitive",
-        "resolved": "2.3.1",
-        "contentHash": "wCNWERk46ATkXor8SK43dgpO8GCuH5BQnvwuVogEVWrYilDKA7QituNhq17iYyL0RAHTuIIyczfuV0AWSe8ZLw=="
+        "resolved": "2.5.1",
+        "contentHash": "85yu455mmWgH6p/5LZhKDFqCC41+1fACeS3r2ruTO1AmsjrxEnZ9A9ly6NBlX8eRONQSGyjCB3XlWSD1mbYgRw=="
       },
       "Resharp": {
         "type": "Transitive",
