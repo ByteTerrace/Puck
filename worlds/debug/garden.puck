@@ -35,10 +35,30 @@ for seat in range(0, 4) {
   rule $"obelisk-sight-{seat}" {
     local dx = bodyPosition(body, seat, x) - 9
     local dz = bodyPosition(body, seat, z) + 30
-    when ((dx * dx + dz * dz) < 9) and (identity(body, seat, companionSight) == 0)
+    when (dx * dx + dz * dz) < 9 and identity(body, seat, companionSight) == 0
     mode: Edge
     companionUnlock(fact: "companionSight", owner: seat)
   }
+}
+
+// The lantern trail's garden steps (lantern-trail.puck): a character that took up lanternLit before the painting
+// finishes its first step past the arrival frame, and one following lanternKept finishes it at the obelisk.
+import "../standard/quests"
+
+rule "lantern-trail-arrival" {
+  forEach: $players
+  when questAt("lanternLit", 0) and bodyPosition(each, z) < -8
+  mode: Edge
+  questAdvance(questId: "lanternLit", fromStep: 0, steps: 2)
+}
+
+rule "lantern-trail-obelisk" {
+  forEach: $players
+  local dx = bodyPosition(each, x) - 9
+  local dz = bodyPosition(each, z) + 30
+  when questAt("lanternKept", 0) and (dx * dx + dz * dz) < 9
+  mode: Edge
+  questAdvance(questId: "lanternKept", fromStep: 0, steps: 1)
 }
 
 // The garden draws no HUD panels; controls.puck supplies its cursor.

@@ -72,12 +72,46 @@ public sealed partial class WorldIdentity {
 
         return (TryStoreArena(arena: out var arena) && WorldIdentityStage.TryReadField(arena: arena, field: field, pool: pool, slot: slot, value: out value));
     }
-    /// <summary>Returns the live instances in a pool and the generation of one slot.</summary>
+    /// <summary>Returns the live instances in a pool.</summary>
     /// <param name="pool">The pool's name on the identity.</param>
     /// <returns>The number of live instances, or 0 when the identity holds no such pool.</returns>
     public int CountRecords(CellName pool) => ((TryStoreArena(arena: out var arena) && arena.Catalog.TryGetPool(name: pool, pool: out var descriptor))
         ? arena.CellCount(rowOrdinal: descriptor.DomainRowOrdinal)
         : 0);
+    /// <summary>Returns the slot the next claim of a pool takes: its lowest free slot.</summary>
+    /// <param name="pool">The pool's name on the identity.</param>
+    /// <returns>The slot, or <c>-1</c> when every slot holds a live instance or the identity holds no such pool.</returns>
+    public int FreeRecordSlot(CellName pool) => ((TryStoreArena(arena: out var arena) && arena.Catalog.TryGetPool(name: pool, pool: out var descriptor))
+        ? arena.FreePoolSlot(poolOrdinal: descriptor.Ordinal)
+        : -1);
+    /// <summary>Finds the live instances of a pool whose field holds a literal, the literal read as the field's own
+    /// kind: text as written, an integer, a fixed-point number, or a flag (<c>0</c> is false).</summary>
+    /// <param name="pool">The pool's name on the identity.</param>
+    /// <param name="field">The record field compared.</param>
+    /// <param name="literal">The literal the field must hold, as authored.</param>
+    /// <param name="count">Whether to count every match rather than answer the lowest matching slot.</param>
+    /// <returns>The lowest matching slot (<c>-1</c> for none), or the number of matches when <paramref name="count"/>;
+    /// a pool, field or literal the store cannot read answers none.</returns>
+    public int MatchRecords(CellName pool, CellName field, string literal, bool count) {
+        ArgumentNullException.ThrowIfNull(argument: literal);
+
+        var none = (count ? 0 : -1);
+
+        if (!TryStoreArena(arena: out var arena) || !arena.Catalog.TryGetPool(name: pool, pool: out var descriptor)) {
+            return none;
+        }
+        foreach (var member in descriptor.Fields) {
+            if (member.Name != field) {
+                continue;
+            }
+
+            return (WorldIdentityRecordLiteral.TryParse(kind: member.Kind, literal: literal, value: out var value)
+                ? arena.MatchPoolSlots(count: count, fieldOrdinal: member.Ordinal, poolOrdinal: descriptor.Ordinal, value: in value)
+                : none);
+        }
+
+        return none;
+    }
     /// <summary>Returns the generation of the live instance in a pool slot.</summary>
     /// <param name="pool">The pool's name on the identity.</param>
     /// <param name="slot">The 0-based slot.</param>

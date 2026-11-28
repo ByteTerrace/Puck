@@ -204,7 +204,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     // assigned in the constructor, never owned/disposed here (see IWorldMachineHost's own remarks).
     private readonly IWorldMachineHost m_machines;
     private readonly WorldPopulation m_population;
-    private readonly WorldOwnedWorlds m_profiles;
+    private WorldOwnedWorlds m_profiles;
     private readonly WorldTransferEscrow m_transferEscrow;
 
     // The mounted Simulation-lane guests, attached once at composition (see AttachAddons) and pumped at the three
@@ -473,6 +473,17 @@ public sealed partial class WorldServer : IWorldServerHost {
     // The account itself, for the host that hands the boot row's account to every row it starts: the catalog object is
     // shared, never its contents, so naming it needs no authority window.
     internal WorldOwnedWorlds Account => m_profiles;
+    // Replaces the account this server reads and writes identities through, answering the one it replaced. Only a replay
+    // probe's verification swaps it, onto a copy of the account as it stood when the probe started, so a replay reads
+    // the records and facts its recording read and writes none into the live account; the probe swaps the live one back.
+    internal WorldOwnedWorlds SwapAccount(WorldOwnedWorlds account) {
+        ArgumentNullException.ThrowIfNull(argument: account);
+
+        var replaced = m_profiles;
+
+        m_profiles = account;
+        return replaced;
+    }
     /// <summary>Gets or sets the composition-owned factory for proving a replacement document relative to that
     /// candidate's own origin rather than the currently loaded document. The path is the candidate's full path.</summary>
     public Func<string, IWorldNeighbourResolver?>? RebuildNeighbours { get; set; }

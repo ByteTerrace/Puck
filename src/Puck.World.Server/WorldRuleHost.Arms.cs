@@ -914,6 +914,7 @@ public sealed partial class WorldRuleHost {
         }
 
         m_pendingIdentityFacts.Clear();
+        m_identityCommits++;
     }
     private bool FireDocument(WorldDocumentEffect effect, in EffectFiring firing, out EffectRefusal refusal) {
         refusal = EffectRefusal.None;

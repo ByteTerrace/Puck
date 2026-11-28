@@ -71,14 +71,15 @@ public sealed partial class WorldRuleHost {
     }
     // A claim, pair claim or write: every field's value in the kind the identity's record declares for it, then the one
     // stage operation, which admits the writer and lands all or nothing.
-    private static bool TryWriteFields(WorldIdentityRecordEffect effect, in EffectFiring firing, WorldIdentityStage stage, WorldIdentityWriter writer, int slot, int second, long? generation, out string reason) {
+    private bool TryWriteFields(WorldIdentityRecordEffect effect, in EffectFiring firing, WorldIdentityStage stage, WorldIdentityWriter writer, int slot, int second, long? generation, out string reason) {
         var values = new WorldIdentityField[effect.Fields.Count];
 
         for (var index = 0; (index < values.Length); index++) {
             var input = effect.Fields[index];
+            var identityId = (input.IdentityOf ? Host.Body(index: BodyIndexOf(source: firing.Values[input.Position]))?.Profile?.Id : null);
 
             if (!stage.TryFieldKind(field: input.Field, kind: out var kind, pool: effect.Pool, reason: out reason) ||
-                !input.TryValue(kind: kind, reason: out reason, value: out var value, values: firing.Values)) {
+                !input.TryValue(identityId: identityId, kind: kind, reason: out reason, value: out var value, values: firing.Values)) {
                 return false;
             }
             values[index] = new WorldIdentityField(Field: input.Field, Value: value);
@@ -126,6 +127,7 @@ public sealed partial class WorldRuleHost {
         }
         m_identityStages.Clear();
         m_identityStageGeneration++;
+        m_identityCommits++;
     }
     // The award id of one committed stage: this world's authority, the tick and the stage's place among the tick's
     // commits, and the identity — a function of the run, never of the wall clock.

@@ -490,7 +490,7 @@ gates on is forgeable by its owner (A1) and writable by any colocated world
 
 **What exists.** `TryAdopt` writes every carried fact and crossing pool through
 the identity's own write door and nothing else, skipping a home-scoped name
-**[opened]** (`src/Puck.World.Schema/WorldIdentity.Records.cs:194-198`):
+**[opened]** (`src/Puck.World.Schema/WorldIdentity.Records.cs:228-232`):
 
 ```csharp
         foreach (var cell in (carried.Facts?.Cells ?? [])) {
