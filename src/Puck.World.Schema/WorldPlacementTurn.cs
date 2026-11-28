@@ -73,21 +73,7 @@ public sealed record WorldPlacementTurn(
         if (Phase is { } phase) { yield return ("phase", phase); }
     }
 
-    // A member's value at a tick: its literal, or its bound cell's live number, a Fixed cell's raw bits or an Int cell's
-    // whole number.
-    private static FixedQ4816 Read(BindableScalar? scalar, FixedQ4816 fallback, WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena) {
-        if (scalar is not { } value) { return fallback; }
-        if (value.Literal is { } literal) { return (float.IsFinite(f: literal) ? FixedQ4816.FromDouble(value: literal) : fallback); }
-        if ((value.State is not { } binding) ||
-            !WorldStateReader.TryRead(arena: arena, definition: definition, engineTick: engineTick, key: binding.Key, rawValue: out var raw, row: out var row, rowName: binding.Row, text: out _, tick: tick) ||
-            (raw is not { } bits)) {
-            return fallback;
-        }
-
-        return row.Kind switch {
-            CellKind.Fixed => FixedQ4816.FromRawBits(value: bits),
-            CellKind.Int => FixedQ4816.FromInteger(value: bits),
-            _ => fallback,
-        };
-    }
+    // A member's value at a tick (BindableScalar.ExactAt), or the fallback for an absent member.
+    private static FixedQ4816 Read(BindableScalar? scalar, FixedQ4816 fallback, WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena) =>
+        ((scalar is { } value) ? value.ExactAt(arena: arena, definition: definition, engineTick: engineTick, fallback: fallback, tick: tick) : fallback);
 }

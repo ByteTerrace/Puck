@@ -53,6 +53,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // cost this band contributes is IDENTICAL between the probe and every live build.
     private IReadOnlyList<WorldScreen> m_derivedFaceRows;
     private float m_pendingDeltaSeconds;
+    // The seconds the nets' parting plays owe since the frame last prepared (WorldNetPresentation.StepPartings).
+    private float m_netDeltaSeconds;
 
     // The bounded volumes the latest live build's static placements baked (WorldPlacementStamper.EmitStatic);
     // WorldFramePresenter.Dress composes them with the pool's per-frame volumes onto SdfFrame.Volumes.
@@ -299,6 +301,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         PrepareRegistrations();
         m_animator.PrepareGuess(source: m_client);
         m_nets.Publish(definition: m_client.Definition, read: m_netReader);
+        m_nets.StepPartings(deltaSeconds: m_netDeltaSeconds, mirror: m_client.StateMirror);
+        m_netDeltaSeconds = 0f;
     }
     private void PrepareRegistrations() {
         Span<int> revision = stackalloc int[WorldClient.RevisionComponentCount];
@@ -451,6 +455,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <param name="deltaSeconds">Seconds advanced since the previous produced frame.</param>
     public void Tick(float deltaSeconds) {
         m_pendingDeltaSeconds += deltaSeconds;
+        m_netDeltaSeconds += deltaSeconds;
     }
     /// <summary>Writes the program-rebuild watch counters this scene composes over: the client's three
     /// (<see cref="WorldClient.WriteRevision"/> — roster, server snapshot, definition delivery), then the continuum
@@ -659,7 +664,26 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <inheritdoc/>
     public IReadOnlyList<SdfSlotClip> SlotClips => m_animator.SlotClips;
     /// <inheritdoc/>
-    public IReadOnlyList<SdfFormBand> FormBands => m_animator.FormBands;
+    /// <remarks>The stamp pool's and its rigid copies' bands (<see cref="WorldCreationInstances.FormBands"/>), then the nets'
+    /// partings (<see cref="WorldNetPresentation.FormBands"/>), joined into a new list only when either moved.</remarks>
+    public IReadOnlyList<SdfFormBand> FormBands {
+        get {
+            var pool = m_animator.FormBands;
+            var nets = m_nets.FormBands;
+
+            if (nets.Count == 0) { return pool; }
+            if (pool.Count == 0) { return nets; }
+            if (!ReferenceEquals(objA: pool, objB: m_joinedPoolBands) || !ReferenceEquals(objA: nets, objB: m_joinedNetBands)) {
+                m_joinedBands = [.. pool, .. nets];
+                m_joinedPoolBands = pool;
+                m_joinedNetBands = nets;
+            }
+            return m_joinedBands;
+        }
+    }
+    private IReadOnlyList<SdfFormBand> m_joinedBands = [];
+    private IReadOnlyList<SdfFormBand>? m_joinedPoolBands;
+    private IReadOnlyList<SdfFormBand>? m_joinedNetBands;
     /// <inheritdoc/>
     public long MeshDrawsRevision => m_meshDraws.Revision;
     /// <inheritdoc/>

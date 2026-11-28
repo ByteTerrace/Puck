@@ -11226,6 +11226,44 @@ export type WorldNestedViewQuality = {
 
 export type WorldNestedViewQualityList = (WorldNestedViewQuality | null)[];
 
+/**
+ * Where a net parts and what opens it (Opening): an ellipse on the net's rest plane whose free nodes the authority drives out to its rim while By reads nonzero, so the ropes splay round a hole a body walks through at its full size, and back while it reads zero (Puck.Physics.FixedNet's opening). The centre is measured in metres, before the row's scale, from the facet's origin along its across edge and along its up edge made square to it; the net moves it to the middle of the grid cell holding it. Presentation plays Effect on the net's strands while it parts and again while it closes.
+ */
+export type WorldNetOpening = {
+  /**
+   * The cell that opens the net: a literal, or state.<row>[.<key>] naming a Fixed or Int cell; nonzero opens it.
+   */
+  by: BindableScalar;
+  /**
+   * The centre's distance along the across edge from the facet's origin, in metres before the row's scale; on the net.
+   */
+  centerAcross: number;
+  /**
+   * The centre's distance along the up edge from the facet's origin, in metres before the row's scale; on the net.
+   */
+  centerUp: number;
+  /**
+   * The ellipse's half axis along the across edge, in metres before the row's scale; positive.
+   */
+  halfWidth: number;
+  /**
+   * The ellipse's half axis along the up edge, in metres before the row's scale; positive.
+   */
+  halfHeight: number;
+  /**
+   * The seconds a closed net takes to open fully; positive.
+   */
+  openSeconds?: number;
+  /**
+   * The seconds an open net takes to close fully; positive.
+   */
+  closeSeconds?: number;
+  /**
+   * The form effect presentation sweeps over the net's strands, out from the opening's centre, as it parts and as it closes (a WorldFormEffect whose edge glows on both sides of its front and whose motes leave the strands it crosses), or null for none.
+   */
+  effect?: WorldFormEffect | null;
+};
+
 export type WorldObserverDisclosure = {
   /**
    * Which bodies an observer is delivered.
@@ -11394,6 +11432,10 @@ export type WorldPlacement = {
    * The placement's net facet (see WorldPlacementNet): the row's creation is a net of rope strands the authority steps, that gives under the bodies leaning on it and carries the bodies holding it, or null for a rigid row. Omitted from the wire when null.
    */
   net?: WorldPlacementNet | null;
+  /**
+   * The placement's shift facet (see WorldPlacementShift): the row's root moves by an offset read from state, or null for a row that stays where it is placed. Omitted from the wire when null.
+   */
+  shift?: WorldPlacementShift | null;
 };
 
 /**
@@ -11728,6 +11770,10 @@ export type WorldPlacementNet = {
    * The acceleration every free node falls at along world down, in metres a second squared; non-negative.
    */
   gravity?: number;
+  /**
+   * Where and how the net parts while a state cell says open (WorldNetOpening), or null for a net that never parts.
+   */
+  opening?: WorldNetOpening | null;
 };
 
 export type WorldPlacementPolicyDefaults = {
@@ -11948,6 +11994,24 @@ export type WorldPlacementResponseConditionStateConditionNullable = {
 };
 
 export type WorldPlacementResponseList = (WorldPlacementResponse | null)[];
+
+/**
+ * A placement's shift facet: the row's root moves by an offset read from state, in world axes, added to wherever the row stands (its resolved frame, or the body it rides): a thing a rule places (a field cast where its caster stood) or moves (a floor button sinking under a foot and rising back). Each member is a literal or a numeric state binding, never keys, so the authority reads the offset exactly from the arena at a tick and a presentation reads the cells its mirror presents, interpolated between ticks. Absent (null) members are zero.
+ */
+export type WorldPlacementShift = {
+  /**
+   * The offset along world X, in metres.
+   */
+  x?: BindableScalar;
+  /**
+   * The offset along world Y, in metres.
+   */
+  y?: BindableScalar;
+  /**
+   * The offset along world Z, in metres.
+   */
+  z?: BindableScalar;
+};
 
 /**
  * The contract a named placement-local spatial volume contributes to queries.

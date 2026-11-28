@@ -1475,6 +1475,19 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.net.origin` | State | Binding | Binding | `WorldPlacementNet.Origin` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.net.across` | State | Binding | Binding | `WorldPlacementNet.Across` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.net.up` | State | Binding | Binding | `WorldPlacementNet.Up` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.net.opening.by` | State | Binding | Binding | `WorldNetOpening.By` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.net.opening.by.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.net.opening.by{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.net.opening.effect.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.shift.x` | State | Binding | Binding | `WorldPlacementShift.X` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.shift.x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.shift.x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.shift.y` | State | Binding | Binding | `WorldPlacementShift.Y` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.shift.y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.shift.y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.shift.z` | State | Binding | Binding | `WorldPlacementShift.Z` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.shift.z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.shift.z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `kits.rows[].actions{*}.onPress.effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -2070,6 +2083,19 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.net.origin` | State | Binding | Binding | `WorldPlacementNet.Origin` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.net.across` | State | Binding | Binding | `WorldPlacementNet.Across` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.net.up` | State | Binding | Binding | `WorldPlacementNet.Up` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.net.opening.by` | State | Binding | Binding | `WorldNetOpening.By` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.net.opening.by.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.net.opening.by{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.net.opening.effect.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.shift.x` | State | Binding | Binding | `WorldPlacementShift.X` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.shift.x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.shift.x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.shift.y` | State | Binding | Binding | `WorldPlacementShift.Y` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.shift.y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.shift.y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.shift.z` | State | Binding | Binding | `WorldPlacementShift.Z` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.shift.z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.shift.z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `kits.rows[].actions{*}.onRelease.effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -2665,6 +2691,19 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.net.origin` | State | Binding | Binding | `WorldPlacementNet.Origin` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.net.across` | State | Binding | Binding | `WorldPlacementNet.Across` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.net.up` | State | Binding | Binding | `WorldPlacementNet.Up` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.net.opening.by` | State | Binding | Binding | `WorldNetOpening.By` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.net.opening.by.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.net.opening.by{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.net.opening.effect.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.shift.x` | State | Binding | Binding | `WorldPlacementShift.X` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.shift.x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.shift.x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.shift.y` | State | Binding | Binding | `WorldPlacementShift.Y` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.shift.y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.shift.y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.shift.z` | State | Binding | Binding | `WorldPlacementShift.Z` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.shift.z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.shift.z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `kits.rows[].actions{*}.onFact[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -3125,6 +3164,19 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].net.origin` | State | Binding | Binding | `WorldPlacementNet.Origin` |
 | `placements.rows[].net.across` | State | Binding | Binding | `WorldPlacementNet.Across` |
 | `placements.rows[].net.up` | State | Binding | Binding | `WorldPlacementNet.Up` |
+| `placements.rows[].net.opening.by` | State | Binding | Binding | `WorldNetOpening.By` |
+| `placements.rows[].net.opening.by.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `placements.rows[].net.opening.by{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `placements.rows[].net.opening.effect.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
+| `placements.rows[].shift.x` | State | Binding | Binding | `WorldPlacementShift.X` |
+| `placements.rows[].shift.x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `placements.rows[].shift.x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `placements.rows[].shift.y` | State | Binding | Binding | `WorldPlacementShift.Y` |
+| `placements.rows[].shift.y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `placements.rows[].shift.y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `placements.rows[].shift.z` | State | Binding | Binding | `WorldPlacementShift.Z` |
+| `placements.rows[].shift.z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `placements.rows[].shift.z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `speakers[].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
 | `speakers[].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `speakers[].feed.gain.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -4011,6 +4063,19 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.net.origin` | State | Binding | Binding | `WorldPlacementNet.Origin` |
 | `rules[].effects[][upsertPlacement].placement.net.across` | State | Binding | Binding | `WorldPlacementNet.Across` |
 | `rules[].effects[][upsertPlacement].placement.net.up` | State | Binding | Binding | `WorldPlacementNet.Up` |
+| `rules[].effects[][upsertPlacement].placement.net.opening.by` | State | Binding | Binding | `WorldNetOpening.By` |
+| `rules[].effects[][upsertPlacement].placement.net.opening.by.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].effects[][upsertPlacement].placement.net.opening.by{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].effects[][upsertPlacement].placement.net.opening.effect.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
+| `rules[].effects[][upsertPlacement].placement.shift.x` | State | Binding | Binding | `WorldPlacementShift.X` |
+| `rules[].effects[][upsertPlacement].placement.shift.x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].effects[][upsertPlacement].placement.shift.x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].effects[][upsertPlacement].placement.shift.y` | State | Binding | Binding | `WorldPlacementShift.Y` |
+| `rules[].effects[][upsertPlacement].placement.shift.y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].effects[][upsertPlacement].placement.shift.y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].effects[][upsertPlacement].placement.shift.z` | State | Binding | Binding | `WorldPlacementShift.Z` |
+| `rules[].effects[][upsertPlacement].placement.shift.z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].effects[][upsertPlacement].placement.shift.z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `rules[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -4624,6 +4689,19 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.net.origin` | State | Binding | Binding | `WorldPlacementNet.Origin` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.net.across` | State | Binding | Binding | `WorldPlacementNet.Across` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.net.up` | State | Binding | Binding | `WorldPlacementNet.Up` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.net.opening.by` | State | Binding | Binding | `WorldNetOpening.By` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.net.opening.by.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.net.opening.by{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.net.opening.effect.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.shift.x` | State | Binding | Binding | `WorldPlacementShift.X` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.shift.x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.shift.x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.shift.y` | State | Binding | Binding | `WorldPlacementShift.Y` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.shift.y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.shift.y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.shift.z` | State | Binding | Binding | `WorldPlacementShift.Z` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.shift.z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.shift.z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `rules[].decision.options[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].decision.options[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].decision.options[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -5260,6 +5338,19 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.net.origin` | State | Binding | Binding | `WorldPlacementNet.Origin` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.net.across` | State | Binding | Binding | `WorldPlacementNet.Across` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.net.up` | State | Binding | Binding | `WorldPlacementNet.Up` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.net.opening.by` | State | Binding | Binding | `WorldNetOpening.By` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.net.opening.by.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.net.opening.by{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.net.opening.effect.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.shift.x` | State | Binding | Binding | `WorldPlacementShift.X` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.shift.x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.shift.x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.shift.y` | State | Binding | Binding | `WorldPlacementShift.Y` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.shift.y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.shift.y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.shift.z` | State | Binding | Binding | `WorldPlacementShift.Z` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.shift.z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.shift.z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `rules[].decision.onNoChoice[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].decision.onNoChoice[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].decision.onNoChoice[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -5838,6 +5929,19 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.net.origin` | State | Binding | Binding | `WorldPlacementNet.Origin` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.net.across` | State | Binding | Binding | `WorldPlacementNet.Across` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.net.up` | State | Binding | Binding | `WorldPlacementNet.Up` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.net.opening.by` | State | Binding | Binding | `WorldNetOpening.By` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.net.opening.by.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.net.opening.by{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.net.opening.effect.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.shift.x` | State | Binding | Binding | `WorldPlacementShift.X` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.shift.x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.shift.x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.shift.y` | State | Binding | Binding | `WorldPlacementShift.Y` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.shift.y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.shift.y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.shift.z` | State | Binding | Binding | `WorldPlacementShift.Z` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.shift.z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.shift.z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `interactions.interactions[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `interactions.interactions[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `interactions.interactions[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -6749,6 +6853,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.net.opening.effect.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.net.opening.effect.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -7202,6 +7308,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.net.opening.effect.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.net.opening.effect.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -7655,6 +7763,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.net.opening.effect.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.net.opening.effect.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -8004,6 +8114,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `placements.rows[].spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `placements.rows[].pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
+| `placements.rows[].net.opening.effect.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `placements.rows[].net.opening.effect.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
 | `speakers[].name` | `WorldSpeaker.Name` | a speaker name |
 | `speakers[].feed.source[machine].output` | `WorldSpeakerSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `speakers[].feed.source[tune].tuneId` | `WorldSpeakerSource.Tune.TuneId` | a tune id |
@@ -8443,6 +8555,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `rules[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `rules[].effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
+| `rules[].effects[][upsertPlacement].placement.net.opening.effect.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `rules[].effects[][upsertPlacement].placement.net.opening.effect.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
 | `rules[].effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `rules[].effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -8913,6 +9027,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.net.opening.effect.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.net.opening.effect.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
 | `rules[].decision.options[].effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].decision.options[].effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `rules[].decision.options[].effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -9401,6 +9517,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.net.opening.effect.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.net.opening.effect.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
 | `rules[].decision.onNoChoice[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].decision.onNoChoice[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `rules[].decision.onNoChoice[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -9862,6 +9980,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `interactions.interactions[].effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
+| `interactions.interactions[].effects[][upsertPlacement].placement.net.opening.effect.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `interactions.interactions[].effects[][upsertPlacement].placement.net.opening.effect.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
 | `interactions.interactions[].effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `interactions.interactions[].effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `interactions.interactions[].effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |

@@ -20,17 +20,28 @@ public sealed partial class WorldPopulation {
     /// mass on it with its weight and its lever (<see cref="FixedNetLoad"/>), and each volume of a body near it that does
     /// not hold it pushes the net's nodes out of it. A net whose touch stays the same sleeps (<see cref="FixedNet.Step"/>),
     /// so with no body near any net a tick costs one box test per active body, and a sleeping net one fingerprint.</summary>
+    /// <param name="definition">The document whose state a net's opening cell reads (<see cref="WorldNetOpening.By"/>).</param>
+    /// <param name="tick">The authority tick the step lands on.</param>
+    /// <param name="engineTick">The engine tick the step starts at, which an advancing cell reads.</param>
     /// <param name="stepTicks">The step's length, in engine ticks.</param>
-    /// <remarks>A body's push reaches past its collider by the net's strand and the contact reach, the band a body
+    /// <remarks>A net with an opening reads its cell first and is told to open while it reads nonzero, so a net that is
+    /// parting or closing steps awake until it settles. A body's push reaches past its collider by the net's strand and the contact reach, the band a body
     /// resting against the net's cell colliders stands in, so a body leaning on the net moves its nodes, and one that only
     /// stands near it neither moves nor wakes it (<see cref="FixedNet.Pressers"/>). A body holding the net presses it only
     /// through its load, never as a pusher: its hold keeps it its standoff from the face it rides, so a push from its
     /// volumes would move the face it then follows, a tick at a time, until the nodes met their reach whatever the body
     /// weighed. A shrunk body loads the net with the cube of its size.</remarks>
-    public void StepNets(ulong stepTicks) {
+    public void StepNets(WorldDefinition definition, ulong tick, ulong engineTick, ulong stepTicks) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
         var panels = m_nets.Panels;
 
         if (panels.IsEmpty) { return; }
+        foreach (var panel in panels) {
+            if (panel.Facet.Opening is { } opening) {
+                panel.Net.SetOpening(open: (opening.By.ExactAt(definition: definition, engineTick: engineTick, fallback: FixedQ4816.Zero, tick: tick) != FixedQ4816.Zero));
+            }
+        }
         m_netBodies.Clear();
         for (var index = 0; (index < m_entries.Length); index++) {
             if (m_entries[index] is not { Active: true, Body: { } body } || body.ScaledColliderVolumes().IsEmpty) { continue; }

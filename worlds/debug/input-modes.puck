@@ -11,8 +11,9 @@ import "../standard/contexts/conversation"
 import "../standard/menu"
 
 let movement = movementChannels
-// The lock-on and marks keys (targeting.puck) and her menu's key are hers in every form she walks or flies in.
-let controls = ["jump", "suit", "noclip", "lock", "lockCycle", "ping", "mark", "markClear", "menu"]
+// The lock-on and marks keys (targeting.puck), the time field (gallery/time-puzzles.puck, the standard's time-field.puck)
+// and her menu's key are hers in every form she walks or flies in.
+let controls = ["jump", "suit", "noclip", "lock", "lockCycle", "ping", "mark", "markClear", "timeField", "menu"]
 let flyingRise = [{ keep ["rise"], from { flight: "flying" }, to { flight: "flying" } }]
 let talking = { family: "conversation", states ["talking"] }
 // A seat engaged anywhere, at a bench, at a terminal or talking with a steward, has none of the families that move her

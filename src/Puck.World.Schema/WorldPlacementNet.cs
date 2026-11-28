@@ -47,6 +47,8 @@ namespace Puck.World;
 /// <param name="SleepSeconds">The seconds every node must stay still, untouched, before the net sleeps; non-negative.</param>
 /// <param name="Gravity">The acceleration every free node falls at along world down, in metres a second squared;
 /// non-negative.</param>
+/// <param name="Opening">Where and how the net parts while a state cell says open (<see cref="WorldNetOpening"/>), or
+/// <see langword="null"/> for a net that never parts.</param>
 public sealed record WorldPlacementNet(
     int Columns,
     int Rows,
@@ -67,7 +69,8 @@ public sealed record WorldPlacementNet(
     float BodyMass = 60f,
     float RestSpeed = 0.01f,
     float SleepSeconds = 1f,
-    float Gravity = 9.81f
+    float Gravity = 9.81f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNetOpening? Opening = null
 ) {
     /// <summary>The most nodes a net takes along either edge.</summary>
     public const int MaxNodesPerEdge = 16;
@@ -101,7 +104,8 @@ public sealed record WorldPlacementNet(
         Sag: FixedQ4816.FromDouble(value: Sag),
         SleepTicks: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: SleepSeconds)),
         Stiffness: FixedQ4816.FromDouble(value: Stiffness),
-        Up: rotation.Rotate(vector: (FixedVector3.FromVector3(value: Up) * scale))
+        Up: rotation.Rotate(vector: (FixedVector3.FromVector3(value: Up) * scale)),
+        Opening: Opening?.SpecAt(scale: scale)
     );
     /// <summary>Returns the net's layout where a placement stands in a document: the row's one resolved stamp instance
     /// and rotation (<c>WorldPlacementStamp.Resolve</c>) and its scale.
@@ -160,6 +164,16 @@ public sealed record WorldPlacementNet(
         NonNegative(value: Gravity, name: "gravity");
         if (!float.IsFinite(f: Sag) || (Sag < -0.5f) || (Sag > 1f)) { errors.Add(item: $"{path}.sag: a net's sag lies in [-0.5, 1], not {Sag}"); }
         if ((Substeps < 1) || (Substeps > MaxSubsteps)) { errors.Add(item: $"{path}.substeps: a net takes 1 to {MaxSubsteps} substeps, not {Substeps}"); }
+        if (Opening is { } opening) {
+            Positive(value: opening.HalfWidth, name: "opening.halfWidth");
+            Positive(value: opening.HalfHeight, name: "opening.halfHeight");
+            Positive(value: opening.OpenSeconds, name: "opening.openSeconds");
+            Positive(value: opening.CloseSeconds, name: "opening.closeSeconds");
+            if (!float.IsFinite(f: opening.CenterAcross) || !float.IsFinite(f: opening.CenterUp) || (opening.CenterAcross < 0f) || (opening.CenterUp < 0f) ||
+                (opening.CenterAcross > across.Length()) || (opening.CenterUp > up.Length())) {
+                errors.Add(item: $"{path}.opening: an opening's centre lies on the net, 0 to {across.Length()} along across and 0 to {up.Length()} along up, not ({opening.CenterAcross}, {opening.CenterUp})");
+            }
+        }
 
         void Positive(float value, string name) {
             if (!float.IsFinite(f: value) || (value <= 0f)) { errors.Add(item: $"{path}.{name}: must be positive and finite, not {value}"); }
@@ -168,4 +182,49 @@ public sealed record WorldPlacementNet(
             if (!float.IsFinite(f: value) || (value < 0f)) { errors.Add(item: $"{path}.{name}: must be non-negative and finite, not {value}"); }
         }
     }
+}
+
+/// <summary>
+/// Where a net parts and what opens it (<see cref="WorldPlacementNet.Opening"/>): an ellipse on the net's rest plane whose
+/// free nodes the authority drives out to its rim while <see cref="By"/> reads nonzero, so the ropes splay round a hole a
+/// body walks through at its full size, and back while it reads zero (<c>Puck.Physics.FixedNet</c>'s opening). The
+/// centre is measured in metres, before the row's scale, from the facet's origin along its across edge and along its up
+/// edge made square to it; the net moves it to the middle of the grid cell holding it. Presentation plays
+/// <see cref="Effect"/> on the net's strands while it parts and again while it closes.
+/// </summary>
+/// <param name="By">The cell that opens the net: a literal, or <c>state.&lt;row&gt;[.&lt;key&gt;]</c> naming a Fixed or
+/// Int cell; nonzero opens it.</param>
+/// <param name="CenterAcross">The centre's distance along the across edge from the facet's origin, in metres before the
+/// row's scale; on the net.</param>
+/// <param name="CenterUp">The centre's distance along the up edge from the facet's origin, in metres before the row's
+/// scale; on the net.</param>
+/// <param name="HalfWidth">The ellipse's half axis along the across edge, in metres before the row's scale; positive.</param>
+/// <param name="HalfHeight">The ellipse's half axis along the up edge, in metres before the row's scale; positive.</param>
+/// <param name="OpenSeconds">The seconds a closed net takes to open fully; positive.</param>
+/// <param name="CloseSeconds">The seconds an open net takes to close fully; positive.</param>
+/// <param name="Effect">The form effect presentation sweeps over the net's strands, out from the opening's centre, as it
+/// parts and as it closes (a <see cref="WorldFormEffect"/> whose edge glows on both sides of its front and whose motes
+/// leave the strands it crosses), or <see langword="null"/> for none.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldNetOpening(
+    BindableScalar By,
+    float CenterAcross,
+    float CenterUp,
+    float HalfWidth,
+    float HalfHeight,
+    float OpenSeconds = 0.6f,
+    float CloseSeconds = 0.8f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFormEffect? Effect = null
+) {
+    /// <summary>Returns the kernel's opening at a row's scale.</summary>
+    /// <param name="scale">The row's scale.</param>
+    /// <returns>The opening.</returns>
+    public FixedNetOpening SpecAt(FixedQ4816 scale) => new(
+        CenterAcross: (FixedQ4816.FromDouble(value: CenterAcross) * scale),
+        CenterUp: (FixedQ4816.FromDouble(value: CenterUp) * scale),
+        HalfWidth: (FixedQ4816.FromDouble(value: HalfWidth) * scale),
+        HalfHeight: (FixedQ4816.FromDouble(value: HalfHeight) * scale),
+        OpenTicks: Math.Max(val1: 1UL, val2: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: OpenSeconds))),
+        CloseTicks: Math.Max(val1: 1UL, val2: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: CloseSeconds)))
+    );
 }

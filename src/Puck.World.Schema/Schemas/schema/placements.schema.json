@@ -153,6 +153,11 @@
             "$ref": "./common.schema.json#/$defs/WorldPlacementNet",
             "description": "The placement\u0027s net facet (see WorldPlacementNet): the row\u0027s creation is a net of rope strands the authority steps, that gives under the bodies leaning on it and carries the bodies holding it, or null for a rigid row. Omitted from the wire when null.",
             "default": null
+          },
+          "shift": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementShift",
+            "description": "The placement\u0027s shift facet (see WorldPlacementShift): the row\u0027s root moves by an offset read from state, or null for a row that stays where it is placed. Omitted from the wire when null.",
+            "default": null
           }
         },
         "required": [

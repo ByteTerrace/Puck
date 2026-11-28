@@ -30,8 +30,11 @@ public sealed partial class SdfWorldTables {
     // how many there are, whether their draw rows are still owed this frame, and the rows each names.
     private IReadOnlyList<SdfFormBand>? m_frameSampledBands;
     private SdfFormBand[] m_formBandScratch = [];
+    // Each scratch band's key: its first slot, or its displacement's handle for one keyed by a displacement.
+    private int[] m_formBandKeys = [];
     private int m_formBandBase;
     private int m_formBandCount;
+    private int m_formBandSlotCount;
     private bool m_formBandRowsOwed;
     private uint[] m_formBandRows = [];
     private int[] m_formBandRowCounts = [];
@@ -81,7 +84,7 @@ public sealed partial class SdfWorldTables {
             words = checked(words + SdfFrameSampled.HeaderWords + (2 * binding.Displacement.Values.Count));
         }
 
-        var bandCount = SortFormBands(bands: bands);
+        var bandCount = SortFormBands(bands: bands, program: program, slotBands: out var slotBands);
         var bandBase = words;
 
         words = checked(words + (bandCount * SdfFrameSampled.BandWords));
@@ -98,7 +101,7 @@ public sealed partial class SdfWorldTables {
         span[SdfFrameSampled.TableBandBaseWord] = (uint)bandBase;
         span[SdfFrameSampled.TableMoteTotalWord] = PackFormBands(words: span.Slice(start: bandBase, length: (bandCount * SdfFrameSampled.BandWords)), count: bandCount);
         FormMoteTotal = (int)span[SdfFrameSampled.TableMoteTotalWord];
-        span[3] = 0u;
+        span[SdfFrameSampled.TableSlotBandCountWord] = (uint)slotBands;
         nextHandle = 0;
         for (var index = 0; (index < displacements.Count); index++) {
             var binding = displacements[index];
@@ -142,25 +145,45 @@ public sealed partial class SdfWorldTables {
         m_frameSampledBands = bands;
         m_formBandBase = bandBase;
         m_formBandCount = bandCount;
+        m_formBandSlotCount = slotBands;
         m_formBandRowsOwed = (bandCount > 0);
         // A field that moved this pack owes its previous values again at the next, when this pack's become them.
         m_frameSampledMoving = moving;
         if (moved > 0) { NoteDisplacedRows(); }
     }
-    // Copies the frame's live form bands into the scratch in the order of their first slots, the order the kernels search
-    // them in (sdfFormBandOf), at most SdfFormBand.MaxBands of them, and returns how many.
-    private int SortFormBands(IReadOnlyList<SdfFormBand> bands) {
-        if (m_formBandScratch.Length < Math.Min(val1: bands.Count, val2: SdfFormBand.MaxBands)) {
-            m_formBandScratch = new SdfFormBand[Math.Min(val1: bands.Count, val2: SdfFormBand.MaxBands)];
+    // Copies the frame's live form bands into the scratch, at most SdfFormBand.MaxBands of them: the bands keyed by slots
+    // first, in the order of their first slots, the order the kernels search them in (sdfFormBandOf), then the bands keyed
+    // by a displacement the frame's program holds, each with that displacement's handle (sdfFormBandOfDisplacement).
+    // Returns how many, and how many lead keyed by slots.
+    private int SortFormBands(IReadOnlyList<SdfFormBand> bands, SdfProgram program, out int slotBands) {
+        var most = Math.Min(val1: bands.Count, val2: SdfFormBand.MaxBands);
+
+        if (m_formBandScratch.Length < most) {
+            m_formBandScratch = new SdfFormBand[most];
+            m_formBandKeys = new int[most];
         }
 
         var count = 0;
 
         for (var index = 0; ((index < bands.Count) && (count < SdfFormBand.MaxBands)); index++) {
-            if (bands[index].IsLive) { m_formBandScratch[count++] = bands[index]; }
+            if (bands[index].IsLive && (bands[index].Displacement is null)) { m_formBandScratch[count++] = bands[index]; }
         }
         m_formBandScratch.AsSpan(start: 0, length: count).Sort(comparison: static (left, right) => left.FirstSlot.CompareTo(value: right.FirstSlot));
+        for (var index = 0; (index < count); index++) { m_formBandKeys[index] = m_formBandScratch[index].FirstSlot; }
+        slotBands = count;
+        for (var index = 0; ((index < bands.Count) && (count < SdfFormBand.MaxBands)); index++) {
+            if (!bands[index].IsLive || (bands[index].Displacement is not { } displacement) || (HandleOf(displacement: displacement, program: program) is not { } handle)) { continue; }
+            m_formBandKeys[count] = handle;
+            m_formBandScratch[count++] = bands[index];
+        }
         return count;
+    }
+    // The handle a displacement's draws carry in a program, or null for one the program does not draw through.
+    private static int? HandleOf(SignedDistance.SdfDisplacement displacement, SdfProgram program) {
+        foreach (var binding in program.Displacements) {
+            if (ReferenceEquals(objA: binding.Displacement, objB: displacement)) { return binding.Handle; }
+        }
+        return null;
     }
     // Writes the sorted form bands' words (SdfFrameSampled's band layout), each band's first mote counted among those
     // before it and its count cut to what SdfFormBand.MaxMotes leaves; their draw rows wait for the frame's staged draws
@@ -175,13 +198,14 @@ public sealed partial class SdfWorldTables {
             var axis = Vector3.Normalize(value: band.Axis);
 
             record.Clear();
-            record[SdfFrameSampled.BandFirstSlotWord] = (uint)band.FirstSlot;
-            record[SdfFrameSampled.BandSlotCountWord] = (uint)band.SlotCount;
+            record[SdfFrameSampled.BandFirstSlotWord] = (uint)m_formBandKeys[index];
+            record[SdfFrameSampled.BandSlotCountWord] = ((band.Displacement is null) ? (uint)band.SlotCount : 1u);
             record[SdfFrameSampled.BandFlagsWord] = (band.Side switch {
                 SdfFormBandSide.Swept => SdfFrameSampled.BandSweptFlag,
                 SdfFormBandSide.Whole => SdfFrameSampled.BandWholeFlag,
                 _ => 0u,
-            } | (band.Parted ? SdfFrameSampled.BandPartedFlag : 0u));
+            } | (band.Parted ? SdfFrameSampled.BandPartedFlag : 0u) | ((band.Displacement is null) ? 0u : SdfFrameSampled.BandDisplacedFlag) |
+                (band.Radial ? SdfFrameSampled.BandRadialFlag : 0u));
             record[SdfFrameSampled.BandSeedWord] = band.Seed;
             SdfProgram.WriteVector4(words: record, baseIndex: SdfFrameSampled.BandOriginWord, x: band.Origin.X, y: band.Origin.Y, z: band.Origin.Z, w: band.Low);
             SdfProgram.WriteVector4(words: record, baseIndex: SdfFrameSampled.BandAxisWord, x: axis.X, y: axis.Y, z: axis.Z, w: Math.Max(val1: band.High, val2: band.Low));
@@ -215,9 +239,11 @@ public sealed partial class SdfWorldTables {
             for (var row = 0; (row < m_stagedCount); row++) {
                 ref readonly var draw = ref m_stagedDraws[row];
 
-                if ((draw.FrameSlot is not { } slot) || (draw.Mesh is null) || (draw.Band.IsFloor != (pass == 1))) { continue; }
+                if ((draw.Mesh is null) || (draw.Band.IsFloor != (pass == 1))) { continue; }
 
-                var band = FormBandOf(slot: slot, count: count);
+                var band = ((draw.Displacement is { } displacement) ? FormBandOfDisplacement(handle: displacement.Handle, count: count) : -1);
+
+                if ((band < 0) && (draw.FrameSlot is { } slot)) { band = FormBandOf(slot: slot, count: m_formBandSlotCount); }
 
                 if ((band < 0) || (m_formBandRowCounts[band] >= capacity)) { continue; }
                 m_formBandRows[((band * capacity) + m_formBandRowCounts[band]++)] = (uint)row;
@@ -236,7 +262,14 @@ public sealed partial class SdfWorldTables {
             }
         }
     }
-    // The sorted band whose run holds a slot, or -1.
+    // The band keyed by a displacement handle, or -1: a walk over the bands after the slot bands.
+    private int FormBandOfDisplacement(int handle, int count) {
+        for (var band = m_formBandSlotCount; (band < count); band++) {
+            if (m_formBandKeys[band] == handle) { return band; }
+        }
+        return -1;
+    }
+    // The sorted slot band whose run holds a slot, or -1.
     private int FormBandOf(int slot, int count) {
         var low = 0;
         var high = (count - 1);

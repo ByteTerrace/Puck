@@ -185,18 +185,18 @@ function rentalReturnReach(stall) = rentalReachBox(
 function rentalCanRent() = (rentalHolder[$each] > 0)
 
 // The cartridge rack: the deck library's titles (toybox.puck's `toyboxLibrary`) as cartridges a body rents and inserts
-// into a toybox station's deck. A slot is a library title number and the copies of it the rack lends; the shipped titles
-// are 1 and 2, and the slots after them hold whatever the owner's local deck folder lists, in its listing order, so their
-// labels name the title's number rather than a file. A slot whose title the library does not hold still lends its
-// cartridge, and a deck it is inserted into runs its own program.
-let rentalCartridgeSlots = [
-  { title: 1, label: "COLOUR BARS", copies: 2 }
-  { title: 2, label: "MOVING SPRITE", copies: 2 }
-  { title: 3, label: "DECK TITLE 3", copies: 1 }
-  { title: 4, label: "DECK TITLE 4", copies: 1 }
-  { title: 5, label: "DECK TITLE 5", copies: 1 }
-  { title: 6, label: "DECK TITLE 6", copies: 1 }
-]
+// into a toybox station's deck. A slot is a library title number and the copies of it the rack lends: the two shipped
+// programs by their titles (layout.puck's `toyboxTitleOf`), then the slots holding whatever the owner's local deck folder
+// lists, in its listing order from `toyboxLocalFirst`, so their labels name the title's number rather than a file. Moth
+// Valley, the shipped cartridge, is not on the rack: the play floor's group puzzle unlocks it (time-puzzles.puck). A slot
+// whose title the library does not hold still lends its cartridge, and a deck it is inserted into runs its own program.
+let rentalCartridgeSlots = concat(
+  [
+    { title: toyboxTitleOf("colour-bars.deck"), label: "COLOUR BARS", copies: 2 }
+    { title: toyboxTitleOf("moving-sprite.deck"), label: "MOVING SPRITE", copies: 2 }
+  ],
+  map(range(0, 4), i => { title: (toyboxLocalFirst + i), label: $"DECK TITLE {toyboxLocalFirst + i}", copies: 1 })
+)
 // Every cartridge, each by its loan ordinal, which follows the devices' in the one loan row (`rentalLoan`), its slot and
 // its place on the rack.
 let rentalCartridges = flatMap(
@@ -258,6 +258,12 @@ let rentalKeyBounds = {
   z1: galleryWorld(0, 0, (galleryDepth + 1))[2]
   y0: (galleryFloor[0] - 1)
   y1: (galleryRoof + 4)
+}
+
+// The title each cartridge carries, which the play floor's unlock (time-puzzles.puck) puts back in a station's deck when
+// its tease ends over an inserted cartridge.
+exports {
+  reads [rentalCartridgeTitle]
 }
 
 state {

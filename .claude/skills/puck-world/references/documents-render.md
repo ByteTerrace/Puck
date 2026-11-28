@@ -655,10 +655,43 @@ What runs:
   `WorldNetMirror`); presentation draws the creation baked once at rest through
   a sheet displacement (`WorldNetPresentation`, `SdfSheetDisplacement`).
 
+A net may part (`opening`, `WorldNetOpening`): while its `by` cell (a literal or
+`state.<row>[.<key>]`, Fixed or Int) reads nonzero, every free node inside an
+ellipse (`centerAcross` and `centerUp` metres from the facet's origin along its
+two edges, `halfWidth`, `halfHeight`) rides a closed-form path out to the rim
+over `openSeconds`, and back over `closeSeconds` once it reads zero
+(`FixedNet.SetOpening`). The solve holds those nodes and moves the rest: the
+strands they pull bow round the hole, the cells they press into crowd, and
+bodies meet the strands where they stand, so the hole is passable at full size;
+the net offers no hold while parted. The net wakes for the move and
+sleeps once it settles, open or closed. The ellipse's centre moves to the middle
+of the grid cell holding it, and a node's way out is measured in cells, so the
+four corners of that cell leave at the ellipse's diagonals and the hole is about
+the ellipse's inscribed rectangle. Every reader that bounds the net grows its rest
+layout by `FixedNetSpec.Extent` (the reach, or twice the longer half axis).
+Presentation sweeps `opening.effect` (a form effect, the standard's
+`formParting`) over the net's strands as a ring growing from the centre, keyed by
+the net's sheet (`SdfFormBand.Displacement`, `Radial`).
+
 Read it back with `world.nets` (nodes, awake, deepest deflection, reach,
-holders, leaners); a rule reads `net("<placement>", deflection|awake|holders|pushers)`
+openness, opens, driven, holders, leaners); a rule reads `net("<placement>", deflection|awake|holders|pushers|openness)`
 (`$net:`); `world.budget`'s `nets` line and `world.counters physics.nets`
-(`steps`, `nodes-solved`, `strands-solved`, `substeps`, `sleeps`, `wakes`) give
-its cost. The gallery's level 1 nets are the worked example (`worlds/debug/gallery.md`,
-"The lattice"). A net drawn in a world seen through a portal or a session draws
-at rest; only the world's own scene displaces it.
+(`steps`, `nodes-solved`, `strands-solved`, `substeps`, `sleeps`, `wakes`,
+`parting-steps`) give its cost. The gallery's level 1 nets are the worked example (`worlds/debug/gallery.md`,
+"The lattice"), and its bay-4 south panel parts ("The time puzzles"). A net drawn
+in a world seen through a portal or a session draws at rest; only the world's own
+scene displaces it.
+
+### A placement's `shift` facet
+
+A placement's `shift` (`WorldPlacementShift`) moves its root by an offset read
+from state, in world axes, added to wherever the row stands: `x`, `y` and `z`,
+each a literal or `state.<row>[.<key>]` naming a Fixed or Int cell, never keys.
+A rule places a thing (the standard's time field shell, shifted to where its
+caster stood) or moves it (the play floor's button, sinking under a foot). The
+authority reads it exactly (`WorldPlacementShift.OffsetAt`), a solid row's
+colliders pose with it every tick (`WorldColliderSet.RefreshAttached`), and the
+drawn copy reads the mirror's presented cells every frame
+(`WorldTurnedPose.Shifted`). Like a turn, it leaves the row's static frame
+behind: no distribution, mirror, inhabit or deal, no board, pointer, spatial or
+surface facet, and no row composes over it.

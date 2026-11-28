@@ -527,6 +527,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
                 WorldNetReading.Deflection => panel.Net.MaxDeflection.Value,
                 WorldNetReading.Awake => (panel.Net.Awake ? 1L : 0L),
                 WorldNetReading.Holders => panel.Holders,
+                WorldNetReading.Openness => panel.Net.Openness.Value,
                 _ => panel.Pushers,
             };
         }

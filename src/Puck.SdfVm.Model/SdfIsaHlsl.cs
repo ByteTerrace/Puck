@@ -469,6 +469,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_FRAME_SAMPLED_BAND_COUNT_WORD", value: SdfFrameSampled.TableBandCountWord);
         declarations.Count(name: "SDF_FRAME_SAMPLED_BAND_BASE_WORD", value: SdfFrameSampled.TableBandBaseWord);
         declarations.Count(name: "SDF_FRAME_SAMPLED_MOTE_TOTAL_WORD", value: SdfFrameSampled.TableMoteTotalWord);
+        declarations.Count(name: "SDF_FRAME_SAMPLED_SLOT_BAND_COUNT_WORD", value: SdfFrameSampled.TableSlotBandCountWord);
         declarations.Count(name: "SDF_FORM_BAND_MAX_BANDS", value: SdfFrameSampled.MaxBands);
         declarations.Count(name: "SDF_FORM_BAND_MAX_MOTES", value: SdfFrameSampled.MaxMotes);
         declarations.Count(name: "SDF_FORM_BAND_WORDS", value: SdfFrameSampled.BandWords);
@@ -488,6 +489,8 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_FORM_BAND_SWEPT_FLAG", value: SdfFrameSampled.BandSweptFlag);
         declarations.Bits(name: "SDF_FORM_BAND_PARTED_FLAG", value: SdfFrameSampled.BandPartedFlag);
         declarations.Bits(name: "SDF_FORM_BAND_WHOLE_FLAG", value: SdfFrameSampled.BandWholeFlag);
+        declarations.Bits(name: "SDF_FORM_BAND_DISPLACED_FLAG", value: SdfFrameSampled.BandDisplacedFlag);
+        declarations.Bits(name: "SDF_FORM_BAND_RADIAL_FLAG", value: SdfFrameSampled.BandRadialFlag);
         declarations.Tuning(name: "SDF_MOTE_LIGHT_SCALE", value: SdfWorldPackage.MoteLightScale);
         declarations.Count(name: "SDF_MOTE_LIGHT_TEXEL_WORDS", value: SdfWorldPackage.MoteLightTexelWords);
         declarations.Count(name: "SDF_MESH_LEVEL_SHIFT", value: SdfKernelInterfaces.MeshLevelShift);

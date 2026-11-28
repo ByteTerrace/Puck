@@ -52,6 +52,7 @@ import "wonder"
 import "mouse-house"
 import "stewards"
 import "portals"
+import "time-puzzles"
 // The companion hears the lifts' authored door edges through its read-only sensory projection, and the world that stands
 // the building binds its camera to the inspection lever's cells (the debug world's exposure.puck).
 exports {

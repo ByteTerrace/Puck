@@ -68,10 +68,8 @@ placements {
 
 // The deck library: the shipped deck programs, then the owner's local deck folder (`roms/hgd`, absent in a clean
 // checkout). A title's number is its place in this listing (`machine.content` prints each file's `title=`), so the
-// shipped programs are titles 1 and 2 whatever the local folder holds. A path resolves beside this file.
+// shipped titles are layout.puck's `toyboxShipped` whatever the local folder holds. A path resolves beside this file.
 let toyboxLibrary = ["../cartridges/deck", "../../../roms/hgd"]
-// The first title of the local folder: the shipped deck programs come first and are two.
-let toyboxLocalFirst = 3
 
 // The cartridge in each station's deck: `toyboxCartridge[<station>]` is the rented cartridge's loan ordinal
 // (rentals.puck) while one is inserted, 0 while the deck runs its own program, and `toyboxTitle[<station>]` the library

@@ -772,6 +772,8 @@ public interface IWorldInhabitants {
 /// <param name="Net">The placement's net facet (see <see cref="WorldPlacementNet"/>): the row's creation is a net of rope
 /// strands the authority steps, that gives under the bodies leaning on it and carries the bodies holding it, or
 /// <see langword="null"/> for a rigid row. Omitted from the wire when null.</param>
+/// <param name="Shift">The placement's shift facet (see <see cref="WorldPlacementShift"/>): the row's root moves by an offset
+/// read from state, or <see langword="null"/> for a row that stays where it is placed. Omitted from the wire when null.</param>
 public sealed record WorldPlacement(
     [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Declares)] string Id,
     [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)] string PrototypeId,
@@ -799,7 +801,8 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementSurface? Surface = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPointerSurface? Pointer = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementTurn? Turn = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementNet? Net = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementNet? Net = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementShift? Shift = null
 ) {
     /// <summary>The body-reference token a rule's <c>placement:$each</c> binds to its <c>forEach</c> key; no placement
     /// may be named it.</summary>
@@ -813,13 +816,13 @@ public sealed record WorldPlacement(
     /// body (<see cref="Attach"/>) or turns (<see cref="Turn"/>). Every reader of such a row poses it live: the drawn
     /// copy every frame and a solid row's colliders every tick.</summary>
     [JsonIgnore]
-    public bool MovesRoot => ((Attach is not null) || (Turn is not null));
+    public bool MovesRoot => ((Attach is not null) || (Turn is not null) || (Shift is not null));
     /// <summary>Gets whether the row has one static frame another row, a spawn point or a surface may compose over: no
     /// expanding distribution (a deal template's region lays out its children and stays one frame), no mirror, and no
     /// facet that moves the row off its compiled frame (<see cref="Attach"/>, <see cref="Inhabit"/>,
-    /// <see cref="Turn"/>).</summary>
+    /// <see cref="Turn"/>, <see cref="Shift"/>).</summary>
     [JsonIgnore]
-    public bool HasStaticFrame => (((Distribution is null) || (Deal is not null)) && (Mirror is null) && (Attach is null) && (Inhabit is null) && (Turn is null));
+    public bool HasStaticFrame => (((Distribution is null) || (Deal is not null)) && (Mirror is null) && (Attach is null) && (Inhabit is null) && (Turn is null) && (Shift is null));
 
     /// <summary>Validates a placement id against the channel spellings that name a placement: it may not carry
     /// <c>:</c>, which separates a reserved channel's arguments (<c>$region:&lt;placementId&gt;</c>,

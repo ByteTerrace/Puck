@@ -8,6 +8,7 @@
 
 import "../../standard/paths"
 import "../../standard/limbs"
+import "../../standard/form-transition"
 
 // Where the debug world stands the building: its root placement's position. A document that stands something in the
 // building by world coordinates (a table's lattice, a painting's door) adds it to a plan position with `galleryWorld`.
@@ -586,6 +587,67 @@ let toyLatticeNet = { strand: 0.04, across: 0.42, up: 0.48 }
 // landing: bay 9 has none of them, standing between the tree's gate (bay 8) and the little house (bay 10), its aisle
 // open to walk up to the net from.
 let toyLatticeNetBay = 9
+
+// The play floor's time puzzles (time-puzzles.puck, gallery.md "The time puzzles"), in bay 4, which the toybox leaves
+// clear on both galleries: the solo puzzle on the south gallery, the group puzzle on the north.
+//
+// The solo puzzle: a floor button against the south wall that opens the bay's net (shell.puck's lattice panel `south-4`)
+// while a body stands on it. Released, it rises over `timeButtonWindow` local seconds, and the net closes over its
+// `closeSeconds` once it has risen. The button's middle stands 6.8 m from the net (tileZ(0) to the net at the balcony
+// edge, 7.72 m), so a body leaving its edge runs 6.35 m. The Moth runs at 5 m/s and sprints at twice that
+// (avatars/moth/contract.puck: `speed: 5`, `sprintAction()`, multiplier 2 in standard/player/actions.puck), 0.64 s for the
+// run, and her suit's dash adds 3 m in 0.2 s (`dashAction(speed: 15, duration: 0.2)`): sprint and dash cross in about
+// half a second, before any reaction. The window is a quarter second, and the net's hole holds a body's width for about
+// a third of its closing, so the way stays open about 0.42 s: no sprint makes it. A field cast over the button slows its
+// rise to a tenth (the standard's slowdown), 2.5 s and the closing's share after it, so an average player who casts on the
+// button and runs makes it with time to spare.
+let timeButtonBay = 4
+let timeButtonAt = [bayX(timeButtonBay), galleryFloor[toyboxLevel], tileZ(wallRowSouth)]
+let timeButtonRadius = 0.45
+let timeButtonDepth = 0.03
+let timeButtonWindow = 0.25
+// How fast the cap rises, metres a local second.
+let timeButtonRise = (timeButtonDepth / timeButtonWindow)
+let timeNetPanel = $"south-{timeButtonBay}"
+// The net's opening (WorldNetOpening, in the panel's frame: from its left post along its width, and up from the floor): a
+// tall ellipse in the panel's middle, its foot below the floor so the ropes there are drawn down onto it. The net moves its
+// centre to the middle of the cell holding it (1.2 m up), and the hole that cell's corners frame, the inscribed rectangle,
+// runs from the floor, where its lowest strand lies, to 2.4 m up and 1.1 m across: the suited Moth, 0.7 m across and
+// 2.06 m tall, walks or leaps through. Beyond it lies the void, so a body passing steps off the balcony's edge.
+let timeNetOpening = {
+  by: "state.timeNetOpen"
+  centerAcross: (arcadePitch / 2)
+  centerUp: 1.1
+  halfWidth: 0.8
+  halfHeight: 1.75
+  openSeconds: 0.6
+  closeSeconds: 0.5
+  effect: formParting()
+}
+// The group puzzle: five tiles on the north gallery in an arc facing the nave, each lit while a body stands on it, which
+// five bodies must hold at once; one body covers one tile, so no player solves it alone. Solving it lets half the
+// toybox's stations (the cabinets) run Moth Valley for `timeTease` local seconds, which a field cast at one stretches to
+// fifteen minutes at the standard's slowdown (90 s at a tenth).
+let timeTileCount = 5
+let timeTileRadius = 0.4
+let timeTilesCentre = [bayX(timeButtonBay), galleryFloor[toyboxLevel], tileZ((wallRowNorth - 2))]
+let timeTiles = map(range(0, timeTileCount), i => {
+  id: $"time-tile-{i}"
+  at: (timeTilesCentre + [(1.6 * cosine((200 + (35 * i)) * 1deg)), 0, (1.6 * sine((200 + (35 * i)) * 1deg))])
+})
+let timeTease = 90
+// A field cast at an unlocked station holds it for fifteen minutes of real time, and its caster's next cast waits as
+// long, so the field stays where it was spent.
+let timeStationField = 900
+let timeUnlockStations = filter(toyboxStations, s => (s.kind == "cabinet"))
+
+// The deck library's shipped titles, in the order the content folder numbers them (file name, ordinal), so a title's
+// number is its place here: Moth Valley, the authored cartridge, sorts between the two programs. The owner's local folder
+// (toybox.puck's `toyboxLibrary`) follows them.
+let toyboxShipped = ["colour-bars.deck", "moth-valley.hgd.puck", "moving-sprite.deck"]
+function toyboxTitleOf(file) = (indexOf(toyboxShipped, file) + 1)
+let toyboxLocalFirst = (length(toyboxShipped) + 1)
+let toyboxMothValley = toyboxTitleOf("moth-valley.hgd.puck")
 
 // The central tree (tree.puck): a giant tree at the hall's exact centre, bay 6 (the middle rest bay) on the nave's
 // centre row, its trunk filling the nine tiles a display's pad does. A spiral of treads climbs its trunk, and two

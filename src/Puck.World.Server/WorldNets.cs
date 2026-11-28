@@ -38,7 +38,7 @@ public sealed class WorldNets {
 
             Strand = (FixedQ4816.FromDouble(value: facet.Strand) * scale);
             Gravity = new FixedVector3(X: FixedQ4816.Zero, Y: -FixedQ4816.FromDouble(value: facet.Gravity), Z: FixedQ4816.Zero);
-            Near = net.RestBox.Grow(margin: ((net.Spec.Reach + Strand) + contactReach));
+            Near = net.RestBox.Grow(margin: ((net.Spec.Extent + Strand) + contactReach));
             Opening = FixedQ4816.Max(x: FixedQ4816.Zero, y: net.Opening(strand: Strand));
         }
 
@@ -95,23 +95,31 @@ public sealed class WorldNets {
         /// <summary>Returns the colliders bodies meet as the net stands: its strands (<see cref="FixedNet.StrandColliders"/>),
         /// each rounded by half the strand, recomputed only when a node moved.</summary>
         /// <returns>The colliders, in strand order, borrowed until the net next moves.</returns>
-        public ReadOnlySpan<FixedStaticCollider> Colliders() => Posed(cache: ref m_colliders, revision: ref m_collidersRevision, strands: true);
+        public ReadOnlySpan<FixedStaticCollider> Colliders() => Posed(cache: ref m_colliders, revision: ref m_collidersRevision, strands: true, written: ref m_strandCount);
         /// <summary>Returns the surface a hold takes as the net stands: a sheet over its cells (<see cref="FixedNet.CellColliders"/>),
         /// so a climber's hands find the net between its strands as on them, recomputed only when a node moved. Bodies
-        /// do not meet it.</summary>
+        /// do not meet it. While the net is parted it offers no hold (<see cref="FixedNet.CellColliders"/>), so a body running
+        /// at its hole is never caught climbing the ropes splayed round it.</summary>
         /// <returns>The colliders, row by row, borrowed until the net next moves.</returns>
-        public ReadOnlySpan<FixedStaticCollider> HoldColliders() => Posed(cache: ref m_holdColliders, revision: ref m_holdCollidersRevision, strands: false);
+        public ReadOnlySpan<FixedStaticCollider> HoldColliders() => Posed(cache: ref m_holdColliders, revision: ref m_holdCollidersRevision, strands: false, written: ref m_holdCount);
+        private int m_strandCount;
+        private int m_holdCount;
         // One of the net's collider sets as it stands, rounded by half the strand, posed again only when a node moved.
-        private ReadOnlySpan<FixedStaticCollider> Posed(ref FixedStaticCollider[] cache, ref int revision, bool strands) {
+        private ReadOnlySpan<FixedStaticCollider> Posed(ref FixedStaticCollider[] cache, ref int revision, bool strands, ref int written) {
             if (revision != Net.Revision) {
                 var count = (strands ? Net.FreeStrandCount : Net.CellCount);
                 var radius = (Strand / FixedQ4816.FromInteger(value: 2));
 
                 if (cache.Length != count) { cache = new FixedStaticCollider[count]; }
-                if (strands) { Net.StrandColliders(destination: cache, radius: radius); } else { Net.CellColliders(destination: cache, radius: radius); }
+                if (strands) {
+                    Net.StrandColliders(destination: cache, radius: radius);
+                    written = count;
+                } else {
+                    written = Net.CellColliders(destination: cache, radius: radius);
+                }
                 revision = Net.Revision;
             }
-            return cache;
+            return cache.AsSpan(start: 0, length: written);
         }
     }
 
@@ -239,7 +247,7 @@ public sealed class WorldNets {
 
             builder.Append(value: '\n');
             builder.Append(provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $"  {panel.Id}: nodes={net.Spec.Columns}x{net.Spec.Rows} awake={(net.Awake ? 1 : 0)} deflection={((double)net.MaxDeflection):0.0000} reach={((double)net.Spec.Reach):0.000} holders={panel.Holders} pushers={panel.Pushers} revision={net.Revision}");
+                handler: $"  {panel.Id}: nodes={net.Spec.Columns}x{net.Spec.Rows} awake={(net.Awake ? 1 : 0)} deflection={((double)net.MaxDeflection):0.0000} reach={((double)net.Spec.Reach):0.000} openness={((double)net.Openness):0.000} opens={(net.Opens ? 1 : 0)} driven={net.DrivenCount} holders={panel.Holders} pushers={panel.Pushers} revision={net.Revision}");
         }
         return builder.ToString();
     }

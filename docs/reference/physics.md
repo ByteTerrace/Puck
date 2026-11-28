@@ -619,8 +619,23 @@ climbing. `CellColliders` writes a
 rounded box over each cell, `TryGrid` and `OffsetAt` locate a point on the net,
 `DisplacementAt` gives the net's movement under it over its latest step, and
 `TakeChanged`, `Capture`, `Restore` and `AppendStateHash` serve delivery,
-checkpoints and the hash. Every reader may bound the net by its rest layout grown
-by its reach. `physics.nets` counts its work. The World's host is a placement's
+checkpoints and the hash.
+
+A net with an opening (`FixedNetSpec.Opening`, a `FixedNetOpening`) parts when
+`SetOpening` tells it to: every free node inside the opening's ellipse at rest
+rides a closed-form path from rest to a point of the rim, eased by smoothstep over
+the open time (and back over the close time), while each slice holds it at
+infinite mass and solves the rest, so the strands it pulls bow round the hole and
+the cells it presses into crowd under the strands' caps and the reach. The rim
+point is the ellipse's at the parametric angle the node's offset makes measured
+in cells (cosine and sine read off the offset made unit), which keeps the nodes'
+order about the centre; the centre moves to the middle of its grid cell, so the
+four corners of that cell frame the hole, about the ellipse's inscribed
+rectangle. While parted, `CellColliders` writes no hold sheet, so a body running
+at the hole is never caught climbing the ropes splayed round it. Every reader may bound the net by its rest layout
+grown by `FixedNetSpec.Extent`: the reach, or for a net with an opening twice its
+longer half axis. `physics.nets` counts its work, `parting-steps` the steps a net
+took while parting or closing. The World's host is a placement's
 `net` facet ([the facet](../../.claude/skills/puck-world/references/documents-render.md#a-placements-net-facet)).
 
 ## Bounded local perception

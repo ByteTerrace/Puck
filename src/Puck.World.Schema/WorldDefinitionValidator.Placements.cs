@@ -2002,10 +2002,31 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
+            // The SHIFT facet moves the row's root by an offset read from state (see WorldPlacementShift), exactly, so its
+            // members take no keys; like a turn, it leaves the facets that read the row's static frame behind.
+            if (placement.Shift is { } shift) {
+                foreach (var (member, value) in shift.Members()) {
+                    if ((value.Keys is not null) || !value.IsAuthorable(definition: definition)) {
+                        errors.Add(item: $"{path}.shift.{member} {value} must be a finite number or state.<row>[.<key>] naming a Fixed or Int cell; the authority reads a shift exactly, so it takes no keys.");
+                    }
+                }
+
+                if ((placement.Distribution is not null) || (placement.Mirror is not null) || (placement.Inhabit is not null) || (placement.Deal is not null)) {
+                    errors.Add(item: $"{path} SHIFTS — a shifting row is one copy moved by its offset: it carries no distribution, mirror, inhabit or deal facet.");
+                }
+
+                if ((placement.Board is not null) || (placement.Pointer is not null) || (placement.Spatial is not null) || (placement.Surface is not null)) {
+                    errors.Add(item: $"{path} SHIFTS — its board, pointer, spatial and surface facets read the row's static frame, which a shift leaves behind; put them on a row that stands still.");
+                }
+            }
+
             // The NET facet: the row's creation is a net the authority steps (see WorldPlacementNet). Its nodes rest on the
             // row's one static frame and collide through the row's solid facet, so it needs both.
             if (placement.Net is { } net) {
                 net.Validate(errors: errors, path: $"{path}.net");
+                if ((net.Opening is { } opening) && ((opening.By.Keys is not null) || !opening.By.IsAuthorable(definition: definition))) {
+                    errors.Add(item: $"{path}.net.opening.by {opening.By} must be a finite number or state.<row>[.<key>] naming a Fixed or Int cell; the authority reads it exactly, so it takes no keys.");
+                }
                 if (placement.Solid is null) {
                     errors.Add(item: $"{path}.net: a net collides through the row's solid facet; add `solid` to the row.");
                 }

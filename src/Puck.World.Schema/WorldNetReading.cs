@@ -11,11 +11,14 @@ public enum WorldNetReading : byte {
     Holders,
     /// <summary>How many body volumes leaned on the net.</summary>
     Pushers,
+    /// <summary>How far the net has parted at its opening (<see cref="WorldNetOpening"/>), from zero (closed) to one (open);
+    /// zero for a net with no opening.</summary>
+    Openness,
 }
 /// <summary>Spells and reads <see cref="WorldNetReading"/> names as a world rule writes them
 /// (<c>$net:&lt;placementId&gt;:deflection</c>).</summary>
 public static class WorldNetVocabulary {
-    private static readonly string[] Names = ["deflection", "awake", "holders", "pushers"];
+    private static readonly string[] Names = ["deflection", "awake", "holders", "pushers", "openness"];
 
     /// <summary>Gets every reading's name, in the order of <see cref="WorldNetReading"/>.</summary>
     public static IReadOnlyList<string> All => Names;
@@ -30,11 +33,11 @@ public static class WorldNetVocabulary {
         reading = (WorldNetReading)Math.Max(val1: 0, val2: index);
         return (index >= 0);
     }
-    /// <summary>Returns the kind of value a reading reads as: a deflection is <see cref="CellKind.Fixed"/>, the rest
+    /// <summary>Returns the kind of value a reading reads as: a deflection and an openness are <see cref="CellKind.Fixed"/>, the rest
     /// <see cref="CellKind.Int"/>.</summary>
     /// <param name="reading">The reading.</param>
     /// <returns>The cell kind.</returns>
-    public static CellKind KindOf(WorldNetReading reading) => ((reading == WorldNetReading.Deflection) ? CellKind.Fixed : CellKind.Int);
+    public static CellKind KindOf(WorldNetReading reading) => (((reading == WorldNetReading.Deflection) || (reading == WorldNetReading.Openness)) ? CellKind.Fixed : CellKind.Int);
 }
 /// <summary>A reading of the net a placement carries (<see cref="WorldRuleFacts.NetPrefix"/>).</summary>
 public sealed class WorldNetOperand : WorldFactOperand {

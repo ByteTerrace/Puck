@@ -301,8 +301,8 @@ public static class WorldPlacementFrameCompilation {
 
                 return false;
             }
-            if (parent.Turn is not null) {
-                reason = $"placement '{placement.Id}' names parent '{parentId}', which turns — a turntable's frame moves with state, and a child composes over a static one.";
+            if ((parent.Turn is not null) || (parent.Shift is not null)) {
+                reason = $"placement '{placement.Id}' names parent '{parentId}', which turns or shifts — its frame moves with state, and a child composes over a static one.";
 
                 return false;
             }

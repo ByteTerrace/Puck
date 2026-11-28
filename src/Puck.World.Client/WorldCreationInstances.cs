@@ -789,10 +789,10 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         if (row.Attach is { } attach) {
             var (position, orientation) = WorldAttachedPose.Root(attach: attach, source: client);
 
-            return (position, WorldTurnedPose.Turned(mirror: client.StateMirror, orientation: orientation, turn: row.Turn), row.Scale);
+            return (WorldTurnedPose.Shifted(mirror: client.StateMirror, position: position, shift: row.Shift), WorldTurnedPose.Turned(mirror: client.StateMirror, orientation: orientation, turn: row.Turn), row.Scale);
         }
 
-        return (live.StaticFrame.Position, WorldTurnedPose.Turned(mirror: client.StateMirror, orientation: live.StaticFrame.Rotation, turn: row.Turn), live.StaticFrame.Scale);
+        return (WorldTurnedPose.Shifted(mirror: client.StateMirror, position: live.StaticFrame.Position, shift: row.Shift), WorldTurnedPose.Turned(mirror: client.StateMirror, orientation: live.StaticFrame.Rotation, turn: row.Turn), live.StaticFrame.Scale);
     }
     private bool TryFindBody(int bodyIndex, out int poolIndex, out Registration live) {
         if ((uint)bodyIndex < (uint)m_bodySlots.Length && m_bodySlots[bodyIndex] is var entry and > 0) {
