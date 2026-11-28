@@ -132,15 +132,7 @@ public static class RuleDataflow {
         var reads = new List<CellAccess>();
 
         CollectExpression(into: reads, tokens: tokens);
-        if (reads.Count == 0) { return []; }
-
-        var seen = new HashSet<CellAccess>(capacity: reads.Count);
-        var kept = 0;
-
-        for (var index = 0; (index < reads.Count); index++) {
-            if (seen.Add(item: reads[index])) { reads[kept++] = reads[index]; }
-        }
-        return System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: reads)[..kept].ToArray();
+        return [.. reads.Distinct()];
     }
     /// <summary>Appends every state cell a compiled expression reads.</summary>
     /// <param name="tokens">The compiled postfix program, or <see langword="null"/>.</param>

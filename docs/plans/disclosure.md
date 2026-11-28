@@ -2366,9 +2366,9 @@ wrote, the declarations, and the units whose bound values read a written row
 cannot refuse it (an identity-bound row aside, below). The enforcing place is
 `WorldServer.ValidateStateTransaction`,
 which every state write passes (the prepared mutation, the console's cell door,
-an addon's cell writes): for the authority it validates the whole document as
-before; for a recipient it runs `TryValidateWrittenBindings` through the
-transaction's `StateReadAccess`. Each written row a document value binds is
+an addon's cell writes, a rule firing): every writer runs
+`TryValidateWrittenBindings`, a recipient through the transaction's
+`StateReadAccess`. Each written row a document value binds is
 acquired through that access (a row the recipient cannot read whole faults it,
 and `WorldPreparedMutation` publishes the neutral refusal);
 `WorldStateDocumentValues.TryCheckBound` checks every value bound to that row
@@ -2390,25 +2390,27 @@ only the written row, never a document path, whose indices can count hidden
 placements; a fault answers as the door does for a withheld row, through a
 mutation, a typed cell write and an addon's cell write alike
 (`BoundWriteValidationNoninterferenceLawTests.AWriteReachingAUnitThatReadsAWithheldRowIsRefusedAsAWithheldRowIs`).
-The authority's whole validation reads the same clock.
+The holders and units a row reaches are indexed once per document
+(`WorldStateDocumentValues.TryCheckBound`, `WorldDefinitionValidator.TryValidateBoundUnits`),
+so a write costs the units it reaches and walks nothing else. The authority (a
+rule firing, the operator, an addon's batch) is judged the same way without the
+access; a value bound outside every registered unit is judged for it by its
+holders alone, as a clock moves one each tick unjudged, so no ordinary authority
+write compiles and prices the whole document on the tick.
 
 This closes H2 for state writes: a hidden unit an authority path leaves unable
-to read its row (a rule firing or a clock that skips binding validation)
-answers nothing to a recipient's write into another bound row, though the
-authority's whole-document validation sees it.
+to read its row (a clock that skips binding validation, or a direct arena write)
+answers nothing to a recipient's write into another bound row.
 `BoundWriteValidationNoninterferenceLawTests` holds it: it finds each hidden
 bound unit by the walk the server uses, leaves its row valid in one world and
 unreadable in the other, and requires the recipient's write into the public
-bound row to be applied alike in both, with the operator's write, still
-validated whole, refused in the second as the control that the hidden state is
-real.
+bound row to be applied alike in both, with the hidden row's own holders
+refusing it in the second as the control that the hidden state is real.
 
 D0a's witnesses for this step, executed: **H2** at the door, recorded by that
-law (the hidden unit's invalidity is visible to whole-document validation and
-is now absent from the recipient's verdict). No production authority path was
-shown to leave a bound value unreadable: a rule firing writing a bound row runs
-the whole-document validation itself, so the law writes the hidden cell through
-the arena directly. **H1**, varying only a hidden row's membership while removing
+law (the hidden unit's invalidity is visible to its own holders and absent from
+the recipient's verdict). The law writes the hidden cell through the arena
+directly, as a path that skips binding validation would. **H1**, varying only a hidden row's membership while removing
 a key from the public domain it is keyed over:
 `WriteDoorNoninterferenceLawTests.ARemovalFromADomainAHiddenRowIsKeyedOverAnswersAlikeWhateverThatRowHolds`
 answers a cell removal, a cell set and a row removal alike for an empty hidden
@@ -2416,17 +2418,19 @@ row, one holding the removed key and one holding another, with a public keyed
 row as the admitted control. The board and search forms of H1 remain for D0a.
 
 `ARecipientWriteRunsEveryCheckOfTheUnitItBindsNotItsGeometryAlone` holds the
-other side: a zero mirror normal written through a bound row is refused, as the
-authority's whole validation refuses it.
+other side: a zero mirror normal written through a bound row is refused by the
+placement's own mirror check, which judges the authority's write the same way.
 
 Where it stops: a write into a row a creation's id or a look's name is bound to
 (`WorldStateDocumentValues.BindsIdentity`, which reads exactly those two
 positions; a reference to an entity, such as a look's creation or an
 assignment's rows, is not an identity) renames an entity every unit naming it
 refers to, so it is still validated whole for every writer, and H2 stays open
-there until references get a unit of their own. A binding outside the
-registered units, such as a spawn point or kit assignment, still reaches
-whole-document validation and can carry H2. A document write is judged by the units it reaches (the next
+there until references get a unit of their own. A recipient's write into a
+row bound outside the registered units (a spawn point, a kit assignment, the
+exposure, a view program, a binding overlay) still reaches whole-document
+validation and can carry H2; giving those sections units of their own closes
+it. A document write is judged by the units it reaches (the next
 checkpoint). Input selection (`Input.TryPrepareAll`, `TryPrepareBodies`) still
 reads every owner's selection inside the same validation (D0b3). A placement
 unit's checks between placements (solids, the envelope, one board per
