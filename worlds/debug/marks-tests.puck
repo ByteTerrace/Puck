@@ -24,9 +24,9 @@ bodies {
 test "a second seat's ping reaches the first seat's companion" {
   when {
     ticks 30
-    seat2: body.pose 3 0 2 0 0 0
+    seat2: body.pose 3 0 2 0 0 0 1
     ticks 10
-    seat2: body.press ping 1 0.2 0
+    seat2: body.press ping 1 0.2 1
     ticks 10
   }
   expect {
@@ -55,11 +55,11 @@ test "a ping lapses" {
 test "a lock sends the companion to the target and outranks a ping" {
   when {
     ticks 30
-    seat2: body.pose 0 0 -5 0 0 0
+    seat2: body.pose 0 0 -5 0 0 0 1
     ticks 10
     seat1: body.press lock 1 0.2 0
     ticks 10
-    seat2: body.press ping 1 0.2 0
+    seat2: body.press ping 1 0.2 1
     ticks 10
   }
   expect {
@@ -90,6 +90,24 @@ test "a placed mark survives a crossing and comes back" {
     record(body, 0, marks, 0, kind) == 1
     record(body, 0, marks, 0, world, debug) == 1
     markOn0["0"] == 1
+    bodyPosition(body, 0, z) > 12.9
+  }
+}
+
+test "control crossing without a mark" {
+  when {
+    ticks 30
+    seat1: body.pose spawn:portal-garden 0
+    ticks 10
+    seat1: body.fly 1 0 0 0 0 0 2
+    ticks 70
+    seat1: body.fly -1 0 0 0 0 0 1
+    ticks 45
+  }
+  expect {
+    garden {
+      bodyState(body, 0, suit) == 1
+    }
     bodyPosition(body, 0, z) > 12.9
   }
 }
