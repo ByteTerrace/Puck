@@ -1441,13 +1441,13 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   type, prefer publish-once handoff to shared state under locks, and research
   a systematic schedule explorer for .NET (Microsoft Coyote) beside the
   `--workers` harness, since these defects rarely show in one run.
-  A `Parallel.For` run from a bake worker waits for helper tasks the runtime's
-  pool has not started, so a pool saturated by other work holds the stage
-  behind it (the collapse's speculation did until it moved to `PoolFork`, whose
-  caller drains the partitions itself): `SdfSampledLattice.PrimeSigns`,
-  `SdfMeshChunks.Bake` and `SdfMeshIrradianceScene`'s builds still fork that way.
-  `PoolFork` lives in `Puck.Hosting`, which `Puck.SignedDistance` does not
-  reference, so `PrimeSigns` needs it (and `IJobPartitions`) a project lower.
+  A `Parallel.For` run from a background worker waits for helper tasks the
+  runtime's pool has not started, so a pool saturated by other work holds the
+  stage behind it; `PoolFork`, whose caller drains the partitions itself, is the
+  fork for that work. The irradiance volume's probe placement and relight batches
+  (`SdfMeshIrradiance.Placement`, `SdfMeshIrradiance.BatchTraced`) still fork
+  through `Parallel.For` with a degree they pass down as `ParallelOptions`; they
+  move once `PoolFork`'s helper count carries that degree through those methods.
 - [medium · unconfirmed] A tick-cadence screen source asked for at the tick's
   own rate (a 30 Hz floor under a 30 Hz tick) has a new image only on a
   step's frame, so its floor releases it there and no lead can move it
@@ -6325,6 +6325,32 @@ wiring, dormancy and cost.
   ([its plan](humble-gaming-deck.md)), and MMC1's large-ROM PRG remap has no
   fixture that exercises it.
 
+### Lock-on and marks
+
+Owner: play lane · ordinary · Next: the marker drawn in the world. Lock-on
+(`worlds/standard/lockon.puck`) and marks (`worlds/standard/marks.puck`) are
+built and wired into the debug world (`worlds/debug/targeting.puck`).
+
+- [high] A mark is drawn in the world only by the companion flying to it. The
+  standard wants an authored marker at each mark and ping (a wisp or pin
+  creation posed at the mark), and posing one needs either a pool of bodies the
+  debug world has no free population slots for, or a placement posed from
+  state, which no facet offers (`WorldPlacementTranslation` is a literal).
+- [high] The group a mark is shared with is an authored list of seats
+  (`playerMarks(members)`), turned into reader tokens. Group membership
+  (`WorldGroup`) does not reach a row's `visibility` readers, so a party formed
+  at run time cannot widen them; a `group:<id>` reader or a rule that writes a
+  `readersFrom` row from membership closes it.
+- [medium] Edges over a moving input (`lock-press`, `ping-press`, `mark-press`)
+  are priced as every binding firing every tick, so the debug world's sheet
+  sits within about sixteen thousand units of `RuleCapacity.MaxWorkUnitsPerTick`.
+  A sweep of the step's input events (`inputEvents(…)`) binds only presses.
+- [medium] `marks-<s>` reads its seat's character records every tick
+  (`$record:` is unversioned); an identity record revision the rule host
+  versions would let it rest.
+- [low] The gallery's lab wing has no portal yet; lock-on and marks have no lab
+  of their own (`worlds/debug/labs/`).
+
 ### Panes: split screens the player drives
 
 Owner: specialist lane (puck-world views, rendering graphs, input) · ordinary ·
@@ -6343,6 +6369,26 @@ in a fourth.
   destination and the in-world computer's program switching reuses it.
 - Arranging panes at runtime beyond the authored layouts: decide once focus
   and switching land.
+
+### Learn panel
+
+Owner: specialist lane (sdf-authoring, rendering, puck-world) · ordinary ·
+Next: a tap on a term inside the typeset formula
+([the learn panel](../authoring/learn-panel.md)).
+
+- A tap on a term inside the typeset formula itself: pointer regions are
+  document data and the layout is the presentation's, so terms are tapped on
+  their rows. A presentation-side hit of a math text's glyph placements,
+  published as a pointer region the authority can read, closes it.
+- The scroll is world state, so it steps at the simulation rate; a presented
+  value that eases between ticks (as a turn facet's angle does) would make a
+  flick read smooth at the display's rate.
+- The authority does not know a math text's laid-out height, so a drag scrolls
+  by an authored estimate of the overflow (`learnStepsSpan`): the ends are
+  always reachable, but the steps follow the finger only near enough.
+- A picture beside the sentence: the exhibit on the turntable stands for it
+  today; a diagram (a slice of the field, `world.slice`'s bands) would teach
+  more.
 
 ### Screens on curved and general SDF surfaces
 

@@ -828,6 +828,26 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
+            name: "world.texts",
+            description: "Reads the boot world's math text paints (a text paint with math: true) as the latest frame laid them out: for each, its slot, the engine formulas it brings in (@formula), the term it highlights, the live values it shows, its scroll (the share asked of the paint's scroll template, and the offset shown against the most it can scroll, in the paint frame's units), its lines, its laid-out height against its box's, and the glyphs it packed. Presentation only; reads change nothing.",
+            handler: (context, args) => {
+                if (CommandResult.RequireNoArguments(args: in args, verb: "world.texts") is { } refusal) {
+                    return refusal;
+                }
+                if (renderProbe.MathTexts is not { } describe) {
+                    return new CommandResult(Output: "[world.texts: presenter not built yet]");
+                }
+
+                var lines = describe();
+
+                return new CommandResult(Output: ((lines.Count == 0)
+                    ? "[world.texts: no math text laid out]"
+                    : string.Join(separator: Environment.NewLine, values: lines.Select(selector: static line => $"[world.texts: {line}]"))));
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
+            bindability: CommandBindability.Unbindable,
             name: "world.probe",
             description: $"Reads the settled irradiance probes about a point: {WorldProbeForms.Spelling}. A changing trace or pending publication is marked unsettled with the published GPU and live CPU windows. Otherwise echoes spacing, window, answering corners and total weight for a receiver facing the normal (up by default), then each corner's cell, relocated position, offset, back-face share, validity, sweeps, measured cubes' mean sky and luminance, and weight terms: trilinear share, positive normal cosine, octahedral depth visibility and final weight. reference-clear is the exact static-mesh segment check for diagnosing sampling; it never changes the gather.",
             forms: WorldProbeForms,

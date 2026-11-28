@@ -1,3 +1,4 @@
+using Puck.Abstractions.Jobs;
 using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -96,8 +97,16 @@ public static class SdfMeshCollapse {
     /// <summary>Counts the speculated candidates an earlier commit of their block reached, which their turn measured
     /// again, a part of <see cref="Speculated"/>.</summary>
     public static readonly WorkKind Redone = new(name: "sdf.collapse.redone", unit: "places", workClass: WorkClass.Pacing);
+    /// <summary>Counts the places a pass left out because every target's kept refusal still stood (the collapser's quiet
+    /// places), beside <see cref="Priced"/>, the places it listed.</summary>
+    public static readonly WorkKind Quiet = new(name: "sdf.collapse.quiet", unit: "places", workClass: WorkClass.Pacing);
+    /// <summary>Counts the surface samples the collapses tried listed from their source fans to measure.</summary>
+    public static readonly WorkKind Listed = new(name: "sdf.collapse.listed", unit: "samples", workClass: WorkClass.Pacing);
+    /// <summary>Counts the surface samples the collapses tried measured against their laid-out triangles, speculated
+    /// measures included.</summary>
+    public static readonly WorkKind Measured = new(name: "sdf.collapse.measured", unit: "samples", workClass: WorkClass.Pacing);
     /// <summary>Gets the collapse's work, process-wide: what building every baked mesh's levels costs, counted, never timed.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.collapse", kinds: [Runs, Kept, Passes, Priced, Tried, Taken, Speculated, Redone]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.collapse", kinds: [Runs, Kept, Passes, Priced, Quiet, Tried, Taken, Speculated, Redone, Listed, Measured]);
 
     /// <summary>Returns a mesh with its coarser levels of detail.</summary>
     /// <param name="mesh">The merged mesh.</param>
@@ -166,6 +175,7 @@ public static class SdfMeshCollapse {
             if ((clusterOf is not null) && (level < ClusteredRuns)) { collapser.CountClusters(into: runs); }
         }
 
+        collapser.CountSamples();
         if (levels.Count == 0) { return mesh; }
 
         var clusters = ((clusterOf is null) ? null : collapser.Clusters(clusters: clusterCount, runs: runs));
@@ -411,7 +421,7 @@ public static class SdfMeshCollapse {
         private readonly OwnedBuffer<int> m_slideTargets;
         private readonly OwnedBuffer<int> m_slideCounts;
         private readonly double m_lineLimit;
-        private readonly OwnedBuffer<double> m_candidateCosts;
+        private readonly OwnedBuffer<(double Cost, int Place)> m_candidateKeys;
         private readonly OwnedBuffer<int> m_candidatePlaces;
 
         // A pass's speculation (Speculate): the block a commit last stamped each place in, the block's number, each
@@ -419,6 +429,17 @@ public static class SdfMeshCollapse {
         // speculate), and the records themselves, a target, its outcome and the budget its refusal stands through.
         private readonly OwnedBuffer<int> m_blockStamp;
         private int m_block;
+        // The quiet places (TryPlace): each one's revision and the budget its refusals stand through when it went quiet,
+        // the cost a pass listed it at and the pass that left it out of its candidates; the woken places of this pass
+        // still to take (Wake), cheapest first; and the candidate the pass is taking, whose key orders a woken place.
+        private readonly OwnedBuffer<bool> m_quiet;
+        private readonly OwnedBuffer<int> m_quietRevision;
+        private readonly OwnedBuffer<int> m_quietThrough;
+        private readonly OwnedBuffer<double> m_quietCost;
+        private readonly OwnedBuffer<int> m_leftOut;
+        private readonly OwnedBuffer<(double Cost, int Place)> m_woken;
+        private int m_wokenCount;
+        private (double Cost, int Place) m_taking;
         private readonly OwnedBuffer<int> m_specFirst;
         private readonly OwnedBuffer<int> m_specCount;
         private readonly OwnedBuffer<int> m_specTarget;
@@ -453,7 +474,10 @@ public static class SdfMeshCollapse {
         private readonly List<Source> m_sources = [];
 
         private int m_source;
-        private bool m_sourcesListed;
+        private int m_sourcesListed;
+        // The samples this collapser listed and measured, which Levels adds to the process's work (CountSamples).
+        private long m_listedSamples;
+        private long m_measuredSamples;
         private bool m_linesListed;
         private int m_laidCount;
 
@@ -579,12 +603,18 @@ public static class SdfMeshCollapse {
             m_revisions = scope.Buffer<int>(length: m_places, clear: true);
             m_fanEdges = scope.Buffer<(int, int)>(length: m_places);
             m_blockStamp = scope.Buffer<int>(length: m_places, clear: true);
+            m_quiet = scope.Buffer<bool>(length: m_places, clear: true);
+            m_quietRevision = scope.Buffer<int>(length: m_places);
+            m_quietThrough = scope.Buffer<int>(length: m_places);
+            m_quietCost = scope.Buffer<double>(length: m_places);
+            m_leftOut = scope.Buffer<int>(length: m_places, clear: true);
+            m_woken = scope.Buffer<(double, int)>(length: m_places);
             m_kind = scope.Buffer<byte>(length: m_places, clear: true);
             m_slideTargets = scope.Buffer<int>(length: (SlideTargets * m_places), clear: true);
             m_slideCounts = scope.Buffer<int>(length: m_places, clear: true);
             m_prices = scope.RentList<(double Cost, int Place)>(capacity: (3 * m_triangles));
             m_priceRuns = scope.Buffer<(int, int, int, bool)>(length: m_places, clear: true);
-            m_candidateCosts = scope.Buffer<double>(length: m_places);
+            m_candidateKeys = scope.Buffer<(double, int)>(length: m_places);
             m_candidatePlaces = scope.Buffer<int>(length: m_places);
             m_specFirst = scope.Buffer<int>(length: SpeculativeBlock);
             m_specCount = scope.Buffer<int>(length: SpeculativeBlock);
@@ -705,7 +735,7 @@ public static class SdfMeshCollapse {
             m_slideTargets = shared.m_slideTargets;
             m_slideCounts = shared.m_slideCounts;
             m_lineLimit = shared.m_lineLimit;
-            m_candidateCosts = shared.m_candidateCosts;
+            m_candidateKeys = shared.m_candidateKeys;
             m_candidatePlaces = shared.m_candidatePlaces;
             m_blockStamp = shared.m_blockStamp;
             m_specFirst = shared.m_specFirst;
@@ -713,6 +743,12 @@ public static class SdfMeshCollapse {
             m_specTarget = shared.m_specTarget;
             m_specOutcome = shared.m_specOutcome;
             m_specThrough = shared.m_specThrough;
+            m_quiet = shared.m_quiet;
+            m_quietRevision = shared.m_quietRevision;
+            m_quietThrough = shared.m_quietThrough;
+            m_quietCost = shared.m_quietCost;
+            m_leftOut = shared.m_leftOut;
+            m_woken = shared.m_woken;
             m_prices = shared.m_prices;
             m_priceRuns = shared.m_priceRuns;
             m_fanEdges = shared.m_fanEdges;
@@ -850,18 +886,34 @@ public static class SdfMeshCollapse {
             m_pass++;
 
             var count = 0;
+            var quiet = 0L;
 
+            m_wokenCount = 0;
             for (var place = 0; (place < m_places); place++) {
                 if (m_kind[place] == Locked) { continue; }
 
                 var prices = Prices(place);
-                m_candidateCosts[count] = prices.IsEmpty ? double.PositiveInfinity : prices[0].Cost;
-                m_candidatePlaces[count] = place;
+                var cost = (prices.IsEmpty ? double.PositiveInfinity : prices[0].Cost);
+
+                // A quiet place still quiet would skip every target by its kept refusals: the pass leaves it out, and a
+                // commit that moves its revision wakes it at its turn (Wake).
+                if (m_quiet[place] && (m_quietRevision[place] == m_revisions[place]) && (m_budget <= m_quietThrough[place])) {
+                    m_quietCost[place] = cost;
+                    m_leftOut[place] = m_pass;
+                    quiet++;
+                    continue;
+                }
+                m_quiet[place] = false;
+                m_candidateKeys[count] = (cost, place);
                 count++;
             }
 
-            // The sort draws on no randomness, so places of equal cost come out in one order on every run.
-            m_candidateCosts.GetSpan().Slice(start: 0, length: count).Sort(items: m_candidatePlaces.GetSpan().Slice(start: 0, length: count));
+            // Candidates are taken in one total order, cheapest first and the lower place among equal costs, so where a
+            // candidate stands never depends on which other places are listed (a woken place's turn, Wake).
+            var keys = m_candidateKeys.GetSpan()[..count];
+
+            keys.Sort();
+            for (var at = 0; (at < count); at++) { m_candidatePlaces[at] = keys[at].Place; }
 
             var taken = 0;
             var tried = 0L;
@@ -883,6 +935,10 @@ public static class SdfMeshCollapse {
                 }
                 for (var at = start; (at < end); at++) {
                     var place = m_candidatePlaces[at];
+
+                    taken += TakeWoken(before: m_candidateKeys[at], cosine: cosine, error: error, tried: ref tried);
+                    m_taking = m_candidateKeys[at];
+
                     var first = (speculating ? m_specFirst[(at - start)] : -1);
                     var clean = ((first >= 0) && Clean(place: place));
 
@@ -894,6 +950,7 @@ public static class SdfMeshCollapse {
                     taken += TryPlace(cosine: cosine, error: error, place: place, records: (clean ? first : 0), recordsEnd: (clean ? (first + m_specCount[(at - start)]) : 0), tried: ref tried);
                 }
             }
+            taken += TakeWoken(before: (double.PositiveInfinity, int.MaxValue), cosine: cosine, error: error, tried: ref tried);
 
             ProcessWork.Count(kind: Passes);
             ProcessWork.Add(amount: count, kind: Priced);
@@ -901,17 +958,70 @@ public static class SdfMeshCollapse {
             ProcessWork.Add(amount: taken, kind: Taken);
             ProcessWork.Add(amount: speculated, kind: Speculated);
             ProcessWork.Add(amount: redone, kind: Redone);
+            ProcessWork.Add(amount: quiet, kind: Quiet);
             return taken;
         }
+
+        // Quiet places: a place whose last turn skipped or refused every target, each refusal kept by the place's own
+        // revision and the level's budget alone (no link refusal, no unkept refusal, no target skipped as touched), skips
+        // every target again until its revision moves or the budget passes what its measured refusals stand through.
+        //
+        // Invariant: a pass that leaves quiet places out takes exactly the collapses and refusals a pass listing them
+        // takes. At its turn a listed quiet place tries nothing and writes nothing, and only Commit moves a revision; a
+        // commit that moves a left-out place's revision wakes it (Wake), and the pass takes it at the turn its listed
+        // key would have had, the order being total (cost, then place), or not at all if that turn has passed, where the
+        // listed place stood quiet. Enforced by the one revision writer, Commit, calling Wake, and by TryPlace alone
+        // making a place quiet. Where it stops: a new input a kept refusal reads beyond the place's revision and the
+        // budget (a link refusal reads the target's revision, so a place holding one never goes quiet) must wake or
+        // disqualify the place here.
+
+        // Takes the woken places whose turn comes before `before`, cheapest first.
+        private int TakeWoken(in (double Cost, int Place) before, double error, double cosine, ref long tried) {
+            var taken = 0;
+
+            while ((m_wokenCount > 0) && (m_woken[0].CompareTo(other: before) < 0)) {
+                var key = BinaryHeap.Pop(count: ref m_wokenCount, heap: m_woken.GetSpan(), order: default(ItemThenIndexOrder<double>));
+                var place = key.Place;
+
+                m_taking = key;
+                if (m_touched[place] == m_pass) { continue; }
+                if ((m_changed[place] == m_pass) && ((m_kind[place] = Kind(penalize: false, place: place)) == Locked)) { continue; }
+                taken += TryPlace(cosine: cosine, error: error, place: place, records: 0, recordsEnd: 0, tried: ref tried);
+            }
+
+            return taken;
+        }
+        // Wakes a quiet place whose revision a commit moved: one the pass left out takes its turn later in the pass when
+        // that turn is still to come.
+        private void Wake(int place) {
+            if (!m_quiet[place]) { return; }
+            m_quiet[place] = false;
+            if (m_leftOut[place] != m_pass) { return; }
+            m_leftOut[place] = 0;
+
+            var key = (m_quietCost[place], place);
+
+            if (key.CompareTo(other: m_taking) > 0) { BinaryHeap.Push(count: ref m_wokenCount, heap: m_woken.GetSpan(), item: key, order: default(ItemThenIndexOrder<double>)); }
+        }
         // Tries a place's targets cheapest first, taking the first collapse every bound holds and keeping each refusal
-        // until what it read changes; returns 1 when it took one. The records between `records` and `recordsEnd` are a
-        // clean speculation's outcomes of this same loop (Speculate), taken in place of measuring again; the loop measures
+        // until what it read changes; returns 1 when it took one, and makes the place quiet when every refusal it kept
+        // stands on its own revision and the budget alone. The records between `records` and `recordsEnd` are a clean
+        // speculation's outcomes of this same loop (Speculate), taken in place of measuring again; the loop measures
         // every target past them, and the taken collapse, itself.
         private int TryPlace(int place, double error, double cosine, int records, int recordsEnd, ref long tried) {
             var prepared = false;
+            var quiet = true;
+            var through = int.MaxValue;
 
             foreach (var (_, target) in Prices(place)) {
-                if (m_touched[target] == m_pass || Refused(place, target)) { continue; }
+                if (m_touched[target] == m_pass) { quiet = false; continue; }
+                if (Refused(place, target)) {
+                    var low = PackedIntPair.Low(value: m_rejected[PackedIntPair.Pack(high: place, low: target)]);
+
+                    quiet &= (low < 0);
+                    through = ((low < AnyRevision) ? Math.Min(val1: through, val2: (AnyRevision - low)) : through);
+                    continue;
+                }
                 Outcome outcome;
 
                 if ((records < recordsEnd) && (m_specTarget[records] == target) && (m_specOutcome[records] != Outcome.Taken)) {
@@ -930,7 +1040,7 @@ public static class SdfMeshCollapse {
                 }
                 // A refusal that read the neighbour's vertices (a corner's third face matched to one) is kept by no
                 // revision; it is tried again.
-                if (outcome == Outcome.RefusedUnkept) { continue; }
+                if (outcome == Outcome.RefusedUnkept) { quiet = false; continue; }
                 // Only the link test reads the neighbour's fan; every other refusal reads the place's own fan, its
                 // samples and lines, and the neighbour's fixed position, so it stands until the place's revision moves.
                 m_rejected[PackedIntPair.Pack(high: place, low: target)] = PackedIntPair.Pack(high: m_revisions[place], low: outcome switch {
@@ -938,6 +1048,13 @@ public static class SdfMeshCollapse {
                     Outcome.RefusedMeasure => MeasuredAt(budget: m_refusedThrough),
                     _ => AnyRevision,
                 });
+                quiet &= (outcome != Outcome.RefusedLinks);
+                through = ((outcome == Outcome.RefusedMeasure) ? Math.Min(val1: through, val2: m_refusedThrough) : through);
+            }
+            if (quiet) {
+                m_quiet[place] = true;
+                m_quietRevision[place] = m_revisions[place];
+                m_quietThrough[place] = through;
             }
 
             return 0;
@@ -983,6 +1100,14 @@ public static class SdfMeshCollapse {
             PoolFork.Run(body: this, partitions: PartitionRuns.Count(count: m_speculating.Count, run: SpeculativeRun));
 
             return m_speculating.Count;
+        }
+        // Adds the samples this collapser and its workers listed and measured to the process's work.
+        public void CountSamples() {
+            var (listed, measured) = (m_listedSamples, m_measuredSamples);
+
+            foreach (var worker in m_workers) { (listed, measured) = ((listed + worker.m_listedSamples), (measured + worker.m_measuredSamples)); }
+            ProcessWork.Add(amount: listed, kind: Listed);
+            ProcessWork.Add(amount: measured, kind: Measured);
         }
         // The speculated candidates one partition of a block measures.
         private const int SpeculativeRun = 16;
@@ -1394,7 +1519,8 @@ public static class SdfMeshCollapse {
             // The source fan's lines and tracked samples are the same for every neighbour tried, so the first that needs
             // them lists them.
             m_linesListed = false;
-            m_sourcesListed = false;
+            m_sourcesListed = 0;
+            m_sources.Clear();
             m_source = place;
 
             if (m_measured.Length < fan.Count) {
@@ -1427,35 +1553,35 @@ public static class SdfMeshCollapse {
                 Bounds(candidate: ref m_previous[index].Surface);
             }
         }
-        // Lists the samples tracked to the prepared fan's triangles, the removed vertex's first, for Measure.
+        // Lists the next phase of the samples tracked to the prepared fan's triangles for Measure: the removed vertex's,
+        // then every other. Most refusals are decided by the removed vertex's own samples, so the rest are listed only
+        // once a measure has passed all of those, in the order a whole listing gives.
         private void ListSources() {
             var fan = m_from;
             var place = m_source;
+            var phase = m_sourcesListed++;
 
-            m_sourcesListed = true;
-            m_sources.Clear();
-            for (var phase = 0; (phase < 2); phase++) {
-                for (var index = 0; (index < fan.Count); index++) {
-                    for (var sample = m_tracked[fan[index]]; (sample >= 0); sample = m_sampleNext[sample]) {
-                        var vertex = m_sampleVertex[sample];
-                        var at = m_placeOf[vertex];
+            for (var index = 0; (index < fan.Count); index++) {
+                for (var sample = m_tracked[fan[index]]; (sample >= 0); sample = m_sampleNext[sample]) {
+                    var vertex = m_sampleVertex[sample];
+                    var at = m_placeOf[vertex];
 
-                        if ((at == place) != (phase == 0)) { continue; }
-                        var own = m_normals[vertex];
+                    if ((at == place) != (phase == 0)) { continue; }
+                    var own = m_normals[vertex];
 
-                        m_sources.Add(item: new Source {
-                            Sample = sample,
-                            Index = index,
-                            Vertex = vertex,
-                            Px = m_point[at].X,
-                            Py = m_point[at].Y,
-                            Pz = m_point[at].Z,
-                            Own = own,
-                            OwnLength = Math.Sqrt(d: (((own.X * ((double)own.X)) + (own.Y * ((double)own.Y))) + (own.Z * ((double)own.Z)))),
-                            Material = m_sampleMaterial[sample],
-                            Feature = (m_waivesNormals ? m_feature[at] : double.PositiveInfinity),
-                        });
-                    }
+                    m_listedSamples++;
+                    m_sources.Add(item: new Source {
+                        Sample = sample,
+                        Index = index,
+                        Vertex = vertex,
+                        Px = m_point[at].X,
+                        Py = m_point[at].Y,
+                        Pz = m_point[at].Z,
+                        Own = own,
+                        OwnLength = Math.Sqrt(d: (((own.X * ((double)own.X)) + (own.Y * ((double)own.Y))) + (own.Z * ((double)own.Z)))),
+                        Material = m_sampleMaterial[sample],
+                        Feature = (m_waivesNormals ? m_feature[at] : double.PositiveInfinity),
+                    });
                 }
             }
         }
@@ -1727,11 +1853,16 @@ public static class SdfMeshCollapse {
             var candidates = Lay(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond);
 
             m_laidCount = candidates;
-            if (!m_sourcesListed) { ListSources(); }
-            // The removed vertex is often the first sample that refuses a target, so PrepareFrom lists its samples first,
-            // then all remaining samples; each still chooses its exact nearest admissible witness independently of the
-            // others.
-            foreach (ref readonly var source in CollectionsMarshal.AsSpan(list: m_sources)) {
+            // The removed vertex is often the first sample that refuses a target, so its samples are listed and measured
+            // first, then all remaining samples; each still chooses its exact nearest admissible witness independently of
+            // the others.
+            for (var next = 0; ; next++) {
+                while ((next == m_sources.Count) && (m_sourcesListed < 2)) { ListSources(); }
+                if (next >= m_sources.Count) { break; }
+
+                ref readonly var source = ref CollectionsMarshal.AsSpan(list: m_sources)[next];
+
+                m_measuredSamples++;
                 // A sample's own triangle, where it stays, is measured first: it is most often the nearest, and the
                 // others then fall to the bound on the nearest yet.
                 var laid = m_laid[source.Index];
@@ -1959,6 +2090,7 @@ public static class SdfMeshCollapse {
                 for (var corner = (3 * triangle); (corner < ((3 * triangle) + 3)); corner++) {
                     m_priceRuns[m_cornerPlace[corner]].Ready = false;
                     m_revisions[m_cornerPlace[corner]] = m_revision;
+                    Wake(place: m_cornerPlace[corner]);
                     m_blockStamp[m_cornerPlace[corner]] = m_block;
                 }
                 m_tracked[triangle] = -1;

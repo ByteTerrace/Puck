@@ -185,16 +185,29 @@ public sealed partial class WorldRuleHost {
         )
         : FixedQ4816.One
     );
-    // The nearest active body to the origin (itself excluded) whose cell in the keyed tag row reads nonzero, or -1: a
-    // walk of the row's held cells, so its cost follows the tagged bodies, never the population's capacity. Distances
-    // compare exactly (FixedVector3.CompareLengthTo), and equal ones resolve to the lowest body.
-    private int ResolveNearestBody(int origin, int tagRowOrdinal) {
+    // The body a walk of the keyed tag row's held cells chooses for the origin (itself excluded), or -1, so its cost
+    // follows the tagged bodies, never the population's capacity. With no envelope it is the nearest tagged body:
+    // distances compare exactly (FixedVector3.CompareLengthTo), and equal ones resolve to the lowest body. Under an
+    // envelope it is the target query (WorldTargetEnvelope): a candidate stands within the range and within the
+    // half-angle of the origin's planar forward axis (-Z under its orientation), bearing measured positive to its right;
+    // with no current target the least distance times one plus the bearing's magnitude wins, and with one the least
+    // bearing beyond the current target's, wrapping to the least bearing of all.
+    private int ResolveNearestBody(int origin, int tagRowOrdinal, WorldTargetEnvelope? envelope = null, int current = -1) {
         if (Host.Body(index: origin) is not { } from) {
             return -1;
         }
 
+        var forward = from.FixedOrientation.Rotate(vector: LocalForward);
+        var planarForward = new FixedVector3(X: forward.X, Y: FixedQ4816.Zero, Z: forward.Z);
+        var right = new FixedVector3(X: -planarForward.Z, Y: FixedQ4816.Zero, Z: planarForward.X);
+        var currentBearing = FixedQ4816.Zero;
+        var cycles = ((envelope is not null) && (current >= 0) && (Host.Body(index: current) is { } held) &&
+            TryBearing(offset: (held.FixedPosition - from.FixedPosition), bearing: out currentBearing));
         var best = -1;
         var bestOffset = FixedVector3.Zero;
+        var bestScore = FixedQ4816.Zero;
+        var wrap = -1;
+        var wrapScore = FixedQ4816.Zero;
         var cursor = 0;
         var walked = 0L;
         var time = Time;
@@ -206,15 +219,54 @@ public sealed partial class WorldRuleHost {
             }
 
             var offset = (candidate.FixedPosition - from.FixedPosition);
-            var order = ((best < 0) ? -1 : offset.CompareLengthTo(other: bestOffset));
 
-            if ((order < 0) || ((order == 0) && (index < best))) {
-                best = index;
-                bestOffset = offset;
+            if (envelope is null) {
+                var order = ((best < 0) ? -1 : offset.CompareLengthTo(other: bestOffset));
+
+                if ((order < 0) || ((order == 0) && (index < best))) {
+                    best = index;
+                    bestOffset = offset;
+                }
+                continue;
+            }
+
+            var distance = offset.Length;
+
+            if ((distance > envelope.Range) || !TryBearing(offset: offset, bearing: out var bearing) || (FixedQ4816.Abs(value: bearing) > envelope.HalfAngle)) {
+                continue;
+            }
+            if (!cycles) {
+                var score = (distance * (FixedQ4816.One + FixedQ4816.Abs(value: bearing)));
+
+                if ((best < 0) || (score < bestScore) || ((score == bestScore) && (index < best))) {
+                    (best, bestScore) = (index, score);
+                }
+                continue;
+            }
+            if ((index != current) && ((bearing > currentBearing) || ((bearing == currentBearing) && (index > current))) &&
+                ((best < 0) || (bearing < bestScore) || ((bearing == bestScore) && (index < best)))) {
+                (best, bestScore) = (index, bearing);
+            }
+            if ((wrap < 0) || (bearing < wrapScore) || ((bearing == wrapScore) && (index < wrap))) {
+                (wrap, wrapScore) = (index, bearing);
             }
         }
         WorldTickWork.Process.Add(amount: walked, kind: WorldTickWork.NearestCells);
-        return best;
+        return ((cycles && (best < 0)) ? wrap : best);
+
+        // The signed planar angle from the origin's forward axis to an offset, positive to its right; false for an offset
+        // straight above or below the origin, which has no bearing.
+        bool TryBearing(FixedVector3 offset, out FixedQ4816 bearing) {
+            var along = FixedVector3.Dot(left: offset, right: planarForward);
+            var across = FixedVector3.Dot(left: offset, right: right);
+
+            if ((along == FixedQ4816.Zero) && (across == FixedQ4816.Zero)) {
+                bearing = FixedQ4816.Zero;
+                return false;
+            }
+            bearing = FixedQ4816.Atan2(y: across, x: along);
+            return true;
+        }
     }
     private FixedQ4816 ReadBodyDistance(int bodyA, int bodyB) => (
         ((Host.Body(index: bodyA) is { } a) && (Host.Body(index: bodyB) is { } b))

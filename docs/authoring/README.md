@@ -13,6 +13,7 @@ not bypass the document's rules.
 | Write one shader or a multi-pass effect | [Live shader workflow](../../src/Puck.World/README.md#shader-pipelines), then the [pipeline contract](../reference/shaders.md#shader-pipelines-and-live-development). |
 | Build a cartridge | [Cartridge DSL](../../src/Puck.GamingBricks.Transpiler/README.md) and [forge workflow](../../src/Puck.GamingBricks.Forge/README.md). |
 | Author shapes or audio | [World authoring library](../../src/Puck.World.Authoring/README.md). |
+| Show the maths behind an exhibit on a terminal's screen | [The learn panel](learn-panel.md): the engine's formulas typeset, terms, scrolling steps and a scrub. |
 
 ## Source, document and running state
 

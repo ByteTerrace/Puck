@@ -31,6 +31,11 @@ public static class WorldRuleFacts {
     /// other than <c>x</c>, <c>y</c> or <c>z</c> is refused by name
     /// (<see cref="WorldRuleRefusal.BodyPositionMalformed"/>).</summary>
     public const string BodyPositionPrefix = "$bodyPosition:";
+    /// <summary>The prefix; <c>$bodyForward:&lt;bodyRef&gt;:x|y|z</c> (<c>bodyForward(each, x)</c> in <c>.puck</c>) reads
+    /// one world axis of the named body's forward direction (its local -Z under its live orientation), a unit vector, so
+    /// a rule places something ahead of a body: a ping where it faces. A reference resolving to no live body reads
+    /// <c>0</c>.</summary>
+    public const string BodyForwardPrefix = "$bodyForward:";
     /// <summary>The prefix; <c>$bodyState:&lt;bodyRef&gt;:&lt;slot&gt;</c> (<c>bodyState(each, fuel)</c> in
     /// <c>.puck</c>) reads one of the named body's action-state slots, declared in <c>state.body</c> or
     /// <c>state.identity</c>: a counter's value, or a timer's remaining seconds
@@ -96,6 +101,15 @@ public static class WorldRuleFacts {
     /// <summary>The reserved channel reading one fact on the identity a body drives under:
     /// <c>$identity:&lt;bodyRef&gt;:&lt;fact&gt;</c>, answered from the world's <see cref="WorldIdentityFactLane"/>.</summary>
     public const string IdentityPrefix = "$identity:";
+    /// <summary>The prefix; <c>$record:&lt;bodyRef&gt;:&lt;pool&gt;:&lt;slot&gt;:&lt;field&gt;[:&lt;text&gt;]</c>
+    /// (<c>record(body, 0, marks, $each, x)</c> in <c>.puck</c>) reads one field of the live instance in a slot of a
+    /// record pool on the identity the named body drives under (<see cref="WorldIdentity.TryReadRecord"/>): an Int
+    /// field as its integer, a Fixed field as itself, a flag as 0 or 1, and a text field compared with the trailing
+    /// text as 1 when equal and 0 otherwise. The slot is a non-negative literal or
+    /// <c>$each</c>, the swept key read as a slot index. It reads absent for a body under no identity, an empty slot, a
+    /// pool or field the identity does not hold, or a text field read with no text. The pool and field live on the identity's own
+    /// document, which a world's compile cannot read, so they are checked as names only.</summary>
+    public const string RecordPrefix = "$record:";
     /// <summary><c>$influence:&lt;channel&gt;:&lt;placementId&gt;</c> counts distinct other placements covering
     /// the target with the named influence. An optional read key addresses a dealt child of the named template.
     /// Channels are opaque shared labels, so importing a module does not rename them. A missing child reads absent.</summary>
@@ -140,6 +154,13 @@ public static class WorldRuleFacts {
     /// <c>row</c> tags enemies — or <c>-1</c> when no such body exists. Ties resolve to the lowest index. The body
     /// reference takes the same tokens <see cref="DistancePrefix"/> takes.</summary>
     public const string NearestPrefix = "$nearest:";
+    /// <summary>The prefix; <c>$target:&lt;bodyRef&gt;:&lt;row&gt;:&lt;range&gt;:&lt;halfAngleDegrees&gt;[:&lt;currentBodyRef&gt;]</c>
+    /// (<c>target(each, lockable, 12, 50)</c> in <c>.puck</c>) is the target query: the body a lock-on picks among
+    /// those whose cell in the keyed <c>row</c> reads nonzero, within <c>range</c> metres of <c>bodyRef</c> and within
+    /// <c>halfAngleDegrees</c> of its planar forward axis (<see cref="WorldTargetEnvelope"/>). With a current body
+    /// reference it cycles to the next candidate to the right, so a press steps through what stands in view. Yields
+    /// <c>-1</c> when no candidate qualifies. The tag row is the author's statement of what can be targeted.</summary>
+    public const string TargetPrefix = "$target:";
     /// <summary>The prefix a cell KEY may carry to address a row by a genuine (observer, subject) pair rather than
     /// one body: <c>$pair:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> resolves, at every read and every firing, to the
     /// composite key <c>"&lt;a&gt;_&lt;b&gt;"</c> (underscore, since <see cref="CellName"/> reserves <c>:</c>)

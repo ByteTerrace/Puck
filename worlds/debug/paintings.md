@@ -58,15 +58,16 @@ Issue each line through the console or the World's MCP attachment.
   glass and in.
 
 A headless seat keeps its heading at -Z, so there `body.fly` walks along the
-heading and a sideways walk is a strafe: `body.pose 57 0.05 36.3 180 0 0`, then
-`body.fly -1 0 0 0 0 0 2` walks +Z into the garden painting, and `body.pose
+heading and a sideways walk is a strafe: `body.pose spawn:portal-garden`, then
+`body.fly 1 0 0 0 0 0 2` walks -Z into the garden painting, and `body.pose
 56.425 0.05 14.975 90 0 0`, then `body.fly 0 -1 0 0 0 0 2` walks -X into the west
 painting.
 
 A door fires once the body's origin, at its feet, passes through the glass. A
 wall painting's canvas reaches the floor, so the feet cross it, and the wall
 behind the glass holds nothing back while the body stands in the opening
-(`WorldPortalHoleContactField`).
+(`WorldPortalHoleContactField`), and offers nothing to climb or anchor to through
+the glass, so a walk into the door is not taken for a climb up the wall.
 
 ## The endless fall
 

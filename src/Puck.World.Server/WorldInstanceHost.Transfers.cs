@@ -1868,45 +1868,21 @@ public sealed partial class WorldInstanceHost {
         }
 
         var definition = instance.Server.Definition;
-        var catalog = WorldFaceCatalog.For(definition: definition);
-        var crossingFloor = WorldFacePortalPolicy.CrossingFloor(definition: definition);
+        var doors = WorldFaceCatalog.For(definition: definition).PortalDoors(definition: definition);
 
-        foreach (var placement in definition.Placements) {
-            if (
-                (placement is null) ||
-                (placement.FaceSources is not { Count: > 0 } faces)
-            ) {
-                continue;
-            }
+        for (var index = 0; (index < doors.Count); index++) {
+            var door = doors[index];
 
-            foreach (var face in faces) {
-                if (
-                    (face.Portal is null) ||
-                    !catalog.TryFind(
-                    placementId: placement.Id,
-                    faceName: face.Face,
-                    out var row
-                ) ||
-                    !WorldFacePortalPolicy.TryAperture(
-                    aperture: out var aperture,
-                    crossingFloor: crossingFloor,
-                    row: in row
-                )
-                ) {
-                    continue;
-                }
-
-                if (WorldFaceRegion.Sweep(
-                    aperture: aperture!,
-                    from: body.FixedPosition,
-                    to: body.FixedPosition
-                ).Inside) {
-                    instance.PortalOccupancy.SeedInside(
-                        placementId: placement.Id,
-                        faceName: face.Face,
-                        seat: seat
-                    );
-                }
+            if (WorldFaceRegion.Sweep(
+                aperture: door.Aperture,
+                from: body.FixedPosition,
+                to: body.FixedPosition
+            ).Inside) {
+                instance.PortalOccupancy.SeedInside(
+                    placementId: definition.Placements[door.Row].Id,
+                    faceName: door.Face.Face,
+                    seat: seat
+                );
             }
         }
     }

@@ -185,7 +185,7 @@ public sealed partial class SdfWorldTables {
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.MotionRowsSpared, amount: spared);
     }
 
-    private sealed class SlotJudges(SdfWorldTables owner) : Puck.Hosting.Jobs.IJobPartitions {
+    private sealed class SlotJudges(SdfWorldTables owner) : Puck.Abstractions.Jobs.IJobPartitions {
         public int Count;
 
         public void Run(int partition) {

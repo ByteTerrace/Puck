@@ -1,3 +1,4 @@
+using Puck.Abstractions.Jobs;
 using System.Numerics;
 using Puck.Abstractions.Memory;
 
@@ -150,7 +151,7 @@ public static class SdfMeshChunks {
             vertexBase += count;
             triangleBase += binTriangles;
         }
-        Parallel.For(0, chunks.Length, part => {
+        PoolFork.Run(partitions: chunks.Length, body: part => {
             chunks[part] = SdfMeshCollapse.Levels(chunks[part], preserveFeatures, owner, allocator) with { BakedSites = null };
         });
         // A chunk whose levels made vertices holds them past its own, and a clustered chunk holds its own triangles in its

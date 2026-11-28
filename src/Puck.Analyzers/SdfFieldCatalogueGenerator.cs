@@ -172,6 +172,13 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
             }
             var formulas = ordered.SelectMany(static entry => entry.Formulas.Select(use => (Entry: entry, Use: use))).ToArray();
             if (formulas.Length != 0) {
+                source.AppendLine("    /// <summary>Enumerates each entry's shared formulas with the facet that names each, in encoding order: the");
+                source.AppendLine("    /// readable lowering (SdfFormulaTypesetting) reads the catalogue through it, so it lists exactly what the readers lower.</summary>");
+                source.AppendLine($"    internal static global::System.Collections.Generic.IEnumerable<({discriminator} Value, string Facet, SdfFormula Formula)> FormulaUses() {{");
+                foreach (var (entry, use) in formulas) {
+                    source.AppendLine($"        yield return ({discriminator}.{entry.Name}, \"{use.Property}\", SdfFieldFormulas.{use.Field});");
+                }
+                source.AppendLine("    }");
                 source.AppendLine("    /// <summary>Lowers the catalogue's shared formulas to shader functions.</summary>");
                 source.AppendLine("    public static string GenerateFormulasHlsl() => SdfFormula.EmitAll(true,");
                 source.AppendLine("        " + string.Join(", ", formulas.Select(static item => "SdfFieldFormulas." + item.Use.Field).Distinct()) + ");");

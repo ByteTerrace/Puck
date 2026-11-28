@@ -11,7 +11,8 @@ import "../standard/contexts/conversation"
 import "../standard/journal"
 
 let movement = movementChannels
-let controls = ["jump", "suit", "noclip", "journal"]
+// The lock-on and marks keys (targeting.puck) and her journal's key are hers in every form she walks or flies in.
+let controls = ["jump", "suit", "noclip", "lock", "lockCycle", "ping", "mark", "markClear", "journal"]
 let flyingRise = [{ keep ["rise"], from { flight: "flying" }, to { flight: "flying" } }]
 let talking = { family: "conversation", states ["talking"] }
 // A seat engaged anywhere, at a bench, at a terminal or talking with a steward, has none of the families that move her
@@ -25,7 +26,7 @@ let engagedAnywhere = [
 
 inputModes {
   // A tap reaches a pointer surface in every mode, as the context button reaches what is beside her.
-  global ["interact", "tap"]
+  global ["interact", "tap", "scroll"]
   families [
     {
       name: "form"

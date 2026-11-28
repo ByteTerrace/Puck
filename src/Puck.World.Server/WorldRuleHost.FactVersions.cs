@@ -296,7 +296,9 @@ public sealed partial class WorldRuleHost {
                 facts.Add(item: new FactRead(Body: WatchValue(fact: bodyOperand, readsInput: false, spelling: bodyOperand.Describe), Source: ValueSource));
 
                 return true;
-            case NearestOperand nearest when (nearest.BodyA.Kind == CompiledBodyRefKind.Literal): {
+            // A target query cycling from a body a cell names reads that cell's row too, which the watch does not name:
+            // it stays volatile.
+            case NearestOperand nearest when ((nearest.BodyA.Kind == CompiledBodyRefKind.Literal) && (nearest.Envelope?.Current is null)): {
                 var tagRow = OrdinalOf(handle: nearest.StateHandle);
 
                 if (tagRow >= 0) {

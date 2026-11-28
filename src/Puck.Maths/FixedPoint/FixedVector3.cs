@@ -452,6 +452,16 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
                 y: value.Z
             )
         );
+    /// <summary>Sums the magnitudes of a vector's three components, its L1 norm. No component of the vector under any
+    /// rotation exceeds it, so it bounds how far a turned offset reaches along any axis without the rotation.</summary>
+    /// <param name="value">The vector to read.</param>
+    /// <returns><c>|X| + |Y| + |Z|</c>, saturated at <see cref="FixedQ4816.MaxValue"/>.</returns>
+    /// <exception cref="OverflowException">A component is <see cref="FixedQ4816.MinValue"/>, whose magnitude is
+    /// unrepresentable.</exception>
+    public static FixedQ4816 L1Norm(FixedVector3 value) => FixedSaturate.Add(
+        left: FixedSaturate.Add(left: FixedQ4816.Abs(value: value.X), right: FixedQ4816.Abs(value: value.Y)),
+        right: FixedQ4816.Abs(value: value.Z)
+    );
     /// <summary>Moves a vector toward a target by no more than a non-negative distance.</summary>
     /// <param name="current">The current vector.</param>
     /// <param name="target">The target vector.</param>

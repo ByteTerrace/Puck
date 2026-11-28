@@ -502,7 +502,8 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
                     return new CompiledBodyRef(
                         Handle: Catalog.Descriptors[cell.RowOrdinal].Handle,
                         Index: -1,
-                        Key: KeyName(key: cell.Key),
+                        Key: ((cell.InnerKeyBinding == BoundKey.None) ? KeyName(key: cell.Key) : null),
+                        KeyBinding: cell.InnerKeyBinding,
                         Kind: CompiledBodyRefKind.Cell,
                         Row: Catalog.Descriptors[cell.RowOrdinal].Name
                     );
@@ -614,6 +615,7 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
             ? resolved
             : default),
         Kind: body.Kind,
+        KeyBinding: body.KeyBinding,
         PlacementOrdinals: body.PlacementOrdinals,
         RowOrdinal: (body.Handle.IsValid
             ? body.Handle.Ordinal

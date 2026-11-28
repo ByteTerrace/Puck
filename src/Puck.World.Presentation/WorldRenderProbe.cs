@@ -24,6 +24,9 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
     /// <summary>Gets or sets the frame presenter's composed frame source, whose latest program emission and build
     /// <c>world.residency</c> times, or <see langword="null"/> before the presenter is built.</summary>
     public SdfCompositionFrameSource? Composition { get; set; }
+    /// <summary>Gets or sets what describes the boot world's math texts as the latest frame laid them out (each slot's
+    /// formulas, highlighted term, values and scroll), or <see langword="null"/> before the presenter is built.</summary>
+    public Func<IReadOnlyList<string>>? MathTexts { get; set; }
 
     private readonly Lock m_gate = new();
     private readonly List<WorkEntry> m_views = [];

@@ -359,11 +359,12 @@ public static class WorldEffect {
     ) : ActionEffect;
 }
 /// <summary>One field an identity record effect writes: exactly one of a numeric literal (stored as the field's own
-/// kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires,
+/// kind: an integer, a fixed-point value, or a flag of 0 or 1), a numeric expression evaluated in fixed point when the
+/// effect fires (a Fixed field keeps its fraction, an Int field refuses a value with one, a flag reads nonzero as 1),
 /// or a text literal.</summary>
 /// <param name="Field">The record field.</param>
 /// <param name="Value">The numeric literal.</param>
-/// <param name="Expression">The integer expression.</param>
+/// <param name="Expression">The numeric expression.</param>
 /// <param name="Text">The text literal.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldIdentityRecordValue(
