@@ -321,9 +321,13 @@ gone (0 to 1, from the `mantling` timer). Her rig's `mantle` driver (the
 standard rig's `progressLayer`) plays that as one turn of the mantle curves in
 [moth.puck](moth.puck), and takes her hips, chest, head, arms and legs from every
 other layer while it runs. Her arms snap up for the catch as her chest arches and
-her head looks up at the lip, her hands come down onto the top as she pulls, her
-arms push while her chest drives over her hands and her knees tuck up under her,
-and then her left leg reaches over the top and her right pushes off, back in her
+her head looks up at the lip. Her palms then plant on the top: a `mantle-hand`
+effector per arm (the standard rig's `ledgeHand`) probes forward and down for it,
+latches the spot and holds the hand there, weighted by the `mantle-plant` curve.
+Her hips drop toward her tucked feet, which ride the move's path, so her
+shoulders come low over the lip; her arms push while her chest drives over her
+hands and her knees tuck up under her, and her hands let go once her chest is over
+them. Then her left leg reaches over the top and her right pushes off, back in her
 run's pose as she lands.
 
 ## Verify edits

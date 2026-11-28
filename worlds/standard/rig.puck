@@ -25,12 +25,39 @@ function progressLayer(name, row, blendIn = 0.03, blendOut = 0.12) = {
   when [$"state.{row}.$body"]
 }
 
+// A hand that plants on a ledge's top through a move a progress layer plays (`progressLayer`): an effector over `chain`
+// to its `tip`, gated on the body's `row` cell, that probes `direction` (forward and down from the hand, in the creation
+// frame) up to `reach` for the top, latches the spot it finds for the plant `window` of `driver`'s phase and holds the
+// hand there while the body carries on past it, its weight `driver`'s phase read on the `weight` curve. Owned by
+// `driver`, so the layer that takes the arm from every other driver leaves this one on.
+function ledgeHand(name, chain, tip, row, driver, weight, window, reach = 1.2, direction = [0, -0.8, -0.6], standoff = 0.04) = {
+  name: name
+  chain: chain
+  tip: tip
+  align: 0
+  when [$"state.{row}.$body"]
+  weightBy { driver: driver, curve: weight }
+  blendInSeconds: 0.03
+  blendOutSeconds: 0.08
+  target {
+    kind: "surface"
+    direction: direction
+    reach: reach
+    standoff: standoff
+  }
+  plant {
+    driver: driver
+    window: window
+  }
+}
+
 // A world `curves` row keyed like an animation channel: `keys` are [progress, value] pairs, progress rising from 0 to 1,
 // and the curve eases in and out of every key (each span the smoothstep cubic between its keys, flat at both), so a
 // `curve:<name>` wave plays the value at each key and settles there. The row's X is `span` times the progress, long
 // against the values' range, so its arc, which a curve wave samples by, runs nearly evenly with the progress. Each
 // knot's curvature is the cubic's on either side of it: six times the span's rise over its run squared, leaving
-// upward and arriving downward when the value rises, so the spline meets every key flat.
+// upward and arriving downward when the value rises, so the spline meets every key flat. A curve's curvature stays
+// within 8, so each span's run, in X, is at least the square root of three quarters of its rise.
 function easedCurve(name, keys, span = 20) = {
   name: name
   knots: map(range(0, length(keys)), i => easedKnot(keys, i, span))

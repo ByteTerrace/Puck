@@ -691,7 +691,7 @@ template mothLimbs(side, isRight, scout) {
     profile {
       kind: "Convex"
       vertices [[-0.6, 1], [0.6, 1], [1, 0.2], [0.7, -0.7], [-0.7, -0.7], [-1, 0.2]]
-      cornerRadius: 0.12
+      cornerRadius: 0.3
     }
   }
 
@@ -745,7 +745,7 @@ template mothLimbs(side, isRight, scout) {
         bySide(isRight, [0.4, -1], [-0.7666667, 0.8888889])
         bySide(isRight, [-0.7, -0.75], [0.8, 0.8888889])
       ]
-      cornerRadius: 0.12
+      cornerRadius: 0.3
     }
   }
 
@@ -891,12 +891,12 @@ template mothLimbs(side, isRight, scout) {
     scale [0.165 * slim, 0.24, 0.25]
     material: violet
     blend: "SmoothIntersection"
-    smooth: 0.02
+    smooth: 0.03
     group: bootGroup(isRight)
     parent: $"boot-{side}"
     profile {
       kind: "Convex"
-      cornerRadius: 0.12
+      cornerRadius: 0.25
       vertices: bootPlanOutline
     }
   }
@@ -908,7 +908,7 @@ template mothLimbs(side, isRight, scout) {
     scale [0.5, 0.5, 0.5]
     material: violet
     blend: "SmoothIntersection"
-    smooth: 0.02
+    smooth: 0.03
     group: bootGroup(isRight)
     parent: $"boot-{side}"
   }
@@ -933,7 +933,7 @@ template mothLimbs(side, isRight, scout) {
     parent: $"boot-{side}"
     profile {
       kind: "Convex"
-      cornerRadius: 0.12
+      cornerRadius: 0.25
       vertices: bootPlanOutline
     }
   }
@@ -950,7 +950,6 @@ template mothLimbs(side, isRight, scout) {
       blend: "Subtraction"
       group: bootGroup(isRight)
       parent: $"boot-{side}"
-      rounding: 0.008
     }
 
     shape Cylinder $"heelHousing-{side}" {
@@ -1038,12 +1037,12 @@ template mothLimbs(side, isRight, scout) {
     scale [0.18 * slim, 0.2, 0.2]
     material: violet
     blend: "SmoothIntersection"
-    smooth: 0.02
+    smooth: 0.03
     group: toeGroup(isRight)
     parent: $"boot-{side}"
     profile {
       kind: "Convex"
-      cornerRadius: 0.12
+      cornerRadius: 0.25
       vertices: bootPlanOutline
     }
   }
@@ -1098,7 +1097,7 @@ template mothLimbs(side, isRight, scout) {
         ]
         profile {
           kind: "Convex"
-          cornerRadius: 0.3
+          cornerRadius: 0.5
           sides: 6
           vertices [
             [-1, -0.8]
@@ -1118,10 +1117,9 @@ template mothLimbs(side, isRight, scout) {
         scale [0.12, 0.24, 0.12]
         material: violet
         blend: "SmoothSubtraction"
-        smooth: 0.02
+        smooth: 0.03
         group: cheek.group + isRight * 2
         parent: $"heelCheek-{cheek.name}-{side}"
-        rounding: 0.008
       }
     }
 
@@ -1451,21 +1449,8 @@ prototypes {
           coat: 0
           wrap: 0.35
           fill: "#8A4A2C"
-          // The mouth, in the face's frame: a line where the face crosses a thin quadratic sweep laid on it.
-          paints [
-            {
-              parent: "face"
-              type: "Sweep"
-              curve {
-                a: map([-0.05808, -0.088389, 0.1068], v => v * headScale)
-                b: map([0, -0.1141765, 0.1082], v => v * headScale)
-                c: map([0.05808, -0.0862981, 0.1078], v => v * headScale)
-                radiusStart: 0.0015
-                radiusEnd: 0.0015
-              }
-              color: "#754137"
-            }
-          ]
+          // The mouth and the closed lids' lash lines (head.puck).
+          paints: mothSkinPaints(headScale)
         }
         {
           color: "#171210"
@@ -1764,6 +1749,14 @@ prototypes {
             axis [0, 1, 0]
             amplitude: 0.025
             wave: "linear"
+          }
+          // Over a ledge her hips drop half a metre toward her tucked feet, which ride the move's path, so her
+          // shoulders come low over the lip and her planted hands reach it.
+          {
+            driver: "mantle"
+            axis [0, 1, 0]
+            amplitude: -0.5
+            wave: "curve:mantle-fold"
           }
         ]
       }
@@ -2417,6 +2410,19 @@ prototypes {
               window: limb.window
             }
           }
+        }
+        // Over a ledge her palms plant on the top from the catch until her chest is over them (moth.puck's mantle
+        // curves).
+        for side in ["left", "right"] {
+          ledgeHand(
+            name: $"mantle-hand-{side}",
+            chain: [$"upperArm-{side}", $"forearm-{side}"],
+            tip: $"palm-{side}",
+            row: "mantlePose",
+            driver: "mantle",
+            weight: "mantle-plant",
+            window: [0.5, 5.03]
+          )
         }
       ]
     }

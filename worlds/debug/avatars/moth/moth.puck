@@ -226,19 +226,21 @@ curves [
 ]
 
 // Her mantle, keyed over the move: each curve is one joint's share of its pose against the move's progress, eased in
-// and out of every key (the standard rig's `easedCurve`), and her rigs play them on the `mantle` driver, which reads `mantlePose` (the progress) as one turn and takes her joints from every other
-// layer while it runs. The move rises straight up beside the face before it carries her in over the top
-// (WorldBody's MantleMove), so the keys follow it: her arms snap up for the catch (0.08) as her chest arches back and
-// her head looks up at the lip; her hands come down onto the top and her elbows bend as she pulls (0.22); her arms
-// straighten under her shoulders and push (0.45) while her chest drives over her hands and her knees tuck up under her
-// (0.6), her feet clearing the lip; then her arms sweep back, her leading leg reaches over the top and her trailing leg
-// pushes off (0.8 to 0.92), and every joint is back in her run's pose at the landing (1), so she steps out running.
+// and out of every key (the standard rig's `easedCurve`), and her rigs play them on the `mantle` driver, which reads
+// `mantlePose` (the progress) as one turn and takes her joints from every other layer while it runs. The move rises
+// straight up beside the face before it carries her in over the top (WorldBody's MantleMove), with her feet on that
+// path, so her hips drop toward her tucked feet (`mantle-fold` on the pelvis's slide) and keep her shoulders low over
+// the lip. Her arms snap up for the catch (0.08) as her chest arches back and her head looks up at the lip; her hands
+// plant on the top (the rigs' mantle hand effectors, weighted by `mantle-plant`) and her elbows bend as she pulls; her
+// chest drives over her hands and her knees tuck up under her (0.6), her feet clearing the lip; her hands push until her
+// chest is over them and let go (0.8); her leading leg reaches over the top and her trailing leg pushes off (0.92), and
+// every joint is back in her run's pose at the landing (1), so she steps out running.
 function mantleCurve(name, keys) = easedCurve(name, keys)
 curves [
-  // The upper arms' swing forward and up (1) and back past her sides (negative).
-  mantleCurve("mantle-reach", [[0, 0], [0.08, 1], [0.25, 0.45], [0.45, 0.05], [0.6, -0.1], [0.8, -0.3], [1, 0]])
+  // The upper arms' swing forward and up (1), which the hand effectors take over while the hands are planted.
+  mantleCurve("mantle-reach", [[0, 0], [0.08, 1], [0.3, 0.6], [0.6, 0.2], [0.8, 0.05], [0.9, -0.05], [1, 0]])
   // The elbows' bend.
-  mantleCurve("mantle-elbow", [[0, 0], [0.08, 0.1], [0.22, 1], [0.45, 0.1], [0.7, 0.3], [1, 0]])
+  mantleCurve("mantle-elbow", [[0, 0], [0.08, 0.1], [0.22, 1], [0.45, 0.2], [0.8, 0.1], [1, 0]])
   // The chest's lean over her hands (1), arched back at the catch (negative).
   mantleCurve("mantle-chest", [[0, 0], [0.08, -0.3], [0.3, 0.4], [0.55, 1], [0.8, 0.5], [1, 0]])
   // The head's look up at the lip (1) and down over the top (negative).
@@ -246,8 +248,11 @@ curves [
   // The knees' tuck: the leading leg's hip lifts and reaches over the top, the trailing leg's pushes back off it.
   mantleCurve("mantle-tuck-lead", [[0, 0], [0.1, 0.15], [0.4, 0.85], [0.6, 1], [0.8, 0.75], [0.92, 0.45], [1, 0]])
   mantleCurve("mantle-tuck-trail", [[0, 0], [0.1, 0.15], [0.4, 0.85], [0.6, 1], [0.8, 0.4], [0.92, -0.15], [1, 0]])
-  // The knees' fold.
+  // The knees' fold, and the hips' drop toward the tucked feet.
   mantleCurve("mantle-fold", [[0, 0], [0.1, 0.2], [0.4, 0.9], [0.6, 1], [0.8, 0.5], [0.92, 0.15], [1, 0]])
+  // How firmly her hands hold the top: on at the catch, held through the push, let go once her chest is over them. A
+  // weight read at the driver's phase, so its X is the phase itself (2π a move).
+  easedCurve("mantle-plant", [[0, 0], [0.02, 0], [0.16, 1], [0.7, 1], [0.84, 0], [1, 0]], span: 2 * pi)
 ]
 
 dynamics [
