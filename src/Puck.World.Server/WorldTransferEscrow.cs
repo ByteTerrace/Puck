@@ -344,8 +344,9 @@ public sealed partial class WorldTransferEscrow {
     private IReadOnlyList<int> m_relandLeased = [];
     private bool m_relandRolledBack;
 
-    // A re-drive's one detached identity per owned id. Live, an id names one owned object, so every seat a recorded
-    // switch or home adoption binds under it shares that object; the re-drive binds them to one detached identity the
+    // A re-drive's one detached identity per owned id, over a live account the re-drive must not write (TryBindReplayed;
+    // over a replay's account copy the copy's own identity serves). Live, an id names one owned object, so every seat a
+    // recorded switch or home adoption binds under it shares that object; the re-drive binds them to one detached identity the
     // same way, for the whole re-drive. Only Restore clears it.
     private readonly Dictionary<string, WorldIdentity> m_detachedIdentities = new(comparer: StringComparer.Ordinal);
 
@@ -1545,70 +1546,58 @@ public sealed partial class WorldTransferEscrow {
         }
     }
 
-    /// <summary>Binds a re-drive's taped identity to the one detached identity its id names: built from the first
-    /// projection taped under the id, and adopting each later one, so every seat a recorded switch or home adoption
-    /// binds under one id shares it, as the live seats shared the one owned object.</summary>
-    /// <param name="taped">The projection the tape recorded for the binding.</param>
-    /// <param name="detached">The detached identity to bind.</param>
-    /// <param name="reason">Why the detached identity refused the taped projection, or empty.</param>
-    /// <returns><see langword="true"/> when the projection is bound.</returns>
-    internal bool TryBindDetached(in WorldIdentityProjection taped, out WorldIdentity detached, out string reason) {
+    /// <summary>Binds an identity a replay reads as the recording carried it: the one door a re-drive's arrival, its home
+    /// adoption and its recorded seat switch, and any arrival a replay over an account copy lands, all bind through. Over
+    /// a replay's account copy (<see cref="WorldOwnedWorlds.IsReplayCopy"/>) it is the copy's own identity of that id,
+    /// which first adopts the taped projection when it differs, so every seat under the id shares it as the live seats
+    /// shared the one owned object, the seats the restore bound included. Over a live account, which a re-drive never
+    /// writes, it is the one detached identity the id names: built from the first projection taped under the id, and
+    /// adopting each later one.</summary>
+    /// <param name="taped">The projection the tape recorded, or the arrival carried, for the binding.</param>
+    /// <param name="bound">The identity to bind.</param>
+    /// <param name="reason">Why the identity refused the taped projection, or empty.</param>
+    /// <returns><see langword="true"/> when the projection is bound whole.</returns>
+    internal bool TryBindReplayed(in WorldIdentityProjection taped, out WorldIdentity bound, out string reason) {
         var carried = WorldIdentity.FromProjection(
             defaults: m_server.Definition.PlayerDefaults,
             projection: in taped
         );
 
+        if (m_server.Account.IsReplayCopy && (m_server.Account.FindById(id: taped.Id) is { Document: not null } owned)) {
+            bound = owned;
+            if (owned.HoldsWhatCarries(carried: carried)) {
+                reason = string.Empty;
+                return true;
+            }
+            return owned.TryAdopt(carried: carried, reason: out reason);
+        }
+
         if (!m_detachedIdentities.TryGetValue(
             key: taped.Id,
-            value: out detached!
+            value: out bound!
         )) {
-            detached = carried;
+            bound = carried;
             m_detachedIdentities.Add(
                 key: taped.Id,
-                value: detached
+                value: bound
             );
             reason = string.Empty;
             return true;
         }
 
-        return detached.TryAdopt(carried: carried, reason: out reason);
+        return bound.TryAdopt(carried: carried, reason: out reason);
     }
 
-    // The identity traveler `index` lands as. A local seat crossing between rows of this host (an arrival that is not a
-    // peer admission or a companion) carries an identity of the one account every row here shares, so it lands bound to
-    // that owned identity itself: what this world writes is the document the next world reads, with no adoption. Any
-    // other traveler lands as the projection its commit carried, or its reservation's when the commit carries none,
-    // rebuilt against this world's player defaults, and nothing of the owned document behind it ever arrives; its home
-    // adoption waits until every landing succeeds and the arrival is durable.
+    // The identity traveler `index` lands as: the projection its commit carried, or its reservation's when the commit
+    // carries none, rebuilt against this world's player defaults, whatever row it comes from. A local seat crossing
+    // between rows of this host lands so too, never bound to the account's owned identity: the owned identity is home's,
+    // and a seat that stayed home may hold it, so a write this world made to it would reach home's state at a tick home
+    // recorded no input for, and neither authority's replay could reproduce it. What this world writes rides the
+    // traveller's projection and reaches the owned identity only through home's adoption when it comes back
+    // (AdoptHomeProfiles), the one door home records, live and in a replay alike.
     private WorldIdentity? ArrivingProfile(WorldCrossingArrival arrival, int index) {
         if ((arrival.Members[index].Profile ?? arrival.Request.Members[index].Identity) is not { } projection) {
             return null;
-        }
-        if (
-            !arrival.Request.PeerAdmission &&
-            (arrival.Request.Members[index].Companion is null) &&
-            (m_server.Account.FindById(id: projection.Id) is { Document: not null } owned)
-        ) {
-            // A re-drive lands the identity as the commit carried it, in the re-drive's one detached identity for its
-            // id: the account may have moved since (another world wrote it after this arrival), and what this world
-            // reads of the traveller is what the recording read, never what the account holds now.
-            if (m_relandOutcome is not null) {
-                return (TryBindDetached(detached: out var detached, reason: out var reason, taped: in projection)
-                    ? detached
-                    : throw ReplayRefusal.ArrivalRefused.Raise(message: $"identity '{projection.Id}' could not reproduce the arrival it carried — {reason}"));
-            }
-            // Live, the owned identity is the one the traveller left as, so it already holds what the projection carries.
-            // A replay's account copy stands as it did when this authority's replay started; what another row wrote to
-            // the traveller's facts and crossing pools since then (a mark left at home) reaches it as the projection
-            // carried it, so the copy adopts that before the traveller binds it.
-            // A copy that already holds what was carried adopts nothing, so it keeps the revision the live identity kept.
-            if (m_server.Account.IsReplayCopy &&
-                (WorldIdentity.FromProjection(defaults: m_server.Definition.PlayerDefaults, projection: in projection) is var carried) &&
-                !owned.HoldsWhatCarries(carried: carried)) {
-                _ = owned.TryAdopt(carried: carried, reason: out _);
-            }
-
-            return owned;
         }
 
         return WorldIdentity.FromProjection(
@@ -1622,8 +1611,8 @@ public sealed partial class WorldTransferEscrow {
     // traveler that did not; the tape records it as part of the arrival's outcome.
     // Several travelers across arrivals may come home under one owned identity: live, they bind the one object, so each
     // adoption writes into what the others hold, and the tape records every binding once every adoption has run. A
-    // re-drive binds travelers whose taped projections name one identity to one shared detached identity, so they
-    // alias exactly as they did live.
+    // re-drive binds travelers whose taped projections name one identity to the one identity the replay binding gives
+    // that id (TryBindReplayed), so they alias exactly as they did live, with the seats that never left.
     private WorldIdentityProjection?[] AdoptHomeProfiles(WorldCrossingArrival arrival) {
         var adopted = new WorldIdentityProjection?[arrival.Slots.Count];
         var bound = new WorldIdentity?[arrival.Slots.Count];
@@ -1635,16 +1624,18 @@ public sealed partial class WorldTransferEscrow {
                 ? null
                 : HomeIdentity(arrival: arrival, index: index, id: carried.Id));
 
-            // A re-drive of a recorded outcome is a function of its tape: a traveler the tape records coming home binds
-            // the projection the live adoption bound, facts and records included, in a detached identity that saves
-            // nothing, and nothing of the live catalog enters it. Where the owned identity has moved since the
-            // recording is reported, read-only.
-            if (m_relandOutcome is { } recorded) {
+            // A re-drive of a recorded outcome over a live account is a function of its tape: a traveler the tape records
+            // coming home binds the projection the live adoption bound, facts and records included, in the replay
+            // binding's detached identity (TryBindReplayed), and nothing of the live catalog enters it. Where the owned
+            // identity has moved since the recording is reported, read-only. Over a replay's account copy the copy holds
+            // what the live account held (the traveller landed through the same binding), so the adoption below runs
+            // exactly as it ran live, into the identity every seat under the id shares.
+            if ((m_relandOutcome is { } recorded) && !m_server.Account.IsReplayCopy) {
                 if (recorded.Adopted[index] is not { } taped) {
                     continue;
                 }
 
-                if (!TryBindDetached(detached: out var detached, reason: out var adoptionReason, taped: in taped)) {
+                if (!TryBindReplayed(bound: out var detached, reason: out var adoptionReason, taped: in taped)) {
                     throw ReplayRefusal.ArrivalRefused.Raise(message: $"home identity '{taped.Id}' could not reproduce its recorded adoption — {adoptionReason}");
                 }
                 if (owned is not null) {
