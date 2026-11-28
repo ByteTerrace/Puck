@@ -216,11 +216,13 @@ refuses the replay as a duplicate. Session epochs reset only in this replay-star
 path; a live load preserves retired epochs. A population restore rebuilds the
 `placement:<id>` table from the restored entries (`WorldPopulation.Restore`),
 so a companion that left with its owner after the checkpoint is named again.
-The replay reads a copy of the account as it stood when its probe started; a
-local seat arriving from another row binds that copy's identity, which first
-adopts what the traveller carried when it differs
-(`WorldTransferEscrow.ArrivingProfile`), since what home wrote meanwhile (a
-mark) reaches this authority only that way.
+The replay reads a copy of the account as it stood when its probe started. A
+traveller always lands as the projection it carried
+(`WorldTransferEscrow.ArrivingProfile`), so a destination never writes an owned
+identity a seat at home also holds: such a write reaches home's state with no
+input home recorded, and home's replay diverges in `BodyActionState` and
+`BodyContinuation` on the seat that stayed. Home takes the traveller's writes
+through its adoption when it returns (`AdoptHomeProfiles`).
 The default bounds concurrent workers at two (one on fewer than four logical
 CPUs); a lane beside heavy work still passes `--jobs 1`.
 Workers share the per-user device caches. `puck test --cache-dir <scratch-root>`
