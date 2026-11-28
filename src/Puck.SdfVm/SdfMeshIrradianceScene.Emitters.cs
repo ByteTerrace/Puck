@@ -66,22 +66,24 @@ public sealed partial class SdfMeshIrradianceScene {
     // The emitting patches of a scene's draws (SdfMeshEmitter) and their digest. A draw whose triangle materials name no
     // material `emits` admits costs one look at each distinct run of materials; only an emitting draw's triangles are read.
     private static (SdfMeshEmitter[] Emitters, ulong Digest) GatherEmitters(ReadOnlySpan<Instance> instances, Func<int, bool> emits) {
-        var runs = new Dictionary<(ReadOnlyMemory<uint> Triangles, int Base), bool>();
+        var runs = new Dictionary<(SdfMesh Mesh, int Level, int Base), bool>();
         var cells = new Dictionary<(int Material, int X, int Y, int Z), (float Area, Vector3 Centroid, Vector3 Normal)>();
         var emitters = new List<SdfMeshEmitter>();
         var digest = MultisetDigest.Empty;
 
         foreach (ref readonly var instance in instances) {
-            if (!runs.TryGetValue(key: (instance.TriangleMaterials, instance.Material), value: out var any)) {
+            if (!runs.TryGetValue(key: (instance.Mesh, instance.Geometry.Level, instance.Material), value: out var any)) {
                 any = AnyEmits(emits: emits, run: instance);
-                runs.Add(key: (instance.TriangleMaterials, instance.Material), value: any);
+                runs.Add(key: (instance.Mesh, instance.Geometry.Level, instance.Material), value: any);
             }
             if (!any) { continue; }
 
             var geometry = instance.Geometry;
-            var positions = geometry.Positions.Span;
-            var indices = geometry.Indices.Span;
-            var materials = instance.TriangleMaterials.Span;
+            using var held = geometry.Mesh.Hold();
+            using var materialHold = instance.Mesh.Hold();
+            var positions = held.Positions.Span;
+            var indices = held.LevelIndices(geometry.Level).Span;
+            var materials = materialHold.LevelMaterials(geometry.Level).Span;
             var low = new Vector3(value: float.PositiveInfinity);
             var high = new Vector3(value: float.NegativeInfinity);
 
@@ -133,7 +135,8 @@ public sealed partial class SdfMeshIrradianceScene {
     }
     // Whether any material a draw's triangles carry emits: its base alone when its mesh carries no triangle materials.
     private static bool AnyEmits(in Instance run, Func<int, bool> emits) {
-        var materials = run.TriangleMaterials.Span;
+        using var held = run.Mesh.Hold();
+        var materials = held.LevelMaterials(run.Geometry.Level).Span;
 
         if (materials.IsEmpty) { return emits(arg: run.Material); }
 
@@ -147,7 +150,7 @@ public sealed partial class SdfMeshIrradianceScene {
         return false;
     }
     // A traced triangle's program material: the draw's base plus the triangle's own entry. `triangle` numbers the traced
-    // level's triangles, as its materials (Geometry.MaterialsOf) are numbered.
+    // level's triangles, as the mesh's held materials are numbered.
     private static int MaterialAt(in Instance instance, ReadOnlySpan<uint> materials, int triangle) =>
         (instance.Material + (materials.IsEmpty ? 0 : (int)materials[triangle]));
     // A traced triangle's corners in world space.

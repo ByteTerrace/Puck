@@ -14,7 +14,13 @@ public static class SdfMeshProbeRelight {
     public static bool RelightDue(int sweep, int phase, int interleave, float age, float bound) =>
         (bound > 0 && age >= bound) || ((uint)sweep + (uint)phase) % (uint)interleave == 0;
     /// <summary>Two exact allocation-token words followed by the cached hit words.</summary>
-    public const int CacheWords = 2 + SdfMeshProbeTrace.HitWords;
+    public const int CacheWords = CacheResultWord + OutputWords;
+    /// <summary>The retained relight result after the allocation token and hit words.</summary>
+    public const int CacheResultWord = 2 + SdfMeshProbeTrace.HitWords;
+    /// <summary>Relative per-channel convergence bound shared by host and device.</summary>
+    public const float ConvergedShare = 0.02f;
+    /// <summary>Absolute convergence bound in nits shared by host and device.</summary>
+    public const float ConvergedFloor = 1.0e-3f;
     /// <summary>Six RGB radiance values, six local values, the visibility bits, then six RGB sky-light values.</summary>
     public const int OutputWords = SkyOutputWord + 18;
     /// <summary>The first word of a relight output's six RGB sky-light values.</summary>
@@ -37,7 +43,9 @@ public static class SdfMeshProbeRelight {
     /// <summary>The first word of a partial relight's six RGB sky-light sums.</summary>
     public const int PartialSkyWord = 36 + (2 * SdfMeshIrradianceProbe.LightWords);
     /// <summary>The diagnostic lighting output followed by the GPU-packed publication record.</summary>
-    public const int ResultWords = OutputWords + SdfMeshIrradianceProbe.ProbeWords;
+    public const int ResultWords = MovedWord + 1;
+    /// <summary>The final result word: nonzero when either light cube moved beyond convergence.</summary>
+    public const int MovedWord = OutputWords + SdfMeshIrradianceProbe.ProbeWords;
     /// <summary>One camera-meter answer: the light the sample receives along each of its six axes (+X, -X, +Y, -Y, +Z,
     /// -Z), RGB in nits (the radiance and sky-light cubes summed, as a probe's indirect light), then its sky visibility,
     /// then its source and trace flags.</summary>

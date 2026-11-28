@@ -76,16 +76,22 @@ public sealed partial class SdfMeshIrradianceScene {
             NearestNode(nodes, right, instanceIndex, point, ref nearest);
             return;
         }
-        for (var i = first; i < first + count; i++) {
-            if (instanceIndex < 0) {
+        if (instanceIndex < 0) {
+            for (var i = first; i < first + count; i++) {
                 var entry = m_content.Entries[i];
                 var held = m_content.Instances[entry.Instance].Geometry;
                 NearestNode(new PackedNodes(frame: held.Frames[entry.Braid], nodes: held.Nodes), entry.Node, entry.Instance, point, ref nearest);
-                continue;
             }
-            ref readonly var instance = ref m_content.Instances[instanceIndex];
-            var geometry = instance.Geometry;
-            geometry.Corner(e1: out var e1, e2: out var e2, index: i, v0: out var v0);
+            return;
+        }
+        ref readonly var instance = ref m_content.Instances[instanceIndex];
+        var geometry = instance.Geometry;
+        using var mesh = geometry.Mesh.Hold();
+        if (!mesh.Readable) { return; }
+        var positions = mesh.Positions.Span;
+        var indices = mesh.LevelIndices(geometry.Level).Span;
+        for (var i = first; i < first + count; i++) {
+            Geometry.Corner(e1: out var e1, e2: out var e2, indices: indices, positions: positions, triangle: geometry.Triangles[i], v0: out var v0);
             var a = Vector3.Transform(v0, instance.ObjectToWorld);
             var b = Vector3.Transform(v0 + e1, instance.ObjectToWorld);
             var c = Vector3.Transform(v0 + e2, instance.ObjectToWorld);

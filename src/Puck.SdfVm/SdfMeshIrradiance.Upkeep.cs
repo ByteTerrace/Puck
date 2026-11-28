@@ -103,7 +103,6 @@ public sealed partial class SdfMeshIrradiance {
                 for (var level = 0; (level < m_levels.Length); level++) { before[level] = m_levels[level].Unwritten; }
             }
 
-            var words = volume.Words;
             var cells = 0L;
 
             m_refillCells.Clear();
@@ -119,10 +118,10 @@ public sealed partial class SdfMeshIrradiance {
                 for (var z = low.Z; (z < (low.Z + dims.Z)); z++) {
                     for (var y = low.Y; (y < (low.Y + dims.Y)); y++) {
                         for (var x = low.X; (x < (low.X + dims.X)); x++) {
-                            var word = ((offset + SlotOf(dims: dims, x: x, y: y, z: z)) * SdfMeshIrradianceProbe.ProbeWords);
+                            var slot = offset + SlotOf(dims: dims, x: x, y: y, z: z);
 
                             cells++;
-                            if (((word + SdfMeshIrradianceProbe.ProbeWords) <= words.Length) && Holds(cell: (x, y, z), words: words.Slice(start: word, length: SdfMeshIrradianceProbe.ProbeWords))) { continue; }
+                            if (volume.Holds(slot, (x, y, z))) { continue; }
                             unwritten[level]++;
                             // GPU records are restored by a selected relight and its guarded device commit.
                             if (!device && cache.ContainsKey(key: (x, y, z))) { m_refillCells.Add(item: (level, (x, y, z))); }
