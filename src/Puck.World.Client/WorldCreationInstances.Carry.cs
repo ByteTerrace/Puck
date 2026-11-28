@@ -88,6 +88,7 @@ public sealed partial class WorldCreationInstances {
             foreach (var candidate in m_pool.AsSpan(0, m_poolCount)) {
                 if (
                     (candidate?.BodyIndex is not { } body) ||
+                    !Shows(live: candidate) ||
                     !client.IsActive(index: body) ||
                     !string.Equals(a: candidate.Look?.Name.Value, b: carry.Look, comparisonType: StringComparison.Ordinal) ||
                     (candidate.PoseFrame == 0) ||

@@ -106,16 +106,17 @@ public sealed partial class SdfMeshPathBake {
                 var group = m_groups[at];
 
                 if (group.Done || group.Retired) { continue; }
-                Raise(group: group);
-                if (group.Leader is { Done: false } leader) { Raise(group: leader); }
+                RaiseFirst(group: group);
+                if (group.Leader is { Done: false } leader) { RaiseFirst(group: leader); }
             }
         }
-
-        static void Raise(Group group) {
-            group.Priority = float.MaxValue;
-            group.InView = true;
-            if (group.Waiter is { } waiter) { waiter.Priority = float.MaxValue; }
-        }
+    }
+    // Ranks a group something draws in its place waits on (a stand-in's template, a held form) ahead of every other group
+    // now, in view, and its waiter with it.
+    private static void RaiseFirst(Group group) {
+        group.Priority = float.MaxValue;
+        group.InView = true;
+        if (group.Waiter is { } waiter) { waiter.Priority = float.MaxValue; }
     }
     // Whether every listed group of a template's instances shows what a settled bake of it shows (ShowsProduct), or,
     // unsettled, draws anything at all or found no surface: what a copy may stand in on.
@@ -142,10 +143,13 @@ public sealed partial class SdfMeshPathBake {
         (((m_standIns.Count > 0) && (drawn ? m_drawnCopies : m_heldCopies).TryGetValue(key: instance, value: out var copies))
             ? copies
             : m_instanceCopies.GetValueOrDefault(key: instance));
-    // The copies the dresser draws a group's mesh for (FrameAccess.CopiesOf).
+    // The copies the dresser draws a group's mesh for (FrameAccess.CopiesOf): none for a group riding a form its owner
+    // does not draw (Forms).
     private IReadOnlyList<int>? DressedCopiesOf(SdfMeshBakeGroup group) => (group.Dynamic
-        ? CopiesOf(group: group)
+        ? (Dormant(group: group) ? Array.Empty<int>() : CopiesOf(group: group))
         : StandInCopiesOf(instance: group.FirstInstance, drawn: true));
-    // Whether a stand-in waits on a group's template.
-    private bool AwaitedByStandIn(Group group) => (!group.Dynamic && (m_awaitedInstances.Count > 0) && m_awaitedInstances.Contains(item: group.FirstInstance));
+    // Whether a stand-in waits on a group's template, or a body waits on a group of the form it names (Forms).
+    private bool AwaitedByStandIn(Group group) => (group.Dynamic
+        ? HeldForm(group: group)
+        : ((m_awaitedInstances.Count > 0) && m_awaitedInstances.Contains(item: group.FirstInstance)));
 }
