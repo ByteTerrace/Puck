@@ -79,7 +79,7 @@ test "a placed mark survives a crossing and comes back" {
     seat1: body.pose spawn:portal-garden 0
     ticks 10
     seat1: body.fly 1 0 0 0 0 0 2
-    ticks 70
+    ticks 300
     seat1: body.fly -1 0 0 0 0 0 1
     ticks 45
   }
@@ -94,13 +94,15 @@ test "a placed mark survives a crossing and comes back" {
   }
 }
 
-test "control crossing without a mark" {
+// The control: the same crossing with no mark, so the garden's replay adopts nothing from what she carried and keeps the
+// identity exactly as it stood live (WorldTransferEscrow.ArrivingProfile).
+test "a crossing that leaves no mark reproduces too" {
   when {
     ticks 30
     seat1: body.pose spawn:portal-garden 0
     ticks 10
     seat1: body.fly 1 0 0 0 0 0 2
-    ticks 70
+    ticks 300
     seat1: body.fly -1 0 0 0 0 0 1
     ticks 45
   }

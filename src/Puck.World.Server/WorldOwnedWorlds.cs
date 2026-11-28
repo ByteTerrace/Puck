@@ -71,6 +71,7 @@ public sealed class WorldOwnedWorlds : IDisposable {
         m_hostSpaces = source.m_hostSpaces;
         m_identities = [];
         m_persist = false;
+        IsReplayCopy = true;
         m_worldDirectory = source.m_worldDirectory;
         MachineId = source.MachineId;
         Defaults = source.Defaults;
@@ -87,6 +88,10 @@ public sealed class WorldOwnedWorlds : IDisposable {
     /// file I/O. The copy narrates through this catalog's hub, so what a replay reports reaches the live session.</summary>
     /// <returns>The replay's own catalog.</returns>
     public WorldOwnedWorlds CreateReplayCopy() => new(source: this);
+    /// <summary>Gets a value indicating whether this catalog is a replay's copy (<see cref="CreateReplayCopy"/>): the
+    /// account as it stood when the replay's authority started, which writes other authorities made to the live account
+    /// since then reach only through what a traveller carried.</summary>
+    public bool IsReplayCopy { get; }
 
     /// <summary>Gets a value indicating whether a tape reading this catalog is recording.</summary>
     public bool Recording => (m_recordingTapes > 0);
