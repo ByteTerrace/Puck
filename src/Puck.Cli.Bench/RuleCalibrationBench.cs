@@ -206,7 +206,7 @@ internal static class RuleCalibrationBench {
         }
         Console.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"rules: picoseconds per setup unit {setup}, binding {binding}, check unit {check}, firing {firing}, door {door}, effect unit {effect}, growth unit {growth}"));
         foreach (var name in clamped) {
-            Console.Error.WriteLine(value: $"{Verb}: the {name} figure solved below zero and was taken as zero; the machine was not quiet, or that quantity is below this run's noise. Read it again with more --rounds.");
+            Console.Error.WriteLine(value: $"{Verb}: the {name} figure solved below zero or to no number and was taken as zero; the machine was not quiet, a scenario spent nothing of that quantity, or it is below this run's noise. Read it again with more --rounds.");
         }
         Console.WriteLine(value: calibration.Describe());
         if (output is not null) {
@@ -215,7 +215,7 @@ internal static class RuleCalibrationBench {
         return CliExit.Success;
 
         long Figure(string name, double value) {
-            if (double.IsNaN(d: value) || (value < 0D)) {
+            if (!double.IsFinite(d: value) || (value < 0D)) {
                 clamped.Add(item: name);
                 return 0L;
             }

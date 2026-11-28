@@ -1559,7 +1559,7 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   window on the RTX 4070 and the RTX 2060 and author each `rules { ... }` block. What the figures leave unpriced:
   the rule part's fixed per-tick host work (`WorldRuleHost.EvaluateWorldRules`' fact derivation, arena publication
   and delivery), which the bench's empty scenario measures and the sheet charges nowhere; host effects that charge a
-  door without counting it (`WorldIdentityFactEffect`'s write, `WorldEffectKinds.DocumentCost`), priced as element
+  door without counting it (`WorldIdentityFactEffect`'s write, `WorldPlacementEffectCost.DocumentCost`, a document write and revalidation), priced as element
   units; the host passes, priced at the check figure; and the search lane, still a unit allowance
   (`SearchCapacity.MaxWorkUnitsPerStep`).
 - [medium] The rule phase's remaining volatile and visit costs are the memo's
