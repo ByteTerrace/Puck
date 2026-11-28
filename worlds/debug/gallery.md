@@ -61,7 +61,12 @@ The owner walked the gallery and ruled its shape:
    tunnel grows with them, so the change reads as one unbroken magical moment.
    The tunnel has character, not a mouse house's theming: uneven walls in the
    gallery's techno-natural style, torch-like lights, and a railing like a
-   theme park's queue, all at the walker's scale wherever they stand.
+   theme park's queue, all at the walker's scale wherever they stand. The exit
+   faces the climbing wall or the entrance (the owner's choice of the two). It
+   faces the climbing wall: it stands in the hall's west end facing east, so
+   visitors walking in from the entrance never see it head-on, and a player
+   stepping out at full size looks straight up at the climbing wall and its
+   stained glass.
 
 ## The plan
 
