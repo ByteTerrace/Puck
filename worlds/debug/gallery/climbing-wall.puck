@@ -3,8 +3,8 @@
 // it climbs the whole height of the hall past the toybox and the board game room's level and pulls up onto a ledge
 // with the nave, the tree and the galleries below her, the east walkway on level 3 that leads to the north and south
 // galleries behind the lifts' shafts. Above the ledge its sandstone carries on to the ceiling as a headwall nothing
-// holds. A fall lands on the sage pad at its foot. The gallery module imports this, so the gallery booted alone
-// (gallery-root.puck) and the debug world both stand it.
+// holds. A fall lands on the sage pad at its foot. A module library: `galleryClimbingWall(frame)` stands it, and
+// building.puck expands it on a floor that enables `climbingWall`.
 //
 // It is four kinds of piece, all the standard's (climbing.puck):
 //
@@ -35,144 +35,147 @@ let climbPalette = map(
   entry => shellBrushed(entry)
 )
 
-prototypes {
-  prototype "gallery-climb-face" {
-    document {
-      name: "gallery-climb-face"
-      schema: "puck.creation.v2"
-      palette: climbPalette
-      climbingFace(
-        base: 0,
-        width: climbWallWidth,
-        height: climbWallFaceHeight,
-        columns: climbFacets.columns,
-        rows: climbFacets.rows,
-        relief: climbFacets.relief,
-        tilt: climbFacets.tilt,
-        thickness: climbWallThickness,
-        salt: climbFacets.salt
-      )
-    }
-  }
-  prototype "gallery-climb-frame" {
-    document {
-      name: "gallery-climb-frame"
-      schema: "puck.creation.v2"
-      palette: climbPalette
-      climbingFrame(
-        base: 0,
-        width: climbWallWidth,
-        height: (climbWallTop - galleryFloor[0]),
-        depth: climbWallDepth,
-        coping: climbWallCoping,
-        thickness: climbWallThickness
-      )
-    }
-  }
-  // The headwall: the same sandstone face from the ledge to the ceiling, flat against the east wall, no hold on it.
-  prototype "gallery-climb-headwall" {
-    document {
-      name: "gallery-climb-headwall"
-      schema: "puck.creation.v2"
-      palette: climbPalette
-      climbingFace(
-        base: 0,
-        width: climbWallWidth,
-        height: climbWallHeadwall,
-        columns: climbFacets.columns,
-        rows: 3,
-        relief: climbFacets.relief,
-        tilt: climbFacets.tilt,
-        thickness: climbWallThickness,
-        salt: (climbFacets.salt + 0.5)
-      )
-    }
-  }
-  prototype "gallery-climb-pad" {
-    document {
-      name: "gallery-climb-pad"
-      schema: "puck.creation.v2"
-      palette: map(climbingPadPalette(lookClimb.pad), entry => shellBrushed(entry))
-      climbingPad(
-        base: 0,
-        width: climbWallPad.width,
-        depth: (climbWallPad.depth + climbWallThickness),
-        height: climbWallPad.height
-      )
-    }
-  }
-  for p in climbHoldPrototypes {
-    prototype $"gallery-climb-{p.family}-{p.kind}" {
-      document {
-        name: $"gallery-climb-{p.family}-{p.kind}"
-        schema: "puck.creation.v2"
-        palette: climbingHoldPalette(p.color, lookClimb.bolt)
-        climbingHold(base: 0, kind: p.kind)
-      }
-    }
-  }
-  for (tone, n) in lookClimb.volumes {
-    prototype $"gallery-climb-volume-{n}" {
-      document {
-        name: $"gallery-climb-volume-{n}"
-        schema: "puck.creation.v2"
-        palette: climbingHoldPalette(tone, lookClimb.bolt)
-        climbingVolume(base: 0)
-      }
-    }
-  }
-}
+template galleryClimbingWall(frame) {
 
-placements {
-  // The face holds a climber, and nothing else of the wall does. Every piece faces west down the nave (`climbWallYaw`).
-  placement "gallery-climb-face" {
-    prototype: "gallery-climb-face"
-    parent: "gallery"
-    position [climbWallFace, climbWallFoot, climbWallZ]
-    yawDegrees: climbWallYaw
-    grip {
-      holdable: true
+  prototypes {
+    prototype "gallery-climb-face" {
+      document {
+        name: "gallery-climb-face"
+        schema: "puck.creation.v2"
+        palette: climbPalette
+        climbingFace(
+          base: 0,
+          width: climbWallWidth,
+          height: climbWallFaceHeight,
+          columns: climbFacets.columns,
+          rows: climbFacets.rows,
+          relief: climbFacets.relief,
+          tilt: climbFacets.tilt,
+          thickness: climbWallThickness,
+          salt: climbFacets.salt
+        )
+      }
     }
-    solid
-  }
-  placement "gallery-climb-frame" {
-    prototype: "gallery-climb-frame"
-    parent: "gallery"
-    position [climbWallFace, galleryFloor[0], climbWallZ]
-    yawDegrees: climbWallYaw
-    solid
-  }
-  // The pad reaches under the face's backing to the frame's body, so the face stands on it.
-  placement "gallery-climb-pad" {
-    prototype: "gallery-climb-pad"
-    parent: "gallery"
-    position [(climbWallFace + climbWallThickness), galleryFloor[0], climbWallZ]
-    yawDegrees: climbWallYaw
-    solid
-  }
-  placement "gallery-climb-headwall" {
-    prototype: "gallery-climb-headwall"
-    parent: "gallery"
-    position [(galleryEast - climbWallThickness), climbWallTop, climbWallZ]
-    yawDegrees: climbWallYaw
-    solid
-  }
-  for (volume, n) in climbVolumes {
-    placement $"gallery-climb-volume-{n}" {
-      prototype: $"gallery-climb-volume-{volume.tone}"
-      parent: "gallery"
-      position: climbWallOff(volume.at[0], volume.at[1], climbHoldSeat)
-      yawDegrees: climbWallYaw
-      scale: volume.size
+    prototype "gallery-climb-frame" {
+      document {
+        name: "gallery-climb-frame"
+        schema: "puck.creation.v2"
+        palette: climbPalette
+        climbingFrame(
+          base: 0,
+          width: climbWallWidth,
+          height: (climbWallTop - galleryFloor[0]),
+          depth: climbWallDepth,
+          coping: climbWallCoping,
+          thickness: climbWallThickness
+        )
+      }
+    }
+    // The headwall: the same sandstone face from the ledge to the ceiling, flat against the east wall, no hold on it.
+    prototype "gallery-climb-headwall" {
+      document {
+        name: "gallery-climb-headwall"
+        schema: "puck.creation.v2"
+        palette: climbPalette
+        climbingFace(
+          base: 0,
+          width: climbWallWidth,
+          height: climbWallHeadwall,
+          columns: climbFacets.columns,
+          rows: 3,
+          relief: climbFacets.relief,
+          tilt: climbFacets.tilt,
+          thickness: climbWallThickness,
+          salt: (climbFacets.salt + 0.5)
+        )
+      }
+    }
+    prototype "gallery-climb-pad" {
+      document {
+        name: "gallery-climb-pad"
+        schema: "puck.creation.v2"
+        palette: map(climbingPadPalette(lookClimb.pad), entry => shellBrushed(entry))
+        climbingPad(
+          base: 0,
+          width: climbWallPad.width,
+          depth: (climbWallPad.depth + climbWallThickness),
+          height: climbWallPad.height
+        )
+      }
+    }
+    for p in climbHoldPrototypes {
+      prototype $"gallery-climb-{p.family}-{p.kind}" {
+        document {
+          name: $"gallery-climb-{p.family}-{p.kind}"
+          schema: "puck.creation.v2"
+          palette: climbingHoldPalette(p.color, lookClimb.bolt)
+          climbingHold(base: 0, kind: p.kind)
+        }
+      }
+    }
+    for (tone, n) in lookClimb.volumes {
+      prototype $"gallery-climb-volume-{n}" {
+        document {
+          name: $"gallery-climb-volume-{n}"
+          schema: "puck.creation.v2"
+          palette: climbingHoldPalette(tone, lookClimb.bolt)
+          climbingVolume(base: 0)
+        }
+      }
     }
   }
-  for (hold, n) in climbHolds {
-    placement $"gallery-climb-hold-{n}" {
-      prototype: $"gallery-climb-{hold.family}-{hold.kind}"
+
+  placements {
+    // The face holds a climber, and nothing else of the wall does. Every piece faces west down the nave (`climbWallYaw`).
+    placement "gallery-climb-face" {
+      prototype: "gallery-climb-face"
       parent: "gallery"
-      position: climbWallOff(hold.at[0], hold.at[1], (climbHoldSeat + climbStandOff(hold.at)))
+      position [climbWallFace, climbWallFoot, climbWallZ]
       yawDegrees: climbWallYaw
-      scale: hold.size
+      grip {
+        holdable: true
+      }
+      solid
+    }
+    placement "gallery-climb-frame" {
+      prototype: "gallery-climb-frame"
+      parent: "gallery"
+      position [climbWallFace, galleryFloor[0], climbWallZ]
+      yawDegrees: climbWallYaw
+      solid
+    }
+    // The pad reaches under the face's backing to the frame's body, so the face stands on it.
+    placement "gallery-climb-pad" {
+      prototype: "gallery-climb-pad"
+      parent: "gallery"
+      position [(climbWallFace + climbWallThickness), galleryFloor[0], climbWallZ]
+      yawDegrees: climbWallYaw
+      solid
+    }
+    placement "gallery-climb-headwall" {
+      prototype: "gallery-climb-headwall"
+      parent: "gallery"
+      position [(galleryEast - climbWallThickness), climbWallTop, climbWallZ]
+      yawDegrees: climbWallYaw
+      solid
+    }
+    for (volume, n) in climbVolumes {
+      placement $"gallery-climb-volume-{n}" {
+        prototype: $"gallery-climb-volume-{volume.tone}"
+        parent: "gallery"
+        position: climbWallOff(volume.at[0], volume.at[1], climbHoldSeat)
+        yawDegrees: climbWallYaw
+        scale: volume.size
+      }
+    }
+    for (hold, n) in climbHolds {
+      placement $"gallery-climb-hold-{n}" {
+        prototype: $"gallery-climb-{hold.family}-{hold.kind}"
+        parent: "gallery"
+        position: climbWallOff(hold.at[0], hold.at[1], (climbHoldSeat + climbStandOff(hold.at)))
+        yawDegrees: climbWallYaw
+        scale: hold.size
+      }
     }
   }
 }

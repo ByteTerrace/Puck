@@ -1,0 +1,537 @@
+// The gallery: the building the shape gallery (../shapes.puck) stands in, as modules a world composes floor by floor
+// (gallery.md, "The modules"). Four storeys round a nave that runs the building's length under skylights, its plan in
+// layout.puck and gallery.md:
+//
+//   the nave            21 m wide, a void from level 0's floor to the roof, the climbing wall rising up the middle
+//                       of its east wall between tall bays of clear and stained glass, a glass lift either side of
+//                       it; level 0's display stations flank its centre aisle
+//   the aisles          north and south of the nave on level 0, behind arcades of branched piers, and the galleries
+//                       over them on levels 1 to 3, their balcony edges round the void and their displays along them
+//   the stairs          one in each corner of the aisles: switchbacks south-west and north-east, spirals south-east
+//                       and north-west, each serving every storey
+//   the entrance        a wide doorway in the west wall on the nave's axis, under a canopy over the west forecourt
+//   the painting wing   level 0's south aisle east of x 30 (../paintings.puck)
+//   the board game room level 2's south gallery and the wing that projects over the forecourt, twelve game
+//                       stations in two rows (games.puck)
+//   the terrace         the roof of the west wing's south aisle, off level 3
+//
+// A module library: `galleryBuilding(frame, floors, home)` stands the building. Every row stands under one root
+// placement, `gallery`, which carries the frame (../../standard/frame.puck: a position, a yaw and a uniform scale), so
+// the whole building moves, turns and scales with that one value as an SVG group does: the shell and its kit pieces
+// (shell.puck), the switches, the signs and every module's pieces are placed in the building's frame with `parent`, the
+// fixtures are anchored to the root, the spawn points name it as their parent, and each lift's car is a body the car's
+// own placement spawns, which its platform, cab, doors and buttons ride by that placement's name. What stands in the
+// world's own coordinates (a static creation's paints, a screen's face, a size field's zones, a speaker) carries the same
+// frame through `galleryAt`. The building has no sun of its own: the importing world's lights it, and its windows show
+// that world at its own size, whatever the building's scale.
+//
+// The shell is solid, so the Moth walks the floors and climbs the stairs (each riser 0.25 m, under her 0.3 m step
+// height) and the chase camera's clearance keeps the eye inside the rooms. ../shapes.md says how to get around and what
+// each level shows.
+//
+// Creation shapes are authored in a frame turned 180 degrees about up from the world's, so a shape at author position
+// (x, y, z) in a placement with no yaw stands at (-x, y, -z) of the placement's frame. `boundsBox`
+// (standard/bounds.puck) takes bounds in that frame and writes the author-frame row.
+
+import "../../standard/bounds"
+import "../../standard/kits"
+import "../../standard/architecture"
+import "../../standard/contexts/terminal"
+import "../../standard/reach"
+import "../../standard/frame"
+import "../../standard/panel"
+import "../shapes"
+import "../portal-library"
+import "layout"
+import "shell"
+import "look"
+import "flaw"
+import "holiday"
+import "toybox"
+import "tree"
+import "climbing-wall"
+import "rentals"
+import "wonder"
+import "mouse-house"
+import "stewards"
+import "portals"
+import "time-puzzles"
+import "games"
+import "lifts"
+import "displays"
+
+// The building: every module its floors enable, in the frame it stands in (layout.puck's floors and modules). `frame` is
+// the root placement's position, yaw and scale (../../standard/frame.puck), which every module stands under or carries
+// into the world's coordinates; `floors` the modules each floor enables, the debug world's `galleryFloorsDebug`, the
+// whole gallery's `galleryFloorsAll` or the shell's `galleryFloorsShell`; `home` the path from the document that
+// expands it to this folder, which the toybox's and the rentals' machines' content paths take. A module no floor
+// enables expands to nothing. The document that expands the building imports the documents its modules read beside it
+// (../../standard/place.puck for the reaches' carrier, ../size.puck for the size register, ../fir-fiber.puck for the
+// holiday firs' fibre lanes).
+template galleryBuilding(frame, floors, home = "") {
+  let has = galleryModulesOf(floors)
+  // The portals' panels are terminals, numbered after the displays' in the building's one `terminalPlay`.
+  let panels = (has.portals ? panelTerminals(galleryPanelsIn(frame)) : [])
+
+  if has.holiday {
+    galleryHoliday(frame: frame)
+  }
+  if has.toybox {
+    galleryToybox(frame: frame, home: home)
+  }
+  if has.tree {
+    galleryTree(frame: frame)
+  }
+  if has.climbingWall {
+    galleryClimbingWall(frame: frame)
+  }
+  if has.rentals {
+    galleryRentals(frame: frame, home: home)
+  }
+  if (has.tree or has.rentals or has.wonder) {
+    galleryWonderRegisters()
+  }
+  gallerySizeField(frame: frame, has: has)
+  if has.wonder {
+    galleryWonder(frame: frame)
+  }
+  if has.mouseHouse {
+    galleryMouseHouse(frame: frame)
+  }
+  if has.stewards {
+    galleryStewards(frame: frame)
+  }
+  if has.portals {
+    galleryPortals(frame: frame)
+  }
+  if has.timePuzzles {
+    galleryTimePuzzles(frame: frame)
+  }
+  if has.gameStations {
+    galleryGames(frame: frame)
+  }
+
+  // The root every row of the building stands under. A world places the building by placing this row.
+  placements {
+    frameRoot(id: "gallery", frame: frame)
+  }
+  galleryHall(frame: frame, has: has)
+  if has.lifts {
+    galleryLifts(frame: frame)
+  }
+  if has.displays {
+    galleryDisplayModule(frame: frame, terminals: panels)
+  } else if length(panels) > 0 {
+    terminalPlay(terminals: panels)
+  }
+}
+
+// The exposure `gallery.inspect On` pins the camera at, in EV100 (a lit room is about 7).
+let inspectHold = 7
+
+// The room lights. `hallLights` holds each level's state, Off or On, and every level starts On. Off quiets the light of
+// the stretch of the flaw that storey holds (`hallLamps`) and the lamps it owns; a lift car's lamp rides the car
+// whatever its level. A level's switch stands on the east wall of the north aisle, beside the north lift's landing and
+// the north-east stair's foot, 1.1 to 1.46 m over the floor; the context button (`interact`, E or RB on a pad) flips it
+// while a body stands in the switch's reach box before it.
+let switchZ = tileZ((arcadeRowNorth + 1))
+let switchReach = map(
+  range(0, 4),
+  k => {
+    rule: $"hall-switch-{k}"
+    level: k
+    x0: (galleryEast - 1)
+    x1: galleryEast
+    z0: (switchZ - 0.5)
+    z1: (switchZ + 0.5)
+    y0: (galleryFloor[k] - 0.5)
+    y1: (galleryFloor[k] + 1)
+  }
+)
+// On and off differ only in the indicator's colour, so the two switches are one geometry and a flip bakes nothing.
+let hallSwitchStates = [
+  { name: "on", indicator: "#FFC46B", glow: 300 }
+  { name: "off", indicator: "#5BE38A", glow: 200 }
+]
+
+// The south-west stair's pendant (architecture.puck's pendantLamp): hung over the middle of level 1's half landing
+// from the soffit of level 2's, its diffuser 3.6 m over the landing, so it lights the flights between levels 1 and 2,
+// where the flaw does not reach. `stairPendantAt` is the ceiling point in the building's frame.
+let stairPendantStair = galleryStair("south-west")
+let stairPendantAt = [
+  stairCentreX(stairPendantStair),
+  ((galleryFloor[2] + (galleryStorey / 2)) - 0.3),
+  (stairPendantStair.well.z0 + (switchbackLanding / 2))
+]
+let stairPendantDrop = 0.55
+let stairPendantPower = glowSpotPower(lookStairPendant.luminance, pendantGlowArea())
+// The pendant's diffuser lit and dark: the two prototypes differ only in that slot, so a flip bakes nothing. The lit one
+// carries the pendant's light, so the placement's response to level 1's switch turns the light with the diffuser.
+let stairPendantStates = [
+  {
+    name: "on"
+    lit: true
+    glow { color: lookStairPendant.color, roughness: 0.5, emissive: lookStairPendant.luminance }
+  }
+  { name: "off", lit: false, glow { color: lookStairPendant.off, roughness: 0.5, specular: 0.04 } }
+]
+
+// What each `hallLamps` cell holds while its level is On: a storey's stretch of the flaw, its light in candela per metre
+// (look.puck's lookFlaw).
+let hallLampLevels = map(range(0, 4), k => { key: $"level{k}", level: k, value: lookFlaw.intensity })
+
+// The building's one size field (../../standard/size-field.puck), standing in its frame: level 1's zones while the
+// building stands its Wonderland (wonder.puck's `wonderZones`), and the entrance's while the building stands at another
+// scale than the world's own. A body in the building is the building's size, so its collider, speeds, gravity, jump,
+// step height and reach follow the frame's scale (bodies.scale) and moving through a scaled building feels as moving
+// through the full-size one does; the entrance carries a body between the world's size outside and the building's inside
+// as it walks through the doorway, `start * power(end / start, t)` over the threshold's depth. At full size the building
+// is the world's own size, so it adds no entrance zone and a body outside every zone keeps the size it last took.
+let galleryEntranceDepth = galleryTile
+let galleryEntranceZone = {
+  from [(galleryWestOut - galleryEntranceDepth), galleryFloor[0], naveMid]
+  to [(galleryWestIn + galleryEntranceDepth), galleryFloor[0], naveMid]
+  box {
+    x0: (galleryWestOut - galleryEntranceDepth)
+    x1: (galleryWestIn + galleryEntranceDepth)
+    y0: -0.5
+    y1: (entranceTop + 0.5)
+    z0: entranceSouth
+    z1: entranceNorth
+  }
+  start: "world"
+  end: "full"
+}
+template gallerySizeField(frame, has) {
+  let scaled = (frame.scale != 1)
+  let zones = concat((scaled ? [galleryEntranceZone] : []), (has.wonder ? wonderZones : []))
+  // `world` is the world's own size in the building's measure, which the field's frame scales back to one.
+  let sizes = concat(wonderSizes, (scaled ? [{ key: "world", value: (1 / frame.scale) }] : []))
+  if length(zones) > 0 {
+    sizeField(
+      name: "gallery",
+      zones: zones,
+      sizes: sizes,
+      passes: (has.wonder ? wonderPasses : []),
+      passSize: "full",
+      frame: frame
+    )
+  }
+}
+
+// The hall that is the building whatever its floors hold: the shell and its theme (shell.puck), the root's lights, each
+// level's light switch and the south-west stair's pendant, the fan shades, the inspection lever, the bookmarked shots and
+// the spawn points the shell gives. `has` is the building's modules (layout.puck's `galleryModulesOf`).
+template galleryHall(frame, has) {
+  // The fan shades ease open and shut over a few seconds and settle without a bounce.
+  dynamics [
+    { name: "gallery-shade", f: 0.35, r: 0, zeta: 1 }
+  ]
+
+  prototypes {
+    shellPrototypes(frame: frame, has: has)
+    if has.flaw {
+      flawPrototype()
+    }
+
+    // A floor's light switch, its plate facing +Z in its own frame. A warm indicator is on; a green locator glow
+    // (findable in the dark) is off.
+    for state in hallSwitchStates {
+      prototype $"hall-switch-{state.name}" {
+        document {
+          name: $"hall-switch-{state.name}"
+          schema: "puck.creation.v2"
+          palette [
+            { color: "#F2EEE4", roughness: 0.55, specular: 0.08 }
+            { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
+            { color: state.indicator, roughness: 0.4, emissive: state.glow }
+          ]
+          boundsBox(label: "plate", x0: -0.13, x1: 0.13, y0: 1.1, y1: 1.46, z0: -0.04, z1: 0, slot: 0)
+          boundsBox(label: "rocker", x0: -0.035, x1: 0.035, y0: 1.24, y1: 1.32, z0: -0.09, z1: -0.04, slot: 1)
+          boundsBox(label: "indicator", x0: -0.02, x1: 0.02, y0: 1.39, y1: 1.42, z0: -0.055, z1: -0.04, slot: 2)
+          textRuns [
+            {
+              text: "LIGHTS"
+              position [0, 1.53, -0.002]
+              rotation [0, 1, 0, 0]
+              emHeight: 0.06
+              depth: 0.004
+              mode: "emboss"
+              material: 1
+              align: "center"
+            }
+          ]
+        }
+      }
+    }
+    // The stair's pendant, lit while level 1's lights are on and dark while they are off.
+    for state in stairPendantStates {
+      prototype $"stair-pendant-{state.name}" {
+        document {
+          name: $"stair-pendant-{state.name}"
+          schema: "puck.creation.v2"
+          palette [
+            { color: lookStairPendant.drum, roughness: 0.45, specular: 0.05 }
+            { color: lookStairPendant.cord, roughness: 0.6, specular: 0.04 }
+            state.glow
+          ]
+          pendantLamp(base: 0, at: [0, 0, 0], drop: stairPendantDrop)
+        }
+        // The diffuser faces down under its drum shade, so its light is a spot opening to a hemisphere at the face's
+        // centre, in the face's colour, giving what the face shows.
+        if state.lit {
+          lights [
+            spot(
+              name: "glow",
+              position: pendantGlowAt([0, 0, 0], stairPendantDrop),
+              direction: [0, -1, 0],
+              angle: 90deg,
+              innerAngle: 70deg,
+              color: lookStairPendant.color,
+              power: stairPendantPower
+            )
+          ]
+        }
+      }
+    }
+
+  }
+
+  placements {
+    shellPlacements(has: has)
+    if has.flaw {
+      flawPlacement()
+    }
+
+    for k in range(0, 4) {
+      placement $"hall-switch-{k}" {
+        prototype: "hall-switch-on"
+        parent: "gallery"
+        position [galleryEast, galleryFloor[k], switchZ]
+        yawDegrees: 90
+        respond [
+          {
+            when: state(state: hallLights, key: $"level{k}", comparison: Equal, value: 0)
+            prototypeId: "hall-switch-off"
+          }
+        ]
+      }
+    }
+    placement "stair-pendant" {
+      prototype: "stair-pendant-on"
+      parent: "gallery"
+      position: stairPendantAt
+      respond [
+        {
+          when: state(state: hallLights, key: level1, comparison: Equal, value: 0)
+          prototypeId: "stair-pendant-off"
+        }
+      ]
+    }
+
+    // The reaches a press acts in: each light switch's.
+    for switch in switchReach {
+      reach(id: $"{switch.rule}-reach", box: switch, parent: "gallery")
+    }
+  }
+
+  // The building's lights, each anchored to the root: a light stands where the root puts it and, standing still there,
+  // is traced into the irradiance volume, which bounces its light and occludes it where the probes about a surface
+  // cannot see it. The flaw (flaw.puck) lights the inside: its tube lights run the whole of its length, each in one
+  // storey, reading its power from that storey's `hallLamps` cell. Beside it stand only the two lamps a body can see,
+  // each light standing at its fixture's glowing face in that face's colour and giving what the face shows (look.puck's
+  // lookCarLamp and lookStairPendant): the south-west stair's pendant, since the flaw never enters that stair's well,
+  // which its lit prototype carries (`stair-pendant-on`), and each lift car's luminous ceiling, which rides the car's
+  // body through its shaft, so it is neither traced nor bounced. Every screen lights what stands before it by its own picture
+  // (toybox.puck), and the windows' daylight is the world's sun. Nothing else lights the building: the coffers' small
+  // lamps are paint.
+  if has.flaw {
+    render {
+      lighting {
+        lights: flawLights(placement(placementId: gallery))
+      }
+    }
+  }
+
+  // A spawn before each level's light switch, facing it, one inside the board game room, facing along it, one outside
+  // the entrance, facing in, and one on the south-west stair's first half landing, facing across it to the second
+  // flight. Each is authored in the building's frame.
+  spawnPoints: concat(
+    map(
+      galleryLevels,
+      level => {
+        id: $"hall-switch-{level.level}"
+        parent: gallery
+        position [(galleryEast - 1.3), galleryFloor[level.level], switchZ]
+        yawDegrees: 270
+      }
+    ),
+    [
+      { id: "boardroom", parent: gallery, position [bayX(4), galleryFloor[wingLevel], tileZ(1)], yawDegrees: 270 }
+      { id: "gallery", parent: gallery, position: entranceOutside, yawDegrees: 270 }
+      {
+        id: "stairs"
+        parent: gallery
+        position [
+          (galleryStair("south-west").well.x1 - 0.9),
+          ((galleryFloor[0] + (galleryStorey / 2)) + 0.05),
+          (galleryStair("south-west").well.z0 + (switchbackLanding / 2))
+        ]
+        yawDegrees: 90
+      }
+    ]
+  )
+
+  state {
+    enum HallLight {
+      Off
+      On
+    }
+
+    enum HallBlind {
+      Up
+      Down
+    }
+
+    world {
+      table hallLights: HallLight {
+        level0 = On
+        level1 = On
+        level2 = On
+        level3 = On
+      }
+      // Each level's fan shades, apart from its lights: Down spreads them over the south and east windows, Up gathers
+      // each over its hub. The shades' leaves follow these cells (shell.puck's `gallery-fan-<level>`).
+      table hallBlinds: HallBlind {
+        level0 = Down
+        level1 = Up
+        level2 = Down
+        level3 = Down
+      }
+      // The inspection lever (`gallery.inspect`), and the exposure hold in EV100 its rules write (zero releases it).
+      table galleryInspect: HallLight {
+        mode = Off
+      }
+      table galleryExposure {
+        hold = 0
+      }
+      // Each level's light by the level that owns it (hallLampLevels): zero while its level is Off.
+      table hallLamps {
+        level0 = lookFlaw.intensity
+        level1 = lookFlaw.intensity
+        level2 = lookFlaw.intensity
+        level3 = lookFlaw.intensity
+      }
+    }
+  }
+
+  // A press of the context button in a switch's reach flips that level's lights; the reach stands before the plate, so
+  // standing there puts the plate ahead of the body. The edge fires once a press.
+  for reach in switchReach {
+    rule $"{reach.rule}" {
+      when pressing()
+      mode: Edge
+      forEach: region($"{reach.rule}-reach")
+      hallLights[$"level{reach.level}"] = 1 - hallLights[$"level{reach.level}"]
+    }
+  }
+
+  // A level's lights follow its state.
+  for lamp in hallLampLevels {
+    rule $"hall-lamp-{lamp.key}-on" {
+      when hallLights[$"level{lamp.level}"] == 1
+      mode: Edge
+      hallLamps[$"{lamp.key}"] = lamp.value
+    }
+    rule $"hall-lamp-{lamp.key}-off" {
+      when hallLights[$"level{lamp.level}"] == 0
+      mode: Edge
+      hallLamps[$"{lamp.key}"] = 0
+    }
+  }
+
+  // The inspection lever: On pins the camera at one exposure, so captures of different exhibits compare at one EV; Off
+  // releases it to the automatic exposure. It adds no light: every exhibit is lit by the building's own lights alone.
+  rule "gallery-inspect-on" {
+    when galleryInspect[$"mode"] == 1
+    mode: Edge
+    galleryExposure[$"hold"] = inspectHold
+  }
+  rule "gallery-inspect-off" {
+    when galleryInspect[$"mode"] == 0
+    mode: Edge
+    galleryExposure[$"hold"] = 0
+  }
+
+  // One camera per bookmarked viewpoint (look.puck's lookShots), its eye and aim placed in the building's frame when the
+  // document compiles; `gallery.shot` selects one. The displays' station views are the station's own (shapeStation).
+  cameras: map(lookShots, view => {
+    name: $"gallery-shot-{view.name}"
+    rig {
+      name: $"gallery-shot-{view.name}"
+      version: "puck.camera.program.v1"
+      operations [
+        { $type: "anchor", subject { $type: "worldPoint", point: galleryAt(frame, view.eye) } }
+        { $type: "lookAt", subject { $type: "worldPoint", point: galleryAt(frame, view.aim) } }
+        { $type: "fieldOfView", fieldOfViewRadians: (view.fov * 0.017453293) }
+      ]
+    }
+    renderWidth: 1672
+    renderHeight: 941
+  })
+
+  commands [
+    {
+      name: "gallery.inspect"
+      help: "Switches the gallery's inspection exposure On or Off: On pins the camera at EV100 7, so captures of different exhibits compare at one exposure; Off releases it to the automatic exposure. It adds no light; the building's own lights (gallery.lights, gallery.blinds) light every exhibit."
+      parameters [
+        { name: "state", kind: Choice, values ["On", "Off"], default: "On" }
+      ]
+      lines [
+        "world.state.cell.set galleryInspect mode {state}"
+      ]
+    }
+    {
+      name: "gallery.lights"
+      help: "Switches a level's room lights in the gallery hall (0 to 3) on or off, as its wall switch does: off quiets the light of the stretch of the flaw that level holds, and its lamps."
+      parameters [
+        { name: "level", kind: Choice, values ["0", "1", "2", "3"] }
+        { name: "state", kind: Choice, values ["On", "Off"] }
+      ]
+      lines [
+        "world.state.cell.set hallLights level{level} {state}"
+      ]
+    }
+    {
+      name: "gallery.shot"
+      help: "Films the gallery from a bookmarked viewpoint (look.puck's lookShots): hall is the level-zero hall painting's, hall-side its second angle, and the rest face what a kit sheet draws. view.override camera auto returns to the chase camera."
+      parameters [
+        { name: "shot", kind: Choice, values: map(lookShots, shot => shot.name), default: "hall" }
+      ]
+      lines [
+        "view.override camera gallery-shot-{shot}"
+      ]
+    }
+    {
+      name: "gallery.time"
+      help: "Moves the day to a fraction, noon by default (look.puck's lookNoon; lookAfternoon is the warmer reading the look is also judged at). The day still advances: hold it with world.row.set state day advance, as debug.md's time of day gives it."
+      parameters [
+        { name: "day", kind: Number, default: $"{lookNoon}" }
+      ]
+      lines [
+        "world.state.cell.set day $value {day}"
+      ]
+    }
+    {
+      name: "gallery.blinds"
+      help: "Spreads or gathers a level's fan shades in the gallery (0 to 3): Down spreads them over the south and east windows, Up, the default, gathers each over its hub and lets the windows light the level."
+      parameters [
+        { name: "level", kind: Choice, values ["0", "1", "2", "3"] }
+        { name: "state", kind: Choice, values ["Up", "Down"] }
+      ]
+      lines [
+        "world.state.cell.set hallBlinds level{level} {state}"
+      ]
+    }
+  ]
+}

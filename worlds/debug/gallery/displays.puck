@@ -1,0 +1,218 @@
+// The gallery's shape displays (../shapes.md): the plinths, consoles and turntables on level 0 (../shapes.puck), their
+// station views and terminals (../shape-station.puck), the exhibit tour that walks them in order, the keys and wheel
+// that step it, and the spawn points and gallery.* commands that reach every exhibit by name. A module library:
+// `galleryDisplayModule(frame, terminals)` stands them in the frame the building stands in, and building.puck expands it
+// on a floor that enables `displays`. `terminals` are the building's other terminals (the portals' panels), which the
+// displays' one `terminalPlay` numbers after theirs.
+
+import "../../standard/frame"
+import "../shapes"
+import "../shape-station"
+import "layout"
+
+// The tour: every exhibit in walking order, level by level and display by display (shapes.puck's galleryCatalog).
+// `galleryStop` is the exhibit the tour last showed (-1 before the first step); gallery.next and gallery.prev write
+// `galleryStep`, a rule moves the stop, and the stop's own rule stands body 0 before the exhibit's display, facing it,
+// and shows the exhibit on its turntable.
+template galleryDisplayModule(frame, terminals = []) {
+  let displays = galleryDisplaysIn(frame)
+
+  prototypes {
+    galleryPrototypes(displays: displays)
+  }
+
+  // Each plinth, its screen, the buttons before its console and the exhibit on its turntable, worked by the displays'
+  // rules (shapes.puck's galleryState).
+  placements {
+    displayPlacements(displays: displays)
+  }
+
+  state {
+    world {
+      // The motion controls and the cells the state-bound exhibits read, each display's selection and its screen's
+      // cells, and every exhibit's copy.
+      galleryState(displays: displays)
+      displayState(displays: displays)
+      slot galleryStop = -1 bounds(-1..galleryLast)
+      slot galleryStep = 0 bounds(-1..1)
+
+      // The gallery wheel's sector labels and icons, by sector id (icons rows in controls.puck).
+      table galleryWheelLabels {
+        next = "Next"
+        prev = "Previous"
+        flag = "Flag"
+        view = "View"
+        slice = "Slice"
+        entrance = "Entrance"
+        cancel = "Cancel"
+      }
+
+      table galleryWheelIcons {
+        next = "act.next"
+        prev = "act.prev"
+        flag = "act.flag"
+        view = "act.view"
+        slice = "act.slice"
+        entrance = "act.respawn"
+      }
+    }
+  }
+
+  // A spawn point per display and per exhibit (shapes.puck's stationSpawns), which the gallery.* commands walk to.
+  spawnPoints: stationSpawns(displays)
+
+  commands: galleryCommands
+
+  // Every display is a terminal, and the backtick turns its screen into its hidden console; the building's other
+  // terminals are numbered after them.
+  shapeStation(displays: displays, terminals: terminals)
+
+  rule "gallery-next" {
+    when galleryStep == 1
+    mode: Level
+    galleryStop = (galleryStop + 1) % (galleryLast + 1)
+    galleryStep = 0
+  }
+
+  rule "gallery-prev" {
+    when galleryStep == -1 and galleryStop > 0
+    mode: Level
+    galleryStop = galleryStop - 1
+    galleryStep = 0
+  }
+
+  rule "gallery-prev-wrap" {
+    when galleryStep == -1 and galleryStop <= 0
+    mode: Level
+    galleryStop = galleryLast
+    galleryStep = 0
+  }
+
+  for entry in galleryCatalog {
+    rule $"gallery-stop-{entry.index}" {
+      when galleryStop == entry.index
+      mode: Edge
+      pose(key: 0, spawnPoint: entry.name)
+      gallerySelect[$"{galleryGroupOf(entry).id}"] = entry.index
+    }
+  }
+
+  commands [
+    {
+      name: "gallery.next"
+      help: "Stands body 0 at the next exhibit of the tour, in walking order (level by level, row by row); after the last it wraps to the first."
+      lines [
+        "world.state.cell.set galleryStep $value 1"
+      ]
+    }
+    {
+      name: "gallery.prev"
+      help: "Stands body 0 at the previous exhibit of the tour; before the first it wraps to the last."
+      lines [
+        "world.state.cell.set galleryStep $value -1"
+      ]
+    }
+  ]
+
+  // The gallery's keys, on the debug world's own resting page: = steps the tour on, - steps it back, G flags the
+  // exhibit the seat stands at, V steps the debug view and B slices the exhibit at hand. Holding Q opens the gallery
+  // wheel, aimed with the mouse and committed on release, as Tab opens the play wheel. A pad reaches the tour through the
+  // bar's Tour page (pad.puck); its right shoulder is the context button. The garden shares the Moth's base page and has
+  // no gallery, so these live here.
+  bindingOverlays [
+    {
+      id: "gallery-keys"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers []
+        chords [
+          {
+            chord ["keyboard.q"]
+            group: "play"
+            page {
+              id: "gallery-wheel-keys"
+              inherits: "base"
+              label: "Gallery"
+              entries [
+                {
+                  command: "player.wheel.select"
+                  sources ["mouse.motion"]
+                }
+                {
+                  command: "player.wheel.commit"
+                  activateOn: Completed
+                  sources ["keyboard.q"]
+                }
+              ]
+            }
+          }
+          {
+            chord []
+            group: "play"
+            page {
+              id: "base"
+              entries [
+                {
+                  command: "gallery.next"
+                  id: "galleryNext"
+                  label: "Next exhibit"
+                  sources ["keyboard.equals"]
+                }
+                {
+                  command: "gallery.prev"
+                  id: "galleryPrev"
+                  label: "Previous exhibit"
+                  sources ["keyboard.minus"]
+                }
+                {
+                  command: "gallery.flag"
+                  id: "galleryFlag"
+                  label: "Flag exhibit"
+                  sources ["keyboard.g"]
+                }
+                {
+                  command: "gallery.view"
+                  id: "galleryView"
+                  label: "Debug view"
+                  sources ["keyboard.v"]
+                }
+                {
+                  command: "gallery.slice"
+                  id: "gallerySlice"
+                  label: "Slice exhibit"
+                  sources ["keyboard.b"]
+                }
+              ]
+            }
+          }
+        ]
+        wheels [
+          {
+            id: "gallery"
+            group: "play"
+            holdPages ["gallery-wheel-keys"]
+            labelRow: "state.galleryWheelLabels"
+            iconRow: "state.galleryWheelIcons"
+            style {
+              placement: ViewportCenter
+            }
+            rings [
+              {
+                id: "gallery-acts"
+                label: "Gallery"
+                entries [
+                  { id: "next", command: "gallery.next", sources: null }
+                  { id: "prev", command: "gallery.prev", sources: null }
+                  { id: "flag", command: "gallery.flag", sources: null }
+                  { id: "view", command: "gallery.view", sources: null }
+                  { id: "slice", command: "gallery.slice", sources: null }
+                  { id: "entrance", command: "gallery.go", sources: null }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

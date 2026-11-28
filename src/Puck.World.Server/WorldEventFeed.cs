@@ -828,7 +828,7 @@ public sealed class WorldEventFeed {
                     reason: out _,
                     yawRadians: out var yawRadians
                 );
-                shape = region.ShapeAt(origin: center, yawRadians: yawRadians);
+                shape = region.ShapeAt(origin: center, yawRadians: yawRadians, scale: FixedQ4816.One);
             }
 
             var frameChanged = (!row.Framed || (row.HasCenter != hasCenter) || (row.Shape != shape));

@@ -427,8 +427,9 @@ public static partial class WorldPlacementStamper {
     }
     // Emits the creation's shapes, EACH its own segment carrying the FULL placement prefix — the shader splits the
     // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead.
-    // Uniform placement scale commutes with the per-shape rotations (shear-free).
-    private static void EmitPlacedShapes(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, Vector3 placementOrigin, Quaternion placementRotation, Vector3? reflectionNormal, bool inScope, bool[]? hidden) {
+    // Uniform placement scale commutes with the per-shape rotations (shear-free). The scale is the row's composed one
+    // (its stamp's frame), never its own local Scale, so a row under a scaled parent draws at the group's scale.
+    private static void EmitPlacedShapes(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, float scale, Vector3 placementOrigin, Quaternion placementRotation, Vector3? reflectionNormal, bool inScope, bool[]? hidden) {
         CreationStampEmitter.Emit(
             builder: builder,
             document: creation,
@@ -437,7 +438,7 @@ public static partial class WorldPlacementStamper {
             transform: new CreationStampTransform(
                 Origin: placementOrigin,
                 Rotation: placementRotation,
-                Scale: placement.Scale,
+                Scale: scale,
                 ReflectionNormal: reflectionNormal
             ),
             materialFor: shape => paletteIds[Math.Clamp(
@@ -459,6 +460,8 @@ public static partial class WorldPlacementStamper {
         }
 
         var stamp = WorldPlacementStamp.Resolve(definition: definition, frameOverride: frameOverride, placement: placement, worldSeed: worldSeed);
+        // The row's composed scale: its own times its parents', as its stamp's frame resolves it.
+        var scale = stamp.Frame.Scale;
         // A glass shape emits apart from the opaque shapes, in the glass instance after them: `hiddenOpaque` hides it
         // from the opaque emission, and `glassHidden` hides everything but the glass shapes from the glass one.
         var (hiddenOpaque, glassHidden) = GlassMasks(creation: creation, hidden: hidden);
@@ -474,7 +477,7 @@ public static partial class WorldPlacementStamper {
             ? CreationStampEmitter.LayoutTextRuns(
                 document: creation,
                 fontFor: textCatalog!.Resolve,
-                scale: placement.Scale
+                scale: scale
             )
             : null
         );
@@ -488,7 +491,7 @@ public static partial class WorldPlacementStamper {
         );
         var reach = CreationStampEmitter.RenderReach(
             document: creation,
-            scale: placement.Scale,
+            scale: scale,
             // A method group, never a lambda over the catalog, which would allocate a closure on every placement.
             fontFor: (hasText
                 ? textCatalog!.Resolve
@@ -521,6 +524,7 @@ public static partial class WorldPlacementStamper {
             placement: placement,
             reach: reach,
             rotation: rotation,
+            scale: scale,
             scoped: scoped,
             textCatalog: textCatalog,
             textLayouts: textLayouts,
@@ -594,7 +598,7 @@ public static partial class WorldPlacementStamper {
     }
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
     // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
-    private readonly struct StaticInstanceVisitor(SdfProgramBuilder builder, CreationDocument creation, bool hasText, bool[]? hidden, bool[]? hiddenOpaque, bool[]? glassHidden, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
+    private readonly struct StaticInstanceVisitor(SdfProgramBuilder builder, CreationDocument creation, bool hasText, bool[]? hidden, bool[]? hiddenOpaque, bool[]? glassHidden, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, float scale, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
         // The creation's glass shapes, one static instance of their own after the opaque shapes and text: their own
         // group, so they never bake with an opaque shape, carve or are carved by one, and draw in the glass pass. They
         // take a field scope of their own only when one of them composes by something other than a union, so a hollow
@@ -609,7 +613,7 @@ public static partial class WorldPlacementStamper {
             _ = builder.BeginInstance(
                 boundCenter: instance.Origin,
                 boundRadius: (reach + PlacementBoundMargin),
-                detail: CreationDetail(document: creation, hidden: glassHidden, scale: placement.Scale)
+                detail: CreationDetail(document: creation, hidden: glassHidden, scale: scale)
             );
             if (glassScoped) {
                 _ = builder.PushField(compose: SdfBlendOp.Union);
@@ -620,7 +624,7 @@ public static partial class WorldPlacementStamper {
                 hidden: glassHidden,
                 inScope: glassScoped,
                 paletteIds: paletteIds,
-                placement: placement,
+                scale: scale,
                 placementOrigin: instance.Origin,
                 placementRotation: rotation,
                 reflectionNormal: instance.ReflectionNormal
@@ -640,7 +644,7 @@ public static partial class WorldPlacementStamper {
                 transform: new CreationStampTransform(
                     Origin: instance.Origin,
                     Rotation: rotation,
-                    Scale: placement.Scale,
+                    Scale: scale,
                     ReflectionNormal: instance.ReflectionNormal
                 ),
                 fontFor: textCatalog!.Resolve,
@@ -664,7 +668,7 @@ public static partial class WorldPlacementStamper {
                 boundCenter: center,
                 boundRadius: (half.Length() + PlacementBoundMargin),
                 box: (tile.Low, tile.High),
-                detail: ReliefDetail(detail: CreationDetail(document: creation, hidden: tile.Hidden, scale: placement.Scale), noise: relief, scale: placement.Scale),
+                detail: ReliefDetail(detail: CreationDetail(document: creation, hidden: tile.Hidden, scale: scale), noise: relief, scale: scale),
                 parts: tile.Parts
             );
             _ = builder.PushField(compose: SdfBlendOp.Union);
@@ -674,7 +678,7 @@ public static partial class WorldPlacementStamper {
                 hidden: tile.Hidden,
                 inScope: true,
                 paletteIds: paletteIds,
-                placement: placement,
+                scale: scale,
                 placementOrigin: stampTransform.Origin,
                 placementRotation: rotation,
                 reflectionNormal: stampTransform.ReflectionNormal
@@ -703,7 +707,7 @@ public static partial class WorldPlacementStamper {
                 hidden: hidden,
                 origin: instance.Origin,
                 rotation: rotation,
-                scale: placement.Scale,
+                scale: scale,
                 volumes: volumes
             );
             AppendMeshDraw(
@@ -715,14 +719,14 @@ public static partial class WorldPlacementStamper {
                 placement: placement.Id,
                 reflectionNormal: instance.ReflectionNormal,
                 rotation: rotation,
-                scale: placement.Scale,
+                scale: scale,
                 scope: meshScope
             );
             if (perShape) {
                 var stampTransform = new CreationStampTransform(
                     Origin: instance.Origin,
                     Rotation: rotation,
-                    Scale: placement.Scale,
+                    Scale: scale,
                     ReflectionNormal: instance.ReflectionNormal
                 );
 
@@ -760,7 +764,7 @@ public static partial class WorldPlacementStamper {
                         bakesWithPrevious: ((emitted++ > 0) && !warped && !previousWarped),
                         boundCenter: boundCenter,
                         boundRadius: (boundRadius + PlacementBoundMargin),
-                        detail: WorldShapeDetail.Of(shape: shape, scale: placement.Scale),
+                        detail: WorldShapeDetail.Of(shape: shape, scale: scale),
                         box: ((box is { } tight) ? ((tight.Low - margin), (tight.High + margin)) : null)
                     );
                     CreationStampEmitter.EmitShapeStamp(
@@ -785,7 +789,7 @@ public static partial class WorldPlacementStamper {
                     _ = builder.BeginInstance(
                         boundCenter: instance.Origin,
                         boundRadius: (reach + PlacementBoundMargin),
-                        detail: TextDetail(creation: creation, scale: placement.Scale)
+                        detail: TextDetail(creation: creation, scale: scale)
                     );
                     EmitTextRuns(instance: instance);
                     _ = builder.EndInstance();
@@ -805,7 +809,7 @@ public static partial class WorldPlacementStamper {
                 var stampTransform = new CreationStampTransform(
                     Origin: instance.Origin,
                     Rotation: rotation,
-                    Scale: placement.Scale,
+                    Scale: scale,
                     ReflectionNormal: instance.ReflectionNormal
                 );
                 var bound = (instance.Origin - new Vector3(value: reach), instance.Origin + new Vector3(value: reach));
@@ -825,7 +829,7 @@ public static partial class WorldPlacementStamper {
                     _ = builder.BeginInstance(
                         boundCenter: instance.Origin,
                         boundRadius: (reach + PlacementBoundMargin),
-                        detail: ReliefDetail(detail: CreationDetail(document: creation, hidden: hiddenOpaque, scale: placement.Scale), noise: (scoped ? creation.Noise : null), scale: placement.Scale),
+                        detail: ReliefDetail(detail: CreationDetail(document: creation, hidden: hiddenOpaque, scale: scale), noise: (scoped ? creation.Noise : null), scale: scale),
                         parts: (scoped
                             ? WorldShapeDetail.PartsOf(document: creation, hidden: hiddenOpaque, relief: creation.Noise, reliefBounds: ((hasText && !textApart) ? bound : null), slot: SdfInstancePart.StaticSlot, transform: stampTransform)
                             : null)
@@ -839,7 +843,7 @@ public static partial class WorldPlacementStamper {
                         hidden: hiddenOpaque,
                         inScope: scoped,
                         paletteIds: paletteIds,
-                        placement: placement,
+                        scale: scale,
                         placementOrigin: instance.Origin,
                         placementRotation: rotation,
                         reflectionNormal: instance.ReflectionNormal
@@ -868,7 +872,7 @@ public static partial class WorldPlacementStamper {
                 _ = builder.BeginInstance(
                     boundCenter: instance.Origin,
                     boundRadius: (reach + PlacementBoundMargin),
-                    detail: TextDetail(creation: creation, scale: placement.Scale)
+                    detail: TextDetail(creation: creation, scale: scale)
                 );
                 EmitTextRuns(instance: instance);
                 _ = builder.EndInstance();

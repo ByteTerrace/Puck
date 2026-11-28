@@ -3,18 +3,82 @@
 //
 // Positions are in the building's own frame, metres: x runs east from the hall's old west face (the west wall now stands at `galleryWestOut`, -3.75), z north
 // from the south wall's outer face (0 .. 36.85), y up from the ground. The building's rows are placed under one root
-// placement, `gallery` (gallery.puck), so a world stands the building by giving that row a position and a turn; the
-// yaw of a row here is the row's own, with yaw 0 facing -z (south) and yaw 180 facing +z, as a placement's does.
+// placement, `gallery` (building.puck), so a world stands the building by giving that row a frame: a position, a turn
+// and a uniform scale (../../standard/frame.puck); the yaw of a row here is the row's own, with yaw 0 facing -z (south)
+// and yaw 180 facing +z, as a placement's does.
 
 import "../../standard/paths"
 import "../../standard/limbs"
 import "../../standard/form-transition"
+import "../../standard/frame"
 
-// Where the debug world stands the building: its root placement's position. A document that stands something in the
-// building by world coordinates (a table's lattice, a painting's door) adds it to a plan position with `galleryWorld`.
-// The site keeps the nave's west arcade at world x 22 and its south edge at world z 20.375 however the aisles are sized.
+// Where the debug world stands the building: the frame of its root placement, at full size and unturned. Every module of
+// the building takes the frame it stands in (building.puck's `galleryBuilding`), and a module that stands something by
+// world coordinates (a static creation's paints, a screen's face, a size field's zones) places it with `galleryAt`, the
+// same frame the root carries. `galleryWorld` is the debug world's own: a document outside the building that names a
+// point of it in the world (a route, a place, a test). The site keeps the nave's west arcade at world x 22 and its south
+// edge at world z 20.375 however the aisles are sized.
 let gallerySite = [(22 - naveWest), 0, (20.375 - naveSouth)]
-function galleryWorld(x, y, z) = [(gallerySite[0] + x), (gallerySite[1] + y), (gallerySite[2] + z)]
+let galleryFrame = frameOf(position: gallerySite)
+function galleryAt(frame, p) = frameAt(frame, p)
+function galleryWorld(x, y, z) = galleryAt(galleryFrame, [x, y, z])
+
+// The building's modules (gallery.md, "The modules"): every part of the gallery beside its shell and theme is a module a
+// floor enables, and the building stands a module when any of its floors enables it, so a module no floor names costs
+// nothing (no rows, rules, bodies or bakes). A floor is `{ level, modules }`. The modules:
+//
+//   lifts         the two glass lifts, their shafts, cars and landings (lifts.puck)
+//   displays      the shape displays on level 0, their consoles and the exhibit tour (../shapes.puck)
+//   tree          the central tree, its walkway and where its branches land (tree.puck)
+//   climbingWall  the east wall's climb from the nave to level 3's ledge (climbing-wall.puck)
+//   stewards      the four crew on level 0 who give a visitor its size back (stewards.puck)
+//   holiday       the holiday firs on the showcase rows (holiday.puck)
+//   toybox        level 1's twelve deck stations (toybox.puck)
+//   rentals       level 1's handheld stalls, the cartridge rack and the wonder keys (rentals.puck)
+//   wonder        level 1's size field, which makes a visitor small there (wonder.puck)
+//   mouseHouse    the little house whose cake grants the full-size pass (mouse-house.puck)
+//   nets          level 1's toy lattice and rope nets along its balcony edges (shell.puck); without them it is railed
+//   timePuzzles   the play floor's time puzzles (time-puzzles.puck)
+//   gameStations  level 2's twelve game stations (games.puck)
+//   portals       level 3's twelve painting portals (portals.puck)
+//   flaw          the glowing tube through every floor (flaw.puck), tabled by the owner, so no floor names it yet
+//
+// A module some other module rests on comes with it: the toybox's decks with the rentals or the time puzzles, the size
+// field with the little house, the rentals and the nets with the time puzzles (`galleryModulesOf`).
+function galleryFloorOf(level, modules) = { level: level, modules: modules }
+function galleryEnables(floors, module) = any(floors, f => contains(f.modules, module))
+// What a set of floors stands, one flag a module.
+function galleryModulesOf(floors) = galleryModulesWith(floors, galleryEnables(floors, "timePuzzles"))
+function galleryModulesWith(floors, puzzles) = galleryModulesRested(floors, puzzles, (puzzles or galleryEnables(floors, "rentals")))
+function galleryModulesRested(floors, puzzles, rentals) = {
+  lifts: galleryEnables(floors, "lifts")
+  displays: galleryEnables(floors, "displays")
+  tree: galleryEnables(floors, "tree")
+  climbingWall: galleryEnables(floors, "climbingWall")
+  stewards: galleryEnables(floors, "stewards")
+  holiday: galleryEnables(floors, "holiday")
+  toybox: (rentals or galleryEnables(floors, "toybox"))
+  rentals: rentals
+  wonder: (galleryEnables(floors, "wonder") or galleryEnables(floors, "mouseHouse"))
+  mouseHouse: galleryEnables(floors, "mouseHouse")
+  nets: (puzzles or galleryEnables(floors, "nets"))
+  timePuzzles: puzzles
+  gameStations: galleryEnables(floors, "gameStations")
+  portals: galleryEnables(floors, "portals")
+  flaw: galleryEnables(floors, "flaw")
+}
+// Every module on the floor that holds it: the gallery as the owner laid it out.
+let galleryFloorsAll = [
+  galleryFloorOf(0, ["lifts", "displays", "tree", "climbingWall", "stewards", "holiday"])
+  galleryFloorOf(1, ["lifts", "toybox", "rentals", "wonder", "mouseHouse", "nets", "timePuzzles"])
+  galleryFloorOf(2, ["lifts", "gameStations"])
+  galleryFloorOf(3, ["lifts", "portals"])
+]
+// The debug world's: every module but level 2's game stations, since the debug world stands its own station beside the
+// board game room's older tables (../game-station-deck.puck).
+let galleryFloorsDebug = map(galleryFloorsAll, f => (f with { modules: filter(f.modules, m => (m != "gameStations")) }))
+// The shell and its theme alone: four empty floors.
+let galleryFloorsShell = map(range(0, 4), k => galleryFloorOf(k, []))
 
 // Four storeys 4.5 m apart: level k's floor top stands at 4.5k + 0.05, on a slab 0.3 m thick, under a ceiling 4.2 m up.
 let galleryStorey = 4.5
@@ -369,10 +433,9 @@ function labWingClear(x) = (count(labWingPlan, lab => (bayX(lab.bay) == x)) == 0
 //
 // It keeps clear of the corner stair bays (0 and 12), the fall's well (bay 11) and the bridge. Every slab it passes
 // through in a gallery is opened and collared (`flawCrossings`); the nave has no slabs.
-// Whether the gallery builds the flaw at all: tabled by the owner while simpler work comes first, so its route, look and
-// lights stay authored here and in flaw.puck, and turning this on restores the tube, its collars, its slab openings and
-// its lights together.
-let flawEnabled = false
+// The flaw is the `flaw` module, which no floor enables while the owner has it tabled behind simpler work: its route, look
+// and lights stay authored here and in flaw.puck, and a floor that names it restores the tube, its collars, its slab
+// openings and its lights together.
 let flawDrop = 0.6
 function flawRun(level) = (galleryCeiling[level] - flawDrop)
 let flawFrom = 2
@@ -506,17 +569,20 @@ let galleryGameRows = [
 ]
 // The yaw that turns a station standing at `z` to face the nave: its near chair away from the nave's middle line.
 function galleryFacingNave(z) = ((z < ((arcadeSouth + arcadeNorth) / 2)) ? 0 : 180)
-// Every station in the world's frame, south row then north, each west to east. A station's creation's floor lies 0.5 m
-// under its origin (the standard's gameStationFloor), so it stands on level 2.
-let galleryGameStations = flatMap(galleryGameRows, row => map(range(0, length(galleryGameBays)), n => {
+// Every station of a building standing in `frame`, in the world's frame, south row then north, each west to east. A
+// station's creation's floor lies 0.5 m under its origin (the standard's gameStationFloor), so it stands on level 2. A
+// station turns with the frame; it stands at its own size, since the standard's station takes no scale.
+function galleryGameStationsIn(frame) = flatMap(galleryGameRows, row => map(range(0, length(galleryGameBays)), n => {
   id: $"{row.name}{n + 1}"
-  at: galleryWorld(bayX(galleryGameBays[n]), (galleryFloor[gameStationLevel] - 0.5), row.z)
-  yaw: galleryFacingNave(row.z)
+  at: galleryAt(frame, [bayX(galleryGameBays[n]), (galleryFloor[gameStationLevel] - 0.5), row.z])
+  yaw: frameYaw(frame, galleryFacingNave(row.z))
 }))
-// The stations the gallery booted alone stands (games.puck): the plan's first `galleryRoomStood`, every one, since the
-// stations play one set of rules (game-station.md, "Cost").
+let galleryGameStations = galleryGameStationsIn(galleryFrame)
+// The stations a building whose level 2 holds its game stations stands (games.puck): the plan's first
+// `galleryRoomStood`, every one, since the stations play one set of rules (game-station.md, "Cost").
 let galleryRoomStood = 12
-let galleryRoomStations = map(range(0, galleryRoomStood), i => galleryGameStations[i])
+function galleryRoomStationsIn(frame) = map(range(0, galleryRoomStood), i => galleryGameStationsIn(frame)[i])
+let galleryRoomStations = galleryRoomStationsIn(galleryFrame)
 
 // Level 1's handheld rentals (rentals.puck): a pool of one brick and one advanced brick for each seat's body (bodies 0
 // to 11, shapes.puck's four local seats and eight visitors), each run only while its body holds a rented device of that
@@ -555,13 +621,12 @@ function stewardSlate(s) = ([s.x, galleryFloor[0], s.z] + (stewardFacing(s) * st
 // the nave (-z), whose door only a body the toybox has made small fits through, and inside it the cake that grants the
 // full-size pass. Its door admits the visitor up to `admits` of its full size, with `room` to spare (the standard's
 // sizedDoorway). Points in it are given in its own frame (x across its front, y up from level 1's floor, z from front
-// to back) and stood in the world by `mouseHousePoint`.
+// to back), stood in the building's plan by `mouseHousePlan` and in the world by `mouseHousePointIn` (the debug world's,
+// `mouseHousePoint`).
 let mouseHouse = { x: bayX(10), z: tileZ((wallRowNorth - 2)), width: 1.8, depth: 1.4, admits: 0.2, room: 1.4 }
-function mouseHousePoint(p) = galleryWorld(
-  (mouseHouse.x + p[0]),
-  (galleryFloor[toyboxLevel] + p[1]),
-  (mouseHouse.z + p[2])
-)
+function mouseHousePlan(p) = [(mouseHouse.x + p[0]), (galleryFloor[toyboxLevel] + p[1]), (mouseHouse.z + p[2])]
+function mouseHousePointIn(frame, p) = galleryAt(frame, mouseHousePlan(p))
+function mouseHousePoint(p) = mouseHousePointIn(galleryFrame, p)
 // Before its door, in its doorway, inside it, and at the cake's table at its back.
 let mouseHouseBefore = [0, 0, ((0 - (mouseHouse.depth / 2)) - 0.6)]
 let mouseHouseDoorway = [0, 0, (0 - (mouseHouse.depth / 2))]

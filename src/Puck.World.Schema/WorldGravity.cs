@@ -913,8 +913,7 @@ public readonly record struct FixedWorldGravityArea(
         if (
             !Enum.IsDefined(value: area.Mode) ||
             !IsFixedRepresentable(value: frame.Position) ||
-            !IsFixedRepresentable(value: placement.Scale) ||
-            !(placement.Scale > 0f) ||
+            !(frame.FixedScale > FixedQ4816.Zero) ||
             !IsFixedRepresentable(value: frame.YawDegrees) ||
             !IsFixedRepresentable(value: area.Blend) ||
             (area.Blend < 0f)
@@ -923,7 +922,7 @@ public readonly record struct FixedWorldGravityArea(
         }
 
         try {
-            var scale = FixedQ4816.FromDouble(value: placement.Scale);
+            var scale = frame.FixedScale;
             var position = FixedVector3.FromVector3(value: frame.Position);
             var yaw = FixedQ4816.FromDegrees(degrees: frame.YawDegrees);
             var boundsKind = default(FixedWorldGravityAreaBoundsKind);

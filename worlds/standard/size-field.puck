@@ -35,6 +35,13 @@
 // (WorldBody.SetScaleWithinClearance): a body asked to grow under a low ceiling stays the largest size that fits, and
 // grows on once it walks clear.
 //
+// A field stands in a frame (frame.puck), as the group it sizes does: its zones are written in the group's own
+// coordinates and carried into the world by `frame`, and its sizes are the group's, so they are multiplied by the frame's
+// scale. A body in a group stood at half size therefore takes half the size the field writes at full size, and its
+// collider, speeds, gravity, jump and reach follow (bodies.scale), so moving through the scaled group feels as moving
+// through the unscaled one does. A path and a capsule hold at any yaw; a box is the world box about the group's box
+// (frameBox), exact at a whole number of quarter turns.
+//
 // The field's sizes live in a world table, `sizeField-<name>`, keyed by the names `sizes` gives them, so a running World
 // is retuned without a reload:
 //
@@ -46,22 +53,33 @@
 //
 // sizeField(
 //   name:     the field's name; names its rule `size-field-<name>` and its table `sizeField-<name>`
-//   zones:    the zones, first match wins, each { from, to, start, end, reach, box }:
-//               from, to   the path's two world points, [x, y, z] (both omitted: one size throughout)
+//   zones:    the zones, first match wins, each { from, to, start, end, reach, box }, in the frame's coordinates:
+//               from, to   the path's two points, [x, y, z] (both omitted: one size throughout)
 //               start, end keys of `sizes`: the size at `from` and at `to` (`end` omitted: `start` throughout)
 //               reach      how far either side of the path, in metres, the zone holds a body (omitted: no capsule)
-//               box        { x0, x1, y0, y1, z0, z1 }, world metres, the box the zone holds a body in (omitted: none)
-//   sizes:    the named sizes, [{ key, value }], each a multiplier of the body's authored size
+//               box        { x0, x1, y0, y1, z0, z1 }, metres, the box the zone holds a body in (omitted: none)
+//   sizes:    the named sizes, [{ key, value }], each a multiplier of the body's authored size in the frame
 //   register: the body register its size lives in; the one bodies.scale names
 //   passes:   body registers that, nonzero, give a body `passSize` inside every zone
 //   passSize: the key of `sizes` a pass holder takes (omitted: the first size)
+//   frame:    the frame the zones and sizes stand in (omitted: the world's own, frameIdentity)
 // )
+
+import "frame"
+
 
 // A zone as the rule reads it: its box and capsule flags, which axes its path moves along, and the path's span and
 // squared length, whose quotient with the foot's offset dotted along the span is its progress. Every value here folds
 // at expansion.
 let sizeFieldNoBox = { x0: 0, x1: 0, y0: 0, y1: 0, z0: 0, z1: 0 }
-function sizeFieldZone(zone) = sizeFieldPrepared({ from [0, 0, 0], to [0, 0, 0], reach: 0, box: sizeFieldNoBox, end: zone.start } with zone)
+function sizeFieldZone(frame, zone) = sizeFieldPrepared(sizeFieldPlaced(frame, ({ from [0, 0, 0], to [0, 0, 0], reach: 0, box: sizeFieldNoBox, end: zone.start } with zone)))
+// A zone carried from its frame into the world: its path's points, its reach and its box.
+function sizeFieldPlaced(frame, zone) = zone with {
+  from: frameAt(frame, zone.from)
+  to: frameAt(frame, zone.to)
+  reach: frameLength(frame, zone.reach)
+  box: ((zone.box.x1 > zone.box.x0) ? frameBox(frame, zone.box) : sizeFieldNoBox)
+}
 function sizeFieldPrepared(zone) = sizeFieldFolded(
   zone,
   [(zone.to[0] - zone.from[0]), (zone.to[1] - zone.from[1]), (zone.to[2] - zone.from[2])]
@@ -78,19 +96,19 @@ function sizeFieldSpanned(zone, span, spanSquared) = zone with {
   spanSquared: ((spanSquared > 0) ? spanSquared : 1)
 }
 
-template sizeField(name, zones, sizes, register = "size", passes = [], passSize = "") {
+template sizeField(name, zones, sizes, register = "size", passes = [], passSize = "", frame = frameIdentity) {
   state {
     world {
       row {
         name: $"sizeField-{name}"
         kind: Fixed
         capacity: length(sizes)
-        cells: map(sizes, size => { key: size.key, value: size.value })
+        cells: map(sizes, size => { key: size.key, value: (size.value * frame.scale) })
       }
     }
   }
 
-  let prepared = map(zones, zone => sizeFieldZone(zone))
+  let prepared = map(zones, zone => sizeFieldZone(frame, zone))
   let count = length(prepared)
   let passKey = ((passSize == "") ? sizes[0].key : passSize)
 

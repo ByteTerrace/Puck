@@ -32,11 +32,12 @@ public static class WorldAdjacencyGeometry {
             }
         }
 
-        var delta = (FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(
+        var resolved = WorldDefinitionRows.ResolvedFrame(
             definition: definition,
             placement: placement
-        )) - frame.Origin);
-        var reach = FixedQ4816.FromDouble(value: (CreationGeometry.Reach(document: creation.Document) * placement.Scale));
+        );
+        var delta = (resolved.FixedPosition - frame.Origin);
+        var reach = FixedQ4816.FromDouble(value: (CreationGeometry.Reach(document: creation.Document) * resolved.Scale));
         var alongNormal = FixedVector3.Dot(
             left: delta,
             right: frame.Normal

@@ -10,14 +10,15 @@ motion, skinning and motion vectors can be inspected, paused and scrubbed.
 [`shapes.puck`](shapes.puck) holds the exhibits and the display stations' look,
 state and placements, and [`shape-station.puck`](shape-station.puck) a station's
 rules and terminal; both take the list of displays a world stands, which is the
-gallery's twelve unless a world gives its own. `debug.puck`
-imports them, expands `galleryPrototypes()` in its `prototypes` block
-and `galleryState()` in its `state.world` block, concatenates `gallerySpawns`
-into its `spawnPoints` and `galleryCommands` into its `commands`, and declares
-the font its lettering embosses in. [`gallery/gallery.puck`](gallery/gallery.puck) is
-the building, a module under one root placement: its shell, floors, stairs,
-lift, lights, level boards, the displays (it expands `displayPlacements()`,
-`displayState()` and `shapeStation()` for them), tour and keys.
+gallery's twelve unless a world gives its own. The gallery's `displays` module
+([`gallery/displays.puck`](gallery/displays.puck)'s `galleryDisplayModule`)
+expands `galleryPrototypes`, `displayPlacements`, `galleryState`,
+`displayState` and `shapeStation` for the displays standing in the building's
+frame, with the spawn points (`stationSpawns`), the gallery.* commands
+(`galleryCommands`), the tour and its keys; the building
+([`gallery/building.puck`](gallery/building.puck), [gallery.md](gallery.md#the-modules))
+stands it on a floor that enables `displays`, and `debug.puck` declares the font
+its lettering embosses in.
 [gallery.md](gallery.md) draws its plan and says what stands where.
 The shape lab, [`labs/shapes.puck`](labs/shapes.puck), boots one station alone
 ([a station on its own](#a-station-on-its-own)).
@@ -153,7 +154,7 @@ has two leaves that retract behind the jambs; both variants collide as drawn.
 `liftLevel` records the last level reached.
 
 The input panel is state and rules (the block comment above the rules in
-`gallery/gallery.puck` has the order). A landing's CALL button writes
+`gallery/lifts.puck` has the order). A landing's CALL button writes
 `liftHallOf<car>[level]` and a car floor button `liftCarCallOf<car>[level]`;
 each button's placement shows its lit prototype while its cell is 1, and the
 cell clears when the car stops there. A stopped car waits out its dwell (four
@@ -176,7 +177,7 @@ A section board hangs on two rods from the ceiling beside each display, on
 its console's right, naming its group. Its lower edge is 2.6 m above the floor,
 clear of a walking Moth.
 
-The gallery's keys live in `gallery/gallery.puck`'s `gallery-keys` overlay on
+The gallery's keys live in `gallery/displays.puck`'s `gallery-keys` overlay on
 the debug world's resting page: `=`, `-`, `G`, `V` and `B` act at once, and
 holding `Q` opens the gallery wheel (aim with the mouse, release to commit, as
 Tab opens the play wheel), whose ring carries next, previous, flag, view, slice
@@ -408,7 +409,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 on the turntable, and `gallery.show <exhibit>` shows it without moving anyone.
 A display stands at plan `(x, z)` on level k's floor, f = 4.5k + 0.05, and its
 console faces +z at yaw 180 (s = 1) and -z at yaw 0 (s = -1); the exhibit's
-middle stands about 1.95 m over the floor. With the building at `gallerySite`
+middle stands about 1.95 m over the floor. With the building at `galleryFrame`'s position
 (10, 0, 12), the operator camera frames it from the console side:
 
 ```text

@@ -104,7 +104,7 @@ let paintingPortals = map(wallPaintings, painting => portalOf(
   y: wingFloor,
   z: painting.z,
   yaw: painting.yaw,
-  site: gallerySite,
+  site: galleryFrame,
   parent: "gallery",
   look: painting.look,
   to: painting.to,

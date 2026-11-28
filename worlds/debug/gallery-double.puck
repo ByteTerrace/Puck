@@ -1,0 +1,29 @@
+// The gallery stood at twice its size, as one value (gallery.md's ruling 8): the building (gallery/building.puck) at
+// gallery-root.puck's site with every module but the game stations, which take no scale yet, its frame's scale 2. A
+// body walking in through the entrance grows to the building's size across the doorway, so the hall reads as it does
+// at full size from inside and only its windows, showing the day outside at its own size, give the scale away.
+// gallery-half.puck stands it at half its size. Boot it with `--world worlds/debug/gallery-double.puck`.
+
+schema: "puck.world.definition.v1"
+basis: "stage"
+documentId: "gallery-double"
+
+import "day-alone"
+import "moon-frame"
+import "set-controls"
+import "noclip"
+import "ship-rows"
+import "exposure"
+import "../standard/place"
+import "fir-fiber"
+import "../standard/flashlight"
+import "size"
+import "gallery/layout"
+import "gallery/root"
+
+metadata {
+  title: "Gallery at twice its size"
+  description: "The debug world's gallery stood at twice its size, its physics scaled with it."
+}
+
+galleryRoot(frame: frameOf(position: gallerySite, scale: 2), floors: galleryFloorsDebug)

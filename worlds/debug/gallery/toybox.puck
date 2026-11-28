@@ -2,8 +2,9 @@
 // a hosted deck running one of the world's shipped deck programs, so a player on any other level looks across into
 // live game screens. A deck runs while someone stands within `toyboxAttention` of its screen, on the side it faces, or
 // plays it, and stands suspended otherwise (its machine's `attention`), so the floor costs no emulation while nobody is
-// near enough to see its pictures move. The gallery module imports this, so the gallery booted alone (gallery-root.puck) and the debug
-// world both host the decks.
+// near enough to see its pictures move. A module library: `galleryToybox(frame, home)` hosts the decks in the frame the
+// building stands in, and building.puck expands it on a floor that enables `toybox`; `home` is the path from the
+// document that expands it to this folder, since a machine's content paths resolve beside that document.
 //
 // Two kinds of station alternate along each gallery (layout.puck's toyboxPlan), and every connection is an object in
 // the world:
@@ -27,157 +28,158 @@ import "../../standard/occlusion"
 import "../../standard/machines"
 import "layout"
 import "look"
-
-
-prototypes {
-  for (c, i) in lookCabinets {
-    prototype $"toybox-cabinet-{i}" {
-      occlusion: propOcclusion
-      document {
-        name: $"toybox-cabinet-{i}"
-        schema: "puck.creation.v2"
-        palette: lookCabinetPalette(c)
-        arcadeCabinet(base: 0, title: deckDeviceName, players: 2, stools: true)
-      }
-    }
-  }
-  for (t, i) in lookTelevisions {
-    prototype $"toybox-television-{i}" {
-      document {
-        name: $"toybox-television-{i}"
-        schema: "puck.creation.v2"
-        palette: lookTelevisionPalette(t)
-        televisionSet(base: 0)
-        lounge(base: (setLamp + 1))
-      }
-    }
-  }
-}
-
-placements {
-  for s in toyboxStations {
-    placement $"toybox-{s.id}" {
-      prototype: $"toybox-{s.kind}-{s.look}"
-      parent: "gallery"
-      position: toyboxAt(s)
-      yawDegrees: s.yaw
-      solid
-    }
-  }
-}
+import "../../standard/frame"
 
 // The deck library: the shipped deck programs, then the owner's local deck folder (`roms/hgd`, absent in a clean
 // checkout). A title's number is its place in this listing (`machine.content` prints each file's `title=`), so the
-// shipped titles are layout.puck's `toyboxShipped` whatever the local folder holds. A path resolves beside this file.
-let toyboxLibrary = ["../cartridges/deck", "../../../roms/hgd"]
-
-// The cartridge in each station's deck: `toyboxCartridge[<station>]` is the rented cartridge's loan ordinal
-// (rentals.puck) while one is inserted, 0 while the deck runs its own program, and `toyboxTitle[<station>]` the library
-// title the deck runs, which its machine's `contentBy` reads. `toyboxSwap` is the insert rule's scratch. The rentals'
-// console rule writes all three and shows the inserted cartridge from `toyboxCartridge`.
-exports {
-  reads [toyboxCartridge, toyboxTitle, toyboxSwap, toyboxPick]
-  actions [toyboxCartridge, toyboxTitle, toyboxSwap]
-}
-state {
-  world {
-    row {
-      name: "toyboxCartridge"
-      kind: Int
-      capacity: length(toyboxStations)
-      cells: map(toyboxStations, s => { key: s.id, value: 0 })
-    }
-    row {
-      name: "toyboxTitle"
-      kind: Int
-      capacity: length(toyboxStations)
-      cells: map(toyboxStations, s => { key: s.id, value: 0 })
-    }
-    // Each deck's own pick from the owner's local deck folder, drawn once from the world's seeded stream at first
-    // fill: a large number its machine folds into the folder's titles (`contentBy.wrapFrom`), so the same seed and the
-    // same folder deal every deck the same title, and a deck with no cartridge in runs its pick.
-    row {
-      name: "toyboxPick"
-      kind: Int
-      capacity: length(toyboxStations)
-      cells: map(toyboxStations, s => { key: s.id, value: 0 })
-      draw {
-        generator {
-          source: "UniformRange"
-          rangeMin: toyboxLocalFirst
-          rangeMax: 1048575
-        }
-        timing: "Boot"
-      }
-    }
-    row {
-      name: "toyboxSwap"
-      kind: Int
-      capacity: length(toyboxStations)
-      cells: map(toyboxStations, s => { key: s.id, value: 0 })
-    }
-  }
-}
+// shipped titles are layout.puck's `toyboxShipped` whatever the local folder holds. A path is this folder's, which
+// `home` carries to the document that expands the module.
+function toyboxLibrary(home) = [$"{home}../cartridges/deck", $"{home}../../../roms/hgd"]
 
 // A deck for each station, booting its shipped program until a cartridge is inserted (`contentBy`); it can also swap to
 // any title of the library by hand (`machine.content toybox-cabinet-south-3`, `machine.swap …`, gallery.md's "The
 // toybox").
 //
-// How far a deck's attention reaches, in metres from its screen: across the nave to the facing gallery and its aisle
-// and well along its own side, so every picture a player can make out is running, and a deck at the far end of the
-// hall resumes, from the frame it stood on, as the player walks toward it. A body more than `toyboxBehind` behind a
-// screen's face does not attend it: the stations stand with their backs to the outer walls, so that is a body outside
-// the building, which sees no picture of that gallery.
+// How far a deck's attention reaches, in the building's metres from its screen: across the nave to the facing gallery
+// and its aisle and well along its own side, so every picture a player can make out is running, and a deck at the far
+// end of the hall resumes, from the frame it stood on, as the player walks toward it. A body more than `toyboxBehind`
+// behind a screen's face does not attend it: the stations stand with their backs to the outer walls, so that is a body
+// outside the building, which sees no picture of that gallery. Both take the frame's scale.
 let toyboxAttention = 40
 let toyboxBehind = 2
-// Every deck runs its own pick from the owner's local deck folder (`toyboxPick`, dealt by `toybox-deal`) while no
-// cartridge is in; before the first deal, and in a clean checkout with no local folder, it boots its library's folder
-// default or its shipped program.
-machines: map(toyboxStations, s => (deckMachine(s.machine, $"../cartridges/deck/{s.cartridge}.deck") with {
-  contentFolders: toyboxLibrary
-  preferFolderDefault: true
-  contentBy { state: toyboxTitle, key: s.id, wrapFrom: toyboxLocalFirst }
-  attention { within: toyboxAttention, behind: toyboxBehind }
-}))
 
-// Each station's picture stands in its frame (a cabinet's bezel, a television's), upright in a television's and leaning
-// back in a cabinet's (`cabinetPictureUp`), its glass exactly the deck's picture at the largest size the frame holds. A
-// screen's frame is in the world's, so it is placed from the building's site (galleryWorld), as the gallery's other
-// world-space pieces are. A station facing +z (the south gallery's) has the picture's right along +x, one facing -z
-// along -x.
-//
-// A station's one screen seats a player on each of the deck's ports (machines.puck's deckRoute).
-screens [
-  for (s, i) in toyboxStations {
-    let at = toyboxAt(s)
-    let picture = ((s.kind == "cabinet") ? cabinetPicture : televisionSetPicture)
-    let half = ((s.kind == "cabinet")
-      ? cabinetPictureHalves(videoAspect(deckVideo))
-      : televisionPictureHalves(videoAspect(deckVideo)))
-    {
-      index: (toyboxScreen + i)
-      origin: galleryWorld(at[0], (at[1] + picture[1]), (at[2] + (s.facing * picture[2])))
-      right [s.facing, 0, 0]
-      up: ((s.kind == "cabinet") ? cabinetPictureUp(s.facing) : [0, 1, 0])
-      halfWidth: half[0]
-      halfHeight: half[1]
-      halfDepth: 0.004
-      round: 0
-      source: machine(instance: s.machine, output: "video")
-      luminance: lookCabinetLuminance
-      material: crt
-      route: deckRoute
+template galleryToybox(frame, home = "") {
+
+
+  prototypes {
+    for (c, i) in lookCabinets {
+      prototype $"toybox-cabinet-{i}" {
+        occlusion: propOcclusion
+        document {
+          name: $"toybox-cabinet-{i}"
+          schema: "puck.creation.v2"
+          palette: lookCabinetPalette(c)
+          arcadeCabinet(base: 0, title: deckDeviceName, players: 2, stools: true)
+        }
+      }
+    }
+    for (t, i) in lookTelevisions {
+      prototype $"toybox-television-{i}" {
+        document {
+          name: $"toybox-television-{i}"
+          schema: "puck.creation.v2"
+          palette: lookTelevisionPalette(t)
+          televisionSet(base: 0)
+          lounge(base: (setLamp + 1))
+        }
+      }
     }
   }
-]
 
-kits [devicePadKit]
+  placements {
+    for s in toyboxStations {
+      placement $"toybox-{s.id}" {
+        prototype: $"toybox-{s.kind}-{s.look}"
+        parent: "gallery"
+        position: toyboxAt(s)
+        yawDegrees: s.yaw
+        solid
+      }
+    }
+  }
 
-// A deck with no cartridge in and no title runs its own pick: at boot, and again after its cartridge comes out. The
-// write closes the rule, so it fires once per deal.
-for s in toyboxStations {
-  rule $"toybox-deal-{s.id}" {
-    when toyboxCartridge[s.id] == 0 and toyboxTitle[s.id] == 0
-    toyboxTitle[s.id] = toyboxPick[s.id]
+  // The cartridge in each station's deck: `toyboxCartridge[<station>]` is the rented cartridge's loan ordinal
+  // (rentals.puck) while one is inserted, 0 while the deck runs its own program, and `toyboxTitle[<station>]` the library
+  // title the deck runs, which its machine's `contentBy` reads. `toyboxSwap` is the insert rule's scratch. The rentals'
+  // console rule writes all three and shows the inserted cartridge from `toyboxCartridge`.
+  state {
+    world {
+      row {
+        name: "toyboxCartridge"
+        kind: Int
+        capacity: length(toyboxStations)
+        cells: map(toyboxStations, s => { key: s.id, value: 0 })
+      }
+      row {
+        name: "toyboxTitle"
+        kind: Int
+        capacity: length(toyboxStations)
+        cells: map(toyboxStations, s => { key: s.id, value: 0 })
+      }
+      // Each deck's own pick from the owner's local deck folder, drawn once from the world's seeded stream at first
+      // fill: a large number its machine folds into the folder's titles (`contentBy.wrapFrom`), so the same seed and the
+      // same folder deal every deck the same title, and a deck with no cartridge in runs its pick.
+      row {
+        name: "toyboxPick"
+        kind: Int
+        capacity: length(toyboxStations)
+        cells: map(toyboxStations, s => { key: s.id, value: 0 })
+        draw {
+          generator {
+            source: "UniformRange"
+            rangeMin: toyboxLocalFirst
+            rangeMax: 1048575
+          }
+          timing: "Boot"
+        }
+      }
+      row {
+        name: "toyboxSwap"
+        kind: Int
+        capacity: length(toyboxStations)
+        cells: map(toyboxStations, s => { key: s.id, value: 0 })
+      }
+    }
+  }
+  // Every deck runs its own pick from the owner's local deck folder (`toyboxPick`, dealt by `toybox-deal`) while no
+  // cartridge is in; before the first deal, and in a clean checkout with no local folder, it boots its library's folder
+  // default or its shipped program.
+  machines: map(toyboxStations, s => (deckMachine(s.machine, $"{home}../cartridges/deck/{s.cartridge}.deck") with {
+    contentFolders: toyboxLibrary(home)
+    preferFolderDefault: true
+    contentBy { state: toyboxTitle, key: s.id, wrapFrom: toyboxLocalFirst }
+    attention { within: frameLength(frame, toyboxAttention), behind: frameLength(frame, toyboxBehind) }
+  }))
+
+  // Each station's picture stands in its frame (a cabinet's bezel, a television's), upright in a television's and leaning
+  // back in a cabinet's (`cabinetPictureUp`), its glass exactly the deck's picture at the largest size the frame holds. A
+  // screen's frame is in the world's, so it is placed in the building's frame (galleryAt), turned and scaled as the
+  // gallery's other world-space pieces are. A station facing +z (the south gallery's) has the picture's right along the
+  // building's +x, one facing -z along its -x.
+  //
+  // A station's one screen seats a player on each of the deck's ports (machines.puck's deckRoute).
+  screens [
+    for (s, i) in toyboxStations {
+      let at = toyboxAt(s)
+      let picture = ((s.kind == "cabinet") ? cabinetPicture : televisionSetPicture)
+      let half = ((s.kind == "cabinet") ? cabinetPictureHalves(videoAspect(deckVideo)) : televisionPictureHalves(
+        videoAspect(deckVideo)
+      ))
+      {
+        index: (toyboxScreen + i)
+        origin: galleryAt(frame, [at[0], (at[1] + picture[1]), (at[2] + (s.facing * picture[2]))])
+        right: rotatePoint(frameTurn(frame), [s.facing, 0, 0])
+        up: rotatePoint(frameTurn(frame), ((s.kind == "cabinet") ? cabinetPictureUp(s.facing) : [0, 1, 0]))
+        halfWidth: frameLength(frame, half[0])
+        halfHeight: frameLength(frame, half[1])
+        halfDepth: frameLength(frame, 0.004)
+        round: 0
+        source: machine(instance: s.machine, output: "video")
+        luminance: lookCabinetLuminance
+        material: crt
+        route: deckRoute
+      }
+    }
+  ]
+
+  kits [devicePadKit]
+
+  // A deck with no cartridge in and no title runs its own pick: at boot, and again after its cartridge comes out. The
+  // write closes the rule, so it fires once per deal.
+  for s in toyboxStations {
+    rule $"toybox-deal-{s.id}" {
+      when toyboxCartridge[s.id] == 0 and toyboxTitle[s.id] == 0
+      toyboxTitle[s.id] = toyboxPick[s.id]
+    }
   }
 }

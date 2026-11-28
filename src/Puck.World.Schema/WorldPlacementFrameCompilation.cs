@@ -256,8 +256,9 @@ public static class WorldPlacementFrameCompilation {
         .FixedRotation.Rotate(FixedVector3.FromVector3(vector)).ToVector3();
     /// <summary>Validates every placement's <see cref="WorldPlacement.Parent"/> chain, refusing BY NAME the first bad
     /// edge found in authored order: an unknown parent, a self-parent, a parent cycle, a distributed/mirrored parent
-    /// (an expanded row has no single frame), or a non-unit-scale parent (composition rotates and translates only)
-    /// other than a deal template parenting its own dealt children, whose scale each child carries.</summary>
+    /// (an expanded row has no single frame), or a parent that turns or shifts. A parent's scale composes into its
+    /// children's offsets and sizes (<see cref="LocalFrame"/>), as an SVG group's does, but a deal template's, which each
+    /// of its dealt children carries already.</summary>
     public static bool TryValidate(IReadOnlyList<WorldPlacement>? placements, out string reason) {
         reason = string.Empty;
 
@@ -303,14 +304,6 @@ public static class WorldPlacementFrameCompilation {
             }
             if ((parent.Turn is not null) || (parent.Shift is not null)) {
                 reason = $"placement '{placement.Id}' names parent '{parentId}', which turns or shifts — its frame moves with state, and a child composes over a static one.";
-
-                return false;
-            }
-
-            // A dealt template's scale is stamped on its children as its prototype is (each child carries it), and
-            // their offsets are metres in its frame, so it scales no child's offset.
-            if ((parent.Scale != 1f) && !WorldPlacementDeal.IsChild(parent: parent, placement: placement)) {
-                reason = $"placement '{placement.Id}' names parent '{parentId}', whose scale ({parent.Scale}) is not 1 — composition rotates and translates only, never a parent's scale into a child's local offset.";
 
                 return false;
             }

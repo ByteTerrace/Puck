@@ -18,8 +18,10 @@ import "../gallery/shell"
 import "../gallery/look"
 import "../gallery/tree"
 import "../gallery/wonder"
+import "../gallery/building"
 import "../tree-walk"
 import "../../standard/place"
+import "../../standard/size-hold"
 import "../../standard/benchmark"
 
 metadata {
@@ -47,7 +49,7 @@ prototypes {
     document {
       name: "lab-tree-floors"
       schema: "puck.creation.v2"
-      palette: shellPlain
+      palette: shellPlainIn(galleryFrame)
       shellSlab(
         label: "floor",
         x0: (treeX - labTreeFloorReach),
@@ -73,11 +75,14 @@ prototypes {
   shellTreeEdgePrototypes()
 }
 
+// The tree and level 1's size field, at the debug world's frame: the building's modules this lab stands.
+galleryTree(frame: galleryFrame)
+galleryWonderRegisters()
+gallerySizeField(frame: galleryFrame, has: galleryModulesOf([galleryFloorOf(1, ["wonder"])]))
+galleryWonder(frame: galleryFrame)
+
 placements {
-  placement "gallery" {
-    prototype: "place"
-    position: gallerySite
-  }
+  frameRoot(id: "gallery", frame: galleryFrame)
   placement "lab-tree-floors" {
     prototype: "lab-tree-floors"
     parent: "gallery"

@@ -16,7 +16,8 @@ public sealed partial class WorldRigidAssets {
     }
     // Audience is the draw tag every draw of the copy carries (SdfMeshAudience): neutral for a row every reader is shown
     // alike, the residency's own for a row the disclosure varies, an overlay's for that overlay's row.
-    private sealed record StaticCopy(StaticAsset Asset, WorldPlacement Placement, WorldPickTarget Target, object MotionKey, Vector3 Position, Quaternion Orientation, byte Audience);
+    // Scale is the row's composed scale (its stamp's frame: its own times its parents'), never its local Scale.
+    private sealed record StaticCopy(StaticAsset Asset, WorldPlacement Placement, WorldPickTarget Target, object MotionKey, Vector3 Position, Quaternion Orientation, float Scale, byte Audience);
     // One static row as the latest reconcile admitted it: the creation it showed, the audience its copies are drawn for,
     // whether it was admitted, and the copies its stamp placed (empty for a refused row or an empty stamp). A row is
     // immutable, so the same instance showing the same creation instance is admitted alike, and the same compiled stamp
@@ -137,10 +138,10 @@ public sealed partial class WorldRigidAssets {
             // A responding row holds a template for every creation it can show, in its authored order, so a sweep that
             // moves its holding swaps the copies' template and leaves the template set, and the program, standing.
             if (placement.Respond is { Count: > 0 } responses) {
-                AdmitVariant(definition: creations, placement: placement, prototypeId: placement.PrototypeId, variants: variants);
-                foreach (var response in responses) { AdmitVariant(definition: creations, placement: placement, prototypeId: response.PrototypeId, variants: variants); }
+                AdmitVariant(definition: creations, placement: placement, prototypeId: placement.PrototypeId, scale: stamp.Frame.Scale, variants: variants);
+                foreach (var response in responses) { AdmitVariant(definition: creations, placement: placement, prototypeId: response.PrototypeId, scale: stamp.Frame.Scale, variants: variants); }
             }
-            var asset = AdmitAsset(creation: creation, scale: placement.Scale, variants: variants);
+            var asset = AdmitAsset(creation: creation, scale: stamp.Frame.Scale, variants: variants);
             if (!ReferenceEquals(objA: row.Stamp, objB: stamp) || !ReferenceEquals(objA: row.Asset, objB: asset)) {
                 var copies = new StaticCopy[stamp.Count];
                 var visitor = new StaticCopyVisitor(copies, asset, placement, stamp, scope, audience);
@@ -222,9 +223,9 @@ public sealed partial class WorldRigidAssets {
         (placement.MovesRoot && (placement.Respond is { Count: > 0 }) && (placement.Inhabit is null) && (placement.Deal is null) && !WorldPlacementStamper.IsAnimated(creation: creation) &&
         !WorldScreenCarry.Lists(screens: screens, placementId: placement.Id));
     // Admits the template of one creation a responding row can show, when that creation would be a rigid copy there.
-    private void AdmitVariant(WorldDefinition definition, WorldPlacement placement, string prototypeId, Dictionary<string, StaticAsset> variants) {
+    private void AdmitVariant(WorldDefinition definition, WorldPlacement placement, string prototypeId, float scale, Dictionary<string, StaticAsset> variants) {
         if ((WorldDefinitionRows.FindCreation(definition.Creations, prototypeId) is not { } creation) || !CopiesRow(placement: placement, creation: creation) || (Refusal(creation: creation, placement: placement) is not null)) { return; }
-        _ = AdmitAsset(creation: creation, scale: placement.Scale, variants: variants);
+        _ = AdmitAsset(creation: creation, scale: scale, variants: variants);
     }
     /// <summary>Gets whether the static templates the latest reconcile admitted are the ones the latest emission wrote, at
     /// the same scales, so the copies it placed can be placed again (<see cref="PlaceStaticCopies"/>) without composing
@@ -332,7 +333,7 @@ public sealed partial class WorldRigidAssets {
             var target = new WorldPickTarget(placement.Id, null) { Prototype = asset.Creation.Id, Occurrence = ordinal };
             // An overlay's copy of a row keeps a motion history apart from the presentation's copy of the same id.
             var motion = ((audience > SdfMeshAudience.Own) ? (object)(scope, audience, placement.Id, ordinal) : (scope, placement.Id, ordinal));
-            copies[index] = new StaticCopy(asset, placement, target, motion, instance.Origin, stamp.Rotation, audience);
+            copies[index] = new StaticCopy(asset, placement, target, motion, instance.Origin, stamp.Rotation, stamp.Frame.Scale, audience);
         }
     }
     // Only body assets need template transform slots. Static templates retain the ordinary instance partitions.
@@ -402,7 +403,7 @@ public sealed partial class WorldRigidAssets {
             var asset = occurrence.Asset;
             var copyIndex = (m_bodies.Count + index);
             var previous = m_copies[copyIndex];
-            var scale = (occurrence.Placement.Scale / asset.BakeScale);
+            var scale = (occurrence.Scale / asset.BakeScale);
 
             m_carriedAudiences[occurrence.Audience] = true;
             if (occurrence.Placement.MovesRoot) {
@@ -423,7 +424,7 @@ public sealed partial class WorldRigidAssets {
             } else if (asset.Range.InstanceCount > 0) {
                 var hidden = isolation?.HiddenFor(asset.Creation.Id, asset.Creation.EngineDocument);
                 StaticVisibleCopies++;
-                WorldPlacementStamper.AppendStaticVolumes(asset.Creation.EngineDocument, occurrence.Position, occurrence.Orientation, occurrence.Placement.Scale, m_staticVolumes, hidden);
+                WorldPlacementStamper.AppendStaticVolumes(asset.Creation.EngineDocument, occurrence.Position, occurrence.Orientation, occurrence.Scale, m_staticVolumes, hidden);
             }
         }
         m_volumesDirty = true;

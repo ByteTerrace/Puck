@@ -84,7 +84,9 @@ public static class WorldNavigationDomains {
 
         var cell = domain.CellSize;
         var margin = domain.Margin;
-        var center = (frame.Position + region.Center);
+        var scale = ((float)((double)WorldPlacementRegion.GroupScale(frame: frame, placement: placement)));
+        var center = (frame.Position + (region.Center * scale));
+        half *= scale;
         var low = new Vector3(x: (center.X - half.X - margin), y: (center.Y - half.Y), z: (center.Z - half.Z - margin));
         var width = (((2f * half.X) + (2f * margin)) / cell);
         var depth = (((2f * half.Z) + (2f * margin)) / cell);

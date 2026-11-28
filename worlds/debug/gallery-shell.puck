@@ -1,0 +1,28 @@
+// The gallery's shell and its theme alone: the building (gallery/building.puck) with no module on any floor
+// (gallery/layout.puck's `galleryFloorsShell`), so its walls, floors, stairs, arcades, window bays, shades, balustrades,
+// entrance and forecourts, its light switches and its look are judged with nothing standing in them, under the debug
+// world's day. Every balcony edge is railed, level 1's included, since no floor stands its nets. Boot it with
+// `--world worlds/debug/gallery-shell.puck`.
+
+schema: "puck.world.definition.v1"
+basis: "stage"
+documentId: "gallery-shell"
+
+import "day-alone"
+import "moon-frame"
+import "set-controls"
+import "noclip"
+import "ship-rows"
+import "exposure"
+import "../standard/place"
+import "../standard/flashlight"
+import "size"
+import "gallery/layout"
+import "gallery/root"
+
+metadata {
+  title: "Gallery shell"
+  description: "The debug world's gallery building and its theme alone, every module left out."
+}
+
+galleryRoot(frame: galleryFrame, floors: galleryFloorsShell)

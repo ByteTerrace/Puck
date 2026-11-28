@@ -4,40 +4,45 @@
 // walking in steps you back out, turned about. Once an artist wires the gallery's library, each portal with a library
 // stands the standard's control panel (../../standard/panel.puck): walk up to a panel, press the context button (E, or
 // the pad's RB), tap a world on its list, and the portal beside it leads there, for everyone, since the panel's choice is
-// world state its door reads. The gallery imports this file, so the gallery booted alone (gallery-root.puck) and the
-// debug world both stand them; the panels' terminals join the display stations' in the gallery's one `terminalPlay`
-// (gallery.puck's `shapeStation`).
+// world state its door reads. A module library: `galleryPortals(frame)` stands them in the frame the building stands in,
+// and building.puck expands it on a floor that enables `portals`; the panels' terminals join the display stations' in
+// the gallery's one `terminalPlay` (building.puck).
 //
-// The library's worlds are this document's references and destinations: a world starts no destination its library does
+// The library's worlds are the document's references and destinations: a world starts no destination its library does
 // not name.
 
 import "../../standard/portal"
 import "../../standard/panel"
 import "../portal-library"
 
-references: portalReferences(galleryPortalLibrary)
-destinations: portalDestinations(galleryPortalLibrary)
+template galleryPortals(frame) {
+  let portals = galleryPortalsIn(frame)
+  let panels = galleryPanelsIn(frame)
 
-prototypes {
-  portalPrototypes(portals: galleryPortals)
-  panelPrototypes(panels: galleryPanels)
-}
+  references: portalReferences(galleryPortalLibrary)
+  destinations: portalDestinations(galleryPortalLibrary)
 
-placements {
-  portalPlacements(portals: galleryPortals)
-  panelPlacements(panels: galleryPanels)
-}
-
-state {
-  world {
-    portalState(portals: galleryPortals)
-    panelState(panels: galleryPanels)
+  prototypes {
+    portalPrototypes(portals: portals)
+    panelPrototypes(panels: panels)
   }
+
+  placements {
+    portalPlacements(portals: portals)
+    panelPlacements(panels: panels)
+  }
+
+  state {
+    world {
+      portalState(portals: portals)
+      panelState(panels: panels)
+    }
+  }
+
+  panelRules(panels: panels)
+
+  cameras: panelCameras(panels)
+
+  // A spawn point before each portal, facing it, and one at each panel.
+  spawnPoints: concat(portalSpawns(portals), panelSpawns(panels))
 }
-
-panelRules(panels: galleryPanels)
-
-cameras: panelCameras(galleryPanels)
-
-// A spawn point before each portal, facing it, and one at each panel.
-spawnPoints: concat(portalSpawns(galleryPortals), panelSpawns(galleryPanels))

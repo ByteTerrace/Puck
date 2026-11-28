@@ -9,7 +9,9 @@
 // Asking "Help me back to my normal size" gives the asking body its full size (`stewardScript` below says how). What a
 // steward says is shown on its slate, to everyone near.
 //
-// The gallery module imports this, so the gallery booted alone and the debug world both stand the stewards.
+// A module library: `galleryStewards(frame)` stands the stewards in the frame the building stands in, and building.puck
+// expands it on a floor that enables `stewards`.
+import "../../standard/frame"
 import "../../standard/architecture"
 import "../../standard/occlusion"
 import "../../standard/contexts/conversation"
@@ -307,108 +309,43 @@ let stewardSlateHalf = [0.42, 0.27]
 let stewardSlateDepth = 0.012
 let stewardChalk = "#F2EAD8"
 let stewardChalkDim = "#B9C9C4"
-// A point on the slate's face, `across` to a reader's right and `up` from its middle, in the world.
-function stewardSlateFace(s, across, up) = (let p = (stewardSlate(s) +
-  rotatePoint(rotate([0, 1, 0], s.yaw), [(0 - across), (stewardSlateMiddle + up), (0 - stewardSlateDepth)])) in
-galleryWorld(
-  p[0],
-  p[1],
-  p[2]
-))
-function stewardSlatePaints(s, number) = [
+// A point on the slate's face, `across` to a reader's right and `up` from its middle, in the world where `frame` stands
+// the building, and the turn that faces a paint out of it there.
+function stewardSlateFace(frame, s, across, up) = galleryAt(
+  frame,
+  (stewardSlate(s) +
+    rotatePoint(rotate([0, 1, 0], s.yaw), [(0 - across), (stewardSlateMiddle + up), (0 - stewardSlateDepth)]))
+)
+function stewardSlateTurn(frame, s) = rotate([0, 1, 0], frameYaw(frame, (s.yaw + 180)))
+function stewardSlatePaints(frame, s, number) = [
   faceText(
-    stewardSlateFace(s, 0, 0.215),
-    rotate([0, 1, 0], (s.yaw + 180)),
-    [0.39, 0.035],
+    stewardSlateFace(frame, s, 0, 0.215),
+    stewardSlateTurn(frame, s),
+    frameLength(frame, [0.39, 0.035]),
     $"{stewardMember(s.crew).name}, GALLERY STEWARD",
     stewardChalkDim,
-    0.04
+    frameLength(frame, 0.04),
+    depth: frameLength(frame, 0.03)
   )
-  faceFill(stewardSlateFace(s, 0, 0.17), rotate([0, 1, 0], (s.yaw + 180)), [0.39, 0.003], stewardChalkDim)
+  faceFill(
+    stewardSlateFace(frame, s, 0, 0.17),
+    stewardSlateTurn(frame, s),
+    frameLength(frame, [0.39, 0.003]),
+    stewardChalkDim,
+    depth: frameLength(frame, 0.03)
+  )
   faceText(
-    stewardSlateFace(s, 0, -0.045),
-    rotate([0, 1, 0], (s.yaw + 180)),
-    [0.39, 0.2],
+    stewardSlateFace(frame, s, 0, -0.045),
+    stewardSlateTurn(frame, s),
+    frameLength(frame, [0.39, 0.2]),
     conversationLine(number),
     stewardChalk,
-    0.042,
+    frameLength(frame, 0.042),
     "left",
-    wrap: true
+    wrap: true,
+    depth: frameLength(frame, 0.03)
   )
 ]
-
-prototypes {
-  for c in stewardCrew {
-    prototype $"gallery-steward-{c.id}" {
-      occlusion: bodyOcclusion
-      document {
-        name: $"gallery-steward-{c.id}"
-        schema: "puck.creation.v2"
-        palette: stewardPalette(c)
-        stewardFigure(c: c)
-      }
-    }
-  }
-  for (s, i) in stewardPlan {
-    prototype $"gallery-steward-slate-{s.id}" {
-      occlusion: propOcclusion
-      document {
-        name: $"gallery-steward-slate-{s.id}"
-        schema: "puck.creation.v2"
-        palette [
-          { color: "#22302E", roughness: 0.9, specular: 0.02, paints: stewardSlatePaints(s, (i + 1)) }
-          { color: "#2F6E7A", roughness: 0.6, specular: 0.04 }
-          { color: "#C8902E", roughness: 0.3, metal: 1 }
-        ]
-        shape Box "face" {
-          material: 0
-          position [0, stewardSlateMiddle, 0]
-          scale [stewardSlateHalf[0], stewardSlateHalf[1], stewardSlateDepth]
-        }
-        shape Box "frame" {
-          material: 1
-          position [0, stewardSlateMiddle, 0.006]
-          scale [(stewardSlateHalf[0] + 0.035), (stewardSlateHalf[1] + 0.035), (stewardSlateDepth + 0.004)]
-          rounding: 0.012
-        }
-        for side in [-1, 1] {
-          shape Box $"leg-{side}" {
-            material: 1
-            position [(side * (stewardSlateHalf[0] - 0.04)), ((stewardSlateMiddle - stewardSlateHalf[1]) / 2), 0.006]
-            scale [0.025, ((stewardSlateMiddle - stewardSlateHalf[1]) / 2), 0.025]
-            rounding: 0.008
-          }
-          shape Box $"foot-{side}" {
-            detail: true
-            material: 2
-            position [(side * (stewardSlateHalf[0] - 0.04)), 0.01, 0.006]
-            scale [0.03, 0.01, 0.16]
-            rounding: 0.006
-          }
-        }
-      }
-    }
-  }
-}
-
-placements {
-  for s in stewardPlan {
-    placement $"gallery-steward-{s.id}" {
-      prototype: $"gallery-steward-{s.crew}"
-      parent: "gallery"
-      position [s.x, galleryFloor[0], s.z]
-      yawDegrees: s.yaw
-      solid
-    }
-    placement $"gallery-steward-slate-{s.id}" {
-      prototype: $"gallery-steward-slate-{s.id}"
-      parent: "gallery"
-      position: stewardSlate(s)
-      yawDegrees: s.yaw
-      solid
-    }
-  }
-}
 
 // What every steward says. Asking for your size back sets the size fields' released hold (standard/size-hold.puck's
 // `sizeHold`, 1): every size field then gives the body its full size, at once where it stands outside every zone, and
@@ -427,10 +364,87 @@ let stewardScript = {
   ]
 }
 
-conversationPlay(
-  speakers: map(stewardPlan, s => { at: galleryWorld(stewardSlate(s)[0], stewardSlate(s)[1], stewardSlate(s)[2]) }),
-  script: stewardScript,
-  radius: stewardReach,
-  seats: seatPopulation,
-  capacity: (seatPopulation + visitorPopulation)
-)
+template galleryStewards(frame) {
+
+  prototypes {
+    for c in stewardCrew {
+      prototype $"gallery-steward-{c.id}" {
+        occlusion: bodyOcclusion
+        document {
+          name: $"gallery-steward-{c.id}"
+          schema: "puck.creation.v2"
+          palette: stewardPalette(c)
+          stewardFigure(c: c)
+        }
+      }
+    }
+    for (s, i) in stewardPlan {
+      prototype $"gallery-steward-slate-{s.id}" {
+        occlusion: propOcclusion
+        document {
+          name: $"gallery-steward-slate-{s.id}"
+          schema: "puck.creation.v2"
+          palette [
+            { color: "#22302E", roughness: 0.9, specular: 0.02, paints: stewardSlatePaints(frame, s, (i + 1)) }
+            { color: "#2F6E7A", roughness: 0.6, specular: 0.04 }
+            { color: "#C8902E", roughness: 0.3, metal: 1 }
+          ]
+          shape Box "face" {
+            material: 0
+            position [0, stewardSlateMiddle, 0]
+            scale [stewardSlateHalf[0], stewardSlateHalf[1], stewardSlateDepth]
+          }
+          shape Box "frame" {
+            material: 1
+            position [0, stewardSlateMiddle, 0.006]
+            scale [(stewardSlateHalf[0] + 0.035), (stewardSlateHalf[1] + 0.035), (stewardSlateDepth + 0.004)]
+            rounding: 0.012
+          }
+          for side in [-1, 1] {
+            shape Box $"leg-{side}" {
+              material: 1
+              position [(side * (stewardSlateHalf[0] - 0.04)), ((stewardSlateMiddle - stewardSlateHalf[1]) / 2), 0.006]
+              scale [0.025, ((stewardSlateMiddle - stewardSlateHalf[1]) / 2), 0.025]
+              rounding: 0.008
+            }
+            shape Box $"foot-{side}" {
+              detail: true
+              material: 2
+              position [(side * (stewardSlateHalf[0] - 0.04)), 0.01, 0.006]
+              scale [0.03, 0.01, 0.16]
+              rounding: 0.006
+            }
+          }
+        }
+      }
+    }
+  }
+
+  placements {
+    for s in stewardPlan {
+      placement $"gallery-steward-{s.id}" {
+        prototype: $"gallery-steward-{s.crew}"
+        parent: "gallery"
+        position [s.x, galleryFloor[0], s.z]
+        yawDegrees: s.yaw
+        solid
+      }
+      placement $"gallery-steward-slate-{s.id}" {
+        prototype: $"gallery-steward-slate-{s.id}"
+        parent: "gallery"
+        position: stewardSlate(s)
+        yawDegrees: s.yaw
+        solid
+      }
+    }
+  }
+
+  conversationPlay(
+    speakers: map(stewardPlan, s => { at: galleryAt(frame, stewardSlate(s)) }),
+    script: stewardScript,
+    radius: frameLength(frame, stewardReach),
+    height: frameLength(frame, 2),
+    seats: seatPopulation,
+    capacity: (seatPopulation + visitorPopulation)
+  )
+}

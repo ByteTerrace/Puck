@@ -1,0 +1,31 @@
+// The gallery stood at half its size, as one value (gallery.md's ruling 8): the building (gallery/building.puck) at
+// gallery-root.puck's site with every module but the game stations, which take no scale yet, its frame's scale 0.5. The
+// frame's scale reaches every row through the root placement and every world-space piece through `galleryAt`, and a
+// body in the building takes its scale through the building's size field, so walking, jumping and climbing in it feel
+// as they do at full size while its windows show the day outside at its own size. A body walking in through the entrance
+// shrinks to the building's size across the doorway and grows back walking out. gallery-double.puck stands it at twice
+// its size. Boot it with `--world worlds/debug/gallery-half.puck`.
+
+schema: "puck.world.definition.v1"
+basis: "stage"
+documentId: "gallery-half"
+
+import "day-alone"
+import "moon-frame"
+import "set-controls"
+import "noclip"
+import "ship-rows"
+import "exposure"
+import "../standard/place"
+import "fir-fiber"
+import "../standard/flashlight"
+import "size"
+import "gallery/layout"
+import "gallery/root"
+
+metadata {
+  title: "Gallery at half size"
+  description: "The debug world's gallery stood at half its size, its physics scaled with it."
+}
+
+galleryRoot(frame: frameOf(position: gallerySite, scale: 0.5), floors: galleryFloorsDebug)

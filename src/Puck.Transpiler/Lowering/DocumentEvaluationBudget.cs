@@ -12,8 +12,11 @@ public sealed class DocumentEvaluationBudget {
     public const int DepthLimit = 64;
     /// <summary>The maximum source or generated string length in characters.</summary>
     public const int TextLimit = 4_000_000;
-    /// <summary>The maximum evaluated nodes and generated collection elements in one compilation.</summary>
-    public const int WorkLimit = 16_000_000;
+    /// <summary>The maximum evaluated nodes and generated collection elements in one compilation. A world composed of
+    /// modules expands them in one compilation, where the same content split into documents would compile in several,
+    /// so the limit holds a whole building of modules (the debug world's gallery spends about half of it) and stops only a
+    /// runaway generation.</summary>
+    public const int WorkLimit = 64_000_000;
 
     private int m_depth;
     private int m_work;

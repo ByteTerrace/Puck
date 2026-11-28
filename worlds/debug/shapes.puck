@@ -22,6 +22,7 @@
 // console controls the motion exhibits answer to. This file is a library: debug.puck and gallery/gallery.puck expand
 // its templates and lets, and gallery/gallery.puck holds the displays' rules.
 import "gallery/layout"
+import "../standard/frame"
 import "../standard/reach"
 import "../standard/styles"
 import "../standard/rig"
@@ -174,21 +175,24 @@ let galleryDisplayRows = [
 ]
 // Every display stands on a floor tile's centre (layout.puck's module), so its pad lies square on the tiles. A display is
 // the station a console and a turntable make, wherever a world stands it, so each row carries the frame it stands in:
-// `floor` the height of its floor in that frame, `site` where the frame stands in the world (a static creation's paints and
-// a terminal's reach are in world coordinates), `parent` the placement that frame is (null for none), and `homes` the groups
-// whose exhibits it is home to (the exhibits whose paints, or whose reach, name the place the exhibit stands at). A world
-// that stands one station of its own gives the station templates its own row (labs/shapes.puck).
-let galleryDisplays = map(
+// `floor` the height of its floor in that frame, `site` the frame itself (../standard/frame.puck: where it stands in the
+// world, its turn and its scale, since a static creation's paints and a terminal's reach are in world coordinates),
+// `parent` the placement that frame is (null for none), and `homes` the groups whose exhibits it is home to (the exhibits
+// whose paints, or whose reach, name the place the exhibit stands at). A world that stands one station of its own gives
+// the station templates its own row (labs/shapes.puck). `galleryDisplaysIn` stands the gallery's in a building's frame,
+// and `galleryDisplays` in the debug world's.
+function galleryDisplaysIn(frame) = map(
   galleryDisplayRows,
   display => (display with {
     x: galleryTileX(display.x)
     z: galleryTileZ(display.z)
     floor: galleryFloor[display.level]
-    site: gallerySite
+    site: frame
     parent: "gallery"
     homes [display.id]
   })
 )
+let galleryDisplays = galleryDisplaysIn(galleryFrame)
 // Every display's exhibit turns as on a turntable. At speed 1 it turns once in turntableSecondsPerTurn gallery seconds;
 // its console steps the speed one at a time up to turntableSpeeds either way, through the slowest pace into turning the
 // other way round, and holds and releases it. `turntableHolds` labels the hold button with what a tap does, by whether
@@ -235,10 +239,15 @@ function displayPoint(display, p) = [
   (display.z + (displayFront(display) * displayScale * p[2]))
 ]
 // The same point in the world, where the display's frame stands: a static creation's paints stand there.
-function displayWorld(display, p) = (display.site + displayPoint(display, p))
+function displayWorld(display, p) = frameAt(display.site, displayPoint(display, p))
+// A length on the display's console in the world, its plinth's units scaled by the display and by its frame.
+function displayPaintScale(display) = (displayScale * display.site.scale)
 // The turn that carries a paint's +X along the console's face to the viewer's right, its +Y up the face and its +Z out
 // of it, in the world: the plinth's own face turn (`plinthFace`) at yaw 180, and the same turned half round at yaw 0.
-function displayFaceTurn(display) = ((display.yaw == 0) ? [0, plinthFace[3], (0 - plinthFace[0]), 0] : plinthFace)
+function displayFaceTurn(display) = frameRotation(
+  display.site,
+  ((display.yaw == 0) ? [0, plinthFace[3], (0 - plinthFace[0]), 0] : plinthFace)
+)
 // Where a body stands before the console, in the plinth's author frame: within reach of the screen, 1.25 m clear of
 // the console.
 let displayStand = [0, 0, 1.75]
@@ -274,7 +283,7 @@ function exhibitPoint(station, p) = [
   (station.y + displayExhibitDrop + (displayExhibitScale * p[1])),
   (station.z + (station.front * displayExhibitScale * p[2]))
 ]
-function exhibitWorld(station, p) = (station.site + exhibitPoint(station, p))
+function exhibitWorld(station, p) = frameAt(station.site, exhibitPoint(station, p))
 
 // A spawn point per display before its console, named after its turntable's placement (`display-<id>`), then one per
 // exhibit at its home display's, named after the exhibit, so `body.pose spawn:<exhibit>` and `gallery.go <exhibit>` walk to
@@ -744,20 +753,20 @@ function consoleRegion(id, rect, rows = 1) = faceRegion(id, rect, plinthGlassHal
 function consoleFill(display, rect, color, round = 0) = faceFill(
   displayWorld(display, plinthOnFace(faceMid(rect)[0], faceMid(rect)[1], displayGlassFront)),
   displayFaceTurn(display),
-  [(displayScale * faceHalf(rect)[0]), (displayScale * faceHalf(rect)[1])],
+  [(displayPaintScale(display) * faceHalf(rect)[0]), (displayPaintScale(display) * faceHalf(rect)[1])],
   color,
-  (displayScale * round),
-  0.08
+  (displayPaintScale(display) * round),
+  (display.site.scale * 0.08)
 )
 // Lettering in a rectangle on a display's glass: `em` in the plinth's units, `spacing` the line spacing, `wrap` breaking
 // lines at the box's width and `markup` reading the substituted text's colour tags. A text fits its box.
 function consoleText(display, rect, template, ink, em, align, wrap = false, markup = false, spacing = 1) = faceText(
   displayWorld(display, plinthOnFace(faceMid(rect)[0], faceMid(rect)[1], displayGlassFront)),
   displayFaceTurn(display),
-  [(displayScale * faceHalf(rect)[0]), (displayScale * faceHalf(rect)[1])],
+  [(displayPaintScale(display) * faceHalf(rect)[0]), (displayPaintScale(display) * faceHalf(rect)[1])],
   template,
   ink,
-  (displayScale * em),
+  (displayPaintScale(display) * em),
   align,
   wrap,
   markup,
@@ -1028,9 +1037,9 @@ function terminalScreenPaints(display, number) = [
   {
     type: "Box"
     position: displayWorld(display, plinthOnFace(0, 0, displayGlassFront))
-    scale [3, terminalScanHalf, 3]
+    scale [3, (display.site.scale * terminalScanHalf), 3]
     color: consoleLook.scan
-    repeat { cell [0, terminalScanPitch, 0] }
+    repeat { cell [0, (display.site.scale * terminalScanPitch), 0] }
   }
   consoleFill(display, { x0: consoleColumn.x0, x1: consoleDetail.x1, y0: 0.15, y1: 0.156 }, consoleLook.frame, 0.003)
   consoleFill(display, { x0: consoleColumn.x0, x1: consoleDetail.x1, y0: -0.117, y1: -0.111 }, consoleLook.frame, 0.003)
@@ -2450,7 +2459,7 @@ template formPrototypes() {
 // turntable exhibit, among `displays`.
 template surfacePrototypes(displays = galleryDisplays) {
   let paintCentre = exhibitWorld(stationOf(displays, "shape-paint-world"), [0, 1.2, 0])
-  let tilesZ = stationOf(displays, "shape-paint-tiles").site[2] + stationOf(displays, "shape-paint-tiles").z
+  let tilesZ = exhibitWorld(stationOf(displays, "shape-paint-tiles"), [0, 0, 0])[2]
   prototype "shape-metal" {
     document {
       shape Sphere "subject" {

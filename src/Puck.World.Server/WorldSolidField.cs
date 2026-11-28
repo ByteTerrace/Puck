@@ -458,15 +458,16 @@ public sealed class WorldSolidField : IContactField {
             // (WorldColliderSet.Build's movingOnly rows), which this field unions in at its live pose. Compiling it here
             // too would leave a second, standing copy at its authored pose.
             if (WorldPlacementStamp.CollidesLive(creation: creation, placement: placement)) { continue; }
-            var (material, reach) = BeginRow(creation: creation, placement: placement, solid: solid);
             var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
+            var (material, reach) = BeginRow(creation: creation, placement: placement, solid: solid, scale: stamp.Frame.Scale);
             var fixedRotation = stamp.FixedRotation;
+            var scale = stamp.Frame.FixedScale;
 
             stamp.ForEachFixed(visitor: instance => EmitCopy(creation: creation, material: material, reach: reach, solid: solid,
                 transform: new FixedCreationStampTransform(
                     Origin: instance.Origin,
                     Rotation: fixedRotation,
-                    Scale: FixedQ4816.FromDouble(value: placement.Scale),
+                    Scale: scale,
                     ReflectionNormal: instance.ReflectionNormal
                 )));
         }
@@ -475,17 +476,17 @@ public sealed class WorldSolidField : IContactField {
                 continue;
             }
 
-            var (material, reach) = BeginRow(placement: pose.Placement, creation: pose.Creation, solid: solid);
+            var (material, reach) = BeginRow(placement: pose.Placement, creation: pose.Creation, solid: solid, scale: ((float)((double)pose.Scale)));
 
             EmitCopy(creation: pose.Creation, material: material, reach: reach, solid: solid, transform: pose.Transform);
         }
 
-        // A row's material, its grip, and the bound of each of its copies: the creation's render reach at the row's
+        // A row's material, its grip, and the bound of each of its copies: the creation's render reach at the copy's
         // scale plus the contact margin the shapes are dilated by. Each placed copy is one program instance carrying
         // that bound; the evaluator's exact cull skips a hard-union instance the bound proves cannot win a query, so
         // the bound decides only which work runs, never what distance results; a plane is never culled whatever its
         // bound.
-        (int Material, float Reach) BeginRow(WorldPlacement placement, WorldPrototype creation, WorldSolid solid) {
+        (int Material, float Reach) BeginRow(WorldPlacement placement, WorldPrototype creation, WorldSolid solid, float scale) {
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
             RecordGrip(
@@ -493,7 +494,7 @@ public sealed class WorldSolidField : IContactField {
                 grantedByOverride: (placement.Grip is not null),
                 material: material
             );
-            return (material, ((CreationStampEmitter.RenderReach(document: creation.EngineDocument, scale: placement.Scale, fontFor: null) +
+            return (material, ((CreationStampEmitter.RenderReach(document: creation.EngineDocument, scale: scale, fontFor: null) +
                 ((solid.Margin > 0f) ? solid.Margin : 0f)) + InstanceBoundMargin));
         }
         void EmitCopy(WorldPrototype creation, WorldSolid solid, int material, float reach, FixedCreationStampTransform transform) {

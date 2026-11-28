@@ -1,8 +1,8 @@
 // The central tree: a giant old broadleaf growing at the hall's exact centre (layout.puck's treeX, treeZ), the gallery's
 // diegetic tutorial in climbing and the hall's great staircase. A timber walkway spirals up the trunk at the stairs'
 // riser, and two broad branches carry decks out to each of levels 1 to 3, so a player who walks up the trunk learns
-// they can climb it, and walking out along a branch learns the branches lead to the other floors. The gallery module
-// imports this, so the gallery booted alone (gallery-root.puck) and the debug world both grow it.
+// they can climb it, and walking out along a branch learns the branches lead to the other floors. A module library:
+// `galleryTree(frame)` grows it, and building.puck expands it on a floor that enables `tree`.
 //
 // It is two creations on one spot and the foliage placed about them. `gallery-tree` is the wood and the walkway, solid:
 // the trunk and its buttress roots, the treads round it on their bark brackets, the level pads where the branches leave
@@ -282,430 +282,442 @@ template treeBoughInto(label, into, radius) {
   }
 }
 
-prototypes {
-  prototype "gallery-tree" {
-    document {
-      name: "gallery-tree"
-      schema: "puck.creation.v2"
-      contact: Shapes
-      palette: concat(
-        [
-          treeBarkSurface(lookTree.bark, lookTree.barkUnder, 6113, barkUpright, lookTree.twist)
-          galleryCel(
-            { color: lookTree.deck, roughness: 0.62, specular: 0.04, shade: brushed(0.08, 1.6, [1, 0.86, 0.62], 6114) }
-          )
-          galleryCel(canopySurface(lookTree.fungus, 6118))
-          { color: lookTree.lantern, roughness: 0.5, emissive: lookTree.lanternGlow }
-          { color: lookTree.brass, roughness: 0.3, metal: 1 }
-          galleryCel({ color: lookTree.wicker, roughness: 0.85, specular: 0.03 })
-          galleryCel({ color: lookTree.egg, roughness: 0.4, specular: 0.05 })
-        ],
-        map(
-          treeLimbs,
-          (b, i) => treeBarkSurface(
-            lookTree.branch,
-            lookTree.branchUnder,
-            (6120 + i),
-            barkAlong((treeBranchC(b) - treeBranchA(b)))
+template galleryTree(frame) {
+
+  prototypes {
+    prototype "gallery-tree" {
+      document {
+        name: "gallery-tree"
+        schema: "puck.creation.v2"
+        contact: Shapes
+        palette: concat(
+          [
+            treeBarkSurface(lookTree.bark, lookTree.barkUnder, 6113, barkUpright, lookTree.twist)
+            galleryCel(
+              {
+                color: lookTree.deck
+                roughness: 0.62
+                specular: 0.04
+                shade: brushed(0.08, 1.6, [1, 0.86, 0.62], 6114)
+              }
+            )
+            galleryCel(canopySurface(lookTree.fungus, 6118))
+            { color: lookTree.lantern, roughness: 0.5, emissive: lookTree.lanternGlow }
+            { color: lookTree.brass, roughness: 0.3, metal: 1 }
+            galleryCel({ color: lookTree.wicker, roughness: 0.85, specular: 0.03 })
+            galleryCel({ color: lookTree.egg, roughness: 0.4, specular: 0.05 })
+          ],
+          map(
+            treeLimbs,
+            (b, i) => treeBarkSurface(
+              lookTree.branch,
+              lookTree.branchUnder,
+              (6120 + i),
+              barkAlong((treeBranchC(b) - treeBranchA(b)))
+            )
           )
         )
-      )
-      // No creation relief and no blend but the unions: a relief can carry the surface inside the shapes, so it would
-      // collide as drawn, a field solve over the whole tree, and a carving blend would scope the whole creation into one
-      // instance every bake sample walks. The bark's texture is its grain (treeBarkSurface) and its form the strands,
-      // burls, knots and forks below.
-      //
-      // The trunk: drums blended into one taper, which it collides as, a stack of cylinders a little inside the drawn
-      // taper, under the braided strands that stand proud of it.
-      trunkCore(
-        label: "trunk",
-        base: treeTrunk.base,
-        apex: treeTrunk.apex,
-        top: treeTrunk.top,
-        count: treeCoreCount,
-        material: treeBark,
-        smooth: 0.4
-      )
-      braidedTrunk(
-        label: "stem",
-        count: treeStems.count,
-        foot: -0.05,
-        top: (treeTrunk.top + 0.4),
-        out: treeStems.out,
-        radius: treeStems.radius,
-        material: treeBark,
-        turn: treeStems.turn,
-        segments: treeStems.segments,
-        bow: treeStems.bow,
-        smooth: treeStems.smooth
-      )
-      for (root, i) in treeRootRows {
-        limb(
-          label: $"root-{i}",
-          a: polarPoint((treeTrunk.base - 0.3), (root.angle + treeAuthorTurn), root.top),
-          b: polarPoint((treeTrunk.base + (0.3 * root.reach)), (root.angle + treeAuthorTurn), (0.32 * root.top)),
-          c: polarPoint((treeTrunk.base + root.reach), (root.angle + treeAuthorTurn), 0.03),
-          width: treeRootWidth,
-          thickness: [(root.top + 0.5), 0.28],
+        // No creation relief and no blend but the unions: a relief can carry the surface inside the shapes, so it would
+        // collide as drawn, a field solve over the whole tree, and a carving blend would scope the whole creation into one
+        // instance every bake sample walks. The bark's texture is its grain (treeBarkSurface) and its form the strands,
+        // burls, knots and forks below.
+        //
+        // The trunk: drums blended into one taper, which it collides as, a stack of cylinders a little inside the drawn
+        // taper, under the braided strands that stand proud of it.
+        trunkCore(
+          label: "trunk",
+          base: treeTrunk.base,
+          apex: treeTrunk.apex,
+          top: treeTrunk.top,
+          count: treeCoreCount,
           material: treeBark,
-          segments: 5,
-          exponent: 2.3,
           smooth: 0.4
         )
-      }
-      // Burls between the spiral's turns, spread up the trunk from its second turn, each two metres under the tread
-      // above it at a bearing the Weyl sequence wanders.
-      for n in range(0, treeBurlCount) {
-        let k = (22 + floor(((n + weylShare(n)) * ((treeTreadCount - 26) / treeBurlCount))))
-        shape Superellipsoid $"burl-{n}" {
-          detail: true
-          material: treeBark
-          exponent: 2.1
-          position: (polarPoint(
-            trunkRadius(treeTrunk.base, treeTrunk.apex, (treeTreadTop(k) - 2)),
-            (treeTreadAngle(k) + treeAuthorTurn),
-            (treeTreadTop(k) - 2)
-          ) * [-1, 1, -1])
-          scale [
-            (0.42 + (0.2 * weylShare(n, 0.7548776662))),
-            (0.55 + (0.2 * weylShare(n))),
-            (0.42 + (0.2 * weylShare(n, 0.7548776662)))
-          ]
-          blend: SmoothUnion
-          smooth: 0.35
-        }
-      }
-      // The walkway: timber treads round the trunk on their bark brackets, and the guard along its rim.
-      spiralTreads(
-        label: "tread",
-        count: treeTreadCount,
-        start: (treeTreadStart + treeAuthorTurn),
-        step: treeTreadStep,
-        rise: treeTreadRise,
-        base: treeTrunk.base,
-        apex: treeTrunk.apex,
-        rim: treeRim,
-        material: treeTimber,
-        bracket: treeBark,
-        thickness: treeTreadThickness,
-        accent: treeFungus,
-        accentEvery: treeFungusEvery
-      )
-      spiralGuard(
-        label: "guard",
-        treads: treeGuarded,
-        start: (treeTreadStart + treeAuthorTurn),
-        step: treeTreadStep,
-        rise: treeTreadRise,
-        rim: treeRim,
-        material: treeBark,
-        height: treeGuardHeight
-      )
-      // The last tread has no tread over its forward run, so a guard closes its leading edge from the bark to the rim
-      // and on round the rim to its pad's guard.
-      let last = (treeTreadCount - 1)
-      let lastBack = ((treeTreadAngle(last) + treeAuthorTurn) - (treeTreadStep / 2))
-      let lastHalf = (((treeRim * sine(((treeTreadStep * pi) / 180))) / 2) + 0.02)
-      let lastAcross = polarPoint((2 * lastHalf), (lastBack + 90), 0)
-      guardRun(
-        label: "guard-end",
-        from: (polarPoint((treeBarkAt(last) + 0.15), lastBack, treeTreadTop(last)) + lastAcross),
-        to: (polarPoint((treeRim - 0.06), lastBack, treeTreadTop(last)) + lastAcross),
-        side: -1,
-        material: treeBark,
-        height: treeGuardHeight
-      )
-      guardRun(
-        label: "guard-end-rim",
-        from: (polarPoint((treeRim - 0.06), lastBack, treeTreadTop(last)) + lastAcross),
-        to: treePadPoint(treeLimbs[(length(treeLimbs) - 1)], treeRim, ((treePadWidth / 2) - 0.06)),
-        side: 1,
-        material: treeBark,
-        height: treeGuardHeight
-      )
-      // Lanterns on brass arms out of the bark, over a walker's head.
-      for k in filter(range(treeLanternFrom, treeTreadCount), k => (((k - treeLanternFrom) % treeLanternEvery) == 0)) {
-        let y = (treeTreadTop(k) + treeLanternLift)
-        let bark = trunkRadius(treeTrunk.base, treeTrunk.apex, y)
-        let angle = (treeTreadAngle(k) + treeAuthorTurn)
-        shape Sweep $"lantern-arm-{k}" {
-          rotation: rotate([0, 1, 0], 180)
-          detail: true
-          material: treeBrass
-          curve {
-            a: polarPoint((bark - 0.1), angle, (y + 0.05))
-            b: polarPoint((bark + 0.3), angle, (y + 0.45))
-            c: polarPoint((bark + 0.45), angle, (y + 0.24))
-            radiusStart: 0.03
-            radiusEnd: 0.02
-          }
-        }
-        treeLantern(label: $"lantern-{k}", at: polarPoint((bark + 0.45), angle, y))
-      }
-      // Each branch: a level pad where it leaves the spiral, on a bough out of the trunk, its bark limb carrying a
-      // timber deck out to its balcony, rails along the pad and both sides of the deck, a lamp on a crook at the pad, and
-      // its fork and knots.
-      for (b, i) in treeLimbs {
-        let top = treeTreadTop(b.tread)
-        let angle = treePadAngle(b)
-        let line = treeDeckLine(b)
-        let under = [0, treeDeck, 0]
-        let side = ((treePadWidth / 2) - 0.06)
-        // The pad is a sharp box, so its outer edge meets the deck's first board flush: a rounded edge would dip under
-        // the board's end and leave a lip a walker steps up.
-        shape Box $"pad-{i}" {
-          material: treeTimber
-          position: (polarPoint(((treePadFrom + treePadReach) / 2), angle, (top - (treeTreadThickness / 2))) *
-            [-1, 1, -1])
-          rotation: rotate([0, 1, 0], (0 - angle))
-          scale [((treePadReach - treePadFrom) / 2), (treeTreadThickness / 2), (treePadWidth / 2)]
-        }
-        shape Sweep $"bough-{i}" {
-          rotation: rotate([0, 1, 0], 180)
-          material: treeBranchBark(i)
-          blend: SmoothUnion
-          smooth: 0.3
-          curve {
-            a: polarPoint((treeBarkAt(b.tread) - 0.5), angle, (top - 1.5))
-            b: polarPoint(((treeBarkAt(b.tread) + treePadReach) / 2), angle, (top - 1.1))
-            c: (line[0] - [0, (treeDeck + (treeBranchDepth[0] / 2)), 0])
-            radiusStart: 0.75
-            radiusEnd: 0.5
-          }
-        }
-        limb(
-          label: $"branch-{i}",
-          a: (line[0] - under),
-          b: (line[1] - under),
-          c: (line[2] - under),
-          width: treeBranchWidth,
-          thickness: treeBranchDepth,
-          material: treeBranchBark(i),
-          segments: treeBranchSegments,
-          smooth: 0.3
+        braidedTrunk(
+          label: "stem",
+          count: treeStems.count,
+          foot: -0.05,
+          top: (treeTrunk.top + 0.4),
+          out: treeStems.out,
+          radius: treeStems.radius,
+          material: treeBark,
+          turn: treeStems.turn,
+          segments: treeStems.segments,
+          bow: treeStems.bow,
+          smooth: treeStems.smooth
         )
-        deckedLimb(
-          label: $"deck-{i}",
-          a: line[0],
-          b: line[1],
-          c: line[2],
-          width: treeDeckWidth,
-          thickness: treeDeck,
+        for (root, i) in treeRootRows {
+          limb(
+            label: $"root-{i}",
+            a: polarPoint((treeTrunk.base - 0.3), (root.angle + treeAuthorTurn), root.top),
+            b: polarPoint((treeTrunk.base + (0.3 * root.reach)), (root.angle + treeAuthorTurn), (0.32 * root.top)),
+            c: polarPoint((treeTrunk.base + root.reach), (root.angle + treeAuthorTurn), 0.03),
+            width: treeRootWidth,
+            thickness: [(root.top + 0.5), 0.28],
+            material: treeBark,
+            segments: 5,
+            exponent: 2.3,
+            smooth: 0.4
+          )
+        }
+        // Burls between the spiral's turns, spread up the trunk from its second turn, each two metres under the tread
+        // above it at a bearing the Weyl sequence wanders.
+        for n in range(0, treeBurlCount) {
+          let k = (22 + floor(((n + weylShare(n)) * ((treeTreadCount - 26) / treeBurlCount))))
+          shape Superellipsoid $"burl-{n}" {
+            detail: true
+            material: treeBark
+            exponent: 2.1
+            position: (polarPoint(
+              trunkRadius(treeTrunk.base, treeTrunk.apex, (treeTreadTop(k) - 2)),
+              (treeTreadAngle(k) + treeAuthorTurn),
+              (treeTreadTop(k) - 2)
+            ) * [-1, 1, -1])
+            scale [
+              (0.42 + (0.2 * weylShare(n, 0.7548776662))),
+              (0.55 + (0.2 * weylShare(n))),
+              (0.42 + (0.2 * weylShare(n, 0.7548776662)))
+            ]
+            blend: SmoothUnion
+            smooth: 0.35
+          }
+        }
+        // The walkway: timber treads round the trunk on their bark brackets, and the guard along its rim.
+        spiralTreads(
+          label: "tread",
+          count: treeTreadCount,
+          start: (treeTreadStart + treeAuthorTurn),
+          step: treeTreadStep,
+          rise: treeTreadRise,
+          base: treeTrunk.base,
+          apex: treeTrunk.apex,
+          rim: treeRim,
           material: treeTimber,
-          segments: treeBranchSegments
+          bracket: treeBark,
+          thickness: treeTreadThickness,
+          accent: treeFungus,
+          accentEvery: treeFungusEvery
         )
-        for s in [-1, 1] {
-          limbGuard(
-            label: $"deck-guard-{i}-{(s + 1) / 2}",
+        spiralGuard(
+          label: "guard",
+          treads: treeGuarded,
+          start: (treeTreadStart + treeAuthorTurn),
+          step: treeTreadStep,
+          rise: treeTreadRise,
+          rim: treeRim,
+          material: treeBark,
+          height: treeGuardHeight
+        )
+        // The last tread has no tread over its forward run, so a guard closes its leading edge from the bark to the rim
+        // and on round the rim to its pad's guard.
+        let last = (treeTreadCount - 1)
+        let lastBack = ((treeTreadAngle(last) + treeAuthorTurn) - (treeTreadStep / 2))
+        let lastHalf = (((treeRim * sine(((treeTreadStep * pi) / 180))) / 2) + 0.02)
+        let lastAcross = polarPoint((2 * lastHalf), (lastBack + 90), 0)
+        guardRun(
+          label: "guard-end",
+          from: (polarPoint((treeBarkAt(last) + 0.15), lastBack, treeTreadTop(last)) + lastAcross),
+          to: (polarPoint((treeRim - 0.06), lastBack, treeTreadTop(last)) + lastAcross),
+          side: -1,
+          material: treeBark,
+          height: treeGuardHeight
+        )
+        guardRun(
+          label: "guard-end-rim",
+          from: (polarPoint((treeRim - 0.06), lastBack, treeTreadTop(last)) + lastAcross),
+          to: treePadPoint(treeLimbs[(length(treeLimbs) - 1)], treeRim, ((treePadWidth / 2) - 0.06)),
+          side: 1,
+          material: treeBark,
+          height: treeGuardHeight
+        )
+        // Lanterns on brass arms out of the bark, over a walker's head.
+        for k in filter(range(treeLanternFrom, treeTreadCount), k => (((k - treeLanternFrom) % treeLanternEvery) == 0)) {
+          let y = (treeTreadTop(k) + treeLanternLift)
+          let bark = trunkRadius(treeTrunk.base, treeTrunk.apex, y)
+          let angle = (treeTreadAngle(k) + treeAuthorTurn)
+          shape Sweep $"lantern-arm-{k}" {
+            rotation: rotate([0, 1, 0], 180)
+            detail: true
+            material: treeBrass
+            curve {
+              a: polarPoint((bark - 0.1), angle, (y + 0.05))
+              b: polarPoint((bark + 0.3), angle, (y + 0.45))
+              c: polarPoint((bark + 0.45), angle, (y + 0.24))
+              radiusStart: 0.03
+              radiusEnd: 0.02
+            }
+          }
+          treeLantern(label: $"lantern-{k}", at: polarPoint((bark + 0.45), angle, y))
+        }
+        // Each branch: a level pad where it leaves the spiral, on a bough out of the trunk, its bark limb carrying a
+        // timber deck out to its balcony, rails along the pad and both sides of the deck, a lamp on a crook at the pad, and
+        // its fork and knots.
+        for (b, i) in treeLimbs {
+          let top = treeTreadTop(b.tread)
+          let angle = treePadAngle(b)
+          let line = treeDeckLine(b)
+          let under = [0, treeDeck, 0]
+          let side = ((treePadWidth / 2) - 0.06)
+          // The pad is a sharp box, so its outer edge meets the deck's first board flush: a rounded edge would dip under
+          // the board's end and leave a lip a walker steps up.
+          shape Box $"pad-{i}" {
+            material: treeTimber
+            position: (polarPoint(((treePadFrom + treePadReach) / 2), angle, (top - (treeTreadThickness / 2))) *
+              [-1, 1, -1])
+            rotation: rotate([0, 1, 0], (0 - angle))
+            scale [((treePadReach - treePadFrom) / 2), (treeTreadThickness / 2), (treePadWidth / 2)]
+          }
+          shape Sweep $"bough-{i}" {
+            rotation: rotate([0, 1, 0], 180)
+            material: treeBranchBark(i)
+            blend: SmoothUnion
+            smooth: 0.3
+            curve {
+              a: polarPoint((treeBarkAt(b.tread) - 0.5), angle, (top - 1.5))
+              b: polarPoint(((treeBarkAt(b.tread) + treePadReach) / 2), angle, (top - 1.1))
+              c: (line[0] - [0, (treeDeck + (treeBranchDepth[0] / 2)), 0])
+              radiusStart: 0.75
+              radiusEnd: 0.5
+            }
+          }
+          limb(
+            label: $"branch-{i}",
+            a: (line[0] - under),
+            b: (line[1] - under),
+            c: (line[2] - under),
+            width: treeBranchWidth,
+            thickness: treeBranchDepth,
+            material: treeBranchBark(i),
+            segments: treeBranchSegments,
+            smooth: 0.3
+          )
+          deckedLimb(
+            label: $"deck-{i}",
             a: line[0],
             b: line[1],
             c: line[2],
             width: treeDeckWidth,
-            side: s,
-            material: treeBranchBark(i),
-            segments: treeBranchSegments,
-            height: treeGuardHeight
+            thickness: treeDeck,
+            material: treeTimber,
+            segments: treeBranchSegments
           )
-          guardRun(
-            label: $"pad-guard-{i}-{(s + 1) / 2}",
-            from: treePadPoint(b, treeRim, (s * side)),
-            to: treePadPoint(b, (treePadReach - 0.06), (s * side)),
-            side: (0 - s),
-            material: treeBranchBark(i),
-            height: treeGuardHeight,
-            post: true
-          )
-        }
-        let lamp = treePadPoint(b, (treePadReach - 0.12), ((treePadWidth / 2) + 0.05))
-        let reach = polarPoint(0.55, angle, 0)
-        shape Sweep $"lamp-crook-{i}" {
-          rotation: rotate([0, 1, 0], 180)
-          material: treeBranchBark(i)
-          blend: SmoothUnion
-          smooth: 0.05
-          curve {
-            a: (lamp - [0, 0.3, 0])
-            b: ((lamp + [0, (treeLampHeight + 0.5), 0]) - (reach * 0.2))
-            c: ((lamp + reach) + [0, (treeLampHeight + 0.35), 0])
-            radiusStart: 0.07
-            radiusEnd: 0.03
+          for s in [-1, 1] {
+            limbGuard(
+              label: $"deck-guard-{i}-{(s + 1) / 2}",
+              a: line[0],
+              b: line[1],
+              c: line[2],
+              width: treeDeckWidth,
+              side: s,
+              material: treeBranchBark(i),
+              segments: treeBranchSegments,
+              height: treeGuardHeight
+            )
+            guardRun(
+              label: $"pad-guard-{i}-{(s + 1) / 2}",
+              from: treePadPoint(b, treeRim, (s * side)),
+              to: treePadPoint(b, (treePadReach - 0.06), (s * side)),
+              side: (0 - s),
+              material: treeBranchBark(i),
+              height: treeGuardHeight,
+              post: true
+            )
           }
-        }
-        treeLantern(label: $"lamp-{i}", at: ((lamp + reach) + [0, (treeLampHeight + 0.05), 0]))
-        limbFork(
-          label: $"fork-{i}",
-          a: line[0],
-          b: line[1],
-          c: line[2],
-          at: treeFork.at,
-          side: treeForkSide(i),
-          reach: treeFork.reach,
-          rise: treeFork.rise,
-          radius: treeFork.radius,
-          material: treeBranchBark(i),
-          drop: treeFork.drop
-        )
-        for (knot, j) in treeKnots {
-          limbKnot(
-            label: $"knot-{i}-{j}",
+          let lamp = treePadPoint(b, (treePadReach - 0.12), ((treePadWidth / 2) + 0.05))
+          let reach = polarPoint(0.55, angle, 0)
+          shape Sweep $"lamp-crook-{i}" {
+            rotation: rotate([0, 1, 0], 180)
+            material: treeBranchBark(i)
+            blend: SmoothUnion
+            smooth: 0.05
+            curve {
+              a: (lamp - [0, 0.3, 0])
+              b: ((lamp + [0, (treeLampHeight + 0.5), 0]) - (reach * 0.2))
+              c: ((lamp + reach) + [0, (treeLampHeight + 0.35), 0])
+              radiusStart: 0.07
+              radiusEnd: 0.03
+            }
+          }
+          treeLantern(label: $"lamp-{i}", at: ((lamp + reach) + [0, (treeLampHeight + 0.05), 0]))
+          limbFork(
+            label: $"fork-{i}",
             a: line[0],
             b: line[1],
             c: line[2],
-            at: knot.at,
-            side: (knot.side * treeForkSide(i)),
-            width: limbTaper(treeBranchWidth, 0, knot.at),
-            size: knot.size,
+            at: treeFork.at,
+            side: treeForkSide(i),
+            reach: treeFork.reach,
+            rise: treeFork.rise,
+            radius: treeFork.radius,
             material: treeBranchBark(i),
-            depth: (treeDeck + 0.35)
+            drop: treeFork.drop
           )
-        }
-      }
-      // Nests in the crooks of forks: a woven rim on a woven bowl, and in one a clutch of eggs.
-      for (nest, n) in treeNests {
-        let b = treeLimbs[nest.branch]
-        let line = treeDeckLine(b)
-        let base = limbForkBase(line[0], line[1], line[2], treeFork.at, treeFork.drop)
-        let bend = ((base +
-          (limbLeft(line[0], line[1], line[2], treeFork.at) * ((treeForkSide(nest.branch) * 0.6) * treeFork.reach))) +
-          [0, (0.25 * treeFork.rise), 0])
-        let at = (quadraticPoint(base, bend, treeForkTip(b, nest.branch), nest.at) + [0, 0.22, 0])
-        shape Torus $"nest-rim-{n}" {
-          detail: true
-          material: treeWicker
-          position: (at * [-1, 1, -1])
-          scale [0.42, 0.42, 0.42]
-        }
-        shape Ellipsoid $"nest-bowl-{n}" {
-          detail: true
-          material: treeWicker
-          position: ((at - [0, 0.1, 0]) * [-1, 1, -1])
-          scale [0.46, 0.2, 0.46]
-          blend: SmoothUnion
-          smooth: 0.06
-        }
-        if nest.eggs {
-          for e in range(0, 3) {
-            shape Ellipsoid $"nest-egg-{n}-{e}" {
-              detail: true
-              material: treeEgg
-              position: ((at + polarPoint(0.1, (120 * e), 0.06)) * [-1, 1, -1])
-              scale [0.06, 0.08, 0.06]
-            }
+          for (knot, j) in treeKnots {
+            limbKnot(
+              label: $"knot-{i}-{j}",
+              a: line[0],
+              b: line[1],
+              c: line[2],
+              at: knot.at,
+              side: (knot.side * treeForkSide(i)),
+              width: limbTaper(treeBranchWidth, 0, knot.at),
+              size: knot.size,
+              material: treeBranchBark(i),
+              depth: (treeDeck + 0.35)
+            )
           }
         }
-      }
-    }
-  }
-  prototype "gallery-tree-canopy" {
-    document {
-      name: "gallery-tree-canopy"
-      schema: "puck.creation.v2"
-      palette [
-        galleryCel(canopySurface(lookTree.foliage.crown.inner, 6115))
-        treeBarkSurface(lookTree.branch, lookTree.branchUnder, 6116, barkUpright)
-      ]
-      shape Superellipsoid "crown-core" {
-        material: treeLeaf
-        exponent: landscapeExponent
-        position: (treeCrownCore.at * [-1, 1, -1])
-        scale: treeCrownCore.r
-      }
-      // Boughs from the trunk into every `every`-th clump that stands of each ring: a few boughs a ring, as a tree
-      // carries, with the clumps between them massed on them, each crossing the walkway between two of its turns
-      // (treeBoughInto).
-      for (ring, r) in treeRings {
-        for (k, m) in treeRingsKept[r] {
-          if ((ring.every > 0) and ((m % maximum(ring.every, 1)) == 0)) {
-            treeBoughInto(label: $"{ring.name}-limb-{k}", into: treeRingAt(ring, k), radius: ring.limb)
+        // Nests in the crooks of forks: a woven rim on a woven bowl, and in one a clutch of eggs.
+        for (nest, n) in treeNests {
+          let b = treeLimbs[nest.branch]
+          let line = treeDeckLine(b)
+          let base = limbForkBase(line[0], line[1], line[2], treeFork.at, treeFork.drop)
+          let bend = ((base +
+            (limbLeft(line[0], line[1], line[2], treeFork.at) * ((treeForkSide(nest.branch) * 0.6) * treeFork.reach))) +
+            [0, (0.25 * treeFork.rise), 0])
+          let at = (quadraticPoint(base, bend, treeForkTip(b, nest.branch), nest.at) + [0, 0.22, 0])
+          shape Torus $"nest-rim-{n}" {
+            detail: true
+            material: treeWicker
+            position: (at * [-1, 1, -1])
+            scale [0.42, 0.42, 0.42]
           }
-        }
-      }
-      // A few twigs from each fork's tip into its clumps.
-      for (b, i) in treeLimbs {
-        for (n, m) in treeForksKept[i] {
-          if ((m % treeForkFoliage.every) == 0) {
-            let into = treeRingAt(treeForkRing(b, i), n)
-            shape Sweep $"fork-twig-{i}-{n}" {
-              rotation: rotate([0, 1, 0], 180)
-              material: treeTwig
-              blend: SmoothUnion
-              smooth: 0.1
-              curve {
-                a: (treeForkTip(b, i) - [0, 0.2, 0])
-                b: (((treeForkTip(b, i) * 0.55) + (into * 0.45)) + [0, 0.35, 0])
-                c: (into - [0, 0.15, 0])
-                radiusStart: 0.12
-                radiusEnd: 0.04
+          shape Ellipsoid $"nest-bowl-{n}" {
+            detail: true
+            material: treeWicker
+            position: ((at - [0, 0.1, 0]) * [-1, 1, -1])
+            scale [0.46, 0.2, 0.46]
+            blend: SmoothUnion
+            smooth: 0.06
+          }
+          if nest.eggs {
+            for e in range(0, 3) {
+              shape Ellipsoid $"nest-egg-{n}-{e}" {
+                detail: true
+                material: treeEgg
+                position: ((at + polarPoint(0.1, (120 * e), 0.06)) * [-1, 1, -1])
+                scale [0.06, 0.08, 0.06]
               }
             }
           }
         }
       }
     }
+    prototype "gallery-tree-canopy" {
+      document {
+        name: "gallery-tree-canopy"
+        schema: "puck.creation.v2"
+        palette [
+          galleryCel(canopySurface(lookTree.foliage.crown.inner, 6115))
+          treeBarkSurface(lookTree.branch, lookTree.branchUnder, 6116, barkUpright)
+        ]
+        shape Superellipsoid "crown-core" {
+          material: treeLeaf
+          exponent: landscapeExponent
+          position: (treeCrownCore.at * [-1, 1, -1])
+          scale: treeCrownCore.r
+        }
+        // Boughs from the trunk into every `every`-th clump that stands of each ring: a few boughs a ring, as a tree
+        // carries, with the clumps between them massed on them, each crossing the walkway between two of its turns
+        // (treeBoughInto).
+        for (ring, r) in treeRings {
+          for (k, m) in treeRingsKept[r] {
+            if ((ring.every > 0) and ((m % maximum(ring.every, 1)) == 0)) {
+              treeBoughInto(label: $"{ring.name}-limb-{k}", into: treeRingAt(ring, k), radius: ring.limb)
+            }
+          }
+        }
+        // A few twigs from each fork's tip into its clumps.
+        for (b, i) in treeLimbs {
+          for (n, m) in treeForksKept[i] {
+            if ((m % treeForkFoliage.every) == 0) {
+              let into = treeRingAt(treeForkRing(b, i), n)
+              shape Sweep $"fork-twig-{i}-{n}" {
+                rotation: rotate([0, 1, 0], 180)
+                material: treeTwig
+                blend: SmoothUnion
+                smooth: 0.1
+                curve {
+                  a: (treeForkTip(b, i) - [0, 0.2, 0])
+                  b: (((treeForkTip(b, i) * 0.55) + (into * 0.45)) + [0, 0.35, 0])
+                  c: (into - [0, 0.15, 0])
+                  radiusStart: 0.12
+                  radiusEnd: 0.04
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    for (family, k) in treeFamilies {
+      leafyClump(
+        id: treeClump(family),
+        tones: map(
+          lookTree.foliage[family].tones,
+          (leaves, j) => galleryCel(leafySurface(leaves, ((6130 + (10 * k)) + j), soft: lookTree.soft))
+        ),
+        inner: galleryCel(leafySurface(lookTree.foliage[family].inner, (6139 + (10 * k)), soft: lookTree.soft))
+      )
+    }
   }
-  for (family, k) in treeFamilies {
-    leafyClump(
-      id: treeClump(family),
-      tones: map(
-        lookTree.foliage[family].tones,
-        (leaves, j) => galleryCel(leafySurface(leaves, ((6130 + (10 * k)) + j), soft: lookTree.soft))
-      ),
-      inner: galleryCel(leafySurface(lookTree.foliage[family].inner, (6139 + (10 * k)), soft: lookTree.soft))
-    )
-  }
-}
 
-placements {
-  placement "gallery-tree" {
-    prototype: "gallery-tree"
-    parent: "gallery"
-    position [treeX, galleryFloor[0], treeZ]
-    solid
+  placements {
+    // The tree can be climbed: its trunk and limbs hold a climber, and its treads and branch tops are ground she walks.
+    placement "gallery-tree" {
+      prototype: "gallery-tree"
+      parent: "gallery"
+      position [treeX, galleryFloor[0], treeZ]
+      grip {
+        holdable: true
+      }
+      solid
+    }
+    placement "gallery-tree-canopy" {
+      prototype: "gallery-tree-canopy"
+      parent: "gallery"
+      position [treeX, galleryFloor[0], treeZ]
+    }
+    // The foliage: a leafy clump for every clump of each ring and of each fork that stands clear of where bodies walk
+    // (treeClumpClear).
+    for (ring, r) in treeRings {
+      leafyClumps(
+        label: $"gallery-tree-{ring.name}",
+        prototype: treeClump(ring.family),
+        origin: [treeX, galleryFloor[0], treeZ],
+        parent: "gallery",
+        centre: ring.centre,
+        radius: ring.radius,
+        height: ring.height,
+        count: ring.count,
+        size: ring.size,
+        turn: ring.turn,
+        wander: ring.wander,
+        only: treeRingsKept[r]
+      )
+    }
+    for (b, i) in treeLimbs {
+      let ring = treeForkRing(b, i)
+      leafyClumps(
+        label: $"gallery-tree-fork-{i}",
+        prototype: treeClump(treeForkFamily(i)),
+        origin: [treeX, galleryFloor[0], treeZ],
+        parent: "gallery",
+        centre: ring.centre,
+        radius: ring.radius,
+        height: ring.height,
+        count: ring.count,
+        size: ring.size,
+        turn: ring.turn,
+        wander: ring.wander,
+        only: treeForksKept[i]
+      )
+    }
   }
-  placement "gallery-tree-canopy" {
-    prototype: "gallery-tree-canopy"
-    parent: "gallery"
-    position [treeX, galleryFloor[0], treeZ]
-  }
-  // The foliage: a leafy clump for every clump of each ring and of each fork that stands clear of where bodies walk
-  // (treeClumpClear).
-  for (ring, r) in treeRings {
-    leafyClumps(
-      label: $"gallery-tree-{ring.name}",
-      prototype: treeClump(ring.family),
-      origin: [treeX, galleryFloor[0], treeZ],
-      parent: "gallery",
-      centre: ring.centre,
-      radius: ring.radius,
-      height: ring.height,
-      count: ring.count,
-      size: ring.size,
-      turn: ring.turn,
-      wander: ring.wander,
-      only: treeRingsKept[r]
-    )
-  }
-  for (b, i) in treeLimbs {
-    let ring = treeForkRing(b, i)
-    leafyClumps(
-      label: $"gallery-tree-fork-{i}",
-      prototype: treeClump(treeForkFamily(i)),
-      origin: [treeX, galleryFloor[0], treeZ],
-      parent: "gallery",
-      centre: ring.centre,
-      radius: ring.radius,
-      height: ring.height,
-      count: ring.count,
-      size: ring.size,
-      turn: ring.turn,
-      wander: ring.wander,
-      only: treeForksKept[i]
-    )
-  }
-}
 
-// On the floor at the walkway's foot, just short of its first riser, facing up the spiral (yaw 0 faces -z, the bearing
-// turns from +x toward +z).
-spawnPoints [
-  { id: "tree", parent: gallery, position: treeTreadWalk(-1), yawDegrees: (180 - treeTreadAngle(-1)) }
-]
+  // On the floor at the walkway's foot, just short of its first riser, facing up the spiral (yaw 0 faces -z, the bearing
+  // turns from +x toward +z).
+  spawnPoints [
+    { id: "tree", parent: gallery, position: treeTreadWalk(-1), yawDegrees: (180 - treeTreadAngle(-1)) }
+  ]
+}

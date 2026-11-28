@@ -1,0 +1,85 @@
+// What a world that boots the gallery alone stands beside the building: the seat's spawn on the west forecourt facing
+// the entrance, the population the building's modules ask for, and the font its labels and signs emboss in. A module
+// library: gallery-root.puck, gallery-shell.puck and the scaled roots (gallery-half.puck, gallery-double.puck) each
+// expand `galleryRoot(frame, floors)` with their own frame and floors, beside the documents the building reads
+// (gallery.md, "The modules").
+
+import "../../standard/frame"
+import "../shapes"
+import "../game-stations"
+import "layout"
+import "look"
+import "building"
+
+// The bodies a building's floors ask for: the gallery's own (the lift cars, the seats and the visitors,
+// shapes.puck's `galleryPopulation`) and, while level 2 holds the game stations, room for each station's largest game.
+function galleryRootBodies(floors) = (galleryPopulation +
+  (galleryModulesOf(floors).gameStations ? (gameStationBodies * galleryRoomStood) : 0))
+
+// The world's size range (../size.puck) widened to a building stood in `frame`: down to Alice's size in it and up to its
+// own, so a body takes every size the building's size field writes. At full size it is ../size.puck's own.
+function gallerySizeRange(frame) = {
+  minimum: minimum([0.1, (0.5 * lookWonderSize * frame.scale)])
+  maximum: maximum([1, frame.scale])
+}
+
+template galleryRoot(frame, floors) {
+  galleryBuilding(frame: frame, floors: floors, home: "gallery/")
+
+  if frame.scale != 1 {
+    state {
+      body [
+        {
+          name: "size"
+          kind: "Counter"
+          initial: 1
+          envelope {
+            $type: "range"
+            maximum: gallerySizeRange(frame).maximum
+            minimum: gallerySizeRange(frame).minimum
+          }
+        }
+      ]
+    }
+  }
+
+  // The seat boots on the west forecourt facing the entrance, with the hall's length beyond it; the building declares its
+  // own spawn points.
+  spawnPoints [
+    { id: "hero", position: galleryAt(frame, [(galleryWestOut - 9), 0.05, naveMid]), yawDegrees: frameYaw(frame, 270) }
+  ]
+
+  bodies {
+    capacity: galleryRootBodies(floors)
+    localSeats: seatPopulation
+    networkPlayers: visitorPopulation
+  }
+
+  // The debug world's placement policy, whose scale envelope holds a body at any size ../size.puck admits and a row of
+  // the building stood at twice its size.
+  placements {
+    policy {
+      authoringHeadroomInstances: 4096
+      authoringHeadroomScreens: 0
+      candidateCap: 1
+      candidateRadius: 1
+      maxPlacementScale: 2.5
+      minPlacementScale: 0.05
+      previewDeadlineFrames: 1
+    }
+  }
+
+  // The font the plinth labels and signs emboss in, as the debug world declares it.
+  text {
+    defaultFont: "inter"
+    fonts [
+      {
+        name: "inter"
+        source: "fonts/inter-regular.ttf"
+        hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
+        // ASCII, and the signs the shape stations' learn panels typeset formulas with (middle dot, minus, root, ≤ and ≥).
+        codePointRanges ["U+0020-U+007E", "U+00B7", "U+2212", "U+221A", "U+2264-U+2265"]
+      }
+    ]
+  }
+}

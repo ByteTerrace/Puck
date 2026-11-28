@@ -84,8 +84,9 @@ public sealed record WorldPlacementNet(
         (PinBottom ? FixedNetPins.Bottom : FixedNetPins.None) | (PinTop ? FixedNetPins.Top : FixedNetPins.None));
 
     /// <summary>Returns the net's layout and material in world coordinates where a row's resolved frame stands it: the
-    /// facet's frame turned by the row's rotation, scaled by its scale and moved to its origin, with the reach and
-    /// strand scaled alike.</summary>
+    /// facet's frame turned by the row's rotation, scaled by its scale and moved to its origin, with the reach, the
+    /// strand and the rest speed scaled alike, so a scaled net sags, swings and sleeps as the unscaled one does, in the
+    /// same time.</summary>
     /// <param name="origin">The row's resolved origin.</param>
     /// <param name="rotation">The row's resolved rotation.</param>
     /// <param name="scale">The row's scale.</param>
@@ -99,7 +100,7 @@ public sealed record WorldPlacementNet(
         Origin: (origin + rotation.Rotate(vector: (FixedVector3.FromVector3(value: Origin) * scale))),
         Pins: PinMask,
         Reach: (FixedQ4816.FromDouble(value: Reach) * scale),
-        RestSpeed: FixedQ4816.FromDouble(value: RestSpeed),
+        RestSpeed: (FixedQ4816.FromDouble(value: RestSpeed) * scale),
         Rows: Rows,
         Sag: FixedQ4816.FromDouble(value: Sag),
         SleepTicks: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: SleepSeconds)),
@@ -114,20 +115,22 @@ public sealed record WorldPlacementNet(
     /// <param name="definition">The document.</param>
     /// <param name="placement">The row carrying the facet.</param>
     /// <param name="spec">The spec, when the row resolves to exactly one stamp instance.</param>
+    /// <param name="scale">The row's composed frame scale (its own and its parents'), which the spec's lengths take.</param>
     /// <returns>Whether the row resolved to exactly one instance.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="placement"/> is
     /// <see langword="null"/>.</exception>
-    public bool TrySpecIn(WorldDefinition definition, WorldPlacement placement, out FixedNetSpec spec) {
+    public bool TrySpecIn(WorldDefinition definition, WorldPlacement placement, out FixedNetSpec spec, out FixedQ4816 scale) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: placement);
 
         var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: (definition.Generation?.WorldSeed ?? 0UL));
 
+        scale = stamp.Frame.FixedScale;
         if (stamp.Count != 1) {
             spec = default;
             return false;
         }
-        spec = SpecAt(origin: stamp.Instances[0].Origin, rotation: stamp.FixedRotation, scale: FixedQ4816.FromDouble(value: placement.Scale));
+        spec = SpecAt(origin: stamp.Instances[0].Origin, rotation: stamp.FixedRotation, scale: scale);
         return true;
     }
     /// <summary>Checks the facet, adding one line to <paramref name="errors"/> for each refusal: a node count outside

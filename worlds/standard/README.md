@@ -343,12 +343,22 @@ the strands it crosses, which the engine sweeps over the net's displaced strands
 
 `place.puck` is the carrier a named place rides on: a creation that draws nothing, which a world places with a `region`
 so `body.place` names where a body stands and a rule sweeps whoever stands there. `reach.puck` is a library over it:
-`reach(id, box)` is the floor before a plate, a button or a door where the context button acts, and `pressing()` the
-test a reach's rule gates on, so one rule over `region(id)` costs the bodies in reach.
+`reach(id, box, parent)` is the floor before a plate, a button or a door where the context button acts, its box in the
+frame of `parent` (a placement, or the world's own), and `pressing()` the test a reach's rule gates on, so one rule over
+`region(id)` costs the bodies in reach. A reach under a group's root stands, turns and scales with it.
 
 `bounds.puck` is a library of boxes given their bounds (`boundsBox` for a world-space box in a creation at the origin,
 `localBox` for one in the creation's own frame, `barRing` for the three bars round a canvas), for shells, furniture and
 frames built from boxes.
+
+`frame.puck` is where a group of rows stands in the world, as an SVG group's transform places what it holds: a frame is
+`{ position, yaw, scale }` (`frameOf`), and `frameRoot` stands a group's root placement with its three values, so every
+row parented to the root follows it, its size, colliders, faces, regions, boards and anchored lights included. What a
+group writes in the world's own coordinates carries the same frame through `frameAt` (a point), `frameLength` (a
+length), `frameYaw` and `frameRotation` (a heading or turn) and `frameBox` (a box, square to the world's axes, exact at a
+whole number of quarter turns); `frameLocal` reads a world point back into the group. The portal and panel modules take
+their rows' `site` as a frame, so their spawn points and glass paints follow a turned or scaled group, and the debug
+world's gallery stands every one of its modules in one (`../debug/gallery.md`, "The modules").
 
 `size-field.puck` is a library of one template, `sizeField`: a list of zones (a capsule about a path, a box, or both)
 where a body's size register is a function of its progress along the zone's path, `start * power(end / start, t)`, so
@@ -356,8 +366,10 @@ each equal step multiplies its size by the same factor; a vertical path in a box
 stair's well or a lift's shaft. The first zone holding the body decides, so a well listed before the floor round it
 wins there. A body holding a named identity fact (a pass a puzzle grants) takes a pass size in every zone instead. One
 world rule writes the size from the body's live position, so every observer sees the true size; the named sizes live in
-a world table the console retunes live. The gallery's level 1 (`../debug/gallery.md`, "The size of level 1") is the
-worked example.
+a world table the console retunes live. A field stands in a frame (`frame`, frame.puck): its zones are written in the
+group's coordinates and its sizes are the group's, multiplied by the frame's scale, so a body in a group stood at half
+size takes half the size and its physics follows. The gallery's level 1 and its entrance (`../debug/gallery.md`, "The
+size of level 1" and "One frame") are the worked example.
 
 `kits.puck` is a library of kit parts: the gravity and the ground, fall and air holds a body wears (`groundHold`,
 `fallHold`, `airHold`), the motions a kit derives its own from with `with` (`walkerMotion`, the walker's 4 m/s walk

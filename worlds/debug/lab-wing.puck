@@ -21,7 +21,7 @@ let labDoors = map(labWingPlan, lab => portalOf(
   y: galleryFloor[0],
   z: tileZ(labWingRow),
   yaw: 0,
-  site: gallerySite,
+  site: galleryFrame,
   parent: "gallery",
   look: portalStanding(color: labFrameColor, roughness: 0.4, specular: 0.3, post: labFramePost),
   to: (lab.open ? debugRoute($"lab-{lab.id}") : null),
