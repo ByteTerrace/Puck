@@ -788,8 +788,10 @@ The owner's rulings:
 - **Two puzzles on the gallery's play floor use the field.**
   - **The solo puzzle** is the field's diegetic tutorial. What it teaches is
     that the field acts on the game world and can solve puzzles there. A small
-    player slipping through the nets on level 1 is not a gap in it: that is
-    another puzzle, still to be designed. A floor button sinks
+    player slipping through the nets on level 1 is not a gap in it but the
+    small player's own lesson: they escape through the mesh and learn that, at
+    that size, they can use the mouse holes, such as the little house's door on
+    level 1's north gallery (`worlds/debug/gallery/mouse-house.puck`). A floor button sinks
     under a player and opens a nearby net while it is held. Released, it rises
     over a window too short to sprint through before the net closes. A field
     cast over the button slows its rise enough for an average player to make it.
