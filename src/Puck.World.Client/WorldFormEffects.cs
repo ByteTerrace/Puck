@@ -87,8 +87,9 @@ public static class WorldFormEffects {
     /// <param name="slotCount">The run's slot count.</param>
     /// <param name="origin">The world point the sweep is measured from: the run's root.</param>
     /// <param name="rotation">The run's root orientation, which turns the effect's direction into the world.</param>
-    /// <param name="low">Where the band starts along the direction from <paramref name="origin"/>, metres.</param>
-    /// <param name="high">Where the band ends, metres.</param>
+    /// <param name="low">Where the form starts along the direction from <paramref name="origin"/>, metres; the band starts
+    /// its edge's width and roughness before it.</param>
+    /// <param name="high">Where the form ends, metres; the band ends its edge's width and roughness past it.</param>
     /// <param name="elapsed">The seconds since the band started; a negative value holds it at its start.</param>
     /// <param name="parted">Whether the run's slots move apart, so a draw blending several of them is not drawn.</param>
     /// <param name="direction">The sweep's direction in the run's frame, or <see langword="null"/> for the effect's
@@ -101,6 +102,12 @@ public static class WorldFormEffects {
         ArgumentNullException.ThrowIfNull(argument: effect);
 
         var axis = Vector3.Transform(value: (direction ?? Direction(effect: effect)), rotation: rotation);
+        // The sweep starts and ends a roughened edge's width past the form, so no surface is cut or glows before the
+        // band starts or after it ends.
+        var pad = (MathF.Max(x: effect.Roughness, y: 0f) + MathF.Max(x: effect.EdgeWidth, y: 0f));
+
+        low -= pad;
+        high += pad;
 
         return new SdfFormBand {
             FirstSlot = firstSlot,

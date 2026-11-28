@@ -49,6 +49,7 @@ public sealed class WorldFormPieces {
         public float SpinRate;
         public Quaternion Twist;
         public bool Launched;
+        public bool Clear;
         public bool Resting;
         public Vector3 Position;
         public Vector3 Velocity;
@@ -169,12 +170,17 @@ public sealed class WorldFormPieces {
 
             var travel = (piece.Velocity * step);
             var length = travel.Length();
+            var radius = MathF.Max(x: (piece.Radius * 0.4f), y: 0.02f);
 
+            // A piece launched from where it overlaps the world (a boot on the floor) flies free until it is clear of it,
+            // so its first sweep does not strike the surface it started in.
+            if (!piece.Clear) {
+                piece.Clear = ((field is null) || !field.Overlap(center: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: piece.Position)), radius: FixedQ4816.FromDouble(value: radius)));
+            }
             if (length > 1e-6f) {
                 var direction = (travel / length);
-                var radius = MathF.Max(x: (piece.Radius * 0.4f), y: 0.02f);
 
-                if ((field is not null) && field.SphereCast(origin: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: piece.Position)),
+                if (piece.Clear && (field is not null) && field.SphereCast(origin: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: piece.Position)),
                     dir: FixedVector3.FromVector3(value: direction), radius: FixedQ4816.FromDouble(value: radius), maxDist: FixedQ4816.FromDouble(value: length), hit: out var hit)) {
                     var normal = hit.Normal.ToVector3();
 
