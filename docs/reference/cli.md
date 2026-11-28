@@ -4520,7 +4520,8 @@ managed bytes with `--measure`, then the five sources that charged the most eval
 these measurements are observations, not gates. With `--validate --budget <lines>` it prints each composed world's
 rule price sheet, the one `world.budget.rules` reads in a running World: the tick's work units, the worst tick in
 time on every device the world authors against the rules' budget (`WorldRuleTimePricing`), each module instance's
-summed lines, and the costliest `<lines>` lines with their check and firing units and how each is priced. With
+summed lines, and the costliest `<lines>` lines, ordered by their time on the device admission holds to the budget,
+with that time, their check and firing units and how each is priced. With
 `--rule-calibration <file>` the sheet is priced as though every device carried that calibration (the JSON
 `puck bench rules --output` writes), which reads what admission would say before the figures are authored. A world its work alone refuses is priced too. It
 compiles only those paths, in the supplied order within one process. Each

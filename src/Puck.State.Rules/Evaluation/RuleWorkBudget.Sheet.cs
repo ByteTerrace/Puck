@@ -264,6 +264,16 @@ public static partial class RuleWorkBudget {
 
         var breakdown = rule.CostBreakdown(context: context);
         var cost = breakdown with { Effects = (breakdown.Effects + commit) };
+
+        // A gate the host stops at a conjunct it proves false runs only the tokens up to that conjunct.
+        if ((context is RuleCompileContext compiled) && (RuleResponse.ClosedPrefix(context: compiled, rule: rule) is > 0 and var prefix)) {
+            var whole = GateCost(context: context, tokens: rule.Gate.Tokens);
+            var ran = GateCost(context: context, tokens: rule.Gate.Tokens[..prefix]);
+
+            if (whole.IsKnown && ran.IsKnown && cost.Check.IsKnown) {
+                cost = cost with { Check = RuleWork.Known(units: (cost.Check.Units - (whole.Units - ran.Units))) };
+            }
+        }
         var capped = Firings(multiplier: multiplier, rule: rule);
         var response = (((context is RuleCompileContext compile) && !inPlace && !isInteraction)
             ? RuleResponse.Of(context: compile, multiplier: multiplier, rule: rule)

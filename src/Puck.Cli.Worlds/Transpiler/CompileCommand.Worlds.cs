@@ -50,8 +50,17 @@ public static partial class CompileCommand {
             .ThenBy(keySelector: static share => share.Owner, comparer: StringComparer.Ordinal)) {
             Console.WriteLine(value: $"  {share.Owner}: {share.Units} over {share.Lines} lines");
         }
-        foreach (var line in contributors.Take(count: lines)) {
-            Console.WriteLine(value: $"  {line.WorkUnits,10} {line.Name} x{line.Multiplier} check {line.CheckUnits} fire {line.FiringUnits}: {line.Response}");
+        // Costliest first in time on the device admission holds to the budget, which is the order a refusal names.
+        var slowest = compilation.Pricing.Slowest;
+        var timed = contributors
+            .Select(selector: line => (Line: line, Time: slowest.Calibration.Time(line: line)))
+            .OrderByDescending(keySelector: static entry => entry.Time.WorkUnits, comparer: Comparer<RuleWork>.Create(comparison: RuleWork.Compare))
+            .ThenBy(keySelector: static entry => entry.Line.Name, comparer: StringComparer.Ordinal);
+
+        foreach (var (line, time) in timed.Take(count: lines)) {
+            var milliseconds = (time.WorkUnits.IsKnown ? Puck.State.Rules.RuleTime.Milliseconds(picoseconds: time.WorkUnits.Units) : time.WorkUnits.ToString());
+
+            Console.WriteLine(value: $"  {milliseconds,10} {line.WorkUnits,10} {line.Name} x{line.Multiplier} check {line.CheckUnits} fire {line.FiringUnits}: {line.Response}");
         }
     }
     private static int ExecuteWorldCompilation(string source, string sourcePath, string? outputPath, ImportHandling imports, bool strict, bool validate, bool updateAssets, IDictionary<string, string>? written = null, int budgetLines = 0, Puck.State.Rules.RuleCostCalibration? ruleCalibration = null) {
