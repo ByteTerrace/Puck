@@ -40,7 +40,9 @@ namespace Puck.Cli.Host;
 /// start is judged by what any World of its kind reached here, else by the fallback.</param>
 /// <param name="ExpectedOwnGb">The start's expected commit peak, in gigabytes, before any lone figure replaces it:
 /// <paramref name="OwnGb"/> is less than this when the start is judged by a lone figure.</param>
-public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalCovered, double HeadroomGb, double FreeRamGb, double NeedGb, double OwnGb, double GrowthGb, double ResidentNeedGb, double ResidentOwnGb, double ResidentGrowthGb, int Growing, HostStartKind Kind, double WorkingSetOwnGb = double.NaN, double LoneOwnGb = double.NaN, double LoneResidentOwnGb = double.NaN, HostStartProfile? Profile = null, bool Measured = true, double ExpectedOwnGb = double.NaN) {
+/// <param name="Held">The reservation of a start admitted as <c>owned</c> (<see cref="HostStartTracker.Judge"/>), which ends
+/// when this is disposed; <see langword="null"/> for any other start.</param>
+public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalCovered, double HeadroomGb, double FreeRamGb, double NeedGb, double OwnGb, double GrowthGb, double ResidentNeedGb, double ResidentOwnGb, double ResidentGrowthGb, int Growing, HostStartKind Kind, double WorkingSetOwnGb = double.NaN, double LoneOwnGb = double.NaN, double LoneResidentOwnGb = double.NaN, HostStartProfile? Profile = null, bool Measured = true, double ExpectedOwnGb = double.NaN, IDisposable? Held = null) {
     /// <summary>Gets whether the machine can hold the start: both the commit headroom and free physical memory cover it.</summary>
     public bool Covered => (CommitCovered && PhysicalCovered);
 }
@@ -90,7 +92,10 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// once and nothing is read from a record that can go stale. The one thing a reading cannot show is a start admitted a
 /// moment ago whose process has not appeared: this tracker holds that start as a reservation of its full peak until a
 /// new live process of its kind appears or <see cref="ReservationHold"/> passes, which is what keeps two starts asked in
-/// a row from both taking the same headroom. Pre-process reservations live in this process's memory only,
+/// a row from both taking the same headroom. A World booted inside the asking process never shows a process of its own, so
+/// its reservation is owned instead (<see cref="Judge"/>): it holds the World's whole expected peak until the World's holder
+/// disposes it, and counts beside the commit charge that already includes what the World has grown, so it overstates the
+/// World's remaining growth by what it has grown and ends the moment the World is gone. Pre-process reservations live in this process's memory only,
 /// so they cover the starts this process admits (an MCP session, the concurrent workers of one verb). What another process
 /// admitted under a lease is read from the lease root instead (<see cref="HostSample.Holds"/>, recorded at the grant under
 /// the lease's admission lock): each hold counts its holder's process tree toward the hold's expected peak from the grant
@@ -98,7 +103,13 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// never read the same headroom, and several heavy holders share the machine by what each still has to grow.</para>
 /// </summary>
 public sealed class HostStartTracker {
-    private sealed record Reservation(HostStartKind Kind, long At, double Gb, double ResidentGb, HashSet<(int Id, long StartTicks)> Known);
+    // Owned: a start with no process of its own to wait for (a World booted inside the asking process) reserves until its holder
+    // gives the reservation back (OwnedReservation), never by a hold passing or another process of its kind appearing.
+    private sealed record Reservation(HostStartKind Kind, long At, double Gb, double ResidentGb, HashSet<(int Id, long StartTicks)> Known, bool Owned = false);
+    // What the holder of an owned reservation disposes: it ends the reservation, once.
+    private sealed class OwnedReservation(HostStartTracker tracker, Reservation reservation) : IDisposable {
+        public void Dispose() => tracker.Release(reservation: reservation);
+    }
     // CpuAnchor is the process's CPU time when BusyAt was last set.
     private sealed record Observation(HostStartProfile Profile, HostPeaks Peaks, double AnchorGb, long GrewAt, long FirstAt, double CpuAnchor, long BusyAt);
 
@@ -324,6 +335,10 @@ public sealed class HostStartTracker {
             Finish(profile: profile, process: (process.Id, process.StartTime.ToUniversalTime().Ticks), peaks: HostProbe.PeaksOf(process: process));
         } catch (Exception exception) when ((exception is InvalidOperationException or NotSupportedException or Win32Exception or IOException or UnauthorizedAccessException)) { }
     }
+    // Ends an owned reservation; a reservation already gone is no error.
+    private void Release(Reservation reservation) {
+        lock (m_gate) { _ = m_reservations.RemoveAll(match: held => ReferenceEquals(held, reservation)); }
+    }
     /// <summary>Reads what a start of <paramref name="kind"/> needs of the headroom <paramref name="reading"/> shows,
     /// folding the reading's processes into the tracker first, and, when <paramref name="reserve"/> is set and the start is
     /// covered, holds its peak as a reservation in the same step so a concurrent start reads it.</summary>
@@ -332,8 +347,11 @@ public sealed class HostStartTracker {
     /// <param name="thresholds">The thresholds that judge the commit headroom (with its reserve) and free physical memory.</param>
     /// <param name="clock">The clock a reservation's hold is measured on.</param>
     /// <param name="reserve">Whether a covered start is admitted by this call and so reserves its peak.</param>
+    /// <param name="owned">Whether the start runs inside the asking process, which shows no process of its own to end the
+    /// reservation: the reservation then lasts until <see cref="HostStartDemand.Held"/> is disposed, not for
+    /// <see cref="ReservationHold"/>.</param>
     /// <returns>The start's demand.</returns>
-    public HostStartDemand Judge(HostSample reading, HostStartProfile kind, HostLoadThresholds thresholds, TimeProvider clock, bool reserve) {
+    public HostStartDemand Judge(HostSample reading, HostStartProfile kind, HostLoadThresholds thresholds, TimeProvider clock, bool reserve, bool owned = false) {
         lock (m_gate) {
             var live = (reading.Starts ?? []);
             HostStartProfile[] asked = [kind, .. live.Select(static start => start.Profile), .. (reading.Holds ?? []).Select(static hold => hold.Profile)];
@@ -377,6 +395,11 @@ public sealed class HostStartTracker {
             List<Reservation> kept = [];
 
             foreach (var reservation in m_reservations) {
+                if (reservation.Owned) {
+                    kept.Add(item: reservation);
+
+                    continue;
+                }
                 if (clock.GetElapsedTime(startingTimestamp: reservation.At) >= ReservationHold) { continue; }
 
                 var answered = false;
@@ -473,8 +496,13 @@ public sealed class HostStartTracker {
 
             // A start admitted below its expectation reserves the whole expectation: a start asked after it in this process
             // is judged beside what it may yet reach, not what it was let in at.
+            IDisposable? held = null;
+
             if (reserve && commitCovered && physicalCovered && (kind.Kind != HostStartKind.Step)) {
-                m_reservations.Add(item: new Reservation(Kind: kind.Kind, At: clock.GetTimestamp(), Gb: Math.Max(own, learned.PrivateGb), ResidentGb: Math.Max(residentOwn, learned.ResidentGb), Known: liveIds));
+                var reservation = new Reservation(Kind: kind.Kind, At: clock.GetTimestamp(), Gb: Math.Max(own, learned.PrivateGb), ResidentGb: Math.Max(residentOwn, learned.ResidentGb), Known: liveIds, Owned: owned);
+
+                m_reservations.Add(item: reservation);
+                if (owned) { held = new OwnedReservation(reservation: reservation, tracker: this); }
             }
 
             return new HostStartDemand(
@@ -487,6 +515,7 @@ public sealed class HostStartTracker {
                 LoneOwnGb: least.PrivateGb,
                 LoneResidentOwnGb: least.ResidentGb,
                 ExpectedOwnGb: learned.PrivateGb,
+                Held: held,
                 Measured: Measured(kind: kind),
                 NeedGb: need,
                 OwnGb: own,

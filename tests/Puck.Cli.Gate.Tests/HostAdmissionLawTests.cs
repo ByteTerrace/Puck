@@ -826,7 +826,7 @@ public sealed class HostAdmissionLawTests {
         var readings = 0;
         var asked = new List<(string Step, bool Device, bool Heavy, HostStartKind Kind)>();
         using var error = new StringWriter();
-        HostAdmit admit = (checkout, step, device, heavySuite, kind, bound, reserve, progress, stage, cancellationToken) => {
+        HostAdmit admit = (checkout, step, device, heavySuite, kind, bound, reserve, progress, stage, cancellationToken, _) => {
             asked.Add(item: (step, device, heavySuite, kind.Kind));
 
             return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, () => ((readings++ < 2) ? Sample(commit: 98, limit: 64) : Sample(commit: 60, limit: 64)), clock, clock.Advance, error, cancellationToken, Thresholds, bound, stage, kind, reserve: reserve));
@@ -859,7 +859,33 @@ public sealed class HostAdmissionLawTests {
         }
 
         // Without an installed admission a start is admitted at once.
-        WorldAdmission.WaitInProcess(cancellationToken: TestContext.Current.CancellationToken, step: "canary");
+        WorldAdmission.WaitInProcess(cancellationToken: TestContext.Current.CancellationToken, step: "canary").Dispose();
+    }
+    // A World booted in the asking process shows no process of its own: its reservation outlives the hold a process-bound
+    // one has, and ends when its holder disposes it, so a row of Worlds booted one after another never stacks their peaks.
+    [Fact]
+    public void AnInProcessWorldsReservationLastsUntilItsHolderDisposesIt() {
+        var clock = new GateClock();
+        var tracker = new HostStartTracker();
+        var reading = Sample(commit: 10);
+
+        double GrowthBesideTheWorld() => tracker.Judge(reading: reading, kind: HostStartKind.HeadlessWorld, thresholds: Thresholds, clock: clock, reserve: false).GrowthGb;
+
+        var held = tracker.Judge(reading: reading, kind: HostStartKind.HeadlessWorld, thresholds: Thresholds, clock: clock, reserve: true, owned: true).Held;
+
+        Assert.NotNull(held);
+        clock.Advance(HostStartTracker.ReservationHold + HostStartTracker.ReservationHold);
+        Assert.True(condition: GrowthBesideTheWorld() > 0);
+        held.Dispose();
+        Assert.Equal(expected: 0.0, actual: GrowthBesideTheWorld());
+        held.Dispose();
+
+        // A process-bound reservation hands back nothing and ends when its hold passes.
+        var processBound = tracker.Judge(reading: reading, kind: HostStartKind.HeadlessWorld, thresholds: Thresholds, clock: clock, reserve: true);
+
+        Assert.Null(processBound.Held);
+        clock.Advance(HostStartTracker.ReservationHold);
+        Assert.Equal(expected: 0.0, actual: GrowthBesideTheWorld());
     }
     [Theory]
     [InlineData(WorldShape.TestBatch, "heavy")]
@@ -870,7 +896,7 @@ public sealed class HostAdmissionLawTests {
         var root = await CliLease.RootAsync(checkout.Root, token);
         var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var headroom = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        HostAdmit admit = async (place, _, _, _, _, bound, reserve, _, _, cancel) => {
+        HostAdmit admit = async (place, _, _, _, _, bound, reserve, _, _, cancel, _) => {
             Assert.Equal(checkout.Root, place);
             if (reserve) {
                 Assert.Equal(TimeSpan.Zero, bound);
@@ -917,7 +943,7 @@ public sealed class HostAdmissionLawTests {
         var asked = new System.Collections.Concurrent.ConcurrentQueue<(bool Reserve, TimeSpan? Bound)>();
         using var error = new StringWriter();
         HostSample Reading() => (impossible ? Sample(commit: 10, limit: 1) : (tight ? Sample(commit: 98, limit: 128) : Sample(commit: 60, limit: 128)));
-        HostAdmit admit = (_, step, device, heavySuite, kind, bound, reserve, _, stage, cancel) => {
+        HostAdmit admit = (_, step, device, heavySuite, kind, bound, reserve, _, stage, cancel, _) => {
             asked.Enqueue(item: (reserve, bound));
 
             // The third delay is the last: the machine has room again.
