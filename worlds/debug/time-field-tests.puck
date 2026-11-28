@@ -175,7 +175,7 @@ test "a parted net lets a full-size body through where its strands stood" {
   when {
     seat1: world.state.cell.set wonderpass 0 2
     ticks 2
-    seat1: body.pose 29.5 4.6 13.5 0 0 0 509
+    seat1: body.pose 29.5 4.8 13.5 0 0 0 509
     seat1: body.pose 29.7 4.6 19.3 180 0 0 0
     ticks 40
     seat1: body.press forward 1 2 0

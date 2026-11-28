@@ -74,7 +74,9 @@ function timeLocalOf(name) = timeBase[name] + (timeNow - timeAnchor[name]) * tim
 // Whether the point (x, y, z) stands within `reach` of the target at (tx, ty, tz).
 function timeInside(tx, ty, tz, reach, x, y, z) = ((((x - tx) * (x - tx)) + ((y - ty) * (y - ty)) + ((z - tz) * (z - tz))) <= (reach * reach))
 
-// The cast's input and its binding: T on the play page, and the pad's West under the left trigger (J with Z held).
+// The cast's input and its binding: T on the play page, and the pad's West under the left trigger (J with Z held). A world
+// whose `inputModes` families list their channels adds `timeField` where its players may cast (the debug world's
+// input-modes.puck `controls`).
 template timeFieldControls(sources = ["keyboard.t"], padSources = padWest) {
   channels [
     { composition: true, name: "timeField", shape: Binary }

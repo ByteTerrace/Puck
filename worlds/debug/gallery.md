@@ -420,6 +420,56 @@ well crosses to the floor rather than into level 1; the bridge is level 1's
 own floor, inside the lattice. The corner stairs and the lifts are the ways in,
 and the tree's two level-1 branches for a body holding a wonder pass.
 
+### The time puzzles
+
+The owner's rulings ([time dilation fields](../../docs/decisions/play.md#time-dilation-fields)):
+two puzzles on the play floor use the time field, the standard's personal ability
+([time-field.puck](../standard/time-field.puck)): T, or the pad's West with the
+left trigger held, casts a field round the body that stands where it was cast for
+twelve seconds and slows the local time of what it covers to a tenth. Its caster
+keeps normal time. [gallery/time-puzzles.puck](gallery/time-puzzles.puck) holds
+both, in bay 4, which the toybox leaves clear on both galleries (layout.puck's
+`timeButtonBay`); the gallery booted alone has them too. Both are for a body at
+full size: at Alice's size a body slips through any net, and a station's screen
+is out of its reach.
+
+**The button and the net (the solo puzzle).** A round brass button lies on the
+south gallery's floor against the wall. A body standing on it sinks it three
+centimetres, and the bay's net (the lattice panel `south-4`) parts: its ropes
+splay out to an ellipse's rim and the strands round it bow and crowd, opening a
+hole a full-size body walks through, with a ring of light running out over the
+strands and motes rising off them (the net facet's `opening`). Stepped
+off, the button rises over a quarter of its local second and the net closes once
+it has risen. The button's middle stands 6.8 m from the net; the Moth sprints at
+10 m/s and her suit's dash adds 3 m in a fifth of a second, so the way is shut
+before any run reaches it (layout.puck's comment holds the arithmetic). A field
+cast while standing on the button covers it, its rise takes ten times as long,
+and its caster sprints through. Beyond the net lies the void.
+
+**The tiles (the group puzzle).** Five stone tiles lie in an arc on the north
+gallery's floor, each lighting its blue inlay while a body stands on it. One body
+covers one tile, so a player alone cannot hold them all. Five bodies on all five
+at once unlock Moth Valley (`cartridges/deck/moth-valley.hgd.puck`) on half the
+toybox's stations, the six arcade cabinets, for a tease of 90 of each cabinet's
+local seconds: the cabinet's deck runs it over whatever it ran, a cartridge put
+in meanwhile included, and goes back when the tease ends. A field cast at a
+cabinet (from its console or before its screen) takes the cabinet's tuning: it
+stands fifteen minutes, its caster cannot cast again until it ends, and the
+cabinet's tease, slowed to a tenth, lasts those fifteen minutes. Working out to
+spend a field there is the puzzle's second half. Moth Valley is not on the
+cartridge rack, so the tiles are the way to play it.
+
+The state a puzzle reads: `timeNetOpen` (1 while the net is told to open),
+`timeButtonHeld`, `timeButtonDue` and `timeButtonSink` for the button,
+`timeTileHeld[time-tile-<n>]`, and `timeUnlocked[<station>]` and
+`timeUnlockDue[<station>]` for the cabinets. The field's own rows are the
+standard's: `timeFieldOn[<body>]` and its centre, end and cooldown, and each
+target's clock, `timeRate`, `timeBase` and `timeAnchor` (`world.state timeRate`
+reads every target's rate). `world.nets` reads the net's `openness=`, `opens=` and
+`driven=` beside its nodes. [time-field-tests.puck](time-field-tests.puck) plays
+the button with and without a field, the tiles and a field at a cabinet, and a
+body walking through the parted net.
+
 ### The wonder key
 
 Four keys stand on a pedestal on level 3's south gallery, 3.4 m in from the
@@ -474,8 +524,8 @@ through `rentalShown`; the same press leaves and puts it back on the hip.
 (toybox.puck's `toyboxLibrary`: the shipped `cartridges/deck`, then the
 owner's local `roms/hgd`), and each title of it is a number: the mountable
 files in listing order, folder by folder, by file name within one
-(`WorldMachineContentFolder.TryTitle`), so the shipped programs are titles 1
-and 2 whatever the local folder holds; `machine.content <deck>` prints each
+(`WorldMachineContentFolder.TryTitle`), so the shipped titles are 1 to 3
+(layout.puck's `toyboxShipped`: the colour bars, Moth Valley, the moving sprite) whatever the local folder holds; `machine.content <deck>` prints each
 file's `title=`. A rack on level 1's south gallery (bay 9, against the wall)
 lends the library as cartridges (rentals.puck's `rentalCartridgeSlots`: a
 title, a label and how many copies). Its cartridges go on loan through the
@@ -491,7 +541,7 @@ from the next tick. Engaging from the console with empty hands takes it out and
 the deck runs its own program again; engaging from before the screen plays
 without touching the cartridge. A cartridge in a deck is on loan to the
 station (`rentalLoan` reads 1000 plus the station's place). The slots past the
-shipped titles carry numbered labels (`DECK TITLE 3`), since no file name
+shipped titles carry numbered labels (`DECK TITLE 4`), since no file name
 enters the document; a slot whose title the folder does not hold lends a
 cartridge whose deck runs its own program. `cartridge-rentals-tests.puck`
 rents, inserts, ejects and returns one.
@@ -499,7 +549,7 @@ rents, inserts, ejects and returns one.
 **Adding your own titles.** Drop a Humble Gaming Deck image (an iNES `.nes`
 file the deck's header check accepts) into `roms/hgd/` at the repository root;
 the folder is git-ignored and may be absent. The next `machine.content
-toybox-television-south-2` lists it with its `title=` (3 for the first local
+toybox-television-south-2` lists it with its `title=` (4 for the first local
 file in name order), and the rack's slot of that number lends it. A file the
 deck cannot run is listed with `refused=` and takes no number. Brick and
 advanced-brick titles are not on the rack yet; their devices swap by hand

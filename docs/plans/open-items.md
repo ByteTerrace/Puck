@@ -6377,9 +6377,9 @@ built and wired into the debug world (`worlds/debug/targeting.puck`).
 
 - [high] A mark is drawn in the world only by the companion flying to it. The
   standard wants an authored marker at each mark and ping (a wisp or pin
-  creation posed at the mark), and posing one needs either a pool of bodies the
-  debug world has no free population slots for, or a placement posed from
-  state, which no facet offers (`WorldPlacementTranslation` is a literal).
+  creation posed at the mark): a placement per seat whose `shift` facet
+  (`WorldPlacementShift`) reads `pingX`/`pingY`/`pingZ`, as the time field's
+  shell reads its centre (`worlds/standard/time-field.puck`'s `timeFieldShells`).
 - [high] The group a mark is shared with is an authored list of seats
   (`playerMarks(members)`), turned into reader tokens. Group membership
   (`WorldGroup`) does not reach a row's `visibility` readers, so a party formed
@@ -6394,6 +6394,34 @@ built and wired into the debug world (`worlds/debug/targeting.puck`).
   versions would let it rest.
 - [low] The gallery's lab wing has no portal yet; lock-on and marks have no lab
   of their own (`worlds/debug/labs/`).
+
+### Time dilation fields
+
+Owner: play lane · ordinary · Next: the second slice. The field
+(`worlds/standard/time-field.puck`), the parting net (`WorldNetOpening`) and the
+play floor's two puzzles (`worlds/debug/gallery/time-puzzles.puck`) are built
+([the rulings](../decisions/play.md#time-dilation-fields)); a field slows
+timers, never motion.
+
+- [high] The second slice: bodies, their physics and the emulated machines inside
+  a field run slow. A body's step and a rigid body's integration would read a
+  per-body rate (its owner exempt as the timers' `timeOwner` is), and a machine's
+  host its engine-tick budget times its rate, except the machine its caster
+  operates. The kernels take a step length already (`FixedNet.Step`'s
+  `stepTicks`, the machines' tick budgets), so the rate is a step length per body
+  or machine; it changes the tick's partition plan, so it is its own design.
+- [medium] The field's shell is a glass sphere under the time film with no form
+  band: its placement is a riding copy (`WorldRigidAssets.PackRiding`), which has
+  a dynamic slot a band could take, but no play begins on a placement's arrival.
+  A play keyed by the shell's shift moving off its park (like the net's parting
+  plays, `WorldNetPresentation.StepPartings`) would sweep motes onto it as it
+  forms and off it as it lapses.
+- [medium] The puzzles are for a body at full size: on level 1 without a pass a
+  body is at Alice's size, slips through every net and cannot reach a station's
+  screen, so the button teaches nothing to a small player. A small-size variant
+  (a net mesh too fine to slip, or a button gated on size) is the floor's call.
+- [low] A field cast at a cabinet reaches every target within 3.5 m of where it is
+  cast; two cabinets never stand that close today, so one field holds one.
 
 ### Panes: split screens the player drives
 

@@ -72,6 +72,19 @@ group sees and a placed mark kept in the character's `marks` crossing pool
 group reads (`audience: "public"` lets everyone), and `companionMarks(owner)`
 flies the companion to the group's pings. The debug world expands both in
 `../debug/targeting.puck`.
+[time-field.puck](time-field.puck) is the time dilation field
+([the rulings](../../docs/decisions/play.md#time-dilation-fields)): `timeFields(casters, targets)`
+gives each caster a personal field cast with T (or the pad's West under the left
+trigger) that stands where it was cast and slows the local time of every target it
+covers, and `timeFieldShells(casters)` draws each field as a glass shell under a
+slow time film, moved there by the placement's `shift` facet. A target
+(`timeTarget(name, at, …)`) is a timer a world wants slowed; its local time is the
+closed form `timeLocal(t)` over its `timeBase`, `timeAnchor` and `timeRate` cells,
+which change only when a field starts or ends over it, so nothing counts while
+nothing changes. Radius, slowdown, duration and cooldown default in
+`timeFieldStandard`; a target tunes them for a field cast at it and may `resist`,
+and a target its own caster owns (`timeOwner`) keeps normal time. The gallery's
+play floor expands both (`../debug/gallery/time-puzzles.puck`).
 
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
@@ -324,7 +337,9 @@ motes settling on (`formDissolve`, `formMaterialize`, paired by `formMotes`), an
 together part by part, each moving part launched off to tumble and bounce off the world's real surfaces or flown in from
 a scattered start to lock into place (`formShed`, `formAssemble`, paired by `formPieces`). Every value is an argument or
 a member an author overrides; the engine plays them (`WorldFormEffects`). The Moth's suits and body
-(`../debug/avatars/moth/moth.puck`) and the holodeck are the worked examples.
+(`../debug/avatars/moth/moth.puck`) and the holodeck are the worked examples. `formParting` is a net's parting (a net
+facet's `opening.effect`): a ring of light that grows out from the opening as the ropes splay, with a few motes rising off
+the strands it crosses, which the engine sweeps over the net's displaced strands.
 
 `place.puck` is the carrier a named place rides on: a creation that draws nothing, which a world places with a `region`
 so `body.place` names where a body stands and a rule sweeps whoever stands there. `reach.puck` is a library over it:

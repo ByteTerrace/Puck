@@ -797,6 +797,18 @@ The owner's rulings:
     device's unlock open for 15 minutes. Working out to do that is the
     puzzle's social second half.
 
+How the build reads them (`worlds/standard/time-field.puck`): a field slows
+targets, the timers a world names, and a target's local time is a closed form
+over the world's seconds, rebased only when a field starts or ends over it, so
+nothing counts while nothing changes. A field covers what its sphere holds when
+it is cast, since it stays where it was cast. "Tuned per target" is read as the
+field taking the tuning of the targets it is cast at (the least slowdown, the
+longest duration and cooldown, each target's own reach), which is how a field
+cast at a device holds its unlock for fifteen minutes and keeps its caster from
+spending it elsewhere; resistance eases a target's rate toward normal. "A machine
+the caster operates keeps normal time" is about the emulated machine, which no
+field slows yet: a device's unlock is the room's timer and slows with the room.
+
 ## Decided here
 
 `replay.verify` claims only what it ran; the Group wire tag and mutation
