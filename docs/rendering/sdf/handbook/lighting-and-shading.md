@@ -95,7 +95,12 @@ texel centre from the hit triangle's normal (`sdfMeshShadowGap`); the triangle
 is what the cascade holds, while the smoothed shading normal tilts away from it
 across an edge the bake rounded. A filter tap sees the light when no caster
 stands in front of that plane by 2.5 texels per texel it lies aside, so the
-foot of a wall facing the light does not darken the floor before it; it hides
+foot of a wall facing the light does not darken the floor before it. A receiver
+nearly edge-on to the light takes more clearance, the slope its plane's
+extrapolation leaves out, but never more depth than the allowance and that
+extrapolation's own slope rise across the filter's widest reach
+(`sdfMeshShadowCleared`), so a grazing cheek or helmet rim stays under a roof
+metres above it; it hides
 the light when its caster also lies inside the light's penumbra cone over the
 receiver point itself; and a tap whose caster lies outside that cone says
 nothing about the point and takes no part in the average. The cone is measured

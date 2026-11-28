@@ -893,7 +893,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   turns away, so a crease's two lit faces keep their own shadows. A sunlit spot on a wall's top under a slab is the
   filter's (`sdfMeshShadowGap`): a tap counts the light hidden only inside the
   light's cone over the point, and the penumbra is the nearest in-cone
-  blocker's. `world.debug-view ao` shows the filtered occlusion and `world.debug-view shadow` the key light's
+  blocker's. The slope clearance that keeps a grazing receiver off its own surface grows as `1 / |n·l|`, so the
+  depth a tap clears is capped (`sdfMeshShadowCleared`); thin lit or violet bands along every silhouette in
+  `world.debug-view shadow` under a roof are that cap failing, a grazing receiver clearing the roof. `world.debug-view ao` shows the filtered occlusion and `world.debug-view shadow` the key light's
   answer as its walk reads it (`sdfDebugKeyShadow`: grey facing the light, amber where the probes answer, violet on a
   queried side past the terminator, dark blue unqueried), and `world.ao` toggles the occlusion live. The shadow view
   runs the probe lookup (`sdfViewsProbesWanted`) and the occlusion filter, since the probes' answer it shows reads
@@ -1033,10 +1035,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   The window describes an output footprint, which can sample different receiver
   identities on opposite jitter phases at a static silhouette. If ordinary
   receiver validation rejects it, retain the bounded window only after proving
-  the unjittered camera is exactly unchanged, every tap is nonreactive, and each
-  visible tap's previous point equals its current point. This extra motion check
-  runs only for rejected footprints. A displaced camera keeps ordinary receiver
-  rejection; a stationary current receiver alone does not prove no disocclusion.
+  the unjittered camera is exactly unchanged, every tap is nonreactive, each
+  visible tap's previous point equals its current point, and the receiver the
+  history surface names there has not moved (`sdfHistoryReceiverStill`): still
+  taps say nothing of a body that stood over the pixel long enough to fill its
+  window and then left, which the window would show as a fading copy of the body.
+  This extra motion check runs only for rejected footprints. A displaced camera
+  keeps ordinary receiver rejection; a stationary current receiver alone does not
+  prove no disocclusion.
   The package owns
   `TemporalPeriod`, `HistorySurfaceWords` and `HistoryWindowWords`; the generator
   carries them into HLSL. A layout change needs a host with the matching history
