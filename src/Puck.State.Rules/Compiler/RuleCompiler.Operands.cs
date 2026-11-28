@@ -46,7 +46,7 @@ public static partial class RuleCompiler {
     private static bool TryResolveMemberOperand(ChannelCall? call, StateChannelRef? cell, in OperandSite site, RuleCompileContext context, out ResolvedOperand resolved) {
         resolved = default;
 
-        if ((call is null) || (context.ForEachFamily is null) || (call.Channel is "match" or "reduce" or "zones")) {
+        if ((call is null) || (call.Channel is "match" or "reduce" or "zones")) {
             return false;
         }
 
@@ -119,28 +119,28 @@ public static partial class RuleCompiler {
             (context.FindRow(name: name) is null) &&
             CellName.TryParse(candidate: name, name: out var familyName, reason: out _) &&
             context.Catalog.TryGetFamily(family: out var family, name: familyName) &&
-            family.TryGetOrdinal(index: FirstMemberIndex(family: family), ordinal: out var first) &&
+            family.TryFirstOrdinal(ordinal: out var first) &&
             (context.FindRowAt(rowOrdinal: first) is { } member) &&
             (member.IsSlot || (whole && (member.EffectiveDomain is StateDomain.Tally))) &&
             TryResolveLiveRow(context: context, name: $"{name}[{cell.Spelling}]", row: out live, ruleName: ruleName, where: where));
     }
-    // The lowest family index that selects a member.
-    private static int FirstMemberIndex(RowFamily family) {
-        for (var index = 0; (index <= FamilySpan(family: family)); index++) {
-            if (family.TryGetOrdinal(index: index, ordinal: out _)) {
-                return index;
-            }
-        }
+    /// <summary>Returns whether a name argument spells the binding's own member of a declared row family,
+    /// <c>&lt;family&gt;[$member]</c>, inside a rule that sweeps a row family, so a channel or effect naming it is compiled
+    /// once per member of that family.</summary>
+    /// <param name="text">The argument's spelling.</param>
+    /// <param name="context">The compile context, whose rule's sweep and catalog decide.</param>
+    /// <param name="family">The family the argument names, on success.</param>
+    /// <returns><see langword="true"/> when the argument names the binding's own member.</returns>
+    public static bool TryMemberSelection(string text, RuleCompileContext context, out RowFamily family) {
+        ArgumentNullException.ThrowIfNull(argument: text);
+        ArgumentNullException.ThrowIfNull(argument: context);
 
-        return -1;
-    }
-    // Whether a channel argument spells the binding's own member of a declared row family: `<family>[$member]`.
-    private static bool TryMemberSelection(string text, RuleCompileContext context, out RowFamily family) {
         family = default;
 
         const string Suffix = "[$member]";
 
-        return (text.EndsWith(value: Suffix, comparisonType: StringComparison.Ordinal) &&
+        return ((context.ForEachFamily is not null) &&
+            text.EndsWith(value: Suffix, comparisonType: StringComparison.Ordinal) &&
             CellName.TryParse(candidate: text[..^Suffix.Length], name: out var name, reason: out _) &&
             context.Catalog.TryGetFamily(family: out family, name: name));
     }

@@ -1,9 +1,9 @@
 // The board games lab's stress mode: twelve game stations playing holodeck chess at once, the stress scenario for the
 // board games under real use (board-games.puck beside it is the lab itself). Each station is the debug world set's
-// station (../game-stations.puck), instanced under its own alias, so every station has its own rows, rules, piece
-// bodies, topology and search job, and a move at one station never restarts another's search (a search job restarts when
-// a row its judge's rules read changes, and no station's rules read another's rows). Every station's computer plays both
-// sides from its own opening (chess-station.puck's `autoplay`), so all twelve lift pieces, settle and judge continuously,
+// station (../game-stations.puck): the twelve play one set of rules, each with its own state, piece bodies, topology and
+// search job, and a move at one station never restarts another's search (a search job judges its own station's bindings
+// alone, and restarts only when a row they read changes). Every station's computer plays both sides from its own opening
+// (chess-station.puck's `autoplay`), so all twelve lift pieces, settle and judge continuously,
 // 384 rigid piece bodies in all; a game that stops passing turns (a draw limit, a mate) is set up afresh, every body
 // standing on its starting square again. The stations open in four groups of three, eight ticks apart, so the worst tick
 // sees three stations changing together.
@@ -12,8 +12,8 @@
 // What to read while it plays: `world.budget.rules --spent` (the sheet's total against the tick's ceiling and the top
 // rules), `world.counters physics` (contacts, bodies awake, solver work), `world.search` (each station's job: restarts,
 // lastRestart, spent and peak tick), `host.frames` (the tick's parts: rules, motion, contact) and `world.status` (bodies
-// against capacity). `world.state s0$chessStationPlies` reads one station's turns played and `s0$chessStationGames` its
-// games set up afresh; `station.chess s3 11 27` plays e2-e4 at station s3 through its move door. `puck test
+// against capacity). `world.state chessStationPlies0` reads the first station's turns played and `chessStationGames0`
+// its games set up afresh; `station.chess 3 11 27` plays e2-e4 at station s3 through its move door. `puck test
 // worlds/debug/labs/board-games-stress.puck --reproduce` plays every station's first turns twice and compares the runs.
 
 schema: "puck.world.definition.v1"

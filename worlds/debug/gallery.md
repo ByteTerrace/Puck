@@ -217,12 +217,10 @@ bay from bay 5 to bay 10 (layout.puck's `galleryGameStations`): the front row
 (`a1` to `a6`) on the south gallery, the back row (`b1` to `b6`) out in the
 wing. Each station's near chair faces north across its glass.
 
-The gallery booted alone stands the first eleven ([gallery/games.puck](gallery/games.puck));
+The gallery booted alone stands all twelve ([gallery/games.puck](gallery/games.puck));
 the debug world stands only `a1` ([game-station-deck.puck](game-station-deck.puck)),
-beside its own older tables. Each station is a module instance of its own, and
-the rule work sheet a tick admits holds eleven beside the rest of the building;
-the twelfth waits on the stations' rules becoming one set over every station
-([open items](../../docs/plans/open-items.md#card-tables-in-the-board-game-room)).
+beside its own older tables. The stations play one set of rules, each station's
+game its own ([game-station.md](game-station.md#how-a-station-is-built)).
 `debug.go boardroom` stands a body at the room's west end; `gallery.shot
 board-room` looks along it.
 

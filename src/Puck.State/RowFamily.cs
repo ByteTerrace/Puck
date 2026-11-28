@@ -83,6 +83,21 @@ public readonly record struct RowFamily(CellName Name, int FirstOrdinal, int Cou
     /// <returns>An enumerator over one ordinal per member, which a <see langword="foreach"/> walks without
     /// allocating.</returns>
     public OrdinalEnumerator Ordinals() => new(family: this);
+    /// <summary>Attempts to resolve the family's first member, in family index order: the row every member's shape is
+    /// read from.</summary>
+    /// <param name="ordinal">The first member's catalog ordinal on success; otherwise <c>-1</c>.</param>
+    /// <returns><see langword="true"/> when the family holds a member.</returns>
+    public bool TryFirstOrdinal(out int ordinal) {
+        foreach (var member in Ordinals()) {
+            ordinal = member;
+
+            return true;
+        }
+
+        ordinal = -1;
+
+        return false;
+    }
 
     /// <summary>Walks a family's member ordinals in member order, skipping the gaps of an indexed family.</summary>
     public struct OrdinalEnumerator {

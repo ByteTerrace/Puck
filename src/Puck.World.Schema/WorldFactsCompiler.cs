@@ -697,11 +697,7 @@ public static partial class WorldFactsCompiler {
     // binding's own member of that family of board rows: each family index's member row's topology, null at a gap. Any
     // other spelling names one topology.
     private static string?[]? MemberTopologies(WorldFactsCompileContext context, string ruleName, string spelling) {
-        const string Suffix = "[$member]";
-
-        if ((context.ForEachFamily is null) || !spelling.EndsWith(value: Suffix, comparisonType: StringComparison.Ordinal) ||
-            !CellName.TryParse(candidate: spelling[..^Suffix.Length], name: out var name, reason: out _) ||
-            !context.Catalog.TryGetFamily(family: out var family, name: name)) {
+        if (!RuleCompiler.TryMemberSelection(context: context, family: out var family, text: spelling)) {
             return null;
         }
 

@@ -564,18 +564,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             (leftFamily.FirstOrdinal == rightFamily.FirstOrdinal) && (leftFamily.Count == rightFamily.Count)));
     // The row a write to an address is counted against: a fixed row's own, or its family's first member, which every
     // write to a member the binding selects names once.
-    private static int RowOf(LiveRow? live, int own) {
-        if (live is not { Family: { } family }) {
-            return own;
-        }
-        for (var index = 0; (index <= RuleCompiler.FamilySpan(family: family)); index++) {
-            if (family.TryGetOrdinal(index: index, ordinal: out var ordinal)) {
-                return ordinal;
-            }
-        }
-
-        return own;
-    }
+    private static int RowOf(LiveRow? live, int own) => (((live is { Family: { } family }) && family.TryFirstOrdinal(ordinal: out var first)) ? first : own);
     // A key the binding itself fixes: a literal, or the key bound to $each or $member.
     private static bool Fixed(CompiledCellRef? key) => ((key is null) || key.Value.IsEach || key.Value.IsMember);
     // A key no program or key fact computes, so two equal references name the same cell.
