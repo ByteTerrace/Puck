@@ -1,4 +1,4 @@
-# Companion and wrist journal build specification
+# Companion and worn screen build specification
 
 Mintstitch and Tangerine are the Moth’s two swappable companions. Each has one
 eye and one active embodiment when selected. Use the [turnarounds](README.md#build-reference)
@@ -378,9 +378,9 @@ channels where specified. Hover bob continues unless the expression sets Y.
 | Tangerine glide | 0 / 0.45 / 0.90 | +10 / +7 / +10 | 0 / +0.14 / 0 | +5 / +6 / +5 |
 | Tangerine startle | 0 / 0.10 / 0.34 | −3 / +23 / −3 | 0 / +0.70 / +0.12 | 0 / −11 / 0 |
 
-## Moth’s left wrist journal
+## Moth’s left worn screen
 
-The journal opens on the dorsal face of the left bracer as the armour
+The worn screen opens on the dorsal face of the left bracer as the armour
 flap folds sideways. Closed, it reads as the continuous ivory and lavender
 shell, with a fine perimeter seam. Keep the existing two outboard vents,
 charcoal cuff and elbow piston. The wrist assembly follows the left forearm
@@ -389,7 +389,7 @@ player chooses the right side, mirror the module, flap and opening pose
 with the arm. Keep the screen artwork and text readable in the same order.
 [Moth suit details](../moth-concept-pack/02-construction-details.png)
 · [Authored bracer](../../../../worlds/debug/avatars/moth.puck)
-· [Journal decision](../../../decisions/play.md#in-world-consoles)
+· [Menu decision](../../../decisions/play.md#in-world-consoles)
 
 ### Construction and finish
 
@@ -448,24 +448,24 @@ either read while the world continues to run.
 | Closed | 0 ms | 0°, armor flush | Off |
 | Unlatch | 75 ms | 14° | Off |
 | Fold | 205 ms | 63° | Dim wake at 2% of display white |
-| Ready | 340 ms | 106° | Menagerie live. Input becomes available here. |
+| Ready | 340 ms | 106° | Companion roster live. Input becomes available here. |
 
-The journal is the menu. Its Menagerie page shows exactly two stacked cards,
+The worn screen shows the menu. Its companion roster page shows exactly two stacked cards,
 Mintstitch first and Tangerine second. Each uses the character’s front-view
 portrait, a name and its button label. The active card shows a check, a
 clear `Active` label and a cyan keyline. The stored companion shows
 `Equip`. Illustrate Mintstitch as active and update both cards on equip.
 Persist the selected companion on the player and present one companion
 through the standard role. Menu focus and companion equip are separate
-actions. Use the wearer’s local journal surface so private journal contents
+actions. Use the wearer’s local worn-screen surface so private menu contents
 stay with the player.
 
 The screen’s artwork uses an 850 × 1280 reference canvas (portrait).
 Coordinates start at top left. Fill the canvas with `#111D23`. Use
 `#F4EDDF` for names and page title, `#A9BBB7` for secondary text,
 `#8CF2E2` for active and `#46696A` for the stored border. Use Segoe UI or
-the same authored humanist face as the journal. Place `Journal` at (70, 52)
-in 34 px and `Menagerie` at (70, 106) in 68 px. Card origins are (68, 278)
+the same authored humanist face as the menu. Place `Menu` at (70, 52)
+in 34 px and `Companion roster` at (70, 106) in 68 px. Card origins are (68, 278)
 and (68, 629), with size 714 × 303 and corner r24. Each card has a
 205 × 205 portrait at (+34,+49), a 45 px name at (+255,+83), and a
 34 px action or status at (+255,+157). Active outline is 4 px, stored

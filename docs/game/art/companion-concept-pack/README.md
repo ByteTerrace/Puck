@@ -61,7 +61,7 @@ fixed character details. The checking partner’s independent pass is pending.
 
 The owner chose **Mintstitch** (Patchlace C) and **Tangerine** (Bellbuoy A).
 Both are palm-sized, one-eyed flying guides. The Moth swaps the active
-companion from the Menagerie page of her wrist journal. The
+companion from the companion roster page of her worn screen. The
 [build specification](build-spec.md) gives the dimensions, SDF groups,
 materials, paint paths, hinges, gaze, motion keys and light cues.
 
@@ -77,13 +77,13 @@ The original [Mintstitch seam cues](ref-mintstitch-states.png) and
 [Tangerine keel cues](ref-tangerine-states.png) record the earlier light study.
 Use the [lighting character sheets](#lighting-character) for the current build.
 
-| Moth’s left wrist journal | Sheet |
+| Moth’s left worn screen | Sheet |
 | --- | --- |
-| Closed | [Flush flap and forearm scale](ref-wristpanel-closed.png) |
-| Open | [Folded flap and seated display](ref-wristpanel-open.png) |
-| Reveal | [Closed, unlatch, fold and ready](ref-wristpanel-reveal.png) |
-| Screen | [Menagerie with Mintstitch active](ref-wristpanel-screen.png) |
-| Construction | [Armour cut, hinge, glass and finishes](ref-wristpanel-construction.png) |
+| Closed | [Flush flap and forearm scale](ref-worn-screen-closed.png) |
+| Open | [Folded flap and seated display](ref-worn-screen-open.png) |
+| Reveal | [Closed, unlatch, fold and ready](ref-worn-screen-reveal.png) |
+| Screen | [Companion roster with Mintstitch active](ref-worn-screen-screen.png) |
+| Construction | [Armour cut, hinge, glass and finishes](ref-worn-screen-construction.png) |
 
 ### How the build sheets were made
 
@@ -1485,7 +1485,7 @@ before it names the destination. The marker placement stops emitting when
 that resolution or the beam’s clear path fails. Pip can turn toward a last
 known direction with the interest dash. The body’s cue belongs to its owner’s
 intent and binds per companion, so a crowd can have different cues in the same
-hall. Private journal details stay with the player. On a crossing, the
+hall. Private menu details stay with the player. On a crossing, the
 destination resolves the cue from its own data. Keep lasting facts such as
 name and affinity in the declared identity. Targets, beam hits and speech
 phase belong to the current instance.
