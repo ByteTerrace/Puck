@@ -892,7 +892,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   turns away, so a crease's two lit faces keep their own shadows. A sunlit spot on a wall's top under a slab is the
   filter's (`sdfMeshShadowGap`): a tap counts the light hidden only inside the
   light's cone over the point, and the penumbra is the nearest in-cone
-  blocker's. `world.debug-view ao` shows the filtered occlusion and `world.debug-view shadow` the key light's
+  blocker's. The slope clearance that keeps a grazing receiver off its own surface grows as `1 / |n·l|`, so the
+  depth a tap clears is capped (`sdfMeshShadowCleared`); thin lit or violet bands along every silhouette in
+  `world.debug-view shadow` under a roof are that cap failing, a grazing receiver clearing the roof. `world.debug-view ao` shows the filtered occlusion and `world.debug-view shadow` the key light's
   answer as its walk reads it (`sdfDebugKeyShadow`: grey facing the light, amber where the probes answer, violet on a
   queried side past the terminator, dark blue unqueried), and `world.ao` toggles the occlusion live. The shadow view
   runs the probe lookup (`sdfViewsProbesWanted`) and the occlusion filter, since the probes' answer it shows reads
