@@ -356,7 +356,7 @@ internal static class WorldCompiler {
         }
         var unreached = new HashSet<string>(collection: test.Foreign.Select(selector: static expectation => expectation.Document), comparer: StringComparer.Ordinal);
 
-        foreach (var (name, _, _) in session.ReachDocuments(known: known, roots: roots)) {
+        foreach (var (name, _, _, _) in session.ReachDocuments(known: known, roots: roots)) {
             if (unreached.Remove(item: name) && (unreached.Count == 0)) {
                 return;
             }

@@ -328,7 +328,7 @@ public static partial class TestCommand {
         }
         // A document the test expects verdicts from carries them as it is staged; the source's compile already refused
         // an expectation about a document this walk does not reach.
-        foreach (var (document, resolved, found) in WorldCompileSession.Shared.ReachDocuments(known: [ownId, .. siblings.Select(selector: static sibling => sibling.Name)], roots: roots)) {
+        foreach (var (document, resolved, namedFrom, found) in WorldCompileSession.Shared.ReachDocuments(known: [ownId, .. siblings.Select(selector: static sibling => sibling.Name)], roots: roots)) {
             var matched = foreign.Where(predicate: expectation => string.Equals(a: expectation.Document, b: document, comparisonType: StringComparison.Ordinal)).ToArray();
 
             if (matched.Length > 0) {
@@ -344,7 +344,9 @@ public static partial class TestCommand {
                     }
                 }
             }
-            if (!Stage(document: document, world: found, from: (Path.GetDirectoryName(path: resolved) ?? sourceDirectory), staged: out _, reason: out reason)) {
+            // The name leads from the referring document's directory, so a nested document (`labs/climbing`) composes
+            // at its own path and its relative basis and imports resolve as authored.
+            if (!Stage(document: document, world: found, from: namedFrom, staged: out _, reason: out reason)) {
                 return false;
             }
         }
