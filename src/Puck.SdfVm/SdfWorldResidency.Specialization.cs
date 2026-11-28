@@ -167,6 +167,7 @@ public sealed partial class SdfWorldResidency {
         var target = LoadedTarget();
         var catalog = m_pipelines.Catalog;
 
+        Console.Error.WriteLine($"[world.shaders: compiling {request.Programs.Count} program(s) set={request.Identity[..12]} target={target} automatic-fallback={(m_shadeCurrent is null ? "plain" : "published")}]");
         m_shadeBuild.Start(build: token => SdfShadePipelines.BuildAsync(
             cache: catalog.Pipelines,
             cancellationToken: token,

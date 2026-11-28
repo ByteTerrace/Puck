@@ -15,13 +15,11 @@
         <RootNamespace>Puck.SignedDistance</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <!-- Shade identities include the live helper source closure. Embedding makes the same identity available
-             to headless admission, the generator and a published host without a source-tree dependency. -->
+        <!-- Shade identities include the live helper semantics, available to headless admission and published hosts.
+             Emitter source is not a semantic input: the shader cache already keys the generated HLSL it produces. -->
         <EmbeddedResource Include="../Puck.SdfVm/Assets/Shaders/Sdf/field/*.hlsli" LogicalName="ShadeHelper.field.%(Filename)%(Extension)" />
         <EmbeddedResource Include="../Puck.Shaders/Assets/Shaders/Shared/msdf.hlsli" LogicalName="ShadeHelper.shared.msdf.hlsli" />
         <EmbeddedResource Include="../Puck.SdfVm/Assets/Shaders/Sdf/shade/shade-weathering.hlsli" LogicalName="ShadeHelper.lines" />
-        <EmbeddedResource Include="../Puck.SdfVm.Model/SdfShadeHlsl.cs" LogicalName="ShadeHelper.generator" />
-        <EmbeddedResource Include="../Puck.SdfVm.Model/SdfShadeHlsl.Invocation.cs" LogicalName="ShadeHelper.invocation" />
         <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
         <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
         <ProjectReference Include="../Puck.Text/Puck.Text.csproj" />

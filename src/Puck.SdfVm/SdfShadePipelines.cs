@@ -28,7 +28,7 @@ internal sealed class SdfShadePipelines : IDisposable {
     internal IGpuComputePipeline Pipeline(SdfKernel kernel) => m_leases[kernel].Current!.Compute!;
 
     // Compiles, reflects and creates off the frame thread, from the sources the running kernels were compiled from. A
-    // kernel that reads anything but this host's interface refuses the whole set, which then stays interpreted.
+    // kernel that reads anything but this host's interface refuses the whole set, keeping the automatic plain fallback.
     internal static async Task<SdfShadePipelines> BuildAsync(SdfShadeKernels request, ShaderCompiler compiler,
         ShaderTarget target, GpuPassPipelineCache cache, IGpuDeviceContext device, CancellationToken cancellationToken) {
         var bytecodes = await request.CompileAsync(cancellationToken: cancellationToken, compiler: compiler, target: target).ConfigureAwait(continueOnCapturedContext: false);

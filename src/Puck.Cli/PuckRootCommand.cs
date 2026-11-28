@@ -72,6 +72,8 @@ public static class PuckRootCommand {
     }
     // A bootstrap binary cannot start a consumer of the deliberately absent model table.
     public static RootCommand Create(TimeProvider clock, bool schemaBootstrap) {
+        var shaders = ShadersCommand.Create();
+        shaders.Subcommands.Add(ShadeCompileCommand.Create());
         Command[] verbs = (schemaBootstrap ? [SchemaCommand.Create(clock: clock)] : [
             AffectedCommand.Create(),
             AgentsCommand.Create(),
@@ -117,7 +119,7 @@ public static class PuckRootCommand {
             ScanCommand.Create(),
             SchemaCommand.Create(clock: clock),
             SearchCommand.Create(),
-            ShadersCommand.Create(),
+            shaders,
             SweepCommand.Create(),
             WasmBuildCommand.Create(),
             WasmStdlibCommand.Create(),
