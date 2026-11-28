@@ -146,24 +146,6 @@ template player(avatar, rig = "player-camera", wall = wallFraming()) {
     playerKit(form)
   }
 
-  // Every body holds the register, born at the worn value, so the cases name only the others: a case naming the worn
-  // value would select every body, a chess piece included. A body whose register names no case keeps what it was
-  // given, the seat kit and look for a player in the suit they were born wearing.
-  kits {
-    assignment {
-      rows []
-      sequence {
-        name: "index"
-        offset: 0
-        step: 0
-      }
-      select {
-        bodyState: "suit"
-        cases: map(unworn, f => { value: f.value, row: $"{f.kit}" })
-      }
-    }
-  }
-
   looks {
     assignment {
       rows [$"{worn.look}"]
@@ -172,9 +154,34 @@ template player(avatar, rig = "player-camera", wall = wallFraming()) {
         offset: 0
         step: 0
       }
-      select {
-        bodyState: "suit"
-        cases: map(unworn, f => { value: f.value, row: $"{f.look}" })
+    }
+  }
+
+  // Every body holds the register, born at the worn value, so the cases name only the others: a case naming the worn
+  // value would select every body, a chess piece included. A body whose register names no case keeps what it was
+  // given, the seat kit and look for a player in the suit they were born wearing.
+  if length(avatar.suits) > 0 {
+    kits {
+      assignment {
+        rows []
+        sequence {
+          name: "index"
+          offset: 0
+          step: 0
+        }
+        select {
+          bodyState: "suit"
+          cases: map(unworn, f => { value: f.value, row: $"{f.kit}" })
+        }
+      }
+    }
+
+    looks {
+      assignment {
+        select {
+          bodyState: "suit"
+          cases: map(unworn, f => { value: f.value, row: $"{f.look}" })
+        }
       }
     }
   }

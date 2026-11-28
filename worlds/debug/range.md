@@ -104,7 +104,7 @@ A body switches to 30 Hz at or below 30 pixels per metre, and to 15, 10 and
 display's height over `2 tan(0.48)` = 1.0432 times the body's depth. The
 depth is measured to the nearest point of the sphere the body's look reaches. The chase camera stands
 4.2 m behind her at a 0.3 rad pitch with a 0.96 rad field of view
-(`avatars/moth.puck`), so a body D down the lane stands about 0.9553 D + 2.39 m
+(`avatars/moth/suits.puck`), so a body D down the lane stands about 0.9553 D + 2.39 m
 deep. The thresholds fall at D = 27.6, 57.7 and 87.8 m at 1280x900, and at
 69.7 and 142 m at 3840x2160. The 5 Hz threshold (D = 178 m at 1280x900) and
 the 4K 10 Hz one lie past the lane's end, so the lane shows each body tier

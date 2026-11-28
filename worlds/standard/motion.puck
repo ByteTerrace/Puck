@@ -1,7 +1,7 @@
 // The standard's body motion programs, which an avatar's kits name by `bodyMotionProgram`. `walk` turns the body toward
 // its planar intent, moves it at the kit's speed (backing at 0.7 of it and sidestepping at 0.85), runs its kit actions
 // and holds it to the ground or lets it fall. Every avatar that walks imports it (the standard walker, walker.puck, and
-// the debug world's, ../debug/avatars/moth.puck); a world refines a program by declaring a row of the same name in its
+// the debug world's, ../debug/avatars/moth/); a world refines a program by declaring a row of the same name in its
 // own body, and an avatar's speeds, holds and turn stay in its own kit.
 
 template walkMotion() {

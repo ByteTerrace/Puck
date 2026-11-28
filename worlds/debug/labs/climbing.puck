@@ -1,4 +1,4 @@
-// The climbing lab (README.md): the Moth's climb (avatars/moth-climb.puck, the standard's `climbAbility`) on a studio
+// The climbing lab (README.md): the Moth's climb (avatars/moth/contract.puck, the standard's `climbAction`) on a studio
 // floor under a held midday, with three bays along one line, each facing the seat as she boots (climbing-plan.puck holds
 // the plan):
 //

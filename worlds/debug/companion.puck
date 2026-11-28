@@ -4,6 +4,8 @@
 // population slot.
 import "../standard/inputs"
 import "../standard/companion"
+import "../standard/player/player"
+import "avatars/moth/contract"
 import "shapes"
 
 let companionBody = (galleryPopulation - 1)
@@ -38,7 +40,8 @@ companionDesign(
   population: (galleryPopulation + 2 + boardRoomBodies + cardBodies),
   interests: companionAttractions
 )
-companion(owner: 0, slot: companionBody, position: [-1.2, 1.52, 1])
+// The player module owns the companion slot: it arrives at the Moth's companion offset (avatars/moth/contract.puck).
+playerCompanion(avatar: mothAvatar, owner: 0, slot: companionBody)
 // The garden's obelisk teaches the Moth's companion sight (garden.puck); here it reaches farther once she carries it.
 companionSight(owner: 0)
 

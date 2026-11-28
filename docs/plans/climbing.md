@@ -4,7 +4,7 @@ The owner's ruling: "Yes, our climbing should be BotW/TotK quality or better!" T
 first place that needs it ([the toybox](toybox.md)): a player learns, with no words, that she can climb it and walk
 its branches to other floors. This plan holds the research round, the systems Puck already had, the gaps a seat's
 climb met in them, the design, and the open work. The ability is authored in the standard package
-(`worlds/standard/abilities.puck`, `climbAbility`); the engine supplies only mechanisms any author can use for
+(`worlds/standard/player/actions.puck`, `climbAction`); the engine supplies only mechanisms any author can use for
 another ability.
 
 ## What players feel in Breath of the Wild and Tears of the Kingdom
@@ -123,14 +123,14 @@ How a climb runs, tick by tick:
 6. **Let go.** A closed `when` gate (the regrab timer, winded) or an emptied register drops the row, and her climb's
    momentum carries into the fall.
 
-The authored ability, `climbAbility` in `worlds/standard/abilities.puck`: the `climb` row (walls from 60 to 120
+The authored ability, `climbAction` in `worlds/standard/player/actions.puck`: the `climb` row (walls from 60 to 120
 degrees), the `stamina` register, the `winded` lock an emptied wheel sets until it has refilled, the leap on the jump
 channel, letting go on the run channel with the `climbRest` timer, the mantle and the corner. `staminaRestore()` is
 the restore an avatar's ground and fall rows author, and `staminaGauge()` the wheel on screen. Every number is a
-template parameter; the Moth's import (`worlds/debug/avatars/moth-climb.puck`) takes the defaults. Her rig raises her
+template parameter; the Moth's import (`worlds/debug/avatars/moth/contract.puck`) takes the defaults. Her rig raises her
 arms to the wall and plants palms and toes in turn on the `climb` driver's cycle: a hand and the opposite foot hold
 together, the foot an eighth of a cycle behind its hand (`cling` and `climb` drivers, the `hand-*` and `toe-*`
-effectors in `worlds/debug/avatars/moth.puck`).
+effectors in `worlds/debug/avatars/moth/suits.puck`).
 
 The controls follow from the mechanisms, with no rule of their own. The row faces her into the wall and owns her
 heading there, and the chase camera's `faceFrame: Body` reads her stick in her own frame while she holds a face, so

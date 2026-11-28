@@ -3511,7 +3511,7 @@ intent is in its guide.
     palette, rig and bake cost carry no weight. The suit, the off-suit pilot
     and the shared head.
   - The suited Moth toward the mech-suit sheets 01, 02, 03 and 10
-    ([moth.md](../../worlds/debug/avatars/moth.md#geometry-and-motion)).
+    ([moth.md](../../worlds/debug/avatars/moth/moth.md#geometry-and-motion)).
   - Her back thrusters to references 07, 08, 09, 12 and 13: proportions from
     the straight rear view; each wing a hollow casing around a dark core,
     leaning in at the top, with domed shoulders; the shell a chain of band
@@ -5615,7 +5615,7 @@ their lane order; this packet keeps the single duplicates and leads.
   not credit an abstract or interface member called through a derived type,
   so treat its interface results as leads.
 - The `.puck` sources still under-use the language:
-  `worlds/debug/avatars/moth.puck` holds thousands of decimal literals and
+  `worlds/debug/avatars/moth/suits.puck` holds thousands of decimal literals and
   raw quaternions, with the pod's band groups pasted (a uniform row table
   waits on a template leaving a member out, G13 in
   [state and language](state-and-language.md)); `worlds/standard/cards.puck`
@@ -5778,8 +5778,8 @@ Looks and rules of play held in engine code:
   `WorldTabletopEngage.Pitch` range stops below it, and report a pitch above
   it by name.
 - [low] Flight and fuel are authored only in the Moth
-  (`worlds/debug/avatars/moth.puck`); the assisted-flight pass is a standard
-  ability template, as `dashAbility` is.
+  (`worlds/debug/avatars/moth/suits.puck`); the assisted-flight pass is a standard
+  ability template, as `dashAction` is.
 
 The standard's own surface:
 
@@ -5831,7 +5831,7 @@ The standard's own surface:
   and the night field RB opens no wheel and reads unbound.
 - Helpers that belong in the standard, transform maths first: rotation and
   transform maths (turns in degrees, axis-angle, composition, mirroring); a
-  mirrored-pair template; a toggle ability beside `dashAbility`; a tabletop
+  mirrored-pair template; a toggle ability beside `dashAction`; a tabletop
   kit (grid board, cell placement, piece prototypes), which chess, Go and
   Reversi each wrote; a named base-materials palette; scenario-step templates
   (tap, hold, wait until settled); the pad slot list and a mirrored bar-table

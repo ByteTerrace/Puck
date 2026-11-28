@@ -11,13 +11,16 @@
 //                stairs with risers she steps and risers she must jump; each item has a board on posts behind it, and
 //                the station has four overview frames (steps, low slopes, steep slopes, stairs)
 //   jump         a run-up and gaps of 1 to 8 m between raised platforms for the jump, the air jump and the dash, and
-//                ledges 0.6 to 2.6 m high for the climb's mantle
+//                plain ledges 0.6 to 2.6 m high, none holdable, for the mantle
 //   climb        a short holdable face over a block to stand on; the climbing lab owns the big wall
 //   flight       four tall pylons with decks at 10, 20 and 30 m for the jetpack: lift, hover, thrust and landing
 //   camera       a tight corridor, a low ceiling and pillars, for the chase camera's clearance, fade and cutaway
+//   suits        three pads, one for each form she owns (her body, the mech suit, the scout suit), a ledge to try each
+//                form's mantle on and a board of what each grants; `moth.suit` or the suit press switches her
 //
-// Her abilities are her basis's own (avatars/moth.puck, moth-climb.puck, moth-dash.puck, moth-jetpack.puck): nothing
-// here adds one. `moth.frame <station>` poses her at a station and shows it from a fixed overview camera. Boot it with
+// Her player and her abilities are the stage's (../stage.puck: the standard player module wearing the Moth, whose
+// contract, avatars/moth/contract.puck, lists what each form grants): nothing here adds or re-authors one.
+// `moth.frame <station>` poses her at a station and shows it from a fixed overview camera. Boot it with
 // `--world worlds/debug/labs/moth.puck`; the gallery's lab wing reaches it through its door `lab-moth`, and the `arrival`
 // frame outside the stage's doorway leads back there.
 
@@ -49,7 +52,7 @@ render {
   farDistance: 220
 }
 
-// A measuring ground needs air a mark can be read through at 40 m: the basis's studio fog (avatars/moth.puck,
+// A measuring ground needs air a mark can be read through at 40 m: the stage's studio fog (../stage.puck,
 // `render.atmosphere`, 0.012 a metre) leaves under two thirds of a surface's light at that range and washes everything
 // past it into the sky's grey-blue. The lab's air is the clear day's density instead (the standard's `clearDayAir`, as
 // light.puck and the debug world's air state it), thinner still with no height profile: about one part in a hundred at 40 m.
@@ -77,6 +80,7 @@ let mothStations = [
   { id: "flight", at: [130, 0, -8] }
   { id: "camera", at: [148, 0, -8] }
   { id: "camera-pillar", at: [148, 0, -49] }
+  { id: "suits", at: [20, 0, 40] }
 ]
 
 // The fixed overview camera of each station that has one: `eye` looking at `target`, `fov` radians tall. The terrain's
@@ -93,6 +97,7 @@ let mothFrames = [
   { id: "climb", eye: [118, 3, 2], target: [114, 1.8, -14], fov: 0.9 }
   { id: "flight", eye: [130, 16, 40], target: [130, 16, -14], fov: 0.9 }
   { id: "camera", eye: [153, 4, 4], target: [148, 1.5, -20], fov: 1 }
+  { id: "suits", eye: [27, 4.5, 47], target: [20, 1.2, 32], fov: 0.9 }
 ]
 
 spawnPoints: map(concat([{ id: "hero", at: [0, 0, 0] }], mothStations), s => { id: s.id, position: s.at, yawDegrees: 0 })
@@ -125,8 +130,15 @@ views {
 
 commands [
   goCommand(
-    help: "Poses a body at one of the Moth lab's stations (hero and look-stage, locomotion, slalom, terrain and its four framings, jump, climb, flight, camera, camera-pillar, or any spawn point) and returns the view to the play layout's chase camera."
+    help: "Poses a body at one of the Moth lab's stations (hero and look-stage, locomotion, slalom, terrain and its four framings, jump, climb, flight, camera, camera-pillar, suits, or any spawn point) and returns the view to the play layout's chase camera."
   )
+  {
+    name: "moth.suit"
+    help: "Steps the Moth to the next form she owns, as the suit press does: from the mech suit to the scout suit, then her own body, then the mech suit again. She must be standing."
+    lines [
+      "body.press suit 1 0.2"
+    ]
+  }
   {
     name: "moth.look"
     help: "Stands the Moth on the look stage and frames her from a fixed camera, the same every time: front, three-quarter (her right), side (her right), back or close (her head)."
@@ -810,7 +822,9 @@ placements {
 
 // The station's origin is 6 m north of its spawn point. Gaps: eight treads of 0.25 m up to a run-up 6 m long and 2 m high,
 // then raised platforms 4 m long (the last 6) with gaps of 1, 2, 3, 4, 6 and 8 m between, 3 m wide; she falls back to the
-// floor 2 m below. Ledges: blocks 0.6 to 2.6 m high, 2.4 m wide and 3 m deep, holdable, 3.2 m apart beside the gaps.
+// floor 2 m below. Ledges: blocks 0.6 to 2.6 m high, 2.4 m wide and 3 m deep, plain and not holdable, 3.2 m apart beside
+// the gaps. In the mech suit the mantle (avatars/moth/contract.puck) takes a top 1.9 m above her feet: she runs up the
+// 0.6 to 1.8 m ones with the run held, and jumps for the 2.2 and 2.6 m ones, catching their tops on the way up or down.
 let mothJumpAt = [80, 0, -14]
 let mothGapWidths = [1, 2, 3, 4, 6, 8]
 let mothPlatformHeight = 2
@@ -906,12 +920,10 @@ placements {
     position: mothJumpAt
     solid
   }
+  // Plain stone, never holdable: the climb cannot take them, so every top she reaches is the mantle's.
   placement "moth-ledges" {
     prototype: "moth-ledges"
     position: mothJumpAt
-    grip {
-      holdable: true
-    }
     solid
   }
   placement "moth-jump-labels" {
@@ -1129,5 +1141,67 @@ placements {
   placement "moth-corridor-labels" {
     prototype: "moth-corridor-labels"
     position: mothCorridorAt
+  }
+}
+
+// ---- Suits: her three forms side by side ----
+
+// The station's origin is its spawn point. Three pads 4 m north of it, 4 m apart, one for each form she owns, each with
+// a board of what it grants; behind them two plain ledges, 1.4 m and 2 m high, none holdable: her own body mantles the
+// lower from a run, the mech suit the lower from a run and the higher from a jump, the scout suit both from a run
+// (avatars/moth/contract.puck). The suit press (T, `moth.suit`) steps her through the forms where she stands.
+let mothSuitsAt = [20, 0, 40]
+let mothSuitForms = [
+  { label: "HER BODY\nmantle 1.5 m\nclimb, swim", x: -4, material: mothStone }
+  { label: "MECH SUIT\nmantle 1.9 m, air jump\ndash, jetpack", x: 0, material: mothOrange }
+  { label: "SCOUT SUIT\nmantle 2.2 m, 6 m/s jump\ndash, quick climb", x: 4, material: mothTeal }
+]
+let mothSuitLedges = [1.4, 2]
+
+prototypes {
+  prototype "moth-suits" {
+    document {
+      name: "moth-suits"
+      schema: "puck.creation.v2"
+      palette: mothPalette
+      for (form, k) in mothSuitForms {
+        shape Box $"pad-{k}" {
+          material: form.material
+          position [form.x, 0.05, -4]
+          scale [0.8, 0.05, 0.8]
+        }
+      }
+      for (h, k) in mothSuitLedges {
+        shape Box $"ledge-{k}" {
+          material: mothStone
+          position [((k * 6) - 3), (h / 2), -10]
+          scale [2.6, (h / 2), 1.5]
+        }
+      }
+    }
+  }
+  prototype "moth-suits-boards" {
+    document {
+      name: "moth-suits-boards"
+      schema: "puck.creation.v2"
+      mothBoards(
+        boards: concat(
+          map(mothSuitForms, form => mothBoard(form.label, form.x, -5.2, 1.9, 2.6, 1.2, 0.28, 3)),
+          map(mothSuitLedges, (h, k) => mothBoard($"{h} m", ((k * 6) - 3), -12, (h + 0.9), 2, 0.8, 0.42))
+        )
+      )
+    }
+  }
+}
+
+placements {
+  placement "moth-suits" {
+    prototype: "moth-suits"
+    position: mothSuitsAt
+    solid
+  }
+  placement "moth-suits-boards" {
+    prototype: "moth-suits-boards"
+    position: mothSuitsAt
   }
 }

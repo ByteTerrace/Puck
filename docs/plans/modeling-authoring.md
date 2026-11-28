@@ -250,7 +250,7 @@ and how does anyone read a rotation back?
 
 **The evidence.**
 
-- **[opened]** `worlds/debug/avatars/moth.puck` holds 198 literal `rotation [`
+- **[opened]** `worlds/debug/avatars/moth/suits.puck` holds 198 literal `rotation [`
   rows and 91 `pivot [` rows over 251 shape rows; `moth-pilot.puck` 32
   rotations. Every one is a quaternion the author derived off the page.
 - **[opened]** The compiler already folds scalar functions at compile time in

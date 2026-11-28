@@ -1,33 +1,37 @@
 // The standard's plain walker: the smallest avatar a world needs to seat a player. A capsule body that walks, runs
 // while `run` is held, jumps once from the ground and falls, drawn as a grey capsule with a darker visor so its facing
-// reads, framed by the standard chase camera (camera.puck's `chaseCamera`). It imports the standard and refines it, so
-// a world imports it in the standard's place and declares its bodies and spawn points (../minimal/minimal.puck); an
-// author's own avatar replaces it by refining the `walker` kit, look and prototype by id, or by not importing it (the
-// debug world's Moth is her own, ../debug/avatars/moth.puck):
+// reads, seated through the standard player module (player/player.puck), which reads it as one form with no suits. It
+// imports the standard and refines it, so a world imports it in the standard's place and declares its bodies and spawn
+// points (../minimal/minimal.puck); an author's own avatar replaces it with a contract of its own (the debug world's
+// Moth is ../debug/avatars/moth/):
 //
 //   import "../standard/walker"
 //
 // Distances are full-size metres: the capsule stands 1.7 m, its eye at 1.6 m.
 import "standard"
-import "motion"
 import "occlusion"
 import "camera"
 import "kits"
+import "player/player"
+import "player/actions"
 
-walkMotion()
-
-chaseCamera(
-  rig: "walker-camera",
-  pivotOffset: [0, 0.9, 0],
-  fadeCloseTarget: [0, 1.5, 0],
-  cutawayCloseTarget: [0, 1.35, 0],
-  eyePoint: [0, 1.6, 0.2]
+// One form: the 1.7 m capsule on 0.3 m spheres, a 4 m/s walk doubled while the run channel is held, and one jump from
+// the ground, cut short by letting go while still rising.
+let walkerBody = playerForm(
+  name: "body",
+  kit: "walker",
+  look: "walker",
+  height: 1.7,
+  radius: 0.3,
+  speed: 4,
+  camera: { pivot [0, 0.9, 0], fadeClose [0, 1.5, 0], cutawayClose [0, 1.35, 0], eye [0, 1.6, 0.2] },
+  actions: [sprintAction(), jumpAction(speed: 5)]
 )
+
+player(avatar: playerAvatar(name: "walker", body: walkerBody), rig: "walker-camera", wall: null)
 
 // The standard's screen material, re-exported so a world importing the walker names it.
 export binding crt
-
-defaultSeatKit: "walker"
 
 // How bodies meet the world: a 2 cm contact skin, slopes walkable to 60 degrees.
 collision {
@@ -40,61 +44,19 @@ collision {
   requirements []
 }
 
-kits [
+looks [
   {
     name: "walker"
-    bodyContact: Solid
-    bodyMotionProgram: "walk"
-    // Its 0.3 m spheres span the ground to 1.7 m: the endpoint is the top sphere's centre above the bottom one's.
-    collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
-    mass: 0
-    // A 4 m/s walk, doubled while the run channel is held.
-    motion: walkerMotion
-    // One jump from the ground, cut short by letting go while still rising.
-    actions {
-      jump {
-        onPress {
-          gate: now(fact: Grounded)
-          latchSeconds: 0
-          effects [
-            setVerticalVelocity(velocity: 5)
-          ]
-        }
-        onRelease {
-          gate: now(fact: Rising)
-          latchSeconds: 0
-          effects [
-            scaleVerticalVelocity(factor: 0.45)
-          ]
-        }
-      }
+    scale: 1
+    source: creation(prototypeId: walker)
+    // A rigid capsule: no gait swing and no timeline.
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
     }
   }
 ]
-
-looks {
-  assignment {
-    rows ["walker"]
-    sequence {
-      name: "index"
-      offset: 0
-      step: 0
-    }
-  }
-  rows [
-    {
-      name: "walker"
-      scale: 1
-      source: creation(prototypeId: walker)
-      // A rigid capsule: no gait swing and no timeline.
-      motion {
-        gaitAmplitude: 0
-        replayFrames: false
-        secondsPerFrame: 0
-      }
-    }
-  ]
-}
 
 prototypes {
   prototype "walker" {

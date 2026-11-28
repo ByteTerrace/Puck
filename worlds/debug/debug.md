@@ -310,7 +310,7 @@ wheel are the standard's [`controls.puck`](../standard/controls.puck), and the k
 
 | Hold | Page | What the twelve plates do |
 |---|---|---|
-| nothing | Move | The Moth's own controls ([moth.md](avatars/moth.md#controls)): run, flight, jump, descend, fly, the context button (RB); LB opens the play wheel (`WH`) |
+| nothing | Move | The Moth's own controls ([moth.md](avatars/moth/moth.md#controls)): run, flight, jump, descend, fly, the context button (RB); LB opens the play wheel (`WH`) |
 | LT or Z | View | Camera layouts (chase, three-quarter, front, rear, wide, face), autorun (L3), autofly (R3), recenter, free look, the frame toggle, the jetpack alone |
 | RT or X | Debug | Where, history on, console, capture (`world.screenshot` to the state root's `screenshots/`), the inspector, the debug view, frame hold and compare, stop, and the suit toggle; the pad's View button switches `world.rates` ([`range.md`](range.md)) |
 | LT then RT | Go | `debug.go` to the stage, gallery, portals, Wonderland, hero studio, devices, chess, computer and the four gallery levels |

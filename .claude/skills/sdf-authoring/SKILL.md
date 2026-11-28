@@ -49,8 +49,8 @@ turn about up from this one (x and z negated). Validation refuses it by name;
 ## Authoring in `.puck`
 
 `.puck` is the checked-in source for shipped creations:
-`worlds/debug/avatars/moth.puck` sculpts the whole Moth as
-`shape` rows inside `prototypes { prototype "moth" { document { } } }`. A shape
+`worlds/debug/avatars/moth/suits.puck` sculpts the Moth's suit frame as
+`shape` rows inside a `suitPrototype` template that emits `prototypes { prototype ... { document { } } }`. A shape
 row is `shape Type "name" { field: value ... }`: array-valued fields take
 brackets with no colon (`position [0, 1.02, 0]`, `scale [x, y, z]`), scalar
 fields take a colon (`material: charcoal`, `exponent: softness`), and

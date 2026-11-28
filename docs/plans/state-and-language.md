@@ -271,7 +271,7 @@ choice:
 overrides. Sites: the gallery map re-lists every text-run field to move six
 runs (`worlds/debug/shapes.puck` around `:410`, the `map(..., run => { … })`),
 the Moth's palette repeats the whole `weathering { }` block per plate slot
-(`worlds/debug/avatars/moth.puck:1233` on, five times), the 13 near-identical
+(`worlds/debug/avatars/moth/suits.puck:1233` on, five times), the 13 near-identical
 emboss runs in `shapes.puck`.
 
 - (a) `base with { member: value }`, an expression: a block after `with`,
@@ -315,7 +315,7 @@ a basis's or import's rows, which today it reads only for enums.
 **G3 — Value functions.** A `let` cannot hold a lambda (PUCK042) and a template
 emits rows or members, not values, so a repeated value inside an array (text
 runs, paints, palette entries) cannot be named once. The Moth's blink frame is
-built twice, once in `worlds/debug/avatars/moth.puck` (the `blink` frame of the
+built twice, once in `worlds/debug/avatars/moth/suits.puck` (the `blink` frame of the
 `moth` prototype) and again in `moth-pilot.puck` (around `:603`), the two
 `map(..., row => { id … position … rotation … })` bodies differing only in the
 head's anchor and scale. The register already

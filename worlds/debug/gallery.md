@@ -416,7 +416,7 @@ bays 9 and 11 stand more than a metre clear of the pad on either side.
 | Doorway | Teal posts and lintel in level 3's balustrade behind the ledge, as at the tree's landings | 2 m clear |
 
 **What can be held.** Only the face: its placement alone carries
-`grip { holdable: true }`, so the standard's `climbAbility` takes it and nothing
+`grip { holdable: true }`, so the standard's `climbAction` takes it and nothing
 else of the wall. A climber stops at the face's edges, since the cheeks beside
 them cannot be held, and the climb ends at the coping, where the climb's mantle
 proves the ledge and sets her down on it. The face's plates and every hold are

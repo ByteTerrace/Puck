@@ -371,7 +371,7 @@ rule "city-lamps-off" {
 }
 
 // The citizens (../standard/citizen.puck). `citizenCount` of them, numbered down from the top of the body capacity
-// above the Moth's eight (avatars/moth.puck), in blocks of one look each: look `b` is block `b`, its citizens standing
+// above the Moth's eight (stage.puck), in blocks of one look each: look `b` is block `b`, its citizens standing
 // in a disc on the open ground north of the square until the schedule sends them off.
 let citizenCount = 1920
 let citizenCoats = ["#B5523B", "#3E6E8E", "#6B8E4E", "#C98B2E", "#7A4E7E", "#D8CBB0"]

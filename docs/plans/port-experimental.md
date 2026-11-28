@@ -32,7 +32,7 @@ both; [card tables](open-items.md#card-tables-in-the-board-game-room)),
 so a lane that adds a whole game lands it as a destination document behind a
 painting, as the garden and the night field do, unless the game is priced to fit.
 And the debug world runs one local seat (`bodies { localSeats: 1 }`,
-`worlds/debug/avatars/moth.puck:197`), so a lane that needs a second seat waits
+`worlds/debug/avatars/moth/suits.puck:197`), so a lane that needs a second seat waits
 for lane 5.
 
 ## What the debug world already has in another form

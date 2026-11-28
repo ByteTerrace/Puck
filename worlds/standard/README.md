@@ -119,6 +119,50 @@ terminal mode its placement responds with
 and its toybox cabinets and television sets, its rental handhelds and its
 desktop monitor the worked full views.
 
+## The player
+
+`player/` is a player and their standard controls, whatever avatar they choose; any world imports it. Both files are
+libraries. [`player/player.puck`](player/player.puck) reads three contracts and nothing else of an avatar:
+
+- A **form** (`playerForm`) is one way a body stands in the world: an avatar's own body, or that body in a suit. It names
+  the kit and look rows it wears, its capsule (`height`, `radius`), pace and step, the actions it grants with their
+  tuning, the camera's offsets on it, and for a suit the wrist panel's attachment points on both forearms
+  (`wristPanel`, with the `handedness` register that picks the wrist).
+- A **suit** is a form worn over the avatar's body. Its `value` is what the body's `suit` register holds while it is
+  worn (1 up; 0 is the body itself). Its shapes are its own creation and its look row the avatar module's; what it grants
+  is its action list, so thrusters grant a jetpack and gloves a climb.
+- An **avatar** (`playerAvatar`) is a body form, the suits it owns, the one it is born wearing and the companion's
+  offset beside it.
+
+`player(avatar)` authors from them the body registers every listed action uses (declared once however many forms list
+an action), one kit per form (`playerKit`: the capsule, the standard walk at the form's pace, every action's holds ahead
+of the ground and fall rows, every action's programs), the kit and look selection by the `suit` register, the `suit`
+press that steps a standing body to its next form, the chase camera on the worn form's offsets, the play layout and the
+default seat kit. Switching suits at run time is a write of that register: a rule, a replay, the console
+(`body.press suit`) or a crossing moves the kit and look on the same tick. `playerCompanion(avatar, owner, slot)` is the
+companion slot: the standard companion arriving at the avatar's offset, in the population slot the world supplies.
+World settings (light, air, floor, gravity, bodies, spawn points) are never a player's or an avatar's.
+
+[`player/actions.puck`](player/actions.puck) is the one action abstraction. Every action is one value of one shape
+(`noAction` with the parts it uses filled in: `holds`, `shaping`, `speedHeld`, `actions`, `registers`, `restore` and a
+`hook`, the register an avatar's rig animates it by), so a form's action list is all `playerKit` reads:
+`sprintAction`, `jumpAction` (air jumps on one shared `jumps` counter), `dashAction`, `mantleAction`, `climbAction`,
+`jetpackAction`, `swimAction`, `lockAction` and `strafeAction`. Each action keys its programs by its own channel
+(`jump`, `run`, `dash`, `flight`, `climb`, `mantle`, `lock`), so no two replace each other.
+
+- `mantleAction` pulls a body up over any ledge it is driven into, holdable or not, through the engine's `mantle`
+  effect: in the air the moment it meets the face, on the ground while `run` is held. It is forgiving in reach and
+  height, keeps the speed the body was commanding so it runs on over the edge, and times its pull on `mantling`.
+- `climbAction` takes a holdable wall by walking or falling into it, spends `stamina` while moving on the face, leaps
+  on the jump channel, lets go on the run channel, swings round outside corners and mantles over the top; it restores
+  stamina on the ground and fall rows through `restore`. [The climbing plan](../../docs/plans/climbing.md) holds the
+  design and the open work.
+- `jetpackAction` is flight mode on the `flight` press: thrust, hover and boost, spending `flightFuel`.
+- `lockAction` and `strafeAction` are the slots a targeting context fills: the lock flips the `locked` register its
+  rules and camera read, and strafe holds the shaping rows a locked body moves under.
+
+The Moth is the debug world's avatar ([`../debug/avatars/moth/`](../debug/avatars/moth/contract.puck)), with two suits;
+the plain walker (`walker.puck`) is a one-form avatar on the same module.
 ## The documents
 
 Start from the worked example, [`../minimal/minimal.puck`](../minimal/minimal.puck): a world that imports the
@@ -133,9 +177,9 @@ import "../standard/walker"
 `companions.puck`, and expands `camera.puck`'s `cameraFeel()`. It names no schema, so it is a fragment the importer
 composes, and it depends on nothing outside this package: its controls author the bar (the `bar` overlay) and the
 resting page (the `on-foot` overlay) every refinement builds on. `walker.puck` is the plain avatar: a capsule that
-walks, runs, jumps and falls, framed by `chaseCamera`. It imports the standard and refines it, so a world imports it in
-the standard's place; an author's own avatar refines its `walker` kit, look and prototype by id, or replaces it (the
-debug world's avatar is its own, [`../debug/avatars/moth.puck`](../debug/avatars/moth.puck)).
+walks, runs, jumps and falls, seated through the player module (`player(...)`, one form, no suits). It imports the
+standard and refines it, so a world imports it in the standard's place; an author's own avatar replaces it with a
+contract of its own (the debug world's Moth, [`../debug/avatars/moth/`](../debug/avatars/moth/contract.puck)).
 
 `motion.puck` authors the standard's body motion programs: `walk`, which every avatar that walks imports, so a
 correction to it reaches them all. An avatar's speeds, holds, turn and actions stay in its own kit; a
@@ -221,7 +265,7 @@ from it (`../debug/gallery.md`), and `../debug/gallery-kit.puck` holds one of ea
 the one surface a world makes holdable, the frame a face stands in with the ledge a climb tops out on, the hold families
 (jug, crimp, sloper, pinch, foot chip and volume, each with a recessed bolt), a segmented landing pad, and
 `climbRoute`, which lays a route's holds along a line of points on a face so a world places one copy of a family's
-prototype per hold. The debug world's gallery climbs one with `climbAbility` (`../debug/gallery.md`).
+prototype per hold. The debug world's gallery climbs one with `climbAction` (`../debug/gallery.md`).
 
 `game-station.puck` is a station whose table's top is one glass display that plays a catalog of games, one at a time, as
 a display station shows a catalog of shapes: the table in the display stations' family, its glass panels, the menu of
@@ -317,8 +361,8 @@ debug world's [water](../debug/debug.md#water) is the worked example.
 response, the zoom bounds/step in `views.seatControl.boom` and the `views.builtinTransition` envelope (seconds and render-scale dip) of the built-in seat ladder; `chaseCamera(rig, ...)` authors a seated body's whole
 chase camera (seat control, clearance mode with each treatment's rise ceiling and close target, the eye's radius and
 skin, character fade, automatic first person, the boom and the rig) from the body's own offsets, with the chase-camera
-decision's values as its defaults. An avatar expands it in a document of its own: the
-Moth's is [`moth-camera.puck`](../debug/avatars/moth-camera.puck). Mouse wheel changes the requested
+decision's values as its defaults. The player module expands it with the worn form's offsets (`player(...)` in
+[`player/player.puck`](player/player.puck)). Mouse wheel changes the requested
 orbit distance; middle click resets distance and angles. The play wheel's hold
 pages bind `mouse.wheel` to `player.wheel.scroll`, replacing the inherited zoom
 source by source, so scrolling steps the open wheel's ring and leaves the boom
@@ -329,22 +373,6 @@ face while the `HoldingUnwalkable` fact holds, eased on the `camera-wall` respon
 `faceFrame: Body` (the template's default) reads the stick in the body's own frame there, so orbiting
 the camera never changes which push climbs.
 
-`abilities.puck` is a library: `dashAbility(kit, speed, duration, cooldown)`
-authors a kit action over the generic timed planar impulse. The avatar declares
-the input channel and timer states and owns its tuning and rig response. The
-Moth's [dash document](../debug/avatars/moth-dash.puck) supplies its burst; West/J activates it on Move.
-Run remains Shift while held, with N/left-stick press switching run on and off.
-
-`climbAbility(kit, ...)` authors climbing into a kit: a `climb` hold row taken by
-walking or falling into a holdable wall, a `stamina` register spent while moving
-on the face and held while hanging, a leap on the jump channel for a chunk of
-it, letting go on the run channel, the winded lock once it empties, the swing
-round an outside corner onto the face past it, and the
-mantle over a wall's top. The kit's own ground and fall rows author
-`restore: staminaRestore()` so standing on ground refills it. Every number is a
-template parameter; the Moth's [climb document](../debug/avatars/moth-climb.puck)
-takes the defaults. [The climbing plan](../../docs/plans/climbing.md) holds the
-design and the open work.
 
 `motion.puck` supplies `walkMotion()` and `easedTimedMove`. Use the latter
 in a kit action to specify its travel, signed yaw and duration with a smooth

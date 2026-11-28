@@ -15,7 +15,7 @@ work in the debug world; quarantined worlds stay quarantined.
 | Static field contact | Exists, with admitted subsets | `GridCellSize` defaults to 0, which means exact evaluation with no distance grid (`WorldCollider.cs`); an oversized grid declines and falls back rather than throwing (`SdfDistanceGrid.TryCoverBox`). Solid placements skip authored sweeps and detail shapes (`CreationStampEmitter.EmitFixed`) and refuse non-detail revolve lifts (`CreationShapeLaw`), so walkable terrain is authored from admitted shapes. |
 | Gravity | Partial | Authored planet sources by surface gravity and radius and local gravity areas exist (`WorldGravity`); wide arithmetic at planetary distances needs widening and unrounded composition. |
 | Changing up | Exists | `WorldBodyUpPolicy` (Ambient, SurfaceFollowing) with the separate `GradientDerivedUp` contact requirement. |
-| Flight | Partial | The Moth's Free and Lift motion (`avatars/moth.puck`) is body-frame 6DOF free integration by design, with no ground pin or gravity. The standard's ship (`worlds/standard/ship.puck`) authors the assisted kind: a `fly` program whose holds level it against the world's pull, settle it near ground and hover it elsewhere. `World` and `Heading` intent are composed correctly and must not be swapped. Grounding facts are written under every motion program; the ownership gate controls only write-back. |
+| Flight | Partial | The Moth's Free and Lift motion (`avatars/moth/suits.puck`) is body-frame 6DOF free integration by design, with no ground pin or gravity. The standard's ship (`worlds/standard/ship.puck`) authors the assisted kind: a `fly` program whose holds level it against the world's pull, settle it near ground and hover it elsewhere. `World` and `Heading` intent are composed correctly and must not be swapped. Grounding facts are written under every motion program; the ownership gate controls only write-back. |
 | Terrain bake | Partial | The bake's reach is `max(1, farDistance)`, and an instance's radius is clamped to it, which can clip a huge instance; post-contour chunks do not stream. Coarse sampling is 65 samples on a shape's longest axis with conditional refinement (4, detail 8). |
 | Draw distance | Partial | `farDistance` is capped at 8192 m (`WorldRenderDefaults.MaxFarDistance`); haze extinction is `-log(1 - haze) / farDistance`, which couples haze to draw distance. |
 | Shadows | Partial | Key-light receiver splits at 16 and 120 m, second light at 40 m, casters reaching 200 m beyond each cascade toward the light (`SdfMeshShadowCascades`, authored as `render.shadowCoverage`); macro terrain shadowing is missing, and stretching the far cascade to the walls costs 25 times its vertices ([illumination step 1](illumination.md#the-build-order)). |
@@ -195,9 +195,9 @@ Built by this feature:
 - A held pace climbs as it travels (`WorldBody.VerticalThrust`): a hold's thrust reads the kit's resolved move speed
   with its held pace, as its travel and a medium's thrust already did, so the ship's boost lifts it at four times its
   cruise and the route's 5,900 m climb takes about a quarter of the time it did. One function serves every bond.
-- Jetpack flight (`worlds/standard/abilities.puck`'s `jetpack`): thrust, hover and boost as two hold rows and the
+- Jetpack flight (`worlds/standard/player/actions.puck`'s `jetpack`): thrust, hover and boost as two hold rows and the
   `flight` action an author expands into any kit, bound through the standard's `flight` channel. The Moth's flight
-  mode is that template (`avatars/moth-jetpack.puck`), no longer her own rows.
+  mode is that template (`avatars/moth/contract.puck`), no longer her own rows.
 - A space mode (`ship.puck`'s `shipSpace` and `shipCamera`'s `spaceRig`): a body is `Weightless` where a world's
   gravity field no longer pulls (`ActionFact.Weightless`, the same one metre a second squared under which a body keeps
   the up it had), the ship's kit marks its `space` register by it, and a world selects the space kit by that register
