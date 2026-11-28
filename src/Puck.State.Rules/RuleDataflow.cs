@@ -125,6 +125,15 @@ public static class RuleDataflow {
             }
         }
     }
+    /// <summary>Returns every state cell a compiled expression reads, each once, in first-read order.</summary>
+    /// <param name="tokens">The compiled postfix program, or <see langword="null"/>.</param>
+    /// <returns>The distinct reads; empty when the program reads no cell.</returns>
+    public static CellAccess[] DistinctReads(CompiledExpressionToken[]? tokens) {
+        var reads = new List<CellAccess>();
+
+        CollectExpression(into: reads, tokens: tokens);
+        return [.. reads.Distinct()];
+    }
     /// <summary>Appends every state cell a compiled expression reads.</summary>
     /// <param name="tokens">The compiled postfix program, or <see langword="null"/>.</param>
     /// <param name="into">The read set being collected.</param>
@@ -267,7 +276,9 @@ public static class RuleDataflow {
                 into.MarkReadsSearchPly();
                 break;
             case LocalOperand { Source: { } source }:
-                CollectExpressionFacts(includeKeyDependencies: includeKeyDependencies, into: into, tokens: source.Expression);
+                if (into.TryEnter(program: source, keyDependencies: includeKeyDependencies)) {
+                    CollectExpressionFacts(includeKeyDependencies: includeKeyDependencies, into: into, tokens: source.Expression);
+                }
                 break;
             case PatternOperand { TokenExpression: { } tokens }:
                 CollectExpressionFacts(includeKeyDependencies: includeKeyDependencies, into: into, tokens: tokens);

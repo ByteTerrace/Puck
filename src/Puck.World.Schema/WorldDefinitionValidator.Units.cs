@@ -53,32 +53,62 @@ public static partial class WorldDefinitionValidator {
     /// and detaches its values at the caller's clock. A remaining binding asks the caller for wider validation.</summary>
     public static bool TryValidateBoundUnits(WorldDefinition definition, string stateRow, Func<object, object?> resolve,
         out bool needsWholeDocument, out string reason) {
+        var index = BoundUnitSets.GetValue(definition: definition, derive: CollectBoundUnits);
+
+        needsWholeDocument = index.Remainder.Contains(item: stateRow);
+        reason = string.Empty;
+        if (!index.Units.TryGetValue(key: stateRow, value: out var units)) { return true; }
+
+        foreach (var (partition, unit) in units) {
+            if (partition.Bound!.Resolve(definition, unit, resolve) is not { } literal) {
+                reason = $"state '{stateRow}' leaves a {partition.Name} unit it binds unreadable";
+                return false;
+            }
+            var run = new WorldValidationRun { BoundUnit = true, Definition = literal.Definition };
+
+            RunPartition(partition, run, literal.Rows, units: 1);
+            if (run.Errors.Count > 0) {
+                reason = $"state '{stateRow}' leaves a {partition.Name} unit it binds invalid: {run.Errors[0]}";
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // A definition's bound units by the rows their values read, in partition order and each partition's own order,
+    // and the rows a value outside every registered unit reads (the remainder, which only the whole document judges).
+    private sealed record BoundUnitIndex(Dictionary<string, List<(WorldValidationPartition Partition, object Unit)>> Units, HashSet<string> Remainder);
+    // Collected by one walk of each unit the first time a write into a bound row asks, so a write's verdict visits the
+    // units of the row it wrote and walks nothing else.
+    private static readonly WorldDocumentDerivedTable<BoundUnitIndex> BoundUnitSets = new();
+
+    private static BoundUnitIndex CollectBoundUnits(WorldDefinition definition) {
+        var units = new Dictionary<string, List<(WorldValidationPartition, object)>>(comparer: StringComparer.Ordinal);
+        var rows = new HashSet<string>(comparer: StringComparer.Ordinal);
         var remainder = definition;
-        needsWholeDocument = false;
 
         foreach (var partition in Partitions) {
             if (partition.Bound is not { } bound) { continue; }
 
             foreach (var unit in bound.Enumerate(definition)) {
-                if (unit is null || !WorldStateDocumentValues.ReferencesRow(definition, unit, stateRow)) { continue; }
-
-                if (bound.Resolve(definition, unit, resolve) is not { } literal) {
-                    reason = $"state '{stateRow}' leaves a {partition.Name} unit it binds unreadable";
-                    return false;
-                }
-                var run = new WorldValidationRun { BoundUnit = true, Definition = literal.Definition };
-
-                RunPartition(partition, run, literal.Rows, units: 1);
-                if (run.Errors.Count > 0) {
-                    reason = $"state '{stateRow}' leaves a {partition.Name} unit it binds invalid: {run.Errors[0]}";
-                    return false;
+                if (unit is null) { continue; }
+                rows.Clear();
+                WorldStateDocumentValues.CollectReferencedRows(graph: unit, rows: rows);
+                foreach (var row in rows) {
+                    if (!units.TryGetValue(key: row, value: out var list)) {
+                        list = [];
+                        units.Add(key: row, value: list);
+                    }
+                    list.Add(item: (partition, unit));
                 }
             }
             remainder = bound.Remove(remainder);
         }
-        needsWholeDocument = WorldStateDocumentValues.ReferencesRow(definition, remainder, stateRow);
-        reason = string.Empty;
-        return true;
+
+        var left = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        WorldStateDocumentValues.CollectReferencedRows(graph: remainder, rows: left);
+        return new BoundUnitIndex(Remainder: left, Units: units);
     }
 
     private static IEnumerable<int> RowOrdinals(int count, IReadOnlyList<int>? selected) =>

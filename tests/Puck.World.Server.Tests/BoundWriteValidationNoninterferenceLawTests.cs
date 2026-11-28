@@ -46,9 +46,10 @@ public sealed class BoundWriteValidationNoninterferenceLawTests {
         return [.. rows];
     }
 
-    // What the writer, and then the operator, are told for one write into the public bound row, with the hidden row
-    // left holding text its binding reads or text it cannot.
-    private static (string Recipient, string Operator) Answers(WorldDefinition document, string hidden, bool readable) {
+    // What the writer is told for one write into the public bound row, with the hidden row left holding text its binding
+    // reads or text it cannot, and whether the hidden row's own holders read it then (the control that the hidden state
+    // is real).
+    private static (string Recipient, bool HiddenReads) Answers(WorldDefinition document, string hidden, bool readable) {
         using var fixture = Fixtures.FreshServer(document);
         fixture.Server.Grant(new WorldGrant(Grantee: Writer, Capability: WorldCapability.Mutate, Subject: GrantSubject.Section(WorldSection.State),
             Exclusive: false, Budget: 64, KindMask: WorldMutationKindCatalog.KindsOf(WorldSection.State)), Principal.Console);
@@ -66,8 +67,8 @@ public sealed class BoundWriteValidationNoninterferenceLawTests {
         static WorldMutation Write(Principal principal, string text) =>
             new WorldMutation.UpsertStateCell(principal, "spot", StateRow.SlotKey.Value, 0, WorldDocumentWriteKind.Set, Text: text);
         var recipient = fixture.SubmitMutation(Write(Writer, "[2,0,0]"));
-        var authority = fixture.SubmitMutation(Write(Principal.Console, "[3,0,0]"));
-        return ($"{recipient.Decision} {recipient.Code} {recipient.Detail}", $"{authority.Decision} {authority.Code}");
+        var hiddenReads = WorldStateDocumentValues.TryCheckBound(fixture.Server.Definition, hidden, fixture.Server.Arena, ArenaTime.Origin, out _);
+        return ($"{recipient.Decision} {recipient.Code} {recipient.Detail}", hiddenReads);
     }
 
     // A placement binding the written public row and a withheld one is a unit the write reaches, so the write is
@@ -118,7 +119,7 @@ public sealed class BoundWriteValidationNoninterferenceLawTests {
     [Fact]
     public void ARecipientWriteRunsEveryCheckOfTheUnitItBindsNotItsGeometryAlone() {
         // A mirror whose normal a public row binds: a zero normal reads as a vector, so only the placement's own mirror
-        // check, which no geometry check makes, refuses it, exactly as the authority's whole validation does.
+        // check, which no geometry check makes, refuses it, exactly as the authority's write into the row is judged.
         var document = Document() with {
             PlacementsRaw = new WorldPlacementsSection([
                 new WorldPlacement("marker", "piece", new DocumentVector3(System.Numerics.Vector3.Zero), 0, 1, Mirror: new WorldPlacementMirror(Bound("state.spot"), 0f)),
@@ -150,9 +151,9 @@ public sealed class BoundWriteValidationNoninterferenceLawTests {
             Assert.Equal(valid.Recipient, invalid.Recipient);
             // The control: the recipient's write is a real one, not refused in both worlds.
             Assert.StartsWith(nameof(WorldMutationDecision.Applied), valid.Recipient, StringComparison.Ordinal);
-            // The hidden unit's state is real: the authority's whole-document validation sees it, as the recipient's
-            // validation did when it validated the whole document.
-            Assert.NotEqual(valid.Operator, invalid.Operator);
+            // The hidden unit's state is real: its own holders cannot read it.
+            Assert.True(valid.HiddenReads);
+            Assert.False(invalid.HiddenReads);
         }
     }
 
@@ -170,6 +171,7 @@ public sealed class BoundWriteValidationNoninterferenceLawTests {
 
         Assert.StartsWith(nameof(WorldMutationDecision.Applied), valid.Recipient, StringComparison.Ordinal);
         Assert.Equal(valid.Recipient, invalid.Recipient);
-        Assert.NotEqual(valid.Operator, invalid.Operator);
+        Assert.True(valid.HiddenReads);
+        Assert.False(invalid.HiddenReads);
     }
 }

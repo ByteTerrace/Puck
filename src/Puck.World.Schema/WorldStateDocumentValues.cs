@@ -345,9 +345,10 @@ public static class WorldStateDocumentValues {
     // Checks every value bound to one row reads that row's cell, rewriting nothing: the bound-write check, which reads
     // the written row alone. A holder naming another row, or no row, is not its business; the state section binds no
     // value, and a dealt child carries its template's values, which the template's own holders answer for.
-    private sealed class BoundChecker(WorldDefinition definition, string soughtRow, StateArena arena, ArenaTime time) : IWorldDocumentVisitor {
-        public string Reason { get; private set; } = string.Empty;
-        public bool Stopped { get; private set; }
+    // Collects every holder whose reference names a row, by that row: the holders a write into the row owes a check.
+    // A malformed reference names no row and is no write's business.
+    private sealed class BoundCollector : IWorldDocumentVisitor {
+        public Dictionary<string, List<BoundHolder>> Rows { get; } = new(comparer: StringComparer.Ordinal);
 
         public bool Enter(object value, WorldDocumentSite site) {
             if ((value is WorldStateSection) || ((value is WorldPlacement placement) && WorldPlacementDeal.TrySplitChildId(id: placement.Id, template: out _, key: out _))) {
@@ -356,14 +357,14 @@ public static class WorldStateDocumentValues {
             if (value is not IDocumentStateValue holder) {
                 return true;
             }
-            if (
-                (holder.Reference is { } reference) &&
-                (StateBinding.Parse(token: reference) is (var row, var key, _)) &&
-                string.Equals(a: row, b: soughtRow, comparisonType: StringComparison.Ordinal) &&
-                (ResolveHolder(arena: arena, definition: definition, deferDrawSites: false, detach: true, holder: holder, key: key, resolved: out _, row: row, time: time) is { } message)
-            ) {
-                Reason = Refusal(message: message, reference: reference, root: "definition", site: site);
-                Stopped = true;
+            if ((holder.Reference is { } reference) && (StateBinding.Parse(token: reference) is (var row, var key, _))) {
+                if (!Rows.TryGetValue(key: row, value: out var list)) {
+                    list = [];
+                    Rows.Add(key: row, value: list);
+                }
+                var path = site.Path;
+
+                list.Add(item: new BoundHolder(Holder: holder, Key: key, Path: ((path.Length == 0) ? "definition" : $"definition.{path}"), Reference: reference));
             }
 
             return false;
@@ -608,12 +609,35 @@ public static class WorldStateDocumentValues {
         ArgumentException.ThrowIfNullOrEmpty(argument: rowName);
         ArgumentNullException.ThrowIfNull(argument: arena);
 
-        var checker = new BoundChecker(arena: arena, definition: definition, soughtRow: rowName, time: time);
+        reason = string.Empty;
+        if (!BoundHolderSets.GetValue(definition: definition, derive: CollectBoundHolders).TryGetValue(key: rowName, value: out var holders)) {
+            return true;
+        }
+        foreach (var bound in holders) {
+            if (ResolveHolder(arena: arena, definition: definition, deferDrawSites: false, detach: true, holder: bound.Holder, key: bound.Key, resolved: out _, row: rowName, time: time) is { } message) {
+                reason = $"{bound.Path} reference '{bound.Reference}' {message}";
+                return false;
+            }
+        }
+        return true;
+    }
+    // One holder a bound-write check reads: the holder, the key its reference names, its reference as authored and the
+    // document path a refusal names it by.
+    private readonly record struct BoundHolder(IDocumentStateValue Holder, string? Key, string Reference, string Path);
+    // Each definition's holders by the row their reference names, collected by one walk the first time a write into a
+    // bound row asks, so a write's check reads the holders of the row it wrote and walks nothing else. The walk is the
+    // check's own (BoundCollector): it never enters the state section or a dealt child.
+    private static readonly WorldDocumentDerivedTable<Dictionary<string, BoundHolder[]>> BoundHolderSets = new();
 
-        Walker.Walk(root: definition, visitor: checker);
-        reason = checker.Reason;
+    private static Dictionary<string, BoundHolder[]> CollectBoundHolders(WorldDefinition definition) {
+        var collector = new BoundCollector();
 
-        return !checker.Stopped;
+        Walker.Walk(root: definition, visitor: collector);
+
+        var holders = new Dictionary<string, BoundHolder[]>(capacity: collector.Rows.Count, comparer: StringComparer.Ordinal);
+
+        foreach (var (row, list) in collector.Rows) { holders.Add(key: row, value: [.. list]); }
+        return holders;
     }
     /// <summary>Reports whether <paramref name="rowName"/> names an entity other units refer to: a creation's id or a
     /// look's name bound to the row, so that writing it renames the entity rather than moves a value, and every unit
