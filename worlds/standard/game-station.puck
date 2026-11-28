@@ -149,7 +149,10 @@ function gameStationHalfOf(rect) = [((rect.x1 - rect.x0) / 2), ((rect.z1 - rect.
 
 // A chair's place on the floor, in the world: 1.5 m out from the station's centre at its edge, inside the engage radius;
 // and the yaw a body sitting in it faces, across the glass.
-function gameStationChairAt(station, chair) = gameStationPoint(station, [0, gameStationFloor, ((chair == "far") ? 1.5 : -1.5)])
+function gameStationChairAt(station, chair) = gameStationPoint(
+  station,
+  [0, gameStationFloor, ((chair == "far") ? 1.5 : -1.5)]
+)
 function gameStationChairYaw(station, chair) = (gameStationYaw(station) + ((chair == "far") ? 0 : 180))
 
 // The rotation that lays a paint flat on a level glass, read from its -Z edge: the paint's +X runs to that reader's right
