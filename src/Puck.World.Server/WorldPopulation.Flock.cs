@@ -380,18 +380,14 @@ public sealed partial class WorldPopulation {
             hash.Add(value: state.FlockGeneration);
             hash.Add(value: state.FlockRemainingTicks);
             hash.Add(value: state.FlockSampleOrdinal);
-            hash.Add(value: state.FlockDesired.X.Value);
-            hash.Add(value: state.FlockDesired.Y.Value);
-            hash.Add(value: state.FlockDesired.Z.Value);
+            state.FlockDesired.AppendHash(hash: ref hash);
             hash.Add(value: ((byte)((state.FlockTarget is null)
                 ? 0
                 : 1)));
             if (state.FlockTarget is { } observed) {
                 hash.Add(value: observed.Index);
                 hash.Add(value: observed.Generation);
-                hash.Add(value: observed.Position.X.Value);
-                hash.Add(value: observed.Position.Y.Value);
-                hash.Add(value: observed.Position.Z.Value);
+                observed.Position.AppendHash(hash: ref hash);
             }
             ref var autonomy = ref entry.AutonomyState;
 
@@ -418,9 +414,7 @@ public sealed partial class WorldPopulation {
                     hash.Add(value: autonomy.SteeringIntent[ordinal].Value);
                 }
             }
-            hash.Add(value: body.FixedPreviousPosition.X.Value);
-            hash.Add(value: body.FixedPreviousPosition.Y.Value);
-            hash.Add(value: body.FixedPreviousPosition.Z.Value);
+            body.FixedPreviousPosition.AppendHash(hash: ref hash);
         }
     }
 }

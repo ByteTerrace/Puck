@@ -112,16 +112,9 @@ public sealed class FixedRigidBody {
     /// angular velocity, then orientation — leaving the per-step accumulators outside the digest.</summary>
     /// <param name="digest">The running digest, advanced in place.</param>
     public void Fold(ref Fnv1aHash digest) {
-        digest.Add(value: LinearVelocity.X.Value);
-        digest.Add(value: LinearVelocity.Y.Value);
-        digest.Add(value: LinearVelocity.Z.Value);
-        digest.Add(value: AngularVelocity.X.Value);
-        digest.Add(value: AngularVelocity.Y.Value);
-        digest.Add(value: AngularVelocity.Z.Value);
-        digest.Add(value: Orientation.X.Value);
-        digest.Add(value: Orientation.Y.Value);
-        digest.Add(value: Orientation.Z.Value);
-        digest.Add(value: Orientation.W.Value);
+        LinearVelocity.AppendHash(hash: ref digest);
+        AngularVelocity.AppendHash(hash: ref digest);
+        Orientation.AppendHash(hash: ref digest);
     }
     /// <summary>Clears the per-step displacement accumulators.</summary>
     public void ResetStepAccumulators() {

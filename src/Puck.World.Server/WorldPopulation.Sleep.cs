@@ -442,7 +442,7 @@ public sealed partial class WorldPopulation {
             var acceleration = m_sleepGravity[index];
 
             hash.Add(value: ((byte)(acceleration.HasValue ? 1 : 0)));
-            if (acceleration is { } vector) { hash.Add(value: vector.X.Value); hash.Add(value: vector.Y.Value); hash.Add(value: vector.Z.Value); }
+            if (acceleration is { } vector) { vector.AppendHash(hash: ref hash); }
         }
     }
     internal ReadOnlySpan<int> EventBodies() {

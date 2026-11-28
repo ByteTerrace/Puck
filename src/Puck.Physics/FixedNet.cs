@@ -508,7 +508,7 @@ public sealed class FixedNet {
     }
     // A vector in net units in metres, each component rounded toward zero, so a length never grows.
     private static FixedVector3 ToMetres(in FixedVector3 fine) => new(X: Shrink(value: fine.X), Y: Shrink(value: fine.Y), Z: Shrink(value: fine.Z));
-    private static FixedQ4816 Shrink(FixedQ4816 value) => FixedQ4816.FromRawBits(value: ((value.Value < 0L) ? -((-value.Value) >> UnitShift) : (value.Value >> UnitShift)));
+    private static FixedQ4816 Shrink(FixedQ4816 value) => FixedQ4816.FromRawBits(value: (value.Value / UnitsPerMetre));
 
     /// <summary>Gets the cell count, one fewer than the nodes along each edge multiplied.</summary>
     public int CellCount => ((Spec.Columns - 1) * (Spec.Rows - 1));
@@ -620,9 +620,9 @@ public sealed class FixedNet {
         hash.Add(value: m_stillTicks);
         hash.Add(value: m_touch);
         for (var node = 0; (node < NodeCount); node++) {
-            Fold(hash: ref hash, value: m_fine[node]);
-            Fold(hash: ref hash, value: m_velocities[node]);
-            Fold(hash: ref hash, value: m_sliceVelocity[node]);
+            m_fine[node].AppendHash(hash: ref hash);
+            m_velocities[node].AppendHash(hash: ref hash);
+            m_sliceVelocity[node].AppendHash(hash: ref hash);
         }
     }
 
@@ -673,21 +673,16 @@ public sealed class FixedNet {
         foreach (ref readonly var load in loads) {
             hash.Add(value: load.Column.Value);
             hash.Add(value: load.Row.Value);
-            Fold(hash: ref hash, value: load.Force);
+            load.Force.AppendHash(hash: ref hash);
             hash.Add(value: load.Mass.Value);
         }
         hash.Add(value: pushers.Length);
         foreach (ref readonly var pusher in pushers) {
-            Fold(hash: ref hash, value: pusher.Start);
-            Fold(hash: ref hash, value: pusher.End);
+            pusher.Start.AppendHash(hash: ref hash);
+            pusher.End.AppendHash(hash: ref hash);
             hash.Add(value: pusher.Radius.Value);
         }
         return hash.Value;
-    }
-    private static void Fold(ref Fnv1aHash hash, FixedVector3 value) {
-        hash.Add(value: value.X.Value);
-        hash.Add(value: value.Y.Value);
-        hash.Add(value: value.Z.Value);
     }
     // How many pushers, in net units, reach a free node of the step's positions.
     private int Pressing(ReadOnlySpan<FixedNetPusher> pushers) {

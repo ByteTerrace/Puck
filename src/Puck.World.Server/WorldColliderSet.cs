@@ -441,20 +441,13 @@ public sealed partial class WorldColliderSet : IContactField {
 
     private static void FoldCollider(in FixedStaticCollider collider, ref Fnv1aHash hash) {
         hash.Add(value: ((byte)collider.Kind));
-        hash.Add(value: collider.Center.X.Value);
-        hash.Add(value: collider.Center.Y.Value);
-        hash.Add(value: collider.Center.Z.Value);
-        hash.Add(value: collider.Extent.X.Value);
-        hash.Add(value: collider.Extent.Y.Value);
-        hash.Add(value: collider.Extent.Z.Value);
+        collider.Center.AppendHash(hash: ref hash);
+        collider.Extent.AppendHash(hash: ref hash);
         hash.Add(value: collider.Radius.Value);
         hash.Add(value: collider.Chamfer.Value);
         hash.Add(value: collider.Exponent.Value);
         hash.Add(value: collider.Elongation.Value);
-        hash.Add(value: collider.Rotation.X.Value);
-        hash.Add(value: collider.Rotation.Y.Value);
-        hash.Add(value: collider.Rotation.Z.Value);
-        hash.Add(value: collider.Rotation.W.Value);
+        collider.Rotation.AppendHash(hash: ref hash);
     }
 
     // Boxes retain their authored rounding (sharp without one), and circular cylinders, capsules and ellipsoids their
