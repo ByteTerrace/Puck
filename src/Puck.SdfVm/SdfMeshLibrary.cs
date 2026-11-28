@@ -461,9 +461,19 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
                         return true;
                     }
                     if (owns) {
-                        // The library let go of the geometry between the hold and the take (a trim): use the decoded mesh.
+                        // The library let go of the geometry between the hold and the take (a trim): use the decoded mesh,
+                        // unless its planes went and the store could not restore them, which is no entry read at all.
+                        if (result.Mesh.Lost) {
+                            Cache.Count(kind: SdfMeshCache.TakesLost);
+                            return false;
+                        }
+                        if (result.Materials.AsSpan().SequenceEqual(other: materials)) {
+                            mesh = result.Mesh.Acquire();
+                        } else if (!TryRenumber(from: result.Materials, mesh: result.Mesh, renumbered: out mesh, to: materials)) {
+                            Cache.Count(kind: SdfMeshCache.TakesLost);
+                            return false;
+                        }
                         if (form is { } lostForm) { lock (m_gate) { SetForm(form: lostForm, geometry: geometry, identity: identity); } }
-                        mesh = (result.Materials.AsSpan().SequenceEqual(other: materials) ? result.Mesh.Acquire() : Renumber(from: result.Materials, mesh: result.Mesh, to: materials));
                         return true;
                     }
                 } finally { if (owns) { result.Mesh.Release(); } }
@@ -497,13 +507,19 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
     /// <param name="identity">The taking bake's identity; only a mesh baked under it is taken.</param>
     /// <returns><see langword="true"/> when the library holds the geometry under <paramref name="identity"/>; a renumbered
-    /// copy the host memory account has no room for is a miss, and the taking group bakes or loads the geometry instead.</returns>
+    /// copy the host memory account has no room for is a miss, and the taking group bakes or loads the geometry instead,
+    /// as is a mesh whose store could not restore its planes (<see cref="LostRevision"/>, counted in
+    /// <see cref="SdfMeshCache.TakesLost"/>).</returns>
     /// <remarks>A successful take returns an owned mesh claim; the consumer releases it after its last borrowed view ends.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
     public bool TryTake(SdfMeshGeometry geometry, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, UInt128 identity = default) =>
         TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh, refused: out _);
     // As the public TryTake, also answering the refusal of a renumbered copy the account had no room for, which a caller
     // that would rather wait than bake the geometry again parks on (SdfMeshPathBake.TakeLanded).
+    // Invariant: no take hands out a mesh whose store could not restore its planes (SdfMesh.Lost). Every take passes this
+    // door (TryTakeForm and TryLoad included), and a geometry turns lost under it at any moment, since a restore runs on
+    // whichever thread holds the mesh first and its Lose reaches the gate only after the mesh reads lost: so the held
+    // meshes are judged under the gate, and a renumbering whose source turned lost since is a miss too.
     internal bool TryTake(SdfMeshGeometry geometry, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out HostMemoryRefusedException? refused, UInt128 identity = default) {
         ArgumentNullException.ThrowIfNull(argument: materials);
 
@@ -518,6 +534,12 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
                 mesh = null;
                 return false;
             }
+            // Every variant views the first one's restorable planes, so one lost is all lost.
+            if (held.Variants[0].Mesh.Lost) {
+                Cache.Count(kind: SdfMeshCache.TakesLost);
+                mesh = null;
+                return false;
+            }
             foreach (var variant in held.Variants) {
                 if (variant.Materials.AsSpan().SequenceEqual(other: materials)) {
                     mesh = variant.Mesh.Acquire();
@@ -529,10 +551,14 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         }
 
         // The renumbered copy is made outside the gate the frame thread takes; the first variant held for these ids wins.
-        SdfMesh renumbered;
+        SdfMesh? renumbered;
 
         try {
-            renumbered = Renumber(mesh: source.Mesh, from: source.Materials, to: materials);
+            if (!TryRenumber(mesh: source.Mesh, from: source.Materials, to: materials, renumbered: out renumbered)) {
+                Cache.Count(kind: SdfMeshCache.TakesLost);
+                mesh = null;
+                return false;
+            }
         } catch (HostMemoryRefusedException refusal) {
             refused = refusal;
             mesh = null;
@@ -606,7 +632,8 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     private bool Revive((UInt128 Identity, SdfMeshGeometry Geometry) key) {
         if (!m_let.Remove(key: key, value: out var let)) { return false; }
         if (m_held.Contains(hash: key)) { return true; }
-        if (!let.Variants[0].Mesh.TryAcquire(cached: true)) { return false; }
+        // A mesh whose store could not restore its planes is left for its Lose, never claimed again.
+        if (let.Variants[0].Mesh.Lost || !let.Variants[0].Mesh.TryAcquire(cached: true)) { return false; }
 
         var variants = new List<Variant>(capacity: let.Variants.Count) { let.Variants[0] };
         var bytes = let.Variants[0].Mesh.StorageBytes;
@@ -701,10 +728,14 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         }
     }
     // The mesh with each triangle material that `from` holds at a place renumbered to what `to` holds there; one neither
-    // list reaches keeps its id. The geometry's equality makes the two lists the same length.
-    private SdfMesh Renumber(SdfMesh mesh, int[] from, int[] to) {
+    // list reaches keeps its id. The geometry's equality makes the two lists the same length. False for a mesh whose store
+    // could not restore its planes (SdfMesh.Lost), which has nothing to renumber.
+    private bool TryRenumber(SdfMesh mesh, int[] from, int[] to, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? renumbered) {
         var map = new SdfMeshMaterials.Remap(from, to);
-        return Allocator is { } native ? mesh.RenumberNative(map, native, Account) : RenumberManaged(mesh, map);
+
+        if (Allocator is { } native) { return mesh.TryRenumberNative(map, native, Account, out renumbered); }
+        renumbered = RenumberManaged(mesh, map);
+        return true;
     }
     // A managed mesh renumbered into new managed arrays: an offline library's variants, and a decode before its native copy.
     private static SdfMesh RenumberManaged(SdfMesh mesh, SdfMeshMaterials.Remap map) {

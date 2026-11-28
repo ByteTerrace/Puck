@@ -65,8 +65,12 @@ public static class SdfMeshCache {
     /// another group of its shape landed a finer rung, and took that rung in its place: a far copy of a body drawn at the
     /// detail a near copy already holds, instead of nothing, until the tier decisions bring it its own.</summary>
     public static readonly WorkKind RungsShared = new(name: "sdf.mesh-cache.rungs-shared", unit: "groups", workClass: WorkClass.Pacing);
+    /// <summary>Counts each take of a mesh the library held whose store could not restore its planes
+    /// (<see cref="SdfMeshLibrary.LostRevision"/>): a miss, after which the taking group reads its entry again or bakes.
+    /// Zero unless restores fail, as a restore refused workspace memory under host-memory pressure does.</summary>
+    public static readonly WorkKind TakesLost = new(name: "sdf.mesh-cache.takes-lost", unit: "takes", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [Dispatches, LiveDispatches, GroupsBaked, LiveBaked, RungsMissed, RungsMissedLive, LoadsDeclined, RungsFilled, RungsTaken, RungsShared];
+    private static readonly WorkKind[] DeclaredKinds = [Dispatches, LiveDispatches, GroupsBaked, LiveBaked, RungsMissed, RungsMissedLive, LoadsDeclined, RungsFilled, RungsTaken, RungsShared, TakesLost];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// library exists.</summary>

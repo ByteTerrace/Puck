@@ -26,10 +26,11 @@ public sealed partial class SdfWorldTables {
     public static int SkyEnvironmentBytes => SdfSkyEnvironment.PayloadBytes;
     /// <summary>Gets how many environment projections have actually been submitted.</summary>
     public long SkyEnvironmentRenders => m_skyEnvironment.Publication.Renders;
-    /// <summary>Gets the shared two-plane environment map. Its graph producer owns access ordering.</summary>
-    public IGpuBuffer SkyEnvironmentMap => m_skyEnvironment.Map;
-    /// <summary>Gets the shared nine-coefficient irradiance table. Its graph producer owns access ordering.</summary>
-    public IGpuBuffer SkyEnvironmentCoefficients => m_skyEnvironment.Coefficients;
+    /// <summary>Gets the shared two-plane environment map. Its graph producer owns access ordering and borrows it under a
+    /// loan, so the tables' disposal leaves it live while a graph still records or publishes it.</summary>
+    public GpuLentBuffer SkyEnvironmentMap => m_skyEnvironment.Map;
+    /// <summary>Gets the shared nine-coefficient irradiance table, lent as <see cref="SkyEnvironmentMap"/> is.</summary>
+    public GpuLentBuffer SkyEnvironmentCoefficients => m_skyEnvironment.Coefficients;
     /// <summary>Gets the latest submitted projection, or null before any projection. A pending newer submission means
     /// the buffers no longer describe an older completed publication.</summary>
     public SdfEnvironmentSubmission? SubmittedSkyEnvironment => m_skyEnvironment.Publication.Submitted;
@@ -121,14 +122,14 @@ public sealed partial class SdfWorldTables {
             m_tables = tables;
             m_watch = new ScreenSourceWatch(tables: tables);
             Publication = new EnvironmentPublication(owner: tables);
-            Map = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "sky-environment", detail: "map"),
-                sizeBytes: SdfSkyEnvironment.MapBytes, usage: GpuBufferUsage.Storage));
-            Coefficients = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "sky-environment", detail: "coefficients"),
-                sizeBytes: SdfSkyEnvironment.CoefficientBytes, usage: GpuBufferUsage.Storage));
+            Map = scope.Own(created: new GpuLentBuffer(buffer: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "sky-environment", detail: "map"),
+                sizeBytes: SdfSkyEnvironment.MapBytes, usage: GpuBufferUsage.Storage)));
+            Coefficients = scope.Own(created: new GpuLentBuffer(buffer: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "sky-environment", detail: "coefficients"),
+                sizeBytes: SdfSkyEnvironment.CoefficientBytes, usage: GpuBufferUsage.Storage)));
         }
 
-        public IGpuBuffer Coefficients { get; }
-        public IGpuBuffer Map { get; }
+        public GpuLentBuffer Coefficients { get; }
+        public GpuLentBuffer Map { get; }
 
         // The screens a lit panorama layer reads, a bit a screen.
         public UInt128 Screens => m_watch.Screens;

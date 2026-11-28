@@ -331,11 +331,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Fact]
     public void AnExportedBorrowedIntermediateLetsItsUnchangedDependentPassStand() {
         var gpu = new FakePipelineGpu();
-        using var primary = gpu.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", "primary"));
-        using var secondary = gpu.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", "secondary"));
-        using var scratch = gpu.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", "private"));
+        using var primary = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", "primary")));
+        using var secondary = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", "secondary")));
+        using var scratch = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", "private")));
         var producer = new NamedBufferPackage {
-            Buffers = new Dictionary<string, IGpuBuffer>(comparer: StringComparer.Ordinal) { ["primary"] = primary, ["secondary"] = secondary, ["private"] = scratch },
+            Buffers = new Dictionary<string, GpuLentBuffer>(comparer: StringComparer.Ordinal) { ["primary"] = primary, ["secondary"] = secondary, ["private"] = scratch },
             Signature = 1,
         };
 
@@ -395,19 +395,19 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public Dictionary<string, nint> Written { get; } = new(comparer: StringComparer.Ordinal);
         public Dictionary<string, int> Records { get; } = new(comparer: StringComparer.Ordinal);
 
-        public IReadOnlyDictionary<string, IGpuBuffer>? Buffers { get; init; }
+        public IReadOnlyDictionary<string, GpuLentBuffer>? Buffers { get; init; }
         public bool BuildOwnsBuffers { get; init; }
         public IReadOnlyDictionary<string, SharedBufferOwner>? SharedBuffers { get; init; }
         public ulong? Signature { get; init; }
 
         public bool OwnsBuffer(string? part) => (BuildOwnsBuffers || (Buffers is not null) || (SharedBuffers is not null));
         public RenderGraphBorrowedBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource, IGpuBuffer? previous) =>
-            ((previous ?? ((built is BorrowedBuild owner) ? owner.Buffer : Buffers?[context.Part!])) is { } buffer ? new(buffer) : null);
+            (((previous as GpuLentBuffer) ?? ((built is BorrowedBuild owner) ? owner.Buffer : Buffers?[context.Part!])) is { } buffer ? new(buffer) : null);
         public RenderGraphPackageFragment? FragmentOf(string instance) => Fragment;
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
             if (SharedBuffers is not null) { return ValueTask.FromResult<IDisposable?>(result: SharedBuffers[context.Part!].Retain()); }
             if (!BuildOwnsBuffers) { return ValueTask.FromResult<IDisposable?>(result: null); }
-            var buffer = context.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", context.Part!));
+            var buffer = new GpuLentBuffer(buffer: context.Services.BufferFactory.CreateDeviceLocal(PoolBytes, GpuBufferUsage.Storage, new GpuObjectName("test", context.Part!)));
 
             return ValueTask.FromResult<IDisposable?>(result: new BorrowedBuild(buffer: buffer, owner: buffer));
         }
@@ -423,13 +423,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
             }
         }
     }
-    private sealed class BorrowedBuild(IGpuBuffer buffer, IDisposable owner) : IDisposable {
-        public IGpuBuffer Buffer { get; } = buffer;
+    private sealed class BorrowedBuild(GpuLentBuffer buffer, IDisposable owner) : IDisposable {
+        public GpuLentBuffer Buffer { get; } = buffer;
 
         public void Dispose() => owner.Dispose();
     }
+    // Counts the package's own holds on its allocation; the graph takes its loans on the lent buffer beside them.
     private sealed class SharedBufferOwner(IGpuBuffer buffer) : IDisposable {
-        public IGpuBuffer Buffer { get; } = buffer;
+        public GpuLentBuffer Buffer { get; } = new(buffer: buffer);
         public int References { get; private set; } = 1;
 
         public BorrowedBuild Retain() { References++; return new BorrowedBuild(buffer: Buffer, owner: this); }

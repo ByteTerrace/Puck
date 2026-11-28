@@ -18,8 +18,9 @@ public sealed partial class SdfWorldTables {
     // surface row, which every writer of the row keeps (WriteScreenReach).
     private readonly float[] m_screenReach = new float[MaxScreenSurfaces];
 
-    /// <summary>Gets the one GPU image reduction every direct screen light reads.</summary>
-    public IGpuBuffer ScreenEmission => m_screenEmission.Buffer;
+    /// <summary>Gets the one GPU image reduction every direct screen light reads, lent to its graph producer as
+    /// <see cref="SkyEnvironmentMap"/> is.</summary>
+    public GpuLentBuffer ScreenEmission => m_screenEmission.Buffer;
     /// <summary>Gets the actual submitted screen reduction, independent of sky projection's cadence.</summary>
     public SdfEnvironmentSubmission? SubmittedScreenEmission => m_screenEmission.Publication.Submitted;
 
@@ -68,11 +69,11 @@ public sealed partial class SdfWorldTables {
             m_tables = tables;
             m_watch = new ScreenSourceWatch(tables: tables);
             Publication = new EnvironmentPublication(owner: this);
-            Buffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "screen-emission"),
-                sizeBytes: SdfScreenEmission.Bytes, usage: GpuBufferUsage.Storage));
+            Buffer = scope.Own(created: new GpuLentBuffer(buffer: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "screen-emission"),
+                sizeBytes: SdfScreenEmission.Bytes, usage: GpuBufferUsage.Storage)));
         }
 
-        public IGpuBuffer Buffer { get; }
+        public GpuLentBuffer Buffer { get; }
 
         // The emitting screens this observation read with a known image, a bit a screen.
         public UInt128 Screens => m_watch.Screens;
