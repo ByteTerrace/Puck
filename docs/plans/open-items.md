@@ -5963,7 +5963,8 @@ shell, each usable alone, each named for what it does.
   `lastRestart=`); the repetition count is no longer a sweep of the 75 ages (`tabletop-board-history` counts a
   position key in the tally row `positionCounts`). (3) The
   instances go and the twelve are placed: delete the module instances and their `use` lines, place all twelve in
-  gallery-root and debug (gallery/layout.puck `galleryGameStations`), let game-station-root boot a list, and re-key
+  gallery-root (which stands eleven today, gallery/layout.puck `galleryRoomStood`, at 4.38 million of the 4.4) and
+  in debug (which stands one, worlds/debug/game-station-deck.puck), let game-station-root boot a list, and re-key
   `station.game`, `station.chess` and the station rows (`gameStationGame`, `gameStationStatus`, `gameStationPick`,
   `gameStationRowInk`, the paints' `state.gameStationStatus.<id>`) by the station's number, the spelling the
   Klondike and FreeCell commands use. (4) Room in the debug world: `go-sync-mark` and `go-sync-keep` (200 and 189

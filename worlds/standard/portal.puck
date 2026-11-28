@@ -216,8 +216,8 @@ function portalDestinations(library) = map(
 
 // Where a routed portal's panel stands, facing +Z from the portal's foot: right of the frame, a step before its glass.
 function portalPanelAt(portal) = [((portalOuter(portal.look) + 0.3) + panelGlassHalf[0]), 0, 0.35]
-// The panels of `portals`' routed portals, one a portal, keyed by the portal's id: what a world's panel state, rules and
-// terminals take (panel.puck), with its other panels.
+// The panels of `portals`' routed portals, one a portal, keyed by the portal's id: what a world puts in its panel set
+// (panel.puck's `panelSet`) with its other panels.
 function portalPanels(portals) = map(filter(portals, portal => (portal.library != null)), portal => {
   id: portal.id
   title: $"DESTINATIONS {length(portal.library)}"
@@ -231,7 +231,8 @@ function portalPanels(portals) = map(filter(portals, portal => (portal.library !
   parent: portal.parent
 })
 
-// Each portal's creation, and its panel's stand and glasses.
+// Each portal's creation. A routed portal's panel is a panel of the world's set (panel.puck's `panelSet`), which the world
+// stands with its other panels (`panelPrototypes` and `panelPlacements` over the set).
 template portalPrototypes(portals) {
   for portal in portals {
     prototype $"{portal.id}" {
@@ -240,11 +241,10 @@ template portalPrototypes(portals) {
       }
     }
   }
-  panelPrototypes(panels: portalPanels(portals))
 }
 
 // Each portal's placement, wearing its face: a routed portal's routes over its library, a fixed portal's one route, or,
-// leading nowhere, its sign; and each routed portal's panel.
+// leading nowhere, its sign.
 template portalPlacements(portals) {
   for portal in portals {
     placement $"{portal.id}" {
@@ -272,7 +272,6 @@ template portalPlacements(portals) {
       }
     }
   }
-  panelPlacements(panels: portalPanels(portals))
 }
 
 // A spawn point before each portal, facing its glass, 3.2 m out: in the world's frame, so it names no parent.

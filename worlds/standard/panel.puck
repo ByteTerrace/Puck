@@ -8,7 +8,7 @@
 // stand, and `<id>-panel-screen`, its glass) and keys its cells; `entries` is its list, each `{ title, note }`; `choice`
 // the entry it boots on; `[x, y, z]` its foot in the frame of `parent` (a placement id, or null for the world), which
 // stands at the world point `site`; and `yaw` turns its glass's front the way a placement's yaw turns it (0 faces -z, 180
-// faces +z). Its glass's points are given facing +Z, as architecture.puck's pieces are, and placed with `panelWorld`.
+// faces +z). Its glass's points are given facing +Z, as architecture.puck's pieces are, and placed with `facingWorld`.
 //
 // A player uses a panel as a terminal (contexts/terminal.puck): within its reach the context button engages it, the
 // seat's camera eases to the panel's desk view, and a tap on a row of its list chooses that entry. PREV and NEXT turn
@@ -16,7 +16,12 @@
 // responds with, so a page's titles are paints and only the inks follow state. A world gathers every panel's terminals
 // with its other terminals into its one `terminalPlay` (`panelTerminals`), since that template is a world's singleton.
 //
-// The state, keyed by panel (`panelState` declares it once for all of a world's panels):
+// A world's panels are one set (`panelSet`), which every template here takes whole: the set numbers every panel's
+// entries in one run, so one rule over all the panels writes any panel's cells, and a panel costs the world its glass's
+// own contact sweep and nothing more a tick. A world declares the set's state once (`panelState`) and its rules once
+// (`panelRules`).
+//
+// The state, keyed by panel:
 //
 //   panelChoice   the chosen entry's index: the lit row, and what an importer reads (a door's routes read it whole)
 //   panelPick     the last entry a tap chose, plus one: a mailbox an importer that acts on every tap clears to 0
@@ -24,11 +29,13 @@
 //   panelTitle    the chosen entry's title and note, which the glass's detail shows
 //   panelNote
 //   panelShownAt  the choice the title, note and inks were last written for
+//   panelTap      the glass's last lift, as its contact sweep posts it: a row plus one, -1 for NEXT, -2 for PREV
+//   panelBase     where the panel's entries start in the set's run, panelCount how many it has and panelLast its last
+//                 page
 //
-// and, one row a panel keyed by entry index, `panelInk-<panel>` (each row's ink, the chosen one lit) and
-// `panelTitles-<panel>` and `panelNotes-<panel>`, each entry's copy, which the detail is written from. A rule or a
-// console write to `panelChoice`
-// moves the glass as a tap does.
+// and, keyed by an entry's place in the set's run, `panelInk` (each row's ink, the chosen one lit) and `panelTitles` and
+// `panelNotes`, each entry's copy, which the detail is written from. A rule or a console write to `panelChoice` moves the
+// glass as a tap does.
 import "architecture"
 import "contexts/terminal"
 
@@ -95,7 +102,7 @@ function panelText(panel, rect, template, ink, em, align, wrap = false, markup =
 // A button's face less a margin, the box its label fits.
 function panelInset(rect) = { x0: (rect.x0 + 0.01), x1: (rect.x1 - 0.01), y0: (rect.y0 + 0.008), y1: (rect.y1 - 0.008) }
 
-// The rows of page `page`: each entry's title in its ink, read from the entry's cell of the panel's ink row.
+// The rows of page `page`: each entry's title in its ink, read from the entry's cell of the set's ink row.
 function panelPageEntries(panel, page) = filter(
   map(panel.entries, (entry, i) => { index: i, title: entry.title }),
   entry => ((entry.index >= (page * panelRows)) and (entry.index < ((page + 1) * panelRows)))
@@ -105,7 +112,7 @@ function panelLines(panel, page) = reduce(
   "",
   (text, entry) => ((text == "") ? panelLine(panel, entry) : $"{text}\n{panelLine(panel, entry)}")
 )
-function panelLine(panel, entry) = $"[color={{state.panelInk-{panel.id}.{entry.index}}}]{entry.title}[/color]"
+function panelLine(panel, entry) = $"[color={{state.panelInk.{panel.base + entry.index}}}]{entry.title}[/color]"
 
 // What page `page` of a panel's glass shows: the elbow and bar with the panel's title in its cap, PREV and NEXT down the
 // column and the page at its foot, the page's rows, a divider, and the chosen entry's title and note.
@@ -255,10 +262,15 @@ template panelPlacements(panels) {
   }
 }
 
-// One cell per panel of `panels`, keyed by its id and seeded from `values` (a value a panel, in `panels`' order), and a
-// row of a panel's own, `<name>-<panel>`, with a Text cell per entry keyed by its index and seeded from `values` (a value
-// an entry): a choice indexes it directly (`$cell:panelChoice:<panel>`), so a change writes the cells it moves and no
-// others.
+// A world's panels as one set: each panel with `base`, where its entries start in the run of every panel's entries.
+function panelSet(panels) = map(range(0, length(panels)), n => (panels[n] with {
+  base: reduce(range(0, n), 0, (sum, k) => (sum + length(panels[k].entries)))
+}))
+// Every entry of a set, in the set's run.
+function panelRun(panels) = flatMap(panels, panel => panel.entries)
+
+// One cell per panel of `panels`, keyed by its id and seeded from `values` (a value a panel, in `panels`' order), and one
+// Text cell per entry of the set's run, keyed by its place in it and seeded from `values` (a value an entry).
 template panelCells(panels, name, values, kind = "Int") {
   row {
     name: name
@@ -267,32 +279,33 @@ template panelCells(panels, name, values, kind = "Int") {
     cells: map(range(0, length(panels)), index => { key: panels[index].id, value: values[index] })
   }
 }
-template panelEntryRow(panel, name, values) {
+template panelRunCells(name, values) {
   row {
-    name: $"{name}-{panel.id}"
+    name: name
     kind: Text
-    capacity: length(panel.entries)
-    cells: map(range(0, length(panel.entries)), i => { key: $"{i}", value: values[i] })
+    capacity: length(values)
+    cells: map(range(0, length(values)), g => { key: $"{g}", value: values[g] })
   }
 }
 
-// Every panel's state, for a world's `state.world`: the cells above, seeded so each glass boots on its panel's choice.
+// A set's state, for a world's `state.world`: the cells above, seeded so each glass boots on its panel's choice.
 template panelState(panels) {
   panelCells(panels: panels, name: "panelChoice", values: map(panels, panel => panel.choice))
   panelCells(panels: panels, name: "panelShownAt", values: map(panels, panel => panel.choice))
   panelCells(panels: panels, name: "panelPick", values: map(panels, panel => 0))
+  panelCells(panels: panels, name: "panelTap", values: map(panels, panel => 0))
   panelCells(panels: panels, name: "panelPage", values: map(panels, panel => floor((panel.choice / panelRows))))
+  panelCells(panels: panels, name: "panelBase", values: map(panels, panel => panel.base))
+  panelCells(panels: panels, name: "panelCount", values: map(panels, panel => length(panel.entries)))
+  panelCells(panels: panels, name: "panelLast", values: map(panels, panel => (panelPages(panel) - 1)))
   panelCells(panels: panels, name: "panelTitle", kind: "Text", values: map(panels, panel => panel.entries[panel.choice].title))
   panelCells(panels: panels, name: "panelNote", kind: "Text", values: map(panels, panel => panel.entries[panel.choice].note))
-  for panel in panels {
-    panelEntryRow(
-      panel: panel,
-      name: "panelInk",
-      values: map(range(0, length(panel.entries)), i => ((i == panel.choice) ? consoleLook.lit : consoleLook.dim))
-    )
-    panelEntryRow(panel: panel, name: "panelTitles", values: map(panel.entries, entry => entry.title))
-    panelEntryRow(panel: panel, name: "panelNotes", values: map(panel.entries, entry => entry.note))
-  }
+  panelRunCells(
+    name: "panelInk",
+    values: flatMap(panels, panel => map(range(0, length(panel.entries)), i => ((i == panel.choice) ? consoleLook.lit : consoleLook.dim)))
+  )
+  panelRunCells(name: "panelTitles", values: map(panelRun(panels), entry => entry.title))
+  panelRunCells(name: "panelNotes", values: map(panelRun(panels), entry => entry.note))
   row {
     name: "panelInks"
     kind: Text
@@ -301,40 +314,52 @@ template panelState(panels) {
   }
 }
 
-// Each panel's rules. Its glass's rules sweep the contacts on it (a finger, a pen, a click: one door each): a lift on a
-// row chooses that row's entry and posts it to the mailbox, and a lift on PREV or NEXT turns the list a page. However the
-// choice moved (a tap, a rule, a console write), the detail and the inks follow it, written once a change by the choice's
-// own index (the row it was on dimmed, the row it is on lit), and the rule's write of `panelShownAt` closes its gate.
+// A set's rules. Each glass's own sweep reads the contacts on it (a finger, a pen, a click: one door each) and posts a
+// lift to its panel's `panelTap`: the row it landed on, or a page button. Two rules over every panel do the rest: a tap
+// on a row chooses that row's entry and posts it to the mailbox, a page button turns the list a page, and however the
+// choice moved (a tap, a rule, a console write) the detail and the inks follow it, written once a change by the choice's
+// own place in the set's run (the row it was on dimmed, the row it is on lit), the write of `panelShownAt` closing the
+// rule's gate. A choice that names no entry (a door closed by its cell) moves nothing on the glass until it names one.
 template panelRules(panels) {
   for panel in panels {
-    let key = panel.id
-    let count = length(panel.entries)
-    let last = (panelPages(panel) - 1)
-    rule $"panel-{key}-touch" {
-      forEach: contacts($"{key}-panel-screen")
-      local chosen = panelPage[key] * panelRows + contact(each, row, list)
+    rule $"panel-{panel.id}-touch" {
+      forEach: contacts($"{panel.id}-panel-screen")
       when contact(each, phase) == 3
       mode: Level
-      if contact(each, region, list) == 1 and contact(each, row, list) >= 0 and chosen < count {
-        panelChoice[key] = chosen
-        panelPick[key] = chosen + 1
-      }
-      if contact(each, region, prev) + contact(each, region, next) > 0 {
-        panelPage[key] = clamp(panelPage[key] + contact(each, region, next) - contact(each, region, prev), 0, last)
-      }
+      panelTap[$"{panel.id}"] = (contact(each, region, list) == 1) ? (contact(each, row, list) + 1) : (0 - (contact(each, region, next) + 2 * contact(each, region, prev)))
     }
-    // A choice that names no entry (a door closed by its cell) moves nothing on the glass until it names one again.
-    rule $"panel-{key}-shown" {
-      when panelShownAt[key] != panelChoice[key] and panelChoice[key] >= 0 and panelChoice[key] < count
-      mode: Level
-      setState(state: $"panelInk-{key}", key: $"$cell:panelShownAt:{key}", fromState: panelInks, fromKey: dim)
-      setState(state: $"panelInk-{key}", key: $"$cell:panelChoice:{key}", fromState: panelInks, fromKey: lit)
-      setState(state: panelTitle, key: $"{key}", fromState: $"panelTitles-{key}", fromKey: $"$cell:panelChoice:{key}")
-      setState(state: panelNote, key: $"{key}", fromState: $"panelNotes-{key}", fromKey: $"$cell:panelChoice:{key}")
-      // The page that holds the choice: its whole part of choice / rows, divided exactly.
-      panelPage[key] = (panelChoice[key] - (panelChoice[key] % panelRows)) / panelRows
-      panelShownAt[key] = panelChoice[key]
+  }
+  rule "panel-tap" {
+    forEach: panelTap
+    local tap = panelTap[$each]
+    local chosen = panelPage[$each] * panelRows + tap - 1
+    when panelTap[$each] != 0
+    mode: Level
+    if tap > 0 and chosen < panelCount[$each] {
+      panelChoice[$each] = chosen
+      panelPick[$each] = chosen + 1
     }
+    if tap == -1 {
+      panelPage[$each] = minimum(panelPage[$each] + 1, panelLast[$each])
+    }
+    if tap == -2 {
+      panelPage[$each] = maximum(panelPage[$each] - 1, 0)
+    }
+    panelTap[$each] = 0
+  }
+  rule "panel-shown" {
+    forEach: panelChoice
+    local was = panelBase[$each] + panelShownAt[$each]
+    local now = panelBase[$each] + panelChoice[$each]
+    when panelShownAt[$each] != panelChoice[$each] and panelChoice[$each] >= 0 and panelChoice[$each] < panelCount[$each]
+    mode: Level
+    setState(state: panelInk, key: was, fromState: panelInks, fromKey: dim)
+    setState(state: panelInk, key: now, fromState: panelInks, fromKey: lit)
+    setState(state: panelTitle, key: $each, fromState: panelTitles, fromKey: (now + 0))
+    setState(state: panelNote, key: $each, fromState: panelNotes, fromKey: (now + 0))
+    // The page that holds the choice: its whole part of choice / rows, divided exactly.
+    panelPage[$each] = (panelChoice[$each] - (panelChoice[$each] % panelRows)) / panelRows
+    panelShownAt[$each] = panelChoice[$each]
   }
 }
 

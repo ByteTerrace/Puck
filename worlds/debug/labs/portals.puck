@@ -70,7 +70,7 @@ let labPortals = [
     route: 0
   )
 ]
-let labPanels = portalPanels(labPortals)
+let labPanels = panelSet(portalPanels(labPortals))
 
 references: portalReferences(labLibrary)
 destinations: portalDestinations(labLibrary)
@@ -106,10 +106,12 @@ inputModes {
 
 prototypes {
   portalPrototypes(portals: labPortals)
+  panelPrototypes(panels: labPanels)
 }
 
 placements {
   portalPlacements(portals: labPortals)
+  panelPlacements(panels: labPanels)
 }
 
 state {

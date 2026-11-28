@@ -1,17 +1,52 @@
 import "gallery/layout"
-import "../games/patience-station"
-// The gallery's game stations' decks: the faces, looks and kit every card wears, and each station's 54 bodies (its
-// cursor, 52 cards and held marker) that its patience games lay out (../games/patience-station.puck), apart from the
-// stations themselves (gallery/games.puck, which stands the plan's first station) because they are inhabitants. A root
-// imports this where its body order wants the decks: debug.puck ahead of every other population, so the cards take the
-// population's top slots (shapes.puck's cardBodies) and every body below keeps its index, and gallery-root.puck beside
-// the gallery. Its cards stand always, not as a holodeck pool, since a pool's bodies take free slots and the bodies below
-// would no longer be numbered from a fixed deck.
+import "game-stations"
+// The debug world's game station: the gallery's board game room's first (gallery/layout.puck's galleryGameStations, a1),
+// holding its own chess, Klondike and FreeCell (game-stations.puck), with its deck: the faces, looks and kit every card
+// wears, and the station's 54 bodies (its cursor, 52 cards and held marker) that its patience games lay out
+// (../games/patience-station.puck). debug.puck imports this ahead of every other population, so the cards take the
+// population's top slots (shapes.puck's cardBodies) and every body below keeps its index; its cards stand always, not as
+// a holodeck pool, since a pool's bodies take free slots and the bodies below would no longer be numbered from a fixed
+// deck. Its chess pieces take the free slots the population keeps for them (shapes.puck's galleryPopulation). The
+// gallery booted alone stands all twelve of the room's stations instead (gallery/games.puck); the debug world's rule work
+// sheet has room for this one (game-station.md, "Cost").
 
 // The deck's back and its ace to six of each suit, which the shedding table (shedding.puck) deals in the same debug world.
 export read `card-back`, `card-s-a`, `card-s-2`, `card-s-3`, `card-s-4`, `card-s-5`, `card-s-6`, `card-h-a`, `card-h-2`, `card-h-3`, `card-h-4`, `card-h-5`, `card-h-6`, `card-c-a`, `card-c-2`, `card-c-3`, `card-c-4`, `card-c-5`, `card-c-6`, `card-d-a`, `card-d-2`, `card-d-3`, `card-d-4`, `card-d-5`, `card-d-6`
 
-patienceDeck()
-for station in [galleryGameStations[0]] {
-  patienceStationCards(station: station, holodeck: false)
+let debugStations = [galleryGameStations[0]]
+
+gameStationSet(stations: debugStations, holodeck: false)
+
+// At the station's near chair, 1.5 m from its centre at its -Z edge and facing +Z across the glass, inside the engage
+// radius: the context button sits her down.
+spawnPoints [
+  { id: "cards", position: gameStationChairAt(debugStations[0], "near"), yawDegrees: 180 }
+]
+
+state {
+  // The chess game's vocabularies (game-stations.puck's header).
+  enum PieceKind {
+    None
+    Pawn
+    Knight
+    Bishop
+    Rook
+    Queen
+    King
+  }
+
+  enum MoveKind {
+    Illegal
+    Quiet
+    Capture
+    EnPassant
+    Castle
+  }
+
+  enum TurnColor {
+    White
+    Black
+  }
 }
+
+use gameStationGames as a1(station: debugStations[0], index: 0)

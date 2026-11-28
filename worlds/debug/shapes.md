@@ -114,11 +114,11 @@ judge it. The card table's cards are posed by the rules, which judge each reques
 
 | To | How |
 |---|---|
-| Enter | `debug.go gallery`, then walk +Z through the door |
+| Enter | `debug.go gallery`, then walk +X through the west entrance and down the nave |
 | Change level on foot | A stair in each corner of the aisles. At a switchback (south-west, north-east) walk up the first flight from the nave side toward the long wall, cross the half landing behind the spine and walk up the second flight back out; at a spiral (south-east, north-west) step on from the nave side and climb one turn round the newel, stepping off where the rail opens |
-| Call the lift | Stand before the wall-mounted `CALL` plate east of the landing door and press the context button (E, or RB on a pad); its button lights until the car arrives. Or `gallery.lift <level>`, which calls as the plate does |
-| Ride the lift | Stand in the car facing its glazed back, where a rail carries a round button each for floors 0 to 3, then door open and door close. Stand before the one you want and press the context button; a floor button lights while that floor is pending |
-| Stand on a level's landing | `gallery.level <level> [body]` |
+| Call a lift | Stand before the `CALL` plate beside a lift's landing door, on its shaft's front, and press the context button (E, or RB on a pad); its button lights until the car arrives. Or `gallery.lift <level> [car]` (0 the north lift, 1 the south), which calls as the plate does |
+| Ride a lift | Stand in the car facing its glazed back, where a rail carries a round button each for floors 0 to 3, then door open and door close. Stand before the one you want and press the context button; a floor button lights while that floor is pending |
+| Stand on a level's landing | `gallery.level <level> [body]`, before the north lift's door |
 | Go to the board game room | `debug.go boardroom`, or a table's own place (a table's edge, close enough to sit) |
 | Spread or gather a level's fan shades | `gallery.blinds <level> up\|down` |
 | Compare exhibits at one exposure | `gallery.inspect on\|off`: On pins the camera at EV100 7 with no local adaptation (the `galleryExposure` cell the world's `render.exposure.hold` reads), so captures of different exhibits compare at one exposure; Off releases it to the automatic exposure. It adds no light: the building's own lights ([gallery.md](gallery.md#lighting)) light every exhibit as `gallery.lights` and `gallery.blinds` leave them |
@@ -132,43 +132,49 @@ judge it. The card table's cards are posed by the rules, which judge each reques
 | Step the debug view | `gallery.view [view]`, or `V`: `world.debug-view next` cycles off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao, shadow and indirect (the irradiance volume's light alone, exposed); a view's name selects it |
 | Slice an exhibit's field | `gallery.slice [display] [axis] [offset]`, or `B` for the display at hand: `world.slice.save` cuts the field through the turntable's placement (`display-<id>`), by default on the level plane through the exhibit's middle (an x or z cut wants offset 0), and writes `worlds/debug/slices/display-<id>-<axis>.png` (git-ignored); the statistics land on stderr as `world.slice`'s do |
 
-The lift car is a population body the `lift-car` placement spawns, carrying
-the attached solid platform, cab and car doors, each of which names that
-placement as its carrier. The cab is glass on three sides under a lit ceiling.
-Rules move it: `liftTarget` and `liftAt` count sixteenths of a metre, and
-`lift-ride` glides the car to cell `liftAt` of the `liftShaft` topology every
-tick (`poseCell(…, glide: true, frame: gallery)`, a continuous move a client
+The two glass lifts at the nave's east end (layout.puck's `galleryLifts`, the
+north car key 0 and the south car key 1) each run a car that is a population
+body its `lift-car-<car>` placement spawns, carrying the attached solid
+platform, cab and car doors, each of which names that placement as its
+carrier. The cab is glass on three sides under a lit ceiling, inside a glass
+shaft whose front opens onto its balcony edge on every level. One set of rules
+moves both cars, every row keyed by the car: `liftTarget` and `liftAt` count
+sixteenths of a metre, and each car's `lift-ride-<car>` glides it to cell
+`liftAt` of its `liftShaft-<car>` topology every tick
+(`poseCell(…, glide: true, frame: gallery)`, a continuous move a client
 interpolates rather than a teleport, read in the building's frame), so it
 climbs 1.875 m/s and stops exactly at each floor. A body standing on the
 platform rides it up and down through the analytic provider's attached-box
 support path (`src/Puck.World.Server/README.md`). `gallery-tests.puck` checks a
-level 0 to 2 ride and grounding on arrival. `liftDoors` closes the car and all
-landing doors before travel starts, then opens the car and only the landing at
-its destination. Each door has two leaves that retract behind the jambs; both
-variants collide as drawn. `liftLevel` records the last level reached.
+level 0 to 2 ride in the north car and grounding on arrival. `liftCarDoor` and
+`liftDoorsOf<car>` close the car and all its landing doors before travel
+starts, then open the car and only the landing at its destination. Each door
+has two leaves that retract behind the jambs; both variants collide as drawn.
+`liftLevel` records the last level reached.
 
 The input panel is state and rules (the block comment above the rules in
 `gallery/gallery.puck` has the order). A landing's CALL button writes
-`liftHall[levelK]` and a car floor button `liftCarCall[levelK]`; each button's
-placement shows its lit prototype while its cell is 1, and the cell clears when
-the car stops there. A stopped car waits out its dwell (four seconds after its
-doors open, `liftClock[dwell]`), then serves pending levels in its direction of
-travel (`liftDir`), nearest first, and turns round only when none is left that
-way; a pending level that lies ahead of a moving car and nearer than its target
-is taken on the way. Door open (`liftOpenReq`) opens or holds the doors and
-restarts the dwell, door close (`liftCloseReq`) shuts them and ends it, and
-each lights its lamp (`liftLamp`) for 0.4 s. `liftFloor` and `liftArrow` drive
-the level displays. A level written to `liftCall`, as `gallery.lift` and the
-traversal addon do, becomes a landing call. Each button reads the bodies in a
-reach box of its own, since a rule reads no facing: one before each landing's
-plate, and six that ride the car before its rail.
-`gallery-tests.puck` checks the door buttons' collider swaps reproducing from a
-checkpoint; the calls and the queue order are shown by riding the lift.
+`liftHallOf<car>[level]` and a car floor button `liftCarCallOf<car>[level]`;
+each button's placement shows its lit prototype while its cell is 1, and the
+cell clears when the car stops there. A stopped car waits out its dwell (four
+seconds after its doors open, `liftDwell`), then serves pending levels in its
+direction of travel (`liftDir`), nearest first, and turns round only when none
+is left that way; a pending level that lies ahead of a moving car and nearer
+than its target is taken on the way. Door open (`liftOpenReq`) opens or holds
+the doors and restarts the dwell, door close (`liftCloseReq`) shuts them and
+ends it, and each lights its lamp (`liftLampOpen`, `liftLampClose`) for 0.4 s.
+`liftFloor` and `liftArrow` drive the level displays. A level written to a
+car's `liftCall` cell, as `gallery.lift` and the traversal addon do, becomes a
+landing call. Each button reads the bodies in a reach box of its own, since a
+rule reads no facing: one before each landing's plate (layout.puck's
+`galleryLiftLandings`, the hooks a replacement panel stands at), and six that
+ride each car before its rail. `gallery-tests.puck` checks the door buttons'
+collider swaps reproducing from a checkpoint; the calls and the queue order
+are shown by riding a lift.
 
 A section board hangs on two rods from the ceiling beside each display, on
 its console's right, naming its group. Its lower edge is 2.6 m above the floor,
-clear of a walking Moth. The lobby map hangs from its ceiling too, facing the
-entrance.
+clear of a walking Moth.
 
 The gallery's keys live in `gallery/gallery.puck`'s `gallery-keys` overlay on
 the debug world's resting page: `=`, `-`, `G`, `V` and `B` act at once, and

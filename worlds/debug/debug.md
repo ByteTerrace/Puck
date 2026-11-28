@@ -80,14 +80,14 @@ course (`camera-course.puck`) holds four more tight spaces, each reached with
 | `camera-colonnade` | Eight 0.35 m pillars on a 1.6 m pitch, with a 1.2 m walkway between them and the wall | Pillars passing between the camera and the Moth while walking parallel to a wall |
 | `camera-bays` | Two bays under their own ceiling lamps (warm and cool) divided by a 0.15 m partition, open at the south end | Whether the camera reveals the adjacent bay when she backs against the partition |
 
-`debug.go lift` and `debug.go stairs` reach the lift car and the south-west
-stair's first half landing. The screen on the cool bay's back wall is the debug world's
+`debug.go lift` and `debug.go stairs` reach the north lift's car and the
+south-west stair's first half landing. The screen on the cool bay's back wall is the debug world's
 probe: a recorded `puck.probe.track.v1` track (`probes/beacon.probe-track.json`,
 `probe-beacon.puck`) tints a camera's view of the reference cubes and breathes
 between colours every 8 s; `probe.status` reads both probes.
 
 For the wall fade, use `body.pose 16 0.1 38.7 0 0 0` in `fade`, then
-`body.pose 16 0.1 39.1 0 0 0` to move closer and hide her completely. The lift's
+`body.pose 16 0.1 39.1 0 0 0` to move closer and hide her completely. A lift car's
 usual 1.4 m boom remains outside the fade range: its improvement is the shared
 higher look target. `gallery.lights 0 On` lights the lobby for the comparison.
 
@@ -259,8 +259,8 @@ case, `stage` when omitted:
 | `devices` | (4, 0.05, 30.5), in Wonderland 2.3 m before the deck's television, at whatever size she is ([`devices.md`](devices.md)) | -X, toward the television |
 | `wonderland` | (13.3, 0.05, 30.5), in the gallery's west hall 3 m before the big painting ([`wonderland.md`](wonderland.md)) | -X; walk ahead to come out a quarter her size |
 | `wonderland-room` | (4.5, 0, 21.5), outside the room's own doorway | +Z, through the doorway |
-| `boardroom` | In the board game room on the gallery's level 2, where the lift's landing meets it ([gallery.md](gallery.md)) | +X, into the room |
-| `cards` | At the near chair of the gallery's first game station, on level 3 ([`game-station.md`](game-station.md)), close enough to sit | +Z, across the glass |
+| `boardroom` | At the west end of the board game room on the gallery's level 2 ([gallery.md](gallery.md#the-board-game-room)) | +X, along the room |
+| `cards` | At the near chair of the board game room's first game station, `a1` ([`game-station.md`](game-station.md)), close enough to sit | +Z, across the glass |
 | `auction`, `shedding` | South of the sealed-bid auction and shedding card tables in the board game room ([`auction.puck`](auction.puck), [`shedding.puck`](shedding.puck)) | +Z, across the table |
 | `deduction`, `skirmish` | North of the social-deduction and fog-of-war skirmish tables in the board game room ([`deduction.puck`](deduction.puck), [`skirmish.puck`](skirmish.puck)) | -Z, across the table |
 | `chess`, `go`, `reversi`, `alchemy`, `granaries` | At White's edge of the chess table, Black's of the Go and Reversi tables, and the south edge of the Alchemy and granary tables, along the projecting wing's windows; each close enough to sit | +Z, across the board |
@@ -273,12 +273,12 @@ case, `stage` when omitted:
 | `portal-fall` | North of the floor painting | -Z; walk ahead to drop in |
 | `lab-wing` | At the west end of the lab wing in the gallery's north aisle ([labs/README.md](labs/README.md)) | East, along the doors |
 | `lab-climbing`, `lab-light`, `lab-surface`, `lab-shapes`, `lab-tree`, `lab-board-games` | Before each lab's door in the north aisle | +Z; walk ahead to cross into the lab |
-| `gallery` | On the forecourt, outside the gallery's entrance | +Z, through the door |
-| `lift`, `stairs` | In the lift car (call it with `gallery.lift 0`) and on the south-west stair's first half landing | +Z out of the car; -X across the landing to the second flight |
-| `climbing-wall` | On the nave's floor before the climbing wall's pad, between the displays either side of it ([gallery.md](gallery.md#the-climbing-wall)) | +Z, toward the wall; walk ahead to take the face |
+| `gallery` | On the west forecourt, outside the gallery's entrance ([gallery.md](gallery.md#the-entrance)) | +X, through the doorway and down the nave |
+| `lift`, `stairs` | In the north lift's car (call it with `gallery.lift 0`) and on the south-west stair's first half landing | +Z out of the car; -X across the landing to the second flight |
+| `climbing-wall` | On the nave's floor before the climbing wall's pad, on the nave's axis ([gallery.md](gallery.md#the-climbing-wall)) | +X, toward the wall; walk ahead to take the face |
 | `camera-course`, `camera-tunnel`, `camera-colonnade` | (-28, 0, 18.8), (-28, 0, 30.2) and (-27.5, 0, 33.8), before the course's L-corridor, tunnel and colonnade | +X, into the structure |
 | `camera-bays` | (-23.5, 0, 36.8), before the two bays and their partition | +Z |
-| `gallery-level-0` .. `gallery-level-3` | Each level's landing in the gallery, before the lift's door | -Z, toward the lift door |
+| `gallery-level-0` .. `gallery-level-3` | Each level's landing in the gallery, before the north lift's door | -Z, toward the lift door |
 | `hero` | (48, 0, -48), the avatar studio | -Z |
 | `meadow` | (119.5, 0.04, -55.3), in the wind meadow east of the studio ([`meadow.md`](meadow.md)) | -Z |
 | `range` | (-100, 0, 118), the head of the rate range ([`range.md`](range.md)) | -Z, down the lane |

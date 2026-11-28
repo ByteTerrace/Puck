@@ -333,7 +333,7 @@ template terminalConsole(console, count, seats = 4, capacity = 16, keysPerStep =
       (((terminalCommandAll[found] ?? 0) == 1) or ((terminalOffers[at * stride + found] ?? 0) == 1))
     )
     local action = offered ? (terminalCommandAction[found] ?? 0) : 0
-    when entered
+    when terminalEntered[$each]
     mode: Level
     terminalEntered[$each] = 0
     terminalRan[$each] = (entered == 2) ? 0 : (offered ? found : unknownNumber)

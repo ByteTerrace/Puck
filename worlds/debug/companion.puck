@@ -67,13 +67,17 @@ rule "companion-hears-guide" {
   companionSound.level = 1
   schedule companionSoundUntil in 0.4s
 }
+// The north lift's car door (gallery/gallery.puck), heard where the car stands: its shaft's middle, 1.5 m over its floor.
+let companionLift = galleryLifts[0]
+let companionLiftX = (gallerySite[0] + companionLift.x)
+let companionLiftZ = (gallerySite[2] + companionLift.z)
 rule "companion-hears-door" {
-  when liftDoors.car != companionCue.door
+  when liftCarDoor[companionLift.key] != companionCue.door
   mode: Level
-  companionCue.door = liftDoors.car
-  companionSound.x = 16
-  companionSound.y = bodyPosition(body, 41, y) + 1.5
-  companionSound.z = 36.4
+  companionCue.door = liftCarDoor[companionLift.key]
+  companionSound.x = companionLiftX
+  companionSound.y = (liftAt[companionLift.key] * 0.0625) + 1.5
+  companionSound.z = companionLiftZ
   companionSound.level = 0.8
   schedule companionSoundUntil in 0.4s
 }
