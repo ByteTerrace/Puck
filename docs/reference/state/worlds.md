@@ -461,11 +461,17 @@ A replay reads the account as it stood when the replay began:
 `WorldReplayProbe` swaps its authority onto a copy of the account taken at its
 start (`WorldOwnedWorlds.CreateReplayCopy`) for the replay and back after, so a
 rule that read a record the recording later wrote reads it as the recording did.
-A traveller arriving in another world of the same process lands bound to the
-owned identity itself, but a re-drive of that arrival lands it as the projection
-its commit carried (`WorldTransferEscrow.TryBindDetached`), since the account may
-have moved after the arrival; a destination's rules therefore read a traveller's
-crossing pools, never its home pools, if they are to replay.
+A traveller arriving in another world, of this process or another, lands as the
+projection its commit carried, never bound to the account's owned identity
+(`WorldTransferEscrow.ArrivingProfile`): a seat that stayed home may hold that
+identity, and a destination's write to it would reach home's state at a tick home
+recorded no input for. What the destination writes rides the projection and
+reaches the owned identity only through home's adoption when the traveller comes
+back, so a destination's rules read a traveller's crossing pools, never its home
+pools. A re-drive of a recorded home adoption or seat switch binds through one
+door (`WorldTransferEscrow.TryBindReplayed`): over a replay's account copy the
+copy's own identity, which every seat under the id shares as live; over a live
+account one detached identity per id.
 
 None of a world's other rows travel, so unselected state stays private to the
 world that owns it. A world's image never holds an owned identity: the account
