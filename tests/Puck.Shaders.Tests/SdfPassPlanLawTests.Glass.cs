@@ -8,8 +8,11 @@ namespace Puck.Shaders.Tests;
 // the reactivity the glass pass raised. The planner orders the sums from the clear's compute write to the raster's
 // fragment-stage accumulation to the shading pass's compute read.
 public sealed partial class SdfPassPlanLawTests {
-    private static RenderGraphPlan GlassPlan(RenderGraphPackageFragment fragment) => new RenderGraphCompiler(packages: new RenderGraphPackageCatalog(packages: [
-        RenderGraphPackageCatalog.Engine.Packages.Single(predicate: static item => (item.Id == RenderGraphPackageCatalog.SdfWorld)) with { Fragment = SdfWorldPackage.WithGlass(fragment: fragment) },
+    private static RenderGraphPlan GlassPlan(RenderGraphPackageFragment fragment) => FragmentPlan(fragment: SdfWorldPackage.WithGlass(fragment: fragment));
+    // The plan of a graph running the world package as a fragment, compiled as the runtime compiles an instance's graph,
+    // which throws for a graph the planner refuses.
+    private static RenderGraphPlan FragmentPlan(RenderGraphPackageFragment fragment) => new RenderGraphCompiler(packages: new RenderGraphPackageCatalog(packages: [
+        RenderGraphPackageCatalog.Engine.Packages.Single(predicate: static item => (item.Id == RenderGraphPackageCatalog.SdfWorld)) with { Fragment = fragment },
     ])).Compile(definition: new RenderGraphDefinition(Name: "glass", Schema: RenderGraphSchemas.Graph,
         Outputs: [SdfWorldPackage.Color], Resources: [new ShaderPipelineResource(Name: SdfWorldPackage.Color,
             Format: RenderGraphPackageCatalog.WorkingFormat.ToString(), Dimensions: ShaderPipelineDimensions.Relative())],
@@ -96,6 +99,19 @@ public sealed partial class SdfPassPlanLawTests {
             Assert.Equal(expected: glassed.Resources.Single(predicate: static resource => (resource.Name == SdfWorldPackage.Parts.MeshDepth)) with { Name = SdfWorldPackage.Parts.GlassDepth }, actual: glassed.Resources.Single(predicate: static resource => (resource.Name == SdfWorldPackage.Parts.GlassDepth)));
             Assert.Equal(expected: glassed.Resources.Single(predicate: resource => (resource.Name == lit)) with { Name = SdfWorldPackage.Parts.GlassLit }, actual: glassed.Resources.Single(predicate: static resource => (resource.Name == SdfWorldPackage.Parts.GlassLit)));
             _ = Assert.Throws<ArgumentException>(testCode: () => SdfWorldPackage.WithGlass(fragment: glassed));
+        }
+    }
+    // Every glass fragment a view can select compiles: each base fragment, binned or not, with the display stage or
+    // without, glass added where SdfWorldPasses adds it (after the bins, before the display).
+    [Fact]
+    public void EveryGlassFragmentAViewSelectsCompiles() {
+        foreach (var source in new[] { SdfWorldPackage.NativeFragment, SdfWorldPackage.Fragment, SdfWorldPackage.TemporalFragment, SdfWorldPackage.RateFragment }) {
+            foreach (var binned in new[] { source, SdfWorldPackage.WithBins(fragment: source) }) {
+                var glassed = SdfWorldPackage.WithGlass(fragment: binned);
+
+                Assert.NotNull(@object: FragmentPlan(fragment: glassed));
+                Assert.NotNull(@object: FragmentPlan(fragment: SdfWorldPackage.WithDisplay(fragment: glassed, quality: Puck.Hosting.BloomQuality.High)));
+            }
         }
     }
     [Fact]

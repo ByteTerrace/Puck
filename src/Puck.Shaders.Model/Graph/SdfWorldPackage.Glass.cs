@@ -162,7 +162,9 @@ public static partial class SdfWorldPackage {
         var visibility = fragment.Resources.Single(predicate: static resource => (resource.Name == Parts.Visibility));
         // The glass shades one view, so its storages follow the render grid's tiles once, whatever the viewports.
         var sumCount = PerTile(pixels: visibility.Count!, elements: (GlassTilePixels * GlassSumWords), perViewport: false);
-        ShaderPipelineCountTerm[] tileCount = [Term(GlassTileHeaderWords), .. PerTile(pixels: visibility.Count!, elements: GlassTileWords, perViewport: false)];
+        // A count term scales with a basis, so the header scales with the viewports, as the shade bins' does: at one viewport
+        // it is the header, and at more the capacity a kernel derives from the length only grows into the extra words.
+        ShaderPipelineCountTerm[] tileCount = [Term(GlassTileHeaderWords, ShaderPipelineCountBasis.Viewports), .. PerTile(pixels: visibility.Count!, elements: GlassTileWords, perViewport: false)];
         // The glass pass runs on the render grid, the probe history's basis in every fragment.
         var probeHistory = fragment.Resources.Single(predicate: static resource => (resource.Name == Parts.ProbeHistory));
         var passes = new List<RenderGraphFragmentPass>(capacity: (fragment.Passes.Count + 4));
