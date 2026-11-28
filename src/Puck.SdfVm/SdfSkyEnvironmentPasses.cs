@@ -114,11 +114,10 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
         } catch { residency.Release(); throw; }
     }
     /// <inheritdoc/>
-    public RenderGraphBorrowedBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource, IGpuBuffer? previous) => new(previous ?? (context.Part switch {
-        SdfSkyEnvironmentGraph.Map => ((Built)built!).Tables.SkyEnvironmentMap,
-        SdfSkyEnvironmentGraph.Screens => ((Built)built!).Tables.ScreenEmission,
-        _ => ((Built)built!).Tables.SkyEnvironmentCoefficients,
-    }));
+    /// <remarks>Lends the tables the build was made for; a park or release of the residency disposes the tables' own
+    /// claims alone, and the graph's loans keep each buffer live until its retirement returns them.</remarks>
+    public RenderGraphBorrowedBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource, IGpuBuffer? previous) =>
+        new((previous as GpuLentBuffer) ?? ((Built)built!).Lent(part: context.Part));
     /// <inheritdoc/>
     public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
         try { return new SdfSkyEnvironmentRecorder(built: ((Built)built!), context: context, groups: groups, views: views); } catch { built?.Dispose(); throw; }
@@ -153,11 +152,41 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
         public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => new(Height: height, Width: width);
     }
 
-    internal sealed class Built(SdfWorldResidency residency, SdfWorldTables tables, int view) : IDisposable {
-        public SdfWorldResidency Residency { get; } = residency;
-        public SdfWorldTables Tables { get; } = tables;
-        public int View { get; } = view;
+    // A build holds a loan on each buffer its graph borrows from the tables it was made for, from the moment it is made, so
+    // the graph's installation lends a live buffer even when the residency parked between the build and the install.
+    internal sealed class Built : IDisposable {
+        private readonly IDisposable[] m_loans;
 
-        public void Dispose() => Residency.Release();
+        public Built(SdfWorldResidency residency, SdfWorldTables tables, int view) {
+            Residency = residency;
+            Tables = tables;
+            View = view;
+            GpuLentBuffer[] lent = [tables.SkyEnvironmentMap, tables.SkyEnvironmentCoefficients, tables.ScreenEmission];
+            var loans = new List<IDisposable>(capacity: lent.Length);
+
+            try {
+                foreach (var buffer in lent) { loans.Add(item: buffer.Lend()); }
+            } catch {
+                foreach (var loan in loans) { loan.Dispose(); }
+                throw;
+            }
+            m_loans = [.. loans];
+        }
+
+        public SdfWorldResidency Residency { get; }
+        public SdfWorldTables Tables { get; }
+        public int View { get; }
+
+        // The tables' buffer a fragment part writes.
+        public GpuLentBuffer Lent(string? part) => part switch {
+            SdfSkyEnvironmentGraph.Map => Tables.SkyEnvironmentMap,
+            SdfSkyEnvironmentGraph.Screens => Tables.ScreenEmission,
+            _ => Tables.SkyEnvironmentCoefficients,
+        };
+
+        public void Dispose() {
+            foreach (var loan in m_loans) { loan.Dispose(); }
+            Residency.Release();
+        }
     }
 }

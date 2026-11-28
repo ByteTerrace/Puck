@@ -503,6 +503,35 @@ public sealed class SdfMeshLibraryLawTests {
         mesh.Release();
     }
 
+    // A published mesh whose entry the store can no longer answer turns lost on whichever take first holds it: a take
+    // that would renumber it (a retier's replacement in another program's ids) is a counted miss, never a throw, and the
+    // library forgets the geometry so its groups read the store again or bake.
+    [Fact]
+    public void ATakeOfAMeshTheStoreCouldNotRestoreIsACountedMissNotAThrow() {
+        using var scratch = new Puck.Testing.TemporaryDirectory(bestEffortDelete: true, prefix: "puck-mesh-library-lost-");
+        var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
+        var geometry = new SdfMeshGeometry(Dynamic: false, Hash: 0x5EED_0005ul);
+        UInt128 identity = 7;
+
+        using var library = new SdfMeshLibrary(allocator: new Puck.Abstractions.Memory.SystemAllocator(), store: store);
+        var stored = library.Store(geometry: geometry, identity: identity, materials: [10, 20], mesh: Piece(offset: 0f, skinned: false));
+        var misses = RestoreMisses();
+
+        // A hold's end idles the planes, which the release then lets go.
+        using (stored.Hold()) { }
+        SdfMesh.ReleaseIdle(all: true);
+        foreach (var path in store.EntryPaths()) { File.Delete(path: path); }
+
+        Assert.False(condition: library.TryTake(geometry: geometry, identity: identity, materials: [30, 40], mesh: out _));
+        Assert.Equal(expected: (misses + 1), actual: RestoreMisses());
+        Assert.Equal(expected: 1L, actual: library.LostRevision);
+        Assert.Equal(expected: 1L, actual: library.Cache.Read(kind: SdfMeshCache.TakesLost));
+        // The library forgot it: a later take of either numbering misses before it reads anything.
+        Assert.False(condition: library.TryTake(geometry: geometry, identity: identity, materials: [10, 20], mesh: out _));
+        Assert.False(condition: library.TryTake(geometry: geometry, identity: identity, materials: [30, 40], mesh: out _));
+        stored.Release();
+    }
+
     private static void AssertSamePlanes(SdfMesh expected, SdfMesh actual) {
         Assert.Equal(expected: expected.Chunks.Count, actual: actual.Chunks.Count);
         Assert.Equal(expected: expected.Positions.ToArray(), actual: actual.Positions.ToArray());
@@ -548,14 +577,19 @@ public sealed class SdfMeshLibraryLawTests {
 
         var first = new uint[words];
         var again = new uint[words];
+        var misses = RestoreMisses();
 
         SdfMeshRegion.WriteMeshes(destination: first, layout: default, meshes: meshes);
         // Every unneeded mesh lets its planes go, so the second write restores them from the entry.
         SdfMesh.ReleaseIdle(all: true);
         SdfMeshRegion.WriteMeshes(destination: again, layout: default, meshes: meshes);
         Assert.Equal(actual: again, expected: first);
-        Assert.Contains(expectedSubstring: "mesh-restore-misses=0", actualString: SdfMesh.DescribeRestores());
+        Assert.Equal(expected: misses, actual: RestoreMisses());
     }
+    // The process's restores the store could not answer, which every library's meshes count together.
+    private static long RestoreMisses() => long.Parse(
+        s: System.Text.RegularExpressions.Regex.Match(input: SdfMesh.DescribeRestores(), pattern: @"mesh-restore-misses=(\d+)").Groups[1].Value,
+        provider: System.Globalization.CultureInfo.InvariantCulture);
     // A mesh of two triangles, two materials, a coarser level, and, when it is skinned, a member and a blended vertex.
     private static SdfMesh Piece(float offset, bool skinned, uint first = 10u, uint second = 20u) => new(
         indices: new uint[] { 0, 1, 2, 2, 1, 3 },

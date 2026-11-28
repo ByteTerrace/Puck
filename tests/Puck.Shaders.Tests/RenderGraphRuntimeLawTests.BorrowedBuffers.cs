@@ -9,9 +9,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
     public void BorrowedBackingChangesWithoutRebuildingAndKeepsThePreviousOwnerUntilReadersFinish() {
         const ulong Bytes = 4096;
         var gpu = new FakePipelineGpu();
-        var first = new SharedBufferOwner(gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new("test", "first")));
-        var second = new SharedBufferOwner(gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new("test", "second")));
-        var producer = new BorrowedPackage(first.Buffer) { LiveOwner = first };
+        var first = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new("test", "first")));
+        var second = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new("test", "second")));
+        var producer = new BorrowedPackage(first);
         var recorders = new Recorders();
         recorders.Registry.Register(factory: producer, package: BufferPackage);
         recorders.Registry.Register(factory: new BufferViewPackage(Bytes), package: RenderGraphPackageCatalog.SdfWorld);
@@ -23,20 +23,21 @@ public sealed partial class RenderGraphRuntimeLawTests {
             TestLiveness.Until(() => { ProducePackageFrame(runtime, frame++); return runtime.Node(instance: 0).FrameCounter > 2; });
             var builds = producer.Builds;
             gpu.QueueHeld = true;
-            producer.LiveOwner = second;
+            producer.CurrentBuffer = second;
+            // The package lets the first allocation go while the graph still records and publishes it: its loan keeps it.
             first.Dispose();
             producer.Outputs.Clear();
             ProducePackageFrame(runtime, frame++);
             Assert.NotEmpty(producer.Outputs);
-            Assert.All(producer.Outputs, output => Assert.Same(second.Buffer, output));
-            Assert.True(first.References > 0);
+            Assert.All(producer.Outputs, output => Assert.Same(second, output));
+            Assert.False(first.Released);
             Assert.Equal(builds, producer.Builds);
             gpu.QueueHeld = false;
-            TestLiveness.Until(() => { ProducePackageFrame(runtime, frame++); return first.References == 0; });
+            TestLiveness.Until(() => { ProducePackageFrame(runtime, frame++); return first.Released; });
             second.Dispose();
-            Assert.True(second.References > 0);
+            Assert.False(second.Released);
         }
-        Assert.Equal(0, second.References);
+        Assert.True(second.Released);
         Assert.Empty(gpu.UsesAfterRelease);
     }
 
@@ -44,8 +45,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
     public void AReadbackCopiesBytesFromTheNewBorrowedBackingAfterASwitch() {
         const ulong Bytes = 4096;
         var gpu = new UploadModelGpu();
-        using var first = gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new("test", "first"));
-        using var second = gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new("test", "second"));
+        using var first = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new("test", "first")));
+        using var second = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new("test", "second")));
         using var answer = gpu.Services.BufferFactory.CreateReadback(32, new("test", "answer"));
         var firstBytes = gpu.DeviceLocal(Bytes, "first");
         var secondBytes = gpu.DeviceLocal(Bytes, "second");
@@ -70,7 +71,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     public void AnImplicitPackagePublishesOneBorrowedBufferAndItsReadersStandWithIt() {
         const ulong Bytes = (1024 * 1024);
         var gpu = new FakeGpuDevice(trackObjects: true);
-        using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new GpuObjectName("test", "cache"));
+        using var buffer = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new GpuObjectName("test", "cache")));
         var creation = Assert.Single(collection: gpu.Created);
         var recorders = new Recorders();
         var producer = new BorrowedPackage(buffer: buffer);
@@ -108,7 +109,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         const ulong InitialBytes = 4096;
         const ulong Bytes = 8192;
         var gpu = new FakeGpuDevice();
-        using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new GpuObjectName("test", "cache"));
+        using var buffer = new GpuLentBuffer(buffer: gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new GpuObjectName("test", "cache")));
         var recorders = new Recorders();
         var producer = new BorrowedPackage(buffer: buffer) { Fragment = ProducerFragment(bytes: InitialBytes) };
         var view = new BufferViewPackage(bytes: InitialBytes);
@@ -141,9 +142,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public IShaderPipelineStorageCounter? CounterOf(string instance) => Inner;
         public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context, in RenderGraphReadStands reads) => Inner.Unchanged;
     }
-    private sealed class BorrowedPackage(IGpuBuffer buffer) : IRenderGraphPackageFactory {
-        public SharedBufferOwner? LiveOwner { get; set; }
-        public IGpuBuffer? CurrentBuffer { get; set; }
+    private sealed class BorrowedPackage(GpuLentBuffer buffer) : IRenderGraphPackageFactory {
+        public GpuLentBuffer? CurrentBuffer { get; set; }
         public IGpuReadbackBuffer? Readback { get; set; }
         public List<byte[]> Answers { get; } = [];
         public int Builds => Volatile.Read(ref m_builds);
@@ -158,10 +158,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public List<IGpuBuffer> Outputs { get; } = [];
 
         public RenderGraphPackageFragment? FragmentOf(string instance) => Fragment;
-        public RenderGraphBorrowedBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource, IGpuBuffer? previous) {
-            var selected = (LiveOwner?.Buffer ?? CurrentBuffer ?? buffer);
-            return new(selected, ReferenceEquals(selected, previous) ? null : LiveOwner?.Retain());
-        }
+        public RenderGraphBorrowedBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource, IGpuBuffer? previous) =>
+            new(CurrentBuffer ?? buffer);
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
             Interlocked.Increment(ref m_builds);
             return ValueTask.FromResult<IDisposable?>(result: null);

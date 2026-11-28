@@ -408,7 +408,7 @@ public sealed partial record SdfMesh {
     }
 
     /// <summary>Gets the mesh whose positions, normals, indices and members this mesh shares, for a mesh renumbered for
-    /// another program's material ids (<see cref="RenumberNative"/>): the two differ in their triangle materials alone,
+    /// another program's material ids (<see cref="TryRenumberNative"/>): the two differ in their triangle materials alone,
     /// so the presentation's mesh region places this one as its materials and draws its geometry from the other's words
     /// (<see cref="SdfMeshRegion.PlacedWordsOf"/>). <see langword="null"/> for a mesh that owns its geometry.</summary>
     public SdfMesh? GeometrySource { get; }
@@ -417,12 +417,15 @@ public sealed partial record SdfMesh {
     // material arrays are new physical allocations; renumbering must not duplicate positions, normals or indices, and a
     // chunked mesh's chunks view one renumbered copy of its triangle materials. A native chunked mesh's chunks always
     // view its attributes (NativeCopy refuses any other, and NativeStorage builds no other).
-    internal SdfMesh RenumberNative(SdfMeshMaterials.Remap map, IAllocator allocator, MemoryAccount account) {
+    // A source whose store could not restore its planes (Lost) has none to renumber: the answer is no copy, a miss its
+    // caller takes as the library holding no mesh, so the taking group loads its entry again or bakes (SdfMeshLibrary.Lose).
+    internal bool TryRenumberNative(SdfMeshMaterials.Remap map, IAllocator allocator, MemoryAccount account, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? renumbered) {
         // The source's triangle materials and its levels' are read here alone: the hold, whose storage its chunks share,
         // keeps them resident for the copy.
         using var held = Hold();
 
-        if (!held.Readable) { throw new InvalidOperationException(message: "A mesh whose store could not restore its planes cannot be renumbered."); }
+        renumbered = null;
+        if (!held.Readable) { return false; }
 
         var payload = new Payload(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh-materials"));
 
@@ -458,12 +461,13 @@ public sealed partial record SdfMesh {
                     source: chunk);
                 triangle += chunk.TriangleCount;
             }
-            return new SdfMesh(
+            renumbered = new SdfMesh(
                 chunks: chunks,
                 levels: Levels.Select(selector: level => new SdfMeshLevel(level.UnheldIndices, Remap(owner: payload, source: level.UnheldMaterials), level.Error)).ToArray(),
                 materials: materials,
                 payload: payload.Seal(),
                 source: this);
+            return true;
         } catch { payload.Release(cached: false); throw; }
     }
 
