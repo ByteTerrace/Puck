@@ -159,7 +159,8 @@ function sidePanelTurn(isRight) = compose(halfTurn, mirrorRotation(isRight, [0, 
 
 // One greave's paints, on shinViolet: the ivory band round the front arch and the back arch, each edged by a seam and
 // clipped to its half of the greave, and the ivory side panel with its two vent slots. Each band is the arch's outline at
-// a larger size, posed where the arch is cut (poseIn), so the band hugs the cut.
+// a larger size, posed where the arch is cut (poseIn), so the band hugs the cut; the scout's greave, cut no back arch
+// for a heel jet, wears the back one whole as an ivory heel plate.
 function greavePaints(side, isRight, ivoryPlate, lavenderSeam) = let at = mirrorX(isRight, greaveAt) in let front = poseIn(
   at,
   halfTurn,
@@ -805,16 +806,19 @@ template mothLimbs(side, isRight, scout) {
     profile { kind: "Convex", vertices: archOutline, cornerRadius: archCorner }
   }
 
-  shape Prism $"shinArchBack-{side}" {
-    id: 964 + isRight * 8
-    position: mirrorX(isRight, archBackAt)
-    rotation: halfTurn
-    scale [0.152, 0.162, 0.19]
-    material: jet
-    blend: "Subtraction"
-    group: greaveGroup(isRight)
-    parent: $"shin-{side}"
-    profile { kind: "Convex", vertices: archOutline, cornerRadius: archCorner }
+  // The back arch clears the heel jet; the scout's plain heel needs none.
+  if scout == false {
+    shape Prism $"shinArchBack-{side}" {
+      id: 964 + isRight * 8
+      position: mirrorX(isRight, archBackAt)
+      rotation: halfTurn
+      scale [0.152, 0.162, 0.19]
+      material: jet
+      blend: "Subtraction"
+      group: greaveGroup(isRight)
+      parent: $"shin-{side}"
+      profile { kind: "Convex", vertices: archOutline, cornerRadius: archCorner }
+    }
   }
 
   shape Capsule $"kneeRod-{side}" {

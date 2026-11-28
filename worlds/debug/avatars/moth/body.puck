@@ -12,7 +12,7 @@
 // hip. While `pilotHold` holds 1 for her body, the `hold` driver bends her arms in front of her and the `hold` frame
 // seats the handheld (75 x 133 x 27.5 mm) in her hands. Her mantle plays the suits' keyed pull-up (moth.puck's mantle
 // curves) at her own joints, and her journal rides a wrist panel on each forearm, a slim one for her bare arm
-// (contract.puck's `mothBodyWristMount`). Each bone's shapes share its bake group, so a limb bakes as one mesh.
+// (contract.puck's `mothBodyWristMount`).
 
 import "head"
 import "../../../standard/rig"
@@ -100,12 +100,13 @@ let journalScreenLeft = mothBody.wornScreen.screens.left
 let journalScreenRight = mothBody.wornScreen.screens.right
 let journalFlap = 29 // the panels' lavender flaps
 
-// Each bone's bake group: the torso 40, the pelvis 43, and by side the upper arm, the forearm with the hand, the shin
-// with its knee pad and the boot with its shaft and sole.
+// Bake groups: the torso with its harness 40, the pelvis with its belt 43, the collar with the braid 39, and by side the
+// upper arm with its deltoid, the hand's wrist, palm and thumb, and the shin with its knee pad. Her fingers, sleeves,
+// pads, cuffs and boots bake alone: joined to a group, a part this small or a boot this compact measured costlier than
+// alone (the union's lattice is set by its finest member).
 function upperArmGroup(side) = (side == 1) ? 44 : 45
 function forearmGroup(side) = (side == 1) ? 41 : 42
 function shinGroup(side) = (side == 1) ? 46 : 47
-function bootGroup(side) = (side == 1) ? 48 : 49
 
 // Authored darker than the sheet reads: the studio's light lifts a charcoal about half again, as it lifts the suit's
 // lavender #744080 to the owner's dusty #B186B6.
@@ -171,7 +172,6 @@ template pilotArm(name, side, baseId) {
     position [side * -0.212, 1.068, 0.032]
     rotation: rotate([0, 1, 0], 180)
     material: sleeve
-    group: forearmGroup(side)
     parent: $"upperArm-{name}"
     curve {
       a [0, 0, 0]
@@ -206,7 +206,6 @@ template pilotArm(name, side, baseId) {
     position [side * -0.218, 1.062, 0.066]
     scale [0.04, 0.05, 0.022]
     material: pad
-    group: forearmGroup(side)
     parent: $"forearm-{name}"
     exponent: 2.6
   }
@@ -216,7 +215,6 @@ template pilotArm(name, side, baseId) {
     position [side * -0.222, 0.846, 0.01]
     scale [0.033, 0.013, 0.033]
     material: collarKnit
-    group: forearmGroup(side)
     parent: $"forearm-{name}"
     exponent: 2.4
   }
@@ -290,7 +288,6 @@ template pilotArm(name, side, baseId) {
       position [side * finger.at[0], finger.at[1], finger.at[2]]
       rotation: rotate([0, 1, 0], 180)
       material: skin
-      group: forearmGroup(side)
       parent: $"forearm-{name}"
       curve {
         a [0, 0, 0]
@@ -384,7 +381,6 @@ template pilotLeg(name, side, baseId) {
     rotation: compose(rotate([0, 1, 0], 180), [0, -diagonal, 0, diagonal])
     scale [0.13, 0.13, 0.055]
     material: leather
-    group: bootGroup(side)
     parent: $"shin-{name}"
     profile {
       kind: "Convex"
@@ -411,7 +407,6 @@ template pilotLeg(name, side, baseId) {
     position [side * -0.105, 0.12, 0.008]
     scale [0.058, 0.09, 0.066]
     material: leather
-    group: bootGroup(side)
     parent: $"boot-{name}"
     exponent: 3
   }
@@ -422,7 +417,6 @@ template pilotLeg(name, side, baseId) {
     rotation [-diagonal, 0, 0, diagonal]
     scale [0.054, 0.135, 0.0125]
     material: sole
-    group: bootGroup(side)
     parent: $"boot-{name}"
     profile {
       kind: "RoundedRectangle"
