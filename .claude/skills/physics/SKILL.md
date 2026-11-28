@@ -293,10 +293,19 @@ witness after `kinematics:`. `worlds/debug/tree-walk-tests.puck` plays the
   the nodes. A net steps on the authority alone (`WorldTick.Step` calls
   `WorldPopulation.StepNets` after `StepBodies`), never inside `StepBodies`, which a
   client's prediction runs too: a predicting population's nets stay at rest.
-  A body's weight on a net is a `FixedNetLoad` at its hold's anchor; its volumes push
-  nodes to their radius plus the net's strand and the contact reach, the band a body
-  resting on the net's cell colliders stands in, so leaning moves nodes and standing
-  near does not.
+  A body holding a net hangs its mass and weight on it as a `FixedNetLoad` at its hold's
+  anchor (and its lever's push back in at its feet) and never pushes it with its volumes:
+  its hold keeps it its standoff from the face it rides, so a push would ratchet the
+  face to the reach. Any other body's volumes push nodes to their radius plus the net's
+  strand and the contact reach, the band a body resting on the net's cell colliders
+  stands in, so leaning moves nodes and standing near does not. The kernel solves in net
+  units (`FixedNet.UnitsPerMetre`), since a slice's motion is below a metre's Q48.16 step.
+- **A live row that stood still costs a copy.** `WorldColliderSet.RestoreAttachedRow`
+  replays a row's last posing while its origin, rotation, size and net revision stand
+  (`PosedRow`), and `FixedStaticColliderSet.Refresh` computes bounds only for slots whose
+  collider changed; the live set is grouped by row, so every query lists its candidates
+  past the rows its region misses (`FixedStaticColliderSet.Candidates`, passed to the
+  solver as `dynamicCandidates`).
 
 ## Where each contract is enforced
 

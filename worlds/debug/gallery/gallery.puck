@@ -998,7 +998,6 @@ state {
     // form, which keeps its frame and crossbars and drops its uprights and sill.
     table toyboxSlats {
       south = 0
-      north = 0
       bridge = 0
     }
     // Each car's landing calls and floor calls pending, a member a car keyed by level.

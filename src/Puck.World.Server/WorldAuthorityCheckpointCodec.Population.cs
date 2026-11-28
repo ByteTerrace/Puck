@@ -347,8 +347,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             w.WriteString(value: net.Placement);
             w.WriteBoolean(value: net.State.Awake);
             w.WriteUInt64(value: net.State.StillTicks);
+            w.WriteUInt64(value: net.State.Touch);
             w.WriteArray(items: net.State.Offsets, writeItem: static (v, offset) => v.WriteFixedVector(value: offset));
             w.WriteArray(items: net.State.Velocities, writeItem: static (v, velocity) => v.WriteFixedVector(value: velocity));
+            w.WriteArray(items: net.State.SliceVelocities, writeItem: static (v, velocity) => v.WriteFixedVector(value: velocity));
         });
 
         return writer.ToArray();
@@ -383,12 +385,15 @@ public static partial class WorldAuthorityCheckpointCodec {
             var placement = r.ReadRequiredString(field: "net placement");
             var awake = r.ReadBoolean();
             var still = r.ReadUInt64();
+            var touch = r.ReadUInt64();
             var offsets = r.ReadArray(field: "net offsets", maximum: (WorldPlacementNet.MaxNodesPerEdge * WorldPlacementNet.MaxNodesPerEdge),
                 readItem: static (ref WireReader v) => v.ReadFixedVector());
             var velocities = r.ReadArray(field: "net velocities", maximum: (WorldPlacementNet.MaxNodesPerEdge * WorldPlacementNet.MaxNodesPerEdge),
                 readItem: static (ref WireReader v) => v.ReadFixedVector());
+            var slices = r.ReadArray(field: "net slice velocities", maximum: (WorldPlacementNet.MaxNodesPerEdge * WorldPlacementNet.MaxNodesPerEdge),
+                readItem: static (ref WireReader v) => v.ReadFixedVector());
 
-            return new WorldNetCheckpoint(Placement: placement, State: new FixedNetState(Offsets: offsets, Velocities: velocities, Awake: awake, StillTicks: still));
+            return new WorldNetCheckpoint(Placement: placement, State: new FixedNetState(Offsets: offsets, Velocities: velocities, SliceVelocities: slices, Awake: awake, StillTicks: still, Touch: touch));
         });
 
         return new WorldPopulationCheckpoint(

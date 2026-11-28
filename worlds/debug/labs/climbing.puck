@@ -96,7 +96,7 @@ template climbFace(name, height) {
 
 // The face's and frame's palette: the standard's slots in the gallery's look.
 let climbPalette = climbingPalette(lookClimb.panels, lookClimb.seam, lookClimb.frame, lookClimb.coping)
-let climbNetLook = lookToyLattice(1)
+let climbNetLook = lookToyNet(1)
 
 prototypes {
   climbFace(name: "climb-practice", height: climbPracticeHeight)
@@ -106,7 +106,7 @@ prototypes {
     document {
       name: "climb-net-frame"
       schema: "puck.creation.v2"
-      palette: latticePalette(climbNetLook.frame, climbNetLook.bar, climbNetLook.rail)
+      palette: latticeNetPalette(climbNetLook.frame, climbNetLook.bar, climbNetLook.rail, climbNetLook.knot)
       lattice(
         base: 0,
         cells: climbNetCells,

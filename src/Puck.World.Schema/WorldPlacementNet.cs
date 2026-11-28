@@ -32,9 +32,12 @@ namespace Puck.World;
 /// <param name="NodeMass">The mass one free node carries, in kilograms; positive.</param>
 /// <param name="Stiffness">One strand's stiffness against stretch past its length, in newtons per metre; positive.</param>
 /// <param name="Damping">The share of a node's speed lost each second; non-negative.</param>
-/// <param name="Sag">The slack each strand carries past its rest spacing, as a share of it, in <c>[0, 1]</c>.</param>
+/// <param name="Sag">The slack each strand carries past its rest spacing, as a share of it, in <c>[−0.5, 1]</c>: positive
+/// hangs the net loose, so it gives freely until its strands draw taut; negative strings it taut, each strand that share
+/// shorter than the spacing, so a load bellies it in proportion to its weight.</param>
 /// <param name="Reach">The farthest a node moves from rest, in metres before the row's scale; positive.</param>
-/// <param name="Iterations">The projection passes a step makes over every strand, 1 to <see cref="MaxIterations"/>.</param>
+/// <param name="Substeps">The slices a step is cut into, each solving every strand once, 1 to <see cref="MaxSubsteps"/>:
+/// more converge a stiffer net, at a strand solve each per strand.</param>
 /// <param name="Strand">The thickness the net collides at, in metres before the row's scale: each node cell is a box
 /// this thick about the nodes' surface, and a body leaning on the net pushes its nodes until they stand this far beyond
 /// the box's face; positive.</param>
@@ -55,11 +58,11 @@ public sealed record WorldPlacementNet(
     bool PinBottom = true,
     bool PinTop = true,
     float NodeMass = 0.2f,
-    float Stiffness = 4000f,
+    float Stiffness = 20000f,
     float Damping = 3f,
     float Sag = 0f,
     float Reach = 0.3f,
-    int Iterations = 4,
+    int Substeps = 8,
     float Strand = 0.035f,
     float BodyMass = 60f,
     float RestSpeed = 0.01f,
@@ -68,8 +71,8 @@ public sealed record WorldPlacementNet(
 ) {
     /// <summary>The most nodes a net takes along either edge.</summary>
     public const int MaxNodesPerEdge = 16;
-    /// <summary>The most projection passes a step makes.</summary>
-    public const int MaxIterations = 16;
+    /// <summary>The most slices a step is cut into.</summary>
+    public const int MaxSubsteps = 32;
 
     /// <summary>Gets the edges the facet pins.</summary>
     [JsonIgnore]
@@ -88,7 +91,7 @@ public sealed record WorldPlacementNet(
         Across: rotation.Rotate(vector: (FixedVector3.FromVector3(value: Across) * scale)),
         Columns: Columns,
         Damping: FixedQ4816.FromDouble(value: Damping),
-        Iterations: Iterations,
+        Substeps: Substeps,
         NodeMass: FixedQ4816.FromDouble(value: NodeMass),
         Origin: (origin + rotation.Rotate(vector: (FixedVector3.FromVector3(value: Origin) * scale))),
         Pins: PinMask,
@@ -126,7 +129,7 @@ public sealed record WorldPlacementNet(
     /// <summary>Checks the facet, adding one line to <paramref name="errors"/> for each refusal: a node count outside
     /// <c>[2, MaxNodesPerEdge]</c>, edges that are zero or parallel, no pinned edge, a mass, stiffness,
     /// reach or strand that is not positive and finite, a damping, rest speed, sleep time or body mass that is negative or
-    /// not finite, a sag outside <c>[0, 1]</c>, or an iteration count outside <c>[1, MaxIterations]</c>.</summary>
+    /// not finite, a sag outside <c>[−0.5, 1]</c>, or a substep count outside <c>[1, MaxSubsteps]</c>.</summary>
     /// <param name="path">The facet's document path, which every refusal starts with.</param>
     /// <param name="errors">The refusals.</param>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> or <paramref name="errors"/> is
@@ -155,8 +158,8 @@ public sealed record WorldPlacementNet(
         NonNegative(value: SleepSeconds, name: "sleepSeconds");
         NonNegative(value: BodyMass, name: "bodyMass");
         NonNegative(value: Gravity, name: "gravity");
-        if (!float.IsFinite(f: Sag) || (Sag < 0f) || (Sag > 1f)) { errors.Add(item: $"{path}.sag: a net's sag lies in [0, 1], not {Sag}"); }
-        if ((Iterations < 1) || (Iterations > MaxIterations)) { errors.Add(item: $"{path}.iterations: a net takes 1 to {MaxIterations} iterations, not {Iterations}"); }
+        if (!float.IsFinite(f: Sag) || (Sag < -0.5f) || (Sag > 1f)) { errors.Add(item: $"{path}.sag: a net's sag lies in [-0.5, 1], not {Sag}"); }
+        if ((Substeps < 1) || (Substeps > MaxSubsteps)) { errors.Add(item: $"{path}.substeps: a net takes 1 to {MaxSubsteps} substeps, not {Substeps}"); }
 
         void Positive(float value, string name) {
             if (!float.IsFinite(f: value) || (value <= 0f)) { errors.Add(item: $"{path}.{name}: must be positive and finite, not {value}"); }

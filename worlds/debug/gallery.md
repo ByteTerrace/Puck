@@ -320,42 +320,55 @@ below).
 
 So every edge level 1 shares with the nave's void stands behind a toy
 construction lattice (the standard's `lattice`,
-[architecture.puck](../standard/architecture.puck)): pastel frames stepping
-with the piers, and inside each frame a diamond rope net, its two sets of
-strands in the complementary pastel and sunflower, knotted where they cross
-(layout.puck's `toyLatticeNet`: 3.5 cm rope, knot to knot every 30 cm). A
-panel stands in each arcade bay along the south and north edges, a half-tile
-panel closes each to the east wall, and five panels run along the bridge's
-edge. Each stands on level 1's floor and reaches into the fascia under level
-2's edge, and neighbouring posts overlap at every joint and corner. The net is
-drawn only; a clear pane threaded through it holds every body, so no body
-flies or jumps in from the void and none drops out, while the panel stays open
-to the eye.
+[architecture.puck](../standard/architecture.puck)) whose frame holds a real
+rope net. A panel stands in each arcade bay along the south and north edges, a
+half-tile panel closes each to the east wall, and five panels run along the
+bridge's edge. Each stands on level 1's floor and reaches into the fascia under
+level 2's edge, and neighbouring posts overlap at every joint and corner.
 
-**The rope net panel.** One panel is a real net: `gallery-lattice-north-9`
-(the north edge's bay 9, layout.puck's `toyLatticeNetBay`) keeps the lattice's
-frame and drops its pane, and its placement carries the standard's
-`latticeNet` facet (architecture.puck, `ropeNet`'s material): a grid of 12 by
-9 nodes from post to post and sill to head, pinned at all four members, that
-the authority steps as rope (the engine's net, [the decision](../../docs/decisions/engine-design.md#a-net-is-a-node-grid-the-authority-steps-drawn-by-displacing-one-rest-mesh)).
-It still holds every body, but it gives: a body leaning on it bulges it, a
-body that walks into it takes it and climbs it like a park climbing net (the
-standard's climb, in or out of the Moth's suit), its weight pulls the net in
-under its hands with a ripple outward, and the drawn strands and knots move
-with the nodes. It settles and sleeps when no one touches it. `debug.go
-rope-net` stands a body before it; `world.nets` reads its nodes, deflection,
-holders and leaners; `world.benchmark run net-climb` plays a climb, and
-the [climbing lab](labs/README.md#climbing) holds a copy of the panel and plays the same climb headless in
-[net-tests.puck](net-tests.puck).
+**The nets.** The owner ruled, after trying the first one: "Replace the whole
+level with the net. Make sure it is proper colorful, not garish, but properly
+complementary/bold." So every panel but the two loose ones (below) drops its
+pane and carries the standard's `latticeNet` facet (architecture.puck,
+`ropeNet`'s material): a grid of nodes from post to post and sill to head (12
+by 9 in a full panel, 3 by 9 in a half one), pinned at all four members, that
+the authority steps as rope (the engine's net,
+[the decision](../../docs/decisions/engine-design.md#a-net-is-a-node-grid-the-authority-steps-drawn-by-displacing-one-rest-mesh)).
+Each net is a diamond mesh (layout.puck's `toyLatticeNet`: 3.5 cm rope, knot to
+knot every 30 cm) whose drawn strands and knots move with its nodes. It holds
+every body, so no body flies or jumps in from the void and none drops out, and
+no body climbs over one, since its head meets the fascia. But it gives: a body
+leaning on it bulges it, a body that walks into it takes it and climbs it like
+a park climbing net (the standard's climb, in or out of the Moth's suit), and
+its weight bellies the net under its hands in proportion to the weight, about a
+fifth of a metre under a full-size climber and barely a dimple under a shrunk
+one, with a bounce and a ripple outward. It settles and sleeps when no one
+touches it, and a net held still by a climber who hangs on sleeps too.
 
-**Hooks for puzzles.** Three panels are loose: `gallery-lattice-loose-south`
-and `gallery-lattice-loose-north` (bay 8, layout.puck's `toyLatticeLooseBay`)
-and `gallery-lattice-loose-bridge` (the bridge's middle tile, on the nave's
-axis). Each follows its cell of the `toyboxSlats` table (`south`, `north`,
-`bridge`, all 0): at 1 the panel swaps to its open form, which keeps its frame
-and crossbars and drops its uprights and sill, so only a body small enough to
-pass between two crossbars (about 0.6 m apart) slips through. No rule sets them
-yet; `world.state.cell.set toyboxSlats south 1` opens one by hand.
+The colours are bold rather than pastel (look.puck's `lookToyNet`). Every frame
+wears one deep cobalt, which grounds the nets against the sky walls, and every
+knot the grout's warm white. Each panel strings its two strand sets in a
+complementary pair: tomato and teal, sunflower and violet, tangerine and azure,
+raspberry and leaf, each a saturated middle value, never neon. The pairs step by
+bay along each edge, the same at each north and south pair as the piers'
+pastels are, and continue round the bridge.
+
+`debug.go rope-net` stands a body before the net of the north edge's bay 9
+(layout.puck's `toyLatticeNetBay`); `world.nets` reads every net's nodes,
+deflection, holders and leaners; `world.benchmark run net-climb` plays a climb
+there, and the [climbing lab](labs/README.md#climbing) holds a copy of a panel
+and plays the same climb headless in [net-tests.puck](net-tests.puck).
+
+**Hooks for puzzles.** Two panels are loose: `gallery-lattice-loose-south`
+(the south edge's bay 8, layout.puck's `toyLatticeLooseBay`; the north edge's
+bay 8 is the tree's gate) and `gallery-lattice-loose-bridge` (the bridge's
+middle tile, on the nave's axis). Each follows its cell of the `toyboxSlats`
+table (`south`, `bridge`, both 0). Closed, it is the same net drawn over a
+clear pane, which holds every body but does not give: a net facet has no open
+state yet. At 1 the panel swaps to its open form, which keeps its frame and
+crossbars and drops its uprights and sill, so only a body small enough to pass
+between two crossbars (about 0.6 m apart) slips through. No rule sets them yet;
+`world.state.cell.set toyboxSlats south 1` opens one by hand.
 
 **The tree's barriers.** Each level-1 branch ([the central tree](#the-central-tree))
 ends at a magic barrier filling the arch behind its bay (architecture.puck's

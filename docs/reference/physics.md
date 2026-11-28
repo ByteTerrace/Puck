@@ -589,17 +589,26 @@ the compliant rope rather than stiffening with the iteration count.
 ## The net
 
 `FixedNet` is a net of rope strands as a grid of point masses over a
-parallelogram (`FixedNetSpec`), its edges optionally pinned. `Step` integrates
-the free nodes under gravity and the caller's `FixedNetLoad`s (a force at a grid
-point, spread bilinearly) and `FixedNetPusher`s (capsules that push nodes out),
-projects every strand's cap a few times through `SolvePair`, then holds each node
-within `Reach` of rest through `Solve`, whose projection never lands a raw past
-the cap; a node's stored velocity is its step's whole movement, and damping takes
-its share as the next step integrates. A load touches the net, and a pusher
-touches it only when it reaches a free node (`Pressers` counts those), so a body
-standing near the net neither wakes it nor keeps it awake. A net that nothing
-touches and whose nodes stay under `RestSpeed` for `SleepTicks` sleeps, and a
-sleeping net's step costs one reach test per pusher. `CellColliders` writes a
+parallelogram (`FixedNetSpec`), its edges optionally pinned. `Step` cuts the
+step into `Substeps` slices (XPBD's substepping: small slices with one pass each
+converge a stiff net where many passes over one long step do not). Each slice
+integrates the free nodes under gravity and the caller's `FixedNetLoad`s (a force
+and a mass at a grid point, spread bilinearly; the mass rides the nodes under it,
+so a body's weight bellies the net by what the strands give rather than flinging
+a light node), solves every strand's cap once through `SolvePair`, pushes the
+nodes out of the `FixedNetPusher`s (capsules), then holds each node within
+`Reach` of rest through `Solve`, whose projection never lands a raw past the
+cap. A negative `Sag` strings the net taut, which makes a load's belly
+proportional to the load. The nodes are solved in net units, metres times
+`UnitsPerMetre` about the origin, because a slice moves a node by micrometres
+that a metre's Q48.16 step would round into a buzz that never sleeps; what the
+net hands out is in metres. A load touches the net, and a pusher touches it
+only when it reaches a free node (`Pressers` counts those), so a body standing
+near the net neither wakes it nor keeps it awake. A net whose touch (its loads
+and pushers, fingerprinted) stays the same while its nodes stay under
+`RestSpeed` for `SleepTicks` sleeps, held or not; a sleeping net handed the
+same touch costs one fingerprint, and a change to the touch it sleeps under
+wakes it. `CellColliders` writes a
 rounded box over each cell, `TryGrid` and `OffsetAt` locate a point on the net,
 `DisplacementAt` gives the net's movement under it over its latest step, and
 `TakeChanged`, `Capture`, `Restore` and `AppendStateHash` serve delivery,
