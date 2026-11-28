@@ -6428,10 +6428,6 @@ timers, never motion.
   A play keyed by the shell's shift moving off its park (like the net's parting
   plays, `WorldNetPresentation.StepPartings`) would sweep motes onto it as it
   forms and off it as it lapses.
-- [medium] The puzzles are for a body at full size: on level 1 without a pass a
-  body is at Alice's size, slips through every net and cannot reach a station's
-  screen, so the button teaches nothing to a small player. A small-size variant
-  (a net mesh too fine to slip, or a button gated on size) is the floor's call.
 - [high] While the walk-through scenario was being written, a `puck test` run of
   `worlds/debug/time-field-tests.puck` stalled one world step past the job pool's
   30-second fork deadline (`JobPool.Fork`, a `TimeoutException`) three times: twice
