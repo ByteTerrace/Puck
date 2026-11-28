@@ -636,8 +636,10 @@ What runs:
 - The authority steps it after the tick's bodies (`WorldPopulation.StepNets`,
   `FixedNet`): a body that holds it (a `Pull` hold whose anchor lies on it)
   loads it with its weight there, and every body volume within its strand and
-  the contact reach of it pushes its nodes out. Untouched and still for
-  `sleepSeconds`, it sleeps and costs one box test a body.
+  the contact reach of it pushes its nodes out. A body that stands near it and
+  reaches no node neither wakes it nor keeps it awake (`FixedNet.Pressers`).
+  Untouched and still for `sleepSeconds`, it sleeps and costs one box test a
+  body, and a reach test over its nodes for a body inside that box.
 - It collides as a sheet of rounded boxes over its cells, posed every tick in
   the analytic provider's live set (`WorldColliderSet.RecordNetColliders`), and a
   `grip { holdable: true }` row is climbable. A body standing on it or holding

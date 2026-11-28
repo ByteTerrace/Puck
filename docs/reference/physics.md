@@ -593,10 +593,13 @@ parallelogram (`FixedNetSpec`), its edges optionally pinned. `Step` integrates
 the free nodes under gravity and the caller's `FixedNetLoad`s (a force at a grid
 point, spread bilinearly) and `FixedNetPusher`s (capsules that push nodes out),
 projects every strand's cap a few times through `SolvePair`, then holds each node
-within `Reach` of rest through `Solve`; a node's stored velocity is its step's
-whole movement, and damping takes its share as the next step integrates. A net
-that nothing touches and whose nodes stay under `RestSpeed` for `SleepTicks`
-sleeps, and a sleeping net's step returns at once. `CellColliders` writes a
+within `Reach` of rest through `Solve`, whose projection never lands a raw past
+the cap; a node's stored velocity is its step's whole movement, and damping takes
+its share as the next step integrates. A load touches the net, and a pusher
+touches it only when it reaches a free node (`Pressers` counts those), so a body
+standing near the net neither wakes it nor keeps it awake. A net that nothing
+touches and whose nodes stay under `RestSpeed` for `SleepTicks` sleeps, and a
+sleeping net's step costs one reach test per pusher. `CellColliders` writes a
 rounded box over each cell, `TryGrid` and `OffsetAt` locate a point on the net,
 `DisplacementAt` gives the net's movement under it over its latest step, and
 `TakeChanged`, `Capture`, `Restore` and `AppendStateHash` serve delivery,

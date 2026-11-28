@@ -18,11 +18,13 @@ public sealed partial class WorldPopulation {
 
     /// <summary>Steps every net once, after the tick's bodies have moved: each body near a net that holds it loads it with
     /// its weight at its hold's anchor, and each of its collider volumes pushes the net's nodes out of it. A net no body
-    /// touches sleeps (<see cref="FixedNet.Step"/>), so a sleeping net costs one box test per body.</summary>
+    /// touches sleeps (<see cref="FixedNet.Step"/>), so a sleeping net costs one box test per body and a
+    /// reach test over its nodes per volume of a body inside the box.</summary>
     /// <param name="stepTicks">The step's length, in engine ticks.</param>
     /// <remarks>A body's push reaches past its collider by the net's strand and the contact reach, the band a body
-    /// resting against the net's cell colliders stands in, so a body leaning on the net moves its nodes and one that only
-    /// stands near it does not. A shrunk body loads the net with the cube of its size.</remarks>
+    /// resting against the net's cell colliders stands in, so a body leaning on the net moves its nodes, and one that only
+    /// stands near it neither moves nor wakes it (<see cref="FixedNet.Pressers"/>). A shrunk body loads the net with the
+    /// cube of its size.</remarks>
     public void StepNets(ulong stepTicks) {
         foreach (var panel in m_nets.Panels) {
             var net = panel.Net;
@@ -36,10 +38,10 @@ public sealed partial class WorldPopulation {
                 CollectHold(body: body, panel: panel);
                 CollectPushers(body: body, panel: panel);
             }
-            panel.Holders = panel.Loads.Count;
-            panel.Pushers = panel.Pushing.Count;
             _ = net.Step(gravity: panel.Gravity, loads: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: panel.Loads),
                 pushers: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: panel.Pushing), stepTicks: stepTicks);
+            panel.Holders = panel.Loads.Count;
+            panel.Pushers = net.Pressers;
         }
     }
     // A body holding a face of the net loads it at the hold's anchor (its place on the grid, within the net and within the

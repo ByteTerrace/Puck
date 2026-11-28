@@ -264,4 +264,30 @@ public static class WorldRuleFacts {
     /// resolved cell. A body reference resolving to no live body reads <c>1</c> (perfectly upright) — the neutral
     /// value for an absent body, since nothing about "no body" should ever read as knocked over.</summary>
     public const string UprightPrefix = "$upright:";
+
+    /// <summary>Returns the kind a channel reads as when its spelling alone decides it, with no document to resolve
+    /// against: a net's reading (<see cref="NetPrefix"/>, by <see cref="WorldNetVocabulary.KindOf"/>) or a body's
+    /// kinematic witness (<see cref="KinematicsPrefix"/>, by <see cref="WorldKinematicsVocabulary.KindOf"/>), each named
+    /// by the channel's last part. A test's lowering records such a read beside the rows its gate read.</summary>
+    /// <param name="channel">The channel's spelling.</param>
+    /// <param name="kind">The kind, when the method returns <see langword="true"/>.</param>
+    /// <returns><see langword="false"/> for any other channel, or a reading or witness no vocabulary declares.</returns>
+    public static bool TryKindOfSpelling(string channel, out CellKind kind) {
+        ArgumentNullException.ThrowIfNull(argument: channel);
+        kind = CellKind.Int;
+
+        var last = channel[(channel.LastIndexOf(value: ':') + 1)..];
+
+        if (channel.StartsWith(value: NetPrefix, comparisonType: StringComparison.Ordinal) &&
+            WorldNetVocabulary.TryResolve(name: last, reading: out var reading)) {
+            kind = WorldNetVocabulary.KindOf(reading: reading);
+            return true;
+        }
+        if (channel.StartsWith(value: KinematicsPrefix, comparisonType: StringComparison.Ordinal) &&
+            WorldKinematicsVocabulary.TryResolve(name: last, witness: out var witness)) {
+            kind = WorldKinematicsVocabulary.KindOf(witness: witness);
+            return true;
+        }
+        return false;
+    }
 }
