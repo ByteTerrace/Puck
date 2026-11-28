@@ -265,6 +265,7 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
     id: baseId + 10
     position: mothHeadPoint(at, s, [side * 0.02992, 1.8241, -0.22005])
     material: hair
+    group: 6
     parent: parentName
     curve {
       a [0, 0, 0]
@@ -304,7 +305,7 @@ template mothBlinkLid(name, side, baseId, s, at, parentName, skin, hair) {
 }
 
 // The whole head. Shape ids are the suited Moth's: face and features 32..50 and 56..66, scalp 76..78, the nose's wings
-// 79 and 80, the hair locks 81..84 and the blink lids 284..287; groups 6..9 and 14.
+// 79 and 80, the hair locks 81..84 and the blink lids 284..287; groups 6..9.
 template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair) {
   shape Superellipsoid "face" {
     id: 32
@@ -354,8 +355,9 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
     parent: parentName
   }
 
-  // A soft bridge in the face's group, and a small rounded tip with its two wings in a group of its own: a part a few
-  // centimetres across bakes on a lattice of its own size, where the face's group bakes at the coarsest cell.
+  // A soft bridge, a small rounded tip with its two wings and the nostrils, all in the face's group: each refines only its
+  // own box toward its own detail, where a group of its own would bake a few centimetres on a lattice of its own size,
+  // far finer than any view resolves.
   shape Sweep "noseBridge" {
     id: 36
     position: mothHeadPoint(at, s, [0, 1.7295, -0.2275])
@@ -379,7 +381,9 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
     rotation: rotate([0, 1, 0], 180)
     scale: map([0.0135, 0.0105, 0.0105], v => v * s)
     material: skin
-    group: 14
+    blend: "SmoothUnion"
+    smooth: 0.006 * s
+    group: 6
     parent: parentName
     exponent: 2
   }
@@ -392,7 +396,7 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
     material: skin
     blend: "SmoothUnion"
     smooth: 0.007 * s
-    group: 14
+    group: 6
     parent: parentName
     exponent: 2
   }
@@ -405,7 +409,7 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
     material: skin
     blend: "SmoothUnion"
     smooth: 0.007 * s
-    group: 14
+    group: 6
     parent: parentName
     exponent: 2
   }
@@ -415,6 +419,7 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
     position: mothHeadPoint(at, s, [0.0085, 1.6805, -0.2425])
     scale: map([0.0035, 0.0016, 0.0025], v => v * s)
     material: lip
+    group: 6
     parent: parentName
     exponent: mothHeadSoftness
   }
@@ -424,6 +429,7 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
     position: mothHeadPoint(at, s, [-0.0085, 1.6805, -0.2425])
     scale: map([0.0035, 0.0016, 0.0025], v => v * s)
     material: lip
+    group: 6
     parent: parentName
     exponent: mothHeadSoftness
   }

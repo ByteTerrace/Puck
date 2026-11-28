@@ -183,19 +183,30 @@ everything parented beneath them, still posed and animated by the hidden body;
 
 ## Geometry and motion
 
-The creation uses superellipsoids for smooth volumes, convex extrusions for
-armor plates, quadratic sweeps for digits and facial lines, and axial profiles
-for flared shins. Scoped subtraction and intersection isolate the hood opening,
-eye sockets, plate boundaries and ankle arches. The shin's ivory arch bands and
-side panels are fitted geometry. Detail that is colour rather than form is paint
-(`palette[].paints`), drawn crisp at the pixel and absent from the bake:
-the hood's ivory trim, the chest slab's lavender centre, the shoulder slabs'
-ivory bands, the gauntlets' lavender inner halves, the vent slot pairs on the
-outer faces of the gauntlets and shin panels, the boot seams, the mouth, the
-pods' plates, and the upper lids and lashes where their tubes cross the eye
-whites. The near-ellipsoidal forms use
-exponent 2.1, a slightly fuller form than the ellipsoid (exponent 2). Check `world.budget` after geometry edits:
-the rebuilt world was verified at `stepScale 1`.
+The suits ([suits.puck](suits.puck)) use superellipsoids for smooth volumes,
+convex extrusions for armor plates and quadratic sweeps for digits, the braid's
+three twisted strands and facial lines. Plates that flare or arch are prisms
+whose outlines carry the shape (a greave is its front outline clipped by its side
+outline; a shoulder plate is its arched side outline extruded across the
+shoulder), never a flare or shear warp, whose scope asks the bake for cells a
+thirty-second of the plate's thickness. Every shape that rides one bone without
+a joint of its own joins that bone's bake group, so a limb bakes as one mesh.
+Detail that is colour rather than form is paint (`palette[].paints`), drawn crisp
+at the pixel and absent from the bake: the hood's ivory trim, the ear mounts'
+covers and rings, the chest slab's lavender centre, the shoulder plates' ivory
+bands, the gauntlets' lavender inner halves, the greaves' ivory arch bands and
+side panels with their seams, the vent slot pairs on the gauntlets and greaves,
+the pods' ivory bands, seams and vents, the ankle hubs' bezels and lenses, the
+heel jets' steel rings, the boot seams, the mouth, and the upper lids and lashes
+where their tubes cross the eye whites. Each band that hugs a cut is the
+cutter's own pose written through the standard rig's `poseIn`, so the two never
+drift apart. The near-ellipsoidal forms use exponent 2.1, a slightly fuller form
+than the ellipsoid (exponent 2).
+
+The scout suit is the same family cut lighter: one shoulder plate a side,
+greaves, gauntlets, boots and toe caps a seventh slimmer, a smaller chest slab, a
+bone dorsal plate down her back where the mech suit's pods hang, and plain heels
+with no jet hardware.
 
 The palette is the concept pack's: lavender plates authored `#744080`, which
 the studio's lighting renders at the owner's dusty `#B186B6`, and warm ivory
@@ -257,9 +268,9 @@ lugs on the thigh and the greave's top.
 
 The greaves flare straight from a narrow top under the knee to a wide foot,
 under an ivory knee guard that rides the thigh and stands proud of the greave's
-lavender front. The boots are their own lavender blocks under the greave's
-ivory cuff: fitted ivory ankle arches, broad lavender insteps and toe caps on
-thick charcoal soles, and split heel pads. Each recessed heel jet points 55 degrees below rearward horizontal in the
+lavender front. The boots are their own lavender blocks through the greave's
+arches, each arch framed by a painted ivory band: broad lavender insteps and toe
+caps on thick charcoal soles, and split heel pads. Each recessed heel jet points 55 degrees below rearward horizontal in the
 boot's rest frame; its lens and exhaust share that axis. The cyan lens and pale
 core stay softly lit at rest. An axial clearance cut passes through the cream
 instep and rubber ankle behind the nozzle; the raised rear arch clears the barrel.
@@ -271,9 +282,6 @@ landing. Nozzle, ankle and cutouts follow the boot so the passage stays aligned
 as it articulates. The [debug studio](../../debug.md#avatar-studio) provides front,
 side, low rear and quarter views on a neutral platform, including `studio-jets`
 for the nozzle clearance study.
-At close range the curved ankle trim still shows some uneven baked shading;
-`mesh audit` locates small folds at its clipped edges even though the mesh is
-closed. Judge the silhouette separately from that remaining surface defect.
 
 The rig swings the thighs, shins, feet, arms and forearms during walking.
 Two surface effectors plant the feet in alternating stride phases. Their target
@@ -307,12 +315,25 @@ the world kit's responsibility.
 Travel direction turns the gait, and the damped landing driver adds joint bend
 and pelvis displacement as the body settles after impact.
 
+The mantle is keyed over the move's progress. The move rises straight up beside
+the face before it carries her in over the top, and `mantlePose` holds its share
+gone (0 to 1, from the `mantling` timer). Her rig's `mantle` driver (the
+standard rig's `progressLayer`) plays that as one turn of the mantle curves in
+[moth.puck](moth.puck), and takes her hips, chest, head, arms and legs from every
+other layer while it runs. Her arms snap up for the catch as her chest arches and
+her head looks up at the lip, her hands come down onto the top as she pulls, her
+arms push while her chest drives over her hands and her knees tuck up under her,
+and then her left leg reaches over the top and her right pushes off, back in her
+run's pose as she lands.
+
 ## Verify edits
 
-Check document admission and the stamp budget (312 of 367):
+Check document admission, the bake groups and instructions, and what one Moth
+bakes at 4 m:
 
 ```powershell
 dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll creation stats --world worlds/debug/labs/moth.puck --prototype moth
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll mesh audit --world worlds/debug/labs/moth.puck --prototype moth --cpu --eye 16,1.2,-4
 ```
 
 Then compare the live suit with the turnaround at the sheet's framing, standing

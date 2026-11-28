@@ -17,8 +17,13 @@ Her head is the suited Moth's own: the [`head.puck`](head.puck) library's
 so her eyes sit 1.527 m up, the suited eye line less sheet 05's 0.208 m
 footbed. Its mouth and lid paints and its blink frame (`mothBlinkPose`) are
 placed at her head the same way. A thick braid roots under the lock beside her
-right cheek as one smooth tapering root, then a plait of alternating lobes falls
+right cheek as one smooth tapering root, then plaits as three twisted strands
 over her right collarbone to an ochre tie.
+
+Her journal rides a slim wrist panel on each bare forearm
+([contract.puck](contract.puck)'s `mothBodyWristMount` and `mothBodyPanelShape`),
+raised to read as the suits' panels are, and her mantle plays the suits' keyed
+pull-up at her own joints.
 
 ## Wear her
 

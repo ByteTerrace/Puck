@@ -2218,13 +2218,14 @@ Next: fill the engine gaps first
   The thresholds (`folds > 0` amber, `flipped > 0` red) are right and are not
   loosened. A per-axis narrowing was worse over the whole world, and moving
   the lattice off a face only moves which exhibit is red.
-- [high] The Moth's shin blend groups (`shin-*`, `shinCavity-*`, `archBand-*`,
-  `archBandHollow-*`, `archBandBack-*`, `sidePanel-*`) carry seven tenths of
-  her flipped triangles in two groups, nearly all under a square millimetre
-  and strung along the blades' edges: each blade tapers to a rim thinner than
-  the 2 mm floor, two creases in one cell, which one vertex a patch cannot
-  hold. `blinkCrease-*` and `nozzleGlow-*` are next on her, and the Humble
-  Brick's face is the worst of a wider sample; none of those three is examined. The contour needs a rule for a face it cannot
+- [high] A blade that tapers to a rim thinner than the 2 mm floor (two creases
+  in one cell, which one vertex a patch cannot hold) contours as strings of
+  flipped triangles under a square millimetre along its edges. The Moth's shin
+  blades (her ivory arch bands and side panels as dilated shells) carried seven
+  tenths of her flipped triangles until they became paints; the measurements
+  below were read in them. `blinkCrease-*` and `nozzleGlow-*` still show it on
+  her, and the Humble Brick's face is the worst of a wider sample; none of
+  those three is examined. The contour needs a rule for a face it cannot
   resolve (close it to one crease, as `SdfSampledLattice.CloseSheets` closes a
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
@@ -2239,8 +2240,8 @@ Next: fill the engine gaps first
   bottom face at offsets 0.3 mm apart, and the triangles between that vertex
   and its neighbours (0.3 mm high) turn over. The audit also counts each
   material-cut piece of a turned triangle: with the cut off, the group reads
-  417 flipped, not 902. Read the shins in a device store audit (the CPU-taps
-  item above) before changing their contour.
+  417 flipped, not 902. Read a remaining example in a device store audit (the
+  CPU-taps item above) before changing the contour.
 - [high] `shape-blend-xor`'s flipped triangles lie along the pinch curves
   where the sphere crosses the box's faces, where the XOR's two solids touch
   along a line, nearly all with a ring cell's merged vertex (a 15 mm cell's 24

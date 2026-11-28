@@ -74,13 +74,14 @@ let torsoSuit = 28 // segmented charcoal fabric between the chest and belt
 // The journal panels' glass: their paints are the journal's interface (contract.puck's worn screen slots).
 let journalScreenLeft = mothMechSuit.wornScreen.screens.left
 let journalScreenRight = mothMechSuit.wornScreen.screens.right
-// Slot 6 (cyan) is free.
+let spineCharcoal = 6 // the spine, its joints painted
 
 // Each bone's bake group, by side: every shape riding that bone without a joint of its own joins it, so the bone bakes as
-// one mesh. Her head's groups are head.puck's (6 to 9 and 14).
+// one mesh. Her head's groups are head.puck's (6 to 9).
 let pelvisGroup = 2
 let torsoGroup = 3
 let hoodGroup = 4
+let braidGroup = 5
 function upperArmGroup(isRight) = 40 + isRight * 10
 function forearmGroup(isRight) = 41 + isRight * 10
 function thighGroup(isRight) = 42 + isRight * 10
@@ -866,7 +867,7 @@ template mothLimbs(side, isRight, scout) {
     parent: $"shin-{side}"
     profile {
       kind: "Convex"
-      cornerRadius: 0.1
+      cornerRadius: 0.2
       vertices [
         [-0.85, -0.34]
         [-0.85, 0.45]
@@ -1013,7 +1014,7 @@ template mothLimbs(side, isRight, scout) {
     parent: $"boot-{side}"
     profile {
       kind: "Convex"
-      cornerRadius: 0.075
+      cornerRadius: 0.15
       vertices [
         [-1, -0.78]
         [-1, 0.22]
@@ -1093,7 +1094,7 @@ template mothLimbs(side, isRight, scout) {
         ]
         profile {
           kind: "Convex"
-          cornerRadius: 0.18
+          cornerRadius: 0.3
           sides: 6
           vertices [
             [-1, -0.8]
@@ -1479,12 +1480,25 @@ prototypes {
           coat: 0
           paints: mothLidPaints(headScale)
         }
+        // The spine's charcoal, its joints painted as lighter bands down its back, one every 67.5 mm. A slot of its own,
+        // so the paint rides only the spine's group's materials.
         {
-          color: "#2ED6EC"
-          roughness: 0.25
+          color: "#252630"
+          toonSelect: mothStyles
+          roughness: 0.62
           specular: 0.04
-          emissive: 2250
+          emissive: 0
           coat: 0
+          paints [
+            {
+              parent: "spine"
+              type: "Box"
+              position [0, -0.0075, 0.0175]
+              scale [0.03, 0.006, 0.012]
+              color: "#3A3B47"
+              repeat { cell [0, 0.0675, 0] }
+            }
+          ]
         }
         {
           color: "#754137"
@@ -1858,26 +1872,15 @@ prototypes {
         exponent: softness
       }
 
-      // The spine down her back and its five joints, one shape repeated.
+      // The spine down her back; its joints are painted bands (spineCharcoal).
       shape Superellipsoid "spine" {
         id: 14
         position [0, 1.3465, 0.155]
         scale [0.0225, 0.1775, 0.0175]
-        material: charcoal
+        material: spineCharcoal
         group: torsoGroup
         parent: "torso"
         exponent: 3
-      }
-
-      shape Superellipsoid "spineJoints" {
-        id: 15
-        position [0, 1.339, 0.172]
-        scale [0.019, 0.012, 0.01]
-        material: charcoal
-        group: torsoGroup
-        parent: "torso"
-        exponent: 3
-        domain [repeat(spacing: [1, 0.0675, 1], limit: [0, 2, 0], origin: [0, 1.339, 0.172])]
       }
 
       if scout {
@@ -2019,7 +2022,7 @@ prototypes {
         position [0.1232, 1.695, -0.137]
         rotation: halfTurn
         material: ink
-        group: hoodGroup
+        group: braidGroup
         parent: "helmet"
         curve {
           a [0, 0, 0]
@@ -2039,7 +2042,7 @@ prototypes {
           position: plait.at
           rotation: halfTurn
           material: ink
-          group: hoodGroup
+          group: braidGroup
           parent: plait.parent
           curve {
             a [0, 0, 0]
@@ -2060,7 +2063,7 @@ prototypes {
         rotation: halfTurn
         scale [0.028, 0.009, 0.028]
         material: brass
-        group: hoodGroup
+        group: braidGroup
         parent: "braid-root-2"
         rounding: 0.003
       }
@@ -2071,7 +2074,7 @@ prototypes {
         rotation [0, 0, 0.0998334, 0.9950042]
         scale [0.02, 0.035, 0.016]
         material: ink
-        group: hoodGroup
+        group: braidGroup
         parent: "braid-root-2"
         exponent: softness
       }

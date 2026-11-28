@@ -40,7 +40,7 @@ let mothBodyWristMount = {
 }
 let mothBodyPanelShape = {
   bezel { half [0.005, 0.04, 0.045], rounding: 0.003 }
-  screen { half [0.04, 0.032], depth: 0.0015, out: 0.0045 }
+  screen { half [0.04, 0.032], depth: 0.003, out: 0.003 }
   flap { half [0.003, 0.043, 0.048], rounding: 0.002, out: 0.0095, open: -1.9 }
 }
 let mothBodyWornScreen = wornScreenMount(mount: mothBodyWristMount, screens: { left: 27, right: 28 })
