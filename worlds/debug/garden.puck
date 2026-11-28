@@ -7,7 +7,7 @@
 // world's painting, and `world.reload` there recompiles only the debug world. See debug.md beside this file.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "garden"
 
 // The garden steps while a window onto it is at least glimpsed or someone stands in it (simulation.stepsAt).

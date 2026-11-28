@@ -6,7 +6,7 @@
 // world, never this one. See debug.md beside this file.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "hearth"
 
 // The hearth stands behind two windows from the debug world, so it steps only while its own window is watched from

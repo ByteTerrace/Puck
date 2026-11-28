@@ -1,9 +1,9 @@
 // What a body arrives as in a world the debug world's ship flies to: the kit and look selectors read `form`, the
-// Moth's suit register on everything but a craft, 4 on a craft and 5 on a craft in space (../standard/ship.puck's
-// `craft` and `space` registers, the space kit's camera and motion taking over where nothing pulls), so a
-// ship that crosses the sky seam is a ship here and the Moth steps out of a painting in the form she left in. The
-// debug world's own `form` also counts noclip (noclip.puck); a world that imports this file imports suit.puck for the
-// suit register and the pilot's kit and look, and replaces its selectors with these.
+// Moth's suit register on everything but a craft (6 for her scout suit, as noclip.puck numbers it), 4 on a craft and 5
+// on a craft in space (../standard/ship.puck's `craft` and `space` registers, the space kit's camera and motion taking
+// over where nothing pulls), so a ship that crosses the sky seam is a ship here and the Moth steps out of a painting in
+// the form she left in. The debug world's own `form` also counts noclip (noclip.puck); these selectors replace the
+// player module's selection by the suit register alone (../standard/player/player.puck).
 
 import "../standard/ship"
 import "suit"
@@ -17,7 +17,7 @@ state {
       name: "form"
       kind: "Counter"
       initial: 1
-      envelope { $type: "set", values [0, 1, 4, 5] }
+      envelope { $type: "set", values [0, 1, 4, 5, 6] }
     }
   ]
 }
@@ -28,6 +28,7 @@ kits {
       bodyState: "form"
       cases [
         { value: 0, row: "pilot" }
+        { value: 6, row: "scout" }
         { value: 4, row: "ship" }
         { value: 5, row: "ship-space" }
       ]
@@ -41,6 +42,7 @@ looks {
       bodyState: "form"
       cases [
         { value: 0, row: "moth-pilot" }
+        { value: 6, row: "moth-scout" }
         { value: 4, row: "ship" }
         { value: 5, row: "ship" }
       ]
@@ -52,7 +54,7 @@ looks {
 // read one local whose every value the form register's envelope keeps, so the work sheet sees that a firing closes its
 // own gate and prices the rule by the registers that move.
 rule "craft-form" {
-  local target = (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * bodyState(each, suit))
+  local target = (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * ((bodyState(each, suit) == 2) ? 6 : bodyState(each, suit)))
   when bodyState(each, form) != target
   mode: Level
   forEach: $bodies

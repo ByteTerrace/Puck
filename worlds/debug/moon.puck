@@ -11,7 +11,7 @@
 // merged once from what the debug world already baked, so seeing the planet bakes nothing and holds none of its bodies.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "moon"
 
 // The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's size; her suit toggle comes

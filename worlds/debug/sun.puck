@@ -19,7 +19,7 @@
 // Boot the debug world, never this one.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "sun"
 
 // The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's size.

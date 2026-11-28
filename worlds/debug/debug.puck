@@ -15,7 +15,7 @@
 // suit and replaces its kit selector).
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "debug"
 
 import "../standard/skies"

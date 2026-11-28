@@ -9,7 +9,7 @@
 // knight, -1 a black pawn), since the pieces' own rows are keyed by the station's qualified placement names.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "chess-tests"
 
 import "game-stations"

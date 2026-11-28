@@ -2,7 +2,7 @@
 // --prototype <id>` judges its form in seconds without a World.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "gallery-kit"
 
 import "../standard/architecture"

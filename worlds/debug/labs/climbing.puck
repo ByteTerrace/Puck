@@ -16,7 +16,7 @@
 // `lab-climbing`, and the `arrival` frame behind the seat leads back there.
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth"
+basis: "../stage"
 documentId: "lab-climbing"
 
 import "../still-noon"

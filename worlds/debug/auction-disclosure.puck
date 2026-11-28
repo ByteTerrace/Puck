@@ -5,7 +5,7 @@
 // ends before the lot's close at tick 302, so nothing the game reveals on purpose differs between the worlds.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "auction-disclosure"
 import "auction"
 

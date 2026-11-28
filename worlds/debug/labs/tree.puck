@@ -7,7 +7,7 @@
 // Its document id, `lab-tree`, is the address the gallery's lab wing reaches it by: a plaque's portal names it.
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth"
+basis: "../stage"
 documentId: "lab-tree"
 
 import "../day-alone"

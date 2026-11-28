@@ -8,7 +8,7 @@
 // watched world's tape carries its lapses, so the first scenario's `steps < 75` gate holds recorded as it does
 // unrecorded, and the replay moves the watched world's clocks over the same ticks.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "attention-tests"
 
 import "painting-kit"

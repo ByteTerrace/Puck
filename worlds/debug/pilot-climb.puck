@@ -1,5 +1,0 @@
-// Out of the suit she climbs as she does in it (avatars/moth-climb.puck), on the stamina wheel the suit's climb declares,
-// so a rope net (the gallery toybox's net panel) is a climb either way. A document of its own, which suit.puck imports,
-// so the climb row composes ahead of the pilot kit's own ground and fall rows, which refill the wheel.
-import "../standard/abilities"
-climbAbility(kit: "pilot", registers: 0)

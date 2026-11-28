@@ -14,7 +14,7 @@
 // decision's common and option effects are one firing. W16 distinguishes an absent body target from a stored zero.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "rule-faults-tests"
 
 import "stand-in"

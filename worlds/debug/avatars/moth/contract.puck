@@ -1,0 +1,98 @@
+// The Moth's avatar contract: what the standard player module (../../../standard/player/player.puck) reads of her. A
+// module library: it hands its importers lets and emits no document. Her own body, the 1.68 m pilot of body.puck, and
+// the two suits she owns, sculpted in suits.puck, each named by the kit and look rows it wears, its capsule, its pace and
+// the actions it grants. The register `suit` holds what she wears: 0 her body, 1 the mech suit she is born in, 2 the
+// scout suit.
+//
+// What each form grants:
+//
+//   her body     sprint, a 3.7 m/s jump (a fit woman's standing jump, 0.56 m), the mantle to 1.5 m, the climb, a swim,
+//                lock and strafe
+//   mech suit    sprint, a 5.1 m/s jump and an air jump the heel jets push, the back pods' dash and jetpack (whose
+//                flight turns the jump into thrust), the mantle to 1.9 m, the climb, a swim, lock and strafe
+//   scout suit   sprint at a quicker pace, a 6 m/s jump with no air jump, a shorter dash, the mantle to 2.2 m, a
+//                faster climb, a swim, lock and strafe: no jetpack, so its pods and heel jets stay dark
+
+import "../../../standard/player/player"
+import "../../../standard/player/actions"
+
+// Each suit's wrist panel sits on the outer face of its gauntlet (suits.puck's `bracer-<side>`), riding the forearm.
+let mothWrist = wristPanel(
+  left: wristPoint("forearm-left", [-0.517, 0.995, 0], [-1, 0, 0]),
+  right: wristPoint("forearm-right", [0.517, 0.995, 0], [1, 0, 0])
+)
+
+// The suits' chase camera offsets: a waist pivot, close targets at her head (fade) and just below it (cutaway, which
+// keeps her solid), and a first-person eye in her face.
+let mothSuitCamera = {
+  pivot [0, 1, 0]
+  fadeClose [0, 1.74, 0]
+  cutawayClose [0, 1.55, 0]
+  eye [0, 1.75, 0.22]
+}
+
+let mothBody = playerForm(
+  name: "body",
+  kit: "pilot",
+  look: "moth-pilot",
+  height: 1.68,
+  radius: 0.25,
+  value: 0,
+  speed: 5,
+  actions: [
+    sprintAction()
+    jumpAction(speed: 3.7)
+    mantleAction(height: 1.5, depth: 0.4)
+    climbAction()
+    swimAction(equilibriumOffset: 1, settleRate: 2.5, speed: 2.5)
+    lockAction()
+    strafeAction()
+  ]
+)
+
+let mothMechSuit = playerForm(
+  name: "mech",
+  kit: "walker",
+  look: "moth",
+  height: 2.06,
+  radius: 0.35,
+  value: 1,
+  speed: 5,
+  camera: mothSuitCamera,
+  wrist: mothWrist,
+  actions: [
+    sprintAction()
+    jumpAction(speed: 5.1, airJumps: 1, when: [notFlying])
+    dashAction(speed: 15, duration: 0.2, cooldown: 0.8)
+    mantleAction(height: 1.9, when: [notFlying])
+    jetpackAction(speed: 10)
+    climbAction()
+    swimAction(equilibriumOffset: 1.25, settleRate: 2.5, speed: 2.5)
+    lockAction()
+    strafeAction()
+  ]
+)
+
+let mothScoutSuit = playerForm(
+  name: "scout",
+  kit: "scout",
+  look: "moth-scout",
+  height: 2.06,
+  radius: 0.35,
+  value: 2,
+  speed: 5.5,
+  camera: mothSuitCamera,
+  wrist: mothWrist,
+  actions: [
+    sprintAction()
+    jumpAction(speed: 6)
+    dashAction(speed: 12, duration: 0.15, cooldown: 0.6)
+    mantleAction(height: 2.2)
+    climbAction(speed: 2.8)
+    swimAction(equilibriumOffset: 1.25, settleRate: 2.5, speed: 3)
+    lockAction()
+    strafeAction()
+  ]
+)
+
+let mothAvatar = playerAvatar(name: "moth", body: mothBody, suits: [mothMechSuit, mothScoutSuit], worn: 1)

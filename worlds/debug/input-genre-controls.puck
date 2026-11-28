@@ -1,6 +1,6 @@
 // Runnable input-model demonstrations; the sweep drives these ordinary rules and reads their results.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "input-genre-controls"
 channels: concat(
   [

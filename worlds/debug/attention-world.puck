@@ -3,7 +3,7 @@
 // rings once its second second has passed. Unwatched it lapses: the day keeps time, the counter stands, and the bell
 // rings on the first tick it steps again.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "attention-world"
 
 simulation {

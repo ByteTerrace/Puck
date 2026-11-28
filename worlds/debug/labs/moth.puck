@@ -22,7 +22,7 @@
 // frame outside the stage's doorway leads back there.
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth"
+basis: "../stage"
 documentId: "lab-moth"
 
 import "../still-noon"

@@ -8,7 +8,7 @@
 // leave her balanced on its far edge, so it cannot be stood on; and a 3 m ledge whose top she pulls up onto.
 // `puck test worlds/debug/climb-tests.puck --reproduce`.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "climb-tests"
 
 import "set-controls"

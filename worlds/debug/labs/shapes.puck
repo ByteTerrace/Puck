@@ -10,7 +10,7 @@
 // exhibit of the catalog is one tap on the console's list away.
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth"
+basis: "../stage"
 documentId: "lab-shapes"
 
 // A clear, neutral midday that hardly moves.

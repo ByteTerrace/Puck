@@ -10,7 +10,7 @@
 // Boot the debug world, never this one.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "globe"
 
 import "set-controls"

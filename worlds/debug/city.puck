@@ -16,7 +16,7 @@
 // street (z -125 .. -135) runs the town's width.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "city"
 
 // The town steps while a window onto it is at least glimpsed or someone walks it; with nobody near any window its
