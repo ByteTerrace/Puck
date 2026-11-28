@@ -1359,6 +1359,14 @@ public sealed partial class WorldBody {
             MarkDurableDirty(slot: slot);
         }
 
+        LetGoForMantle(scratch: ref scratch);
+
+        return true;
+    }
+    // A mantle's exclusive move owns the body: it lets go of whatever row holds it (a climbed face, the ground it ran
+    // on), so `Mantling` reads true and no row seats or snaps it while the move carries it, and it drops the velocity
+    // and impulse it had, which the move's own exit hands back.
+    private void LetGoForMantle(ref BodyMotionScratch scratch) {
         m_holdSpendAccumulator.Reset();
         m_holdRestoreAccumulator.Reset();
         m_holdAnchor = FixedVector3.Zero;
@@ -1371,8 +1379,6 @@ public sealed partial class WorldBody {
         CancelImpulse();
         scratch.FaceGuard = FaceEdges.None;
         scratch.FaceInto = FixedVector3.Zero;
-
-        return true;
     }
     // The one proof every mantle passes, a climb's off the top of its face and a mantle action's off any ledge: raised
     // by `raise`, carried `depth` along the level direction `into`, and lowered onto walkable support
@@ -1441,13 +1447,14 @@ public sealed partial class WorldBody {
     // steeper than a walkable slope within the action's reach, and a raise between the kit's step and the action's
     // height proves a landing past its top that stands higher than a step. `move` is the exclusive move that carries the
     // body there, leaving it at the action's share of the commanded speed. A body already moving under a timed move,
-    // or holding a face, finds none: a climb's own mantle owns the top of a held face.
+    // or held to a face by a pull, finds none: a climb's own mantle owns the top of a held face. Every other row (the
+    // ground it runs on, the fall it is in) is a row a mantle lets go of.
     private bool TryPrepareMantleAction(in CompiledBodyInstruction instruction, ref BodyMotionScratch scratch, out WorldTimedBodyMove move) {
         move = default;
 
         if (
             m_timedMove.IsActive ||
-            Holding ||
+            HoldOwnsVerticalChannel ||
             !CanStartTimedMove ||
             (m_contactField is not { } field) ||
             (m_collider is null)
@@ -1546,11 +1553,7 @@ public sealed partial class WorldBody {
 
         m_timedMove = scratch.PreparedMantle;
         scratch.PreparedMantle = default;
-        m_planarVelocity = FixedVector3.Zero;
-        m_verticalVelocity = FixedQ4816.Zero;
-        m_verticalVelocityAccumulator.Reset();
-        ClearBallisticTangent();
-        CancelImpulse();
+        LetGoForMantle(scratch: ref scratch);
     }
     // An impulse fired while a pull holds the body lies in the held face: the commanded direction laid onto the face
     // when the effect follows the move direction, else the authored body direction with its part through the face
