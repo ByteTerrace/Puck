@@ -1,0 +1,119 @@
+// The debug world set's companions: the kinds its characters keep in their menagerie (../standard/menagerie.puck) and
+// the creation each wears. The first two are Mintstitch and Tangerine (docs/decisions/play.md, "Companions live in the
+// journal's menagerie"). A library: it hands its importers the kinds and a template that writes their creations, and
+// emits no document.
+//
+// Both creations are placeholders named for the companions they stand in for, a small round flier each in its
+// companion's colours, until the companion concept pack's references give them their real forms; a kind's row keeps its
+// number and id when its creation is rebuilt.
+import "../standard/rig"
+
+let menagerieKinds = [
+  { kind: 1, id: "mintstitch", name: "Mintstitch", prototype: "companion-mintstitch" }
+  { kind: 2, id: "tangerine", name: "Tangerine", prototype: "companion-tangerine" }
+]
+
+// What every placeholder flier shares, inside its creation: a round body in palette slot 0, two dark eyes (slot 1) on
+// its front (-Z) and two small wings (slot 2) that bank and pitch with its flight. About 0.26 m across, its underside
+// 3 cm off its root.
+template menagerieFlier() {
+  shape Superellipsoid "body" {
+    position [0, 0.13, 0]
+    scale [0.11, 0.1, 0.1]
+    material: 0
+    group: 1
+    exponent: 2.3
+    swings [
+      swing("bank", [0, 0, -1], 0.06, [0, 0.13, 0]) with { wave: "linear" }
+      swing("pitch", [-1, 0, 0], -0.035, [0, 0.13, 0]) with { wave: "linear" }
+    ]
+  }
+  for side in [-1, 1] {
+    shape Ellipsoid $"eye{(side < 0) ? "Left" : "Right"}" {
+      position [(side * 0.038), 0.15, -0.088]
+      scale [0.016, 0.02, 0.012]
+      material: 1
+      group: 1
+      parent: "body"
+    }
+    shape Ellipsoid $"wing{(side < 0) ? "Left" : "Right"}" {
+      position [(side * 0.12), 0.16, 0.02]
+      rotation: rotate([0, 0, 1], side * -25)
+      scale [0.07, 0.012, 0.045]
+      material: 2
+      group: 2
+      parent: "body"
+    }
+  }
+  drivers [
+    { name: "bank", signal: "lateralAcceleration", cadence: 1, when ["always"] }
+    { name: "pitch", signal: "forwardAcceleration", cadence: 1, when ["always"] }
+  ]
+}
+
+// The kinds' creations, for a world's `prototypes`.
+template menagerieCreatures() {
+  prototypes {
+    // Mintstitch: mint green, a cream stitch round its middle and two ears.
+    prototype "companion-mintstitch" {
+      document {
+        name: "Mintstitch"
+        schema: "puck.creation.v2"
+        palette [
+          {
+            color: "#8FD9B6"
+            roughness: 0.55
+            specular: 0.2
+            sheen: 0.3
+            paints [
+              { parent: "body", type: "Plane", position [0, 0, 0], stroke: 0.004, color: "#F4EBD2" }
+            ]
+          }
+          { color: "#1C1622", roughness: 0.2, specular: 0.6 }
+          { color: "#D7F2E3", roughness: 0.45, specular: 0.25 }
+        ]
+        menagerieFlier()
+        for side in [-1, 1] {
+          shape Superellipsoid $"ear{(side < 0) ? "Left" : "Right"}" {
+            position [(side * 0.06), 0.225, 0]
+            rotation: rotate([0, 0, 1], side * -20)
+            scale [0.022, 0.04, 0.018]
+            material: 0
+            group: 1
+            parent: "body"
+            exponent: 2.5
+          }
+        }
+      }
+    }
+    // Tangerine: a round orange with a green leaf on its crown.
+    prototype "companion-tangerine" {
+      document {
+        name: "Tangerine"
+        schema: "puck.creation.v2"
+        palette [
+          { color: "#F28C28", roughness: 0.6, specular: 0.25 }
+          { color: "#1C1622", roughness: 0.2, specular: 0.6 }
+          { color: "#FFE3B8", roughness: 0.45, specular: 0.25 }
+          { color: "#4E9A3E", roughness: 0.5, specular: 0.15 }
+        ]
+        menagerieFlier()
+        shape Cylinder "stem" {
+          position [0, 0.235, 0]
+          scale [0.006, 0.012, 0.006]
+          material: 3
+          group: 1
+          parent: "body"
+        }
+        shape Ellipsoid "leaf" {
+          position [0.03, 0.245, 0]
+          rotation: rotate([0, 0, 1], -30)
+          scale [0.035, 0.007, 0.018]
+          material: 3
+          group: 1
+          parent: "body"
+        }
+      }
+    }
+  }
+}

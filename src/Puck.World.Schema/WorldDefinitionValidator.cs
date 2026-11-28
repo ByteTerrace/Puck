@@ -1203,6 +1203,7 @@ public static partial class WorldDefinitionValidator {
             navigationDomainNames: navigationDomainNames,
             navigationProfileNames: navigationProfileNames,
             curveNames: curveNames,
+            stateSlots: actionStateSlots,
             errors: errors
         );
 

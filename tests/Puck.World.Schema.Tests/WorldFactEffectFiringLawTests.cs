@@ -128,6 +128,7 @@ public sealed class WorldFactEffectFiringLawTests {
         public Fact Read(BodyPositionOperand operand) => throw Unserved();
         public Fact Read(BodyKinematicsOperand operand) => throw Unserved();
         public Fact Read(WorldNetOperand operand) => throw Unserved();
+        public Fact Read(GroupMemberOperand operand) => throw Unserved();
         public Fact Read(EngagedOperand operand) => throw Unserved();
         public Fact Read(BodyStateOperand operand) => throw Unserved();
         public Fact Read(LinkStalenessOperand operand) => throw Unserved();
@@ -136,6 +137,7 @@ public sealed class WorldFactEffectFiringLawTests {
         public Fact Read(PointerOperand operand) => throw Unserved();
         public Fact Read(ContactOperand operand) => throw Unserved();
         public Fact Read(NearestOperand operand) => throw Unserved();
+        public Fact Read(IdentityRecordOperand operand) => throw Unserved();
         public Fact Read(NavigationOperand operand) => throw Unserved();
         public Fact Read(ProducerOperand operand) => throw Unserved();
         public Fact Read(BoardCellOfOperand operand) => throw Unserved();

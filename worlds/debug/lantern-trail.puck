@@ -1,0 +1,74 @@
+// The lantern trail: the debug world's quest, a chain of two parts that crosses worlds (standard/quests.puck). Its steps
+// are places, so playing it walks the painting wing and the garden:
+//
+//   lanternLit   taken up standing before the garden painting; its first step is finished in the garden, past the
+//                arrival frame (garden.puck), and its second back home before the painting.
+//   lanternKept  open to a character who finished lanternLit, taken up before the painting again, and finished at the
+//                garden's obelisk (garden.puck).
+//
+// The quests live on each seat's character, so the progress made in the garden is the progress read here. The four
+// local seats are the debug party: a seat writing its body index into `lanternTrailShare.from` shares the trail with the
+// others, and each joins at the farthest part it qualifies for. lantern-trail-tests.puck plays the crossing.
+
+import "../standard/quests"
+import "../standard/reach"
+import "../standard/place"
+
+// Where the trail starts and ends at home: the floor before the garden painting, which faces the wing from its south
+// wall (paintings.puck); a body walking +Z from the start passes through its glass into the garden, and one coming back
+// out of the painting steps onto the home floor. Each is a region, so a rule over it binds only the bodies standing there.
+placements {
+  reach(id: "lantern-trail-start", box: { x0: 55.5, x1: 58.5, y0: -0.5, y1: 2.5, z0: 34.8, z1: 37.2 })
+  reach(id: "lantern-trail-home", box: { x0: 55, x1: 59, y0: -0.5, y1: 2.5, z0: 38, z1: 41 })
+}
+
+// Whether the body a region binds plays under a character, which alone can hold a quest.
+function playsACharacter() = recordFree(each, quests) >= 0
+
+groups {
+  kinds [
+    {
+      name: "party"
+      roles [{ name: "member", capabilities [Observe] }]
+      lifetime: Persistent
+      evictionPolicy: Remove
+      capacity: 4
+    }
+  ]
+  groups [
+    {
+      id: "debugParty"
+      kindName: "party"
+      members: map(range(0, 4), s => { ref { kind: Local, principal: $"seat{s + 1}" }, role: "member", joinOrdinal: s })
+      nextJoinOrdinal: 4
+    }
+  ]
+  ownership []
+}
+
+questChain(
+  id: "lanternTrail",
+  parts: [{ quest: "lanternLit", steps: 2 }, { quest: "lanternKept", steps: 1 }],
+  group: "debugParty"
+)
+
+rule "lantern-trail-take-up" {
+  forEach: region("lantern-trail-start")
+  when playsACharacter() and questStatus("lanternLit") == 0
+  mode: Edge
+  questStart(questId: "lanternLit", chain: "lanternTrail", part: 0)
+}
+
+rule "lantern-trail-home" {
+  forEach: region("lantern-trail-home")
+  when questAt("lanternLit", 1)
+  mode: Edge
+  questAdvance(questId: "lanternLit", fromStep: 1, steps: 2)
+}
+
+rule "lantern-trail-keep" {
+  forEach: region("lantern-trail-start")
+  when questStatus("lanternLit") == questDone and questStatus("lanternKept") == 0
+  mode: Edge
+  questStart(questId: "lanternKept", chain: "lanternTrail", part: 1)
+}

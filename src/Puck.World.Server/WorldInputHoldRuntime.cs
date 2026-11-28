@@ -29,11 +29,6 @@ public sealed class WorldInputHoldRuntime {
         ((submission.EntityIndex >= 0) && (submission.EntityIndex < m_participants.Length) &&
          (((submission.Principal.Kind == PrincipalKind.Seat) && (submission.Principal.Index == submission.EntityIndex)) ||
           ((submission.Principal.Kind == PrincipalKind.Peer) && (submission.Principal.Index == submission.EntityIndex))));
-    private static Principal ParticipantPrincipal(WorldPopulation population, int bodyIndex) =>
-        ((bodyIndex < population.LocalSeatCount)
-            ? Principal.Seat(slot: bodyIndex)
-            : population.PeerPrincipal(index: bodyIndex)
-        );
 
     public void Apply(WorldPopulation population) {
         var maximum = 0;
@@ -177,10 +172,7 @@ public sealed class WorldInputHoldRuntime {
                 continue;
             }
 
-            var principal = ParticipantPrincipal(
-                bodyIndex: bodyIndex,
-                population: population
-            );
+            var principal = population.OccupantPrincipal(index: bodyIndex);
 
             if (
                 !state.Active ||

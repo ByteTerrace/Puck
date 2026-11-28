@@ -6346,6 +6346,32 @@ wiring, dormancy and cost.
   ([its plan](humble-gaming-deck.md)), and MMC1's large-ROM PRG remap has no
   fixture that exercises it.
 
+### Lock-on and marks
+
+Owner: play lane · ordinary · Next: the marker drawn in the world. Lock-on
+(`worlds/standard/lockon.puck`) and marks (`worlds/standard/marks.puck`) are
+built and wired into the debug world (`worlds/debug/targeting.puck`).
+
+- [high] A mark is drawn in the world only by the companion flying to it. The
+  standard wants an authored marker at each mark and ping (a wisp or pin
+  creation posed at the mark), and posing one needs either a pool of bodies the
+  debug world has no free population slots for, or a placement posed from
+  state, which no facet offers (`WorldPlacementTranslation` is a literal).
+- [high] The group a mark is shared with is an authored list of seats
+  (`playerMarks(members)`), turned into reader tokens. Group membership
+  (`WorldGroup`) does not reach a row's `visibility` readers, so a party formed
+  at run time cannot widen them; a `group:<id>` reader or a rule that writes a
+  `readersFrom` row from membership closes it.
+- [medium] Edges over a moving input (`lock-press`, `ping-press`, `mark-press`)
+  are priced as every binding firing every tick, so the debug world's sheet
+  sits within about sixteen thousand units of `RuleCapacity.MaxWorkUnitsPerTick`.
+  A sweep of the step's input events (`inputEvents(…)`) binds only presses.
+- [medium] `marks-<s>` reads its seat's character records every tick
+  (`$record:` is unversioned); an identity record revision the rule host
+  versions would let it rest.
+- [low] The gallery's lab wing has no portal yet; lock-on and marks have no lab
+  of their own (`worlds/debug/labs/`).
+
 ### Panes: split screens the player drives
 
 Owner: specialist lane (puck-world views, rendering graphs, input) · ordinary ·

@@ -1,0 +1,95 @@
+// Lock-on and marks in the whole debug world (targeting.puck, companion.puck): `puck test worlds/debug/marks-tests.puck
+// --jobs 1 --reproduce`. Seat 1 is body 0, the Moth, and her companion is owner 0; seat 2 is body 1. The invariants are
+// the ones running cannot pin: a second seat's ping reaches the first seat's companion through the group's rows, a lock
+// outranks a ping in the companion's guide, and a mark left on her character crosses into the garden with her and comes
+// home, read back from the character's records on both sides.
+//
+// The crossing walks her at the garden painting and back as suit-tests.puck does: `body.fly 1 …` walks -Z from the
+// painting's own place before it (`spawn:portal-garden`) into its glass, and `body.fly -1 …` walks +Z in the garden back
+// through the arrival frame into the gallery. `garden { … }` is judged in the garden the crossing starts.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+// The debug world's own id: the garden's way back names `debug`, so she comes home to the instance the run booted.
+documentId: "debug"
+
+import "stopped-machines"
+
+bodies {
+  seatActivation [Eager, Eager, OnDemand, OnDemand]
+  seatSpawns [stage, stage, stage, stage]
+}
+
+// Seat 2 pings ahead of where it stands; the Moth's companion, in the same group, flies to the ping.
+test "a second seat's ping reaches the first seat's companion" {
+  when {
+    ticks 30
+    seat2: body.pose 3 0 2 0 0 0
+    ticks 10
+    seat2: body.press ping 1 0.2 0
+    ticks 10
+  }
+  expect {
+    pingOn["1"] == 1
+    companionGuiding0.mode == 2
+    companionGuiding0.body == -1
+    companionGuide0.x == pingX["1"]
+    companionGuide0.z == pingZ["1"]
+  }
+}
+
+// A ping is short-lived: six seconds on, it has lapsed.
+test "a ping lapses" {
+  when {
+    ticks 30
+    seat1: body.press ping 1 0.2 0
+    ticks 420
+  }
+  expect {
+    pingOn["0"] == 0
+  }
+}
+
+// The Moth locks onto seat 2 standing ahead of her, and her companion flies to it; a ping of seat 2's does not draw the
+// companion away while the lock holds.
+test "a lock sends the companion to the target and outranks a ping" {
+  when {
+    ticks 30
+    seat2: body.pose 0 0 -5 0 0 0
+    ticks 10
+    seat1: body.press lock 1 0.2 0
+    ticks 10
+    seat2: body.press ping 1 0.2 0
+    ticks 10
+  }
+  expect {
+    lockTarget["0"] == 1
+    companionGuiding0.body == 1
+    companionGuiding0.mode == 2
+  }
+}
+
+// She leaves a mark, crosses into the garden and comes home: the mark is on her character in the garden and back here,
+// recorded as this world's, so the debug world shows it again.
+test "a placed mark survives a crossing and comes back" {
+  when {
+    ticks 30
+    seat1: body.press mark 1 0.2 0
+    ticks 10
+    seat1: body.pose spawn:portal-garden 0
+    ticks 10
+    seat1: body.fly 1 0 0 0 0 0 2
+    ticks 70
+    seat1: body.fly -1 0 0 0 0 0 1
+    ticks 45
+  }
+  expect {
+    garden {
+      record(body, 0, marks, 0, kind) == 1
+    }
+    record(body, 0, marks, 0, kind) == 1
+    record(body, 0, marks, 0, world, debug) == 1
+    markOn0["0"] == 1
+    bodyPosition(body, 0, z) > 12.9
+  }
+}

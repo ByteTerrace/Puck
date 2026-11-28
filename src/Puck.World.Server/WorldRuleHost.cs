@@ -154,6 +154,12 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         Y: FixedQ4816.One,
         Z: FixedQ4816.Zero
     );
+    // WorldRuleFacts.TargetPrefix's forward axis: a body's own local -Z, the advance direction, before its orientation.
+    private static readonly FixedVector3 LocalForward = new(
+        X: FixedQ4816.Zero,
+        Y: FixedQ4816.Zero,
+        Z: -FixedQ4816.One
+    );
 
     private readonly WorldServer m_host;
 
@@ -463,12 +469,14 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
             return Fact.Finite(value: FixedQ4816.Zero);
         }
 
-        var position = body.FixedPosition;
+        var vector = ((operand.Axis >= BodyPositionOperand.ForwardAxis)
+            ? body.FixedOrientation.Rotate(vector: LocalForward)
+            : body.FixedPosition);
 
-        return Fact.Finite(value: operand.Axis switch {
-            0 => position.X,
-            1 => position.Y,
-            _ => position.Z,
+        return Fact.Finite(value: (operand.Axis % BodyPositionOperand.ForwardAxis) switch {
+            0 => vector.X,
+            1 => vector.Y,
+            _ => vector.Z,
         });
     }
     /// <inheritdoc/>
@@ -495,6 +503,34 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
             };
         }
         return Fact.Finite(kind: operand.ValueKind, value: value);
+    }
+    /// <inheritdoc/>
+    /// <remarks>The store read is the identity's as it stands: a record a firing earlier in this pass committed is
+    /// already installed (<see cref="Committed"/>), as the version a schedule names for it says.</remarks>
+    public Fact Read(IdentityRecordOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        return operand.Answer(
+            identity: Host.Body(index: ResolveBodyRef(bodyRef: operand.Body))?.Profile,
+            slot: ((operand.Slot == IdentityRecordOperand.EachSlot) ? BoundEachIndex() : operand.Slot)
+        );
+    }
+    /// <inheritdoc/>
+    /// <remarks>Membership is read from the live document's <c>groups</c> section, under the principal the body's
+    /// index stands for (<see cref="WorldPopulation.OccupantPrincipal"/>).</remarks>
+    public Fact Read(GroupMemberOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        var index = ResolveBodyRef(bodyRef: operand.Body);
+        var member = (
+            (index >= 0) &&
+            Host.Population.IsActive(index: index) &&
+            (Host.Document.Definition.Groups is { } section) &&
+            (WorldGroup.Find(groups: section.Groups, id: operand.Group) is { } group) &&
+            WorldGroup.HoldsLocal(members: group.Members, principal: Host.Population.OccupantPrincipal(index: index))
+        );
+
+        return Fact.Finite(kind: CellKind.Int, value: (member ? 1L : 0L));
     }
     /// <inheritdoc/>
     public Fact Read(EngagedOperand operand) {
@@ -559,6 +595,8 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         return Fact.Finite(
             kind: CellKind.Int,
             value: ResolveNearestBody(
+                current: ((operand.Envelope?.Current is { } current) ? ResolveBodyRef(bodyRef: current) : -1),
+                envelope: operand.Envelope,
                 origin: ResolveBodyRef(bodyRef: operand.BodyA),
                 tagRowOrdinal: OrdinalOf(handle: operand.StateHandle)
             )
@@ -692,19 +730,25 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     // ordinal-addressed one (WorldBodyRef) carries the key its compile interned. Both resolve through ResolveBody.
     private int ResolveBodyRef(in CompiledBodyRef bodyRef) => ResolveBody(
         index: bodyRef.Index,
-        key: (((bodyRef.Kind == CompiledBodyRefKind.Cell) && Host.Arena.Keys.TryResolve(
-            key: out var cellKey,
-            name: CellName.Parse(candidate: bodyRef.Key!)
-        ))
-            ? cellKey
-            : default),
+        key: ((bodyRef.Kind != CompiledBodyRefKind.Cell)
+            ? default
+            : ((bodyRef.KeyBinding != BoundKey.None)
+                ? Puck.State.Rules.RuleReads.KeyOf(binding: bodyRef.KeyBinding, keys: Host.Arena.Keys, reader: this)
+                : (Host.Arena.Keys.TryResolve(
+                    key: out var cellKey,
+                    name: CellName.Parse(candidate: bodyRef.Key!)
+                )
+                    ? cellKey
+                    : default))),
         kind: bodyRef.Kind,
         placementOrdinals: bodyRef.PlacementOrdinals,
         rowOrdinal: OrdinalOf(handle: bodyRef.Handle)
     );
     private int ResolveWorldBodyRef(WorldBodyRef bodyRef) => ResolveBody(
         index: bodyRef.Index,
-        key: bodyRef.Key,
+        key: ((bodyRef.KeyBinding != BoundKey.None)
+            ? Puck.State.Rules.RuleReads.KeyOf(binding: bodyRef.KeyBinding, keys: Host.Arena.Keys, reader: this)
+            : bodyRef.Key),
         kind: bodyRef.Kind,
         placementOrdinals: bodyRef.PlacementOrdinals,
         rowOrdinal: bodyRef.RowOrdinal
@@ -738,6 +782,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         rowOrdinal: rowOrdinal
     ),
     });
+
 
     /// <summary>Initializes the rule host over the server it evaluates against.</summary>
     /// <param name="host">The owning server.</param>

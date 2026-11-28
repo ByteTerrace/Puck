@@ -8,12 +8,13 @@ import "../standard/kits"
 // her suit register selects, colliding again where she is; if that kit's collider finds her inside something, the
 // engine steps her out to the nearest free pose up or sideways, never down through the floor.
 //
-// The kit assignment reads one register, so its selector reads `form`, the suit register plus two while noclip is on
-// (0 the pilot, 1 the suit, 2 and 3 the same with noclip on), which a rule keeps in step with both; a craft
-// (../standard/ship.puck's register, on the launch field's ship) is form 4 whatever the other two hold, and 5 while its
-// `space` register says nothing pulls it, as craft-form.puck has it on the moon, so a ship crossing the sky seam either
-// way keeps the form it flew in. The look assignment reads the same register. The debug world
-// imports this file in place of suit.puck, which it imports and whose selector it replaces. The garden and the night
+// The suit, noclip and a craft decide one thing between them, so the kit assignment's `form` selector reads one register,
+// `form`: the suit register plus two while noclip is on (0 the pilot, 1 the suit, 2 and 3 the same with noclip on),
+// which a rule keeps in step with both; a craft (../standard/ship.puck's register, on the launch field's ship) is form 4
+// whatever the other two hold, and 5 while its `space` register says nothing pulls it, as craft-form.puck has it on the
+// moon, so a ship crossing the sky seam either way keeps the form it flew in. The look assignment's `form` selector reads
+// the same register. The debug world imports this file in place of suit.puck, which it imports and whose `form`
+// selectors it refines by name. The garden and the night
 // field import suit.puck alone, so they declare neither register: noclip is the debug world's, and a crossing lands her
 // with her suit's kit there.
 
@@ -57,30 +58,36 @@ state {
 
 looks {
   assignment {
-    select {
-      bodyState: "form"
-      cases [
-        { value: 0, row: "moth-pilot" }
-        { value: 2, row: "moth-pilot" }
-        { value: 4, row: "ship" }
-        { value: 5, row: "ship" }
-      ]
-    }
+    select [
+      {
+        name: "form"
+        bodyState: "form"
+        cases [
+          { value: 0, row: "moth-pilot" }
+          { value: 2, row: "moth-pilot" }
+          { value: 4, row: "ship" }
+          { value: 5, row: "ship" }
+        ]
+      }
+    ]
   }
 }
 
 kits {
   assignment {
-    select {
-      bodyState: "form"
-      cases [
-        { value: 0, row: "pilot" }
-        { value: 2, row: "noclip" }
-        { value: 3, row: "noclip" }
-        { value: 4, row: "ship" }
-        { value: 5, row: "ship-space" }
-      ]
-    }
+    select [
+      {
+        name: "form"
+        bodyState: "form"
+        cases [
+          { value: 0, row: "pilot" }
+          { value: 2, row: "noclip" }
+          { value: 3, row: "noclip" }
+          { value: 4, row: "ship" }
+          { value: 5, row: "ship-space" }
+        ]
+      }
+    ]
   }
   rows [
     // Free flight with nothing to collide as: no collider, so the contact field never solves her, and overlap with every

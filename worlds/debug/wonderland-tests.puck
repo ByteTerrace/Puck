@@ -1,8 +1,10 @@
 // Wonderland's portal pair of two sizes (wonderland.puck), each scenario booted in the whole debug world:
 // `puck test worlds/debug/wonderland-tests.puck`, and `--reproduce` to show two runs agree. The `size` register
-// (size.puck) holds each body's size. A headless seat's camera faces -Z, so a strafe walks along X: -1 toward the lobby's west
-// wall and the big painting on the wall at x = 10.3, +1 toward the room's east wall and the mouse hole on it at x = 9.4. At full size
-// the wall round the mouse hole stops her before her feet reach its glass.
+// (size.puck) holds each body's size. A headless seat's camera faces -Z, so a strafe walks along X: -1 toward the lobby's
+// west wall and the big painting on it, +1 toward the room's east wall and the mouse hole on it. With the gallery at
+// layout.puck's `gallerySite` those walls' faces stand at world x 6.375 and 5.475 (wonderland.puck's 10.3 and 9.4 moved by
+// `galleryWestShift`), so the poses below that no spawn point names are world coordinates against them, z 30.5 being the
+// paintings' own. At full size the wall round the mouse hole stops her before her feet reach its glass.
 
 schema: "puck.world.definition.v1"
 basis: "debug"
@@ -38,8 +40,8 @@ rule "round-trip-away" {
 rule "round-trip-home-small" {
   when (away[0] == 1 and
     bodyState(body, 0, size) == 0.25 and
-    bodyPosition(body, 0, x) > 50 and
-    bodyPosition(body, 0, z) > 38)
+    bodyPosition(body, 0, x) > 43 and
+    bodyPosition(body, 0, z) > 12.9)
   mode: Edge
   homeSmall[0] = 1
 }
@@ -48,11 +50,11 @@ rule "round-trip-home-small" {
 // would come out a sixteenth, which the pair refuses by name (bodies.scale 'size' 0.1..1), so she stays as she was.
 test "a quarter her size she cannot shrink further" {
   when {
-    seat1: body.pose 12.5 0.05 30.5 90 0 0 0
+    seat1: body.pose spawn:wonderland 0
     ticks 15
     seat1: body.fly 0 -1 0 0 0 0 1.5 0
     ticks 60
-    seat1: body.pose 11.5 0.05 30.5 90 0 0 0
+    seat1: body.pose 7.575 0.05 30.5 90 0 0 0
     ticks 15
     seat1: body.fly 0 -1 0 0 0 0 1.5 0
     ticks 60
@@ -63,25 +65,26 @@ test "a quarter her size she cannot shrink further" {
 }
 
 // Her size is her own register, so it crosses with her: shrunk by the big painting, she walks through the garden
-// painting (+Z into its glass on the gallery's north wall), arrives in the garden a quarter her size, walks back out of
-// its frame (+Z again, from just past the arrival frame), comes home a quarter her size, and the mouse hole sets her
-// down at full size. The poses after the first crossing land in whichever world she is in, so a run that never left
-// stands her far from any door, and one that came home to a second world leaves body 0 empty here.
+// painting (-Z into its glass on the gallery's south wall at z 12.9, from as near it as a quarter-size walk reaches in
+// time), arrives in the garden a quarter her size, walks back out of its frame (+Z, from just past the arrival frame),
+// comes home a quarter her size in front of the painting, and the mouse hole sets her down at full size. The poses after
+// the first crossing land in whichever world she is in, so a run that never left stands her far from any door, and one
+// that came home to a second world leaves body 0 empty here.
 test "a quarter her size she crosses the garden and back, and the mouse hole sets her down at full size" {
   when {
-    seat1: body.pose 12.5 0.05 30.5 90 0 0 0
+    seat1: body.pose spawn:wonderland 0
     ticks 15
     seat1: body.fly 0 -1 0 0 0 0 1.5 0
     ticks 60
-    seat1: body.pose 57 0.05 38.6 180 0 0
+    seat1: body.pose 44.225 0.05 13.675 0 0 0
     ticks 10
-    seat1: body.fly -1 0 0 0 0 0 1.5
+    seat1: body.fly 1 0 0 0 0 0 1.5
     ticks 60
     seat1: body.pose 3 0.05 -8.6 0 0 0
     ticks 10
     seat1: body.fly -1 0 0 0 0 0 1.5
     ticks 60
-    seat1: body.pose 8.8 0.05 30.5 -90 0 0
+    seat1: body.pose 4.875 0.05 30.5 -90 0 0
     ticks 15
     seat1: body.fly 0 1 0 0 0 0 1.5
     ticks 60

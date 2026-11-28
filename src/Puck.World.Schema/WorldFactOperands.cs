@@ -15,7 +15,9 @@ namespace Puck.World;
 /// <param name="Key">The interned cell key a cell reference reads, or the invalid default.</param>
 /// <param name="PlacementOrdinals">The placement ordinal per cell of the enclosing rule's <c>forEach</c> row, for a
 /// <c>placement:$each</c> reference.</param>
-public readonly record struct WorldBodyRef(CompiledBodyRefKind Kind, int Index, int RowOrdinal = -1, CellKey Key = default, IReadOnlyList<int>? PlacementOrdinals = null);
+/// <param name="KeyBinding">The binding a cell reference reads its key through (<c>cell:&lt;row&gt;:$each</c>), or
+/// <see cref="BoundKey.None"/> for the literal <paramref name="Key"/>.</param>
+public readonly record struct WorldBodyRef(CompiledBodyRefKind Kind, int Index, int RowOrdinal = -1, CellKey Key = default, IReadOnlyList<int>? PlacementOrdinals = null, BoundKey KeyBinding = BoundKey.None);
 /// <summary>The operand facts only a world answers. The facet is the type argument, so the read receives
 /// <see cref="IWorldFacts"/> as an argument and a fact cannot reach a capability it did not declare.</summary>
 public abstract class WorldFactOperand : Puck.State.Rules.FacetRuleOperand<IWorldFacts>, IWorldDisclosedFact {

@@ -359,12 +359,15 @@ public static class WorldEffect {
     ) : ActionEffect;
 }
 /// <summary>One field an identity record effect writes: exactly one of a numeric literal (stored as the field's own
-/// kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires,
-/// or a text literal.</summary>
+/// kind: an integer, a fixed-point value, or a flag of 0 or 1), a numeric expression evaluated in fixed point when the
+/// effect fires (a Fixed field keeps its fraction, an Int field refuses a value with one, a flag reads nonzero as 1),
+/// a text literal, or the id of the identity another body drives under (a text field), read when the effect fires.</summary>
 /// <param name="Field">The record field.</param>
 /// <param name="Value">The numeric literal.</param>
-/// <param name="Expression">The integer expression.</param>
+/// <param name="Expression">The numeric expression.</param>
 /// <param name="Text">The text literal.</param>
+/// <param name="IdentityOf">The body whose identity's id the field holds — an index, a <c>$cell:</c> indirection, or a
+/// bound key; a body driving under no identity refuses the firing.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldIdentityRecordValue(
     [property: DocumentText("a record field of an identity pool")] string Field,
@@ -372,7 +375,9 @@ public sealed record WorldIdentityRecordValue(
     [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null,
     [property: DocumentText("a text value")]
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? IdentityOf = null
 );
 /// <summary>How a rule-triggered body designation chooses its target.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldBodyDesignationKind>))]

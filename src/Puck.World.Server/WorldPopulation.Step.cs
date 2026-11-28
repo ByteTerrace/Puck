@@ -557,20 +557,7 @@ public sealed partial class WorldPopulation {
         var offset = (index - LocalSeatCount);
 
         var producer = SeedProducer(kit: m_kits[KitIndex(index: index)]);
-
-        var phase = WorldSequenceSampling.FixedAngle(
-            sequence: m_peerVariation.Phase,
-            index: index
-        );
-        var weaveUnit = WorldSequenceSampling.FixedScalar(
-            sequence: m_peerVariation.Weave,
-            index: index
-        );
-
-        var (activityUnit, altitudeUnit) = WorldSequenceSampling.FixedPair(
-            sequence: m_peerVariation.Activity,
-            index: index
-        );
+        var (phase, weaveUnit, activityUnit, altitudeUnit) = PeerVariation(index: index);
         var hue = WorldColor.SequenceHue(
             index: index,
             sequence: m_peerColors
@@ -632,6 +619,40 @@ public sealed partial class WorldPopulation {
                 phase: phase,
                 producer: producer,
                 resetPhase: resetPhase,
+                weaveUnit: weaveUnit
+            );
+        }
+    }
+    // A peer slot's producer variation, sampled from its index alone through the independent peer sequences.
+    private (FixedQ4816 Phase, FixedQ4816 WeaveUnit, FixedQ4816 ActivityUnit, FixedQ4816 AltitudeUnit) PeerVariation(int index) {
+        var (activityUnit, altitudeUnit) = WorldSequenceSampling.FixedPair(
+            sequence: m_peerVariation.Activity,
+            index: index
+        );
+
+        return (
+            WorldSequenceSampling.FixedAngle(sequence: m_peerVariation.Phase, index: index),
+            WorldSequenceSampling.FixedScalar(sequence: m_peerVariation.Weave, index: index),
+            activityUnit,
+            altitudeUnit
+        );
+    }
+    // An admitted inhabitant's producer state, from its admission alone: fresh, at the altitude its placement stands it
+    // on, with its kit's roaming producer (when it has one) varied by the slot's index. Nothing a slot's earlier
+    // occupant left reaches it, so a run and a restore of the run's start admit the same body; a checkpoint carries
+    // only the active slots' producer state.
+    private void SeedInhabitantProducer(Entry entry, int index, byte kitIndex, FixedQ4816 altitude) {
+        entry.ProducerState = BodyProducerState.Fresh;
+        entry.ProducerState.PreferredAltitude = altitude;
+        if (SeedProducer(kit: m_kits[kitIndex]) is { } producer) {
+            var (phase, weaveUnit, activityUnit, _) = PeerVariation(index: index);
+
+            ApplyVariation(
+                activityUnit: activityUnit,
+                entry: entry,
+                phase: phase,
+                producer: producer,
+                resetPhase: true,
                 weaveUnit: weaveUnit
             );
         }

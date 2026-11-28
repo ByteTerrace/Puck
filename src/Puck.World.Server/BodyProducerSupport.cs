@@ -26,6 +26,14 @@ internal readonly record struct BodySensorTarget(int Index, FixedVector3 Positio
 }
 internal readonly record struct BodyProducerSensors(BodySensorTarget Candidate, BodySensorTarget CurrentTarget, FixedVector3 FlockDesired = default);
 internal struct BodyProducerState {
+    // A slot's state before anything is admitted to it: no target, no curve, no navigation domain, every oscillator at
+    // zero. Every admission starts from this, so nothing an earlier occupant left reaches the next.
+    public static BodyProducerState Fresh => new() {
+        AcquiredTarget = -1,
+        ActiveProducerCurveIndex = -1,
+        ActiveProducerNavigationDomainIndex = -1,
+    };
+
     // Why the producer stands down, or None while it runs. Set and cleared through WorldPopulation.SetProducerStandDown
     // and WorldPopulation.SyncPossession; a slot's new occupant starts with None.
     public BodyProducerStandDown StandDown;

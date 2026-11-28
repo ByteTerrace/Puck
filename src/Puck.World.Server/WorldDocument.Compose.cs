@@ -34,18 +34,6 @@ public sealed partial class WorldDocument {
         return false;
     }
 
-    private static bool ContainsMember(IReadOnlyList<WorldGroupMember> members, Principal member) {
-        foreach (var existing in members) {
-            if (
-                (existing.Ref.Kind == MemberRefKind.Local) &&
-                (existing.Ref.Principal == member)
-            ) {
-                return true;
-            }
-        }
-
-        return false;
-    }
     // The boot-frozen derived-face reservation gate, shared by the mutation and rebuild apply paths so the two can
     // never disagree about what the binder can actually show.
     private bool ExceedsBootDerivedFaceReservation(WorldDefinition candidate, out string reason) {
@@ -1467,9 +1455,9 @@ public sealed partial class WorldDocument {
                         return false;
                     }
 
-                    if (ContainsMember(
+                    if (WorldGroup.HoldsLocal(
                         members: group.Members,
-                        member: m.Member
+                        principal: m.Member
                     )) {
                         candidate = current;
                         reason = $"{m.Member.Describe()} already belongs to group '{m.GroupId}'";
@@ -1524,9 +1512,9 @@ public sealed partial class WorldDocument {
                         return false;
                     }
 
-                    if (!ContainsMember(
+                    if (!WorldGroup.HoldsLocal(
                         members: group.Members,
-                        member: m.Member
+                        principal: m.Member
                     )) {
                         candidate = current;
                         reason = $"{m.Member.Describe()} does not belong to group '{m.GroupId}'";
@@ -1565,9 +1553,9 @@ public sealed partial class WorldDocument {
                         return false;
                     }
 
-                    if (!ContainsMember(
+                    if (!WorldGroup.HoldsLocal(
                         members: group.Members,
-                        member: m.Member
+                        principal: m.Member
                     )) {
                         candidate = current;
                         reason = $"{m.Member.Describe()} does not belong to group '{m.GroupId}'";

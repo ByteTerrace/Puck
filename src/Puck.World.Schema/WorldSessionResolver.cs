@@ -141,36 +141,17 @@ public sealed class WorldSessionResolver {
                 }
             }
 
-            if (
-                carriesTag &&
-                group.Members.Any(predicate: member =>
-                    ((member.Ref.Kind == MemberRefKind.Local) &&
-                    (member.Ref.Principal == principal)))
-            ) {
+            if (carriesTag && WorldGroup.HoldsLocal(members: group.Members, principal: principal)) {
                 matches.Add(item: group.Id);
             }
         }
 
         return matches;
     }
-    private static bool GroupContains(IReadOnlyList<WorldGroup> groups, string groupId, Principal principal) {
-        foreach (var group in groups) {
-            if (
-                (group is not null) &&
-                string.Equals(
-                a: group.Id,
-                b: groupId,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return group.Members.Any(predicate: member =>
-                    ((member.Ref.Kind == MemberRefKind.Local) &&
-                    (member.Ref.Principal == principal)));
-            }
-        }
-
-        return false;
-    }
+    private static bool GroupContains(IReadOnlyList<WorldGroup> groups, string groupId, Principal principal) => (
+        (WorldGroup.Find(groups: groups, id: groupId) is { } group) &&
+        WorldGroup.HoldsLocal(members: group.Members, principal: principal)
+    );
     // The shared cache-install half TryResolve and TryAdopt both need: installs the (destination, scope key,
     // referenced document) key against `generation.InstanceName` in BOTH directions — m_active for the ordinary
     // forward lookup, and m_byInstanceName's per-instance key SET for NotifyInstanceRetired's own reverse walk. A

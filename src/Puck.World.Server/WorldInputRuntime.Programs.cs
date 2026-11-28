@@ -48,14 +48,17 @@ public sealed partial class WorldInputRuntime {
     // m_controllers, kept so a tick's admission hashes no key.
     private Owner?[] m_programOwners = [];
 
-    // Reads the body's selection registers into the buffer: the kit assignment's selector, then each body-state
-    // selector family's counter, in family order. Returns the number written. The buffer holds one more than the
-    // selection plan's families, so a caller ensures the plan before it sizes one.
+    // Reads the body's selection registers into the buffer: the kit assignment's selectors, then each body-state
+    // selector family's counter, in family order. Returns the number written. The buffer holds SelectorCapacity, the
+    // selection plan's kit selectors and families, so a caller ensures the plan before it sizes one.
+    private int SelectorCapacity => (m_kitSelectSlots.Length + m_selectorSlots.Length);
     private int ReadSelectors(int body, Span<long> into) {
         var lane = m_host.Population.ActionStateLane;
         var count = 0;
 
-        if (m_kitSelectSlot >= 0) { into[count++] = lane.Read(ordinal: body, slot: m_kitSelectSlot); }
+        foreach (var slot in m_kitSelectSlots) {
+            if (slot >= 0) { into[count++] = lane.Read(ordinal: body, slot: slot); }
+        }
         foreach (var slot in m_selectorSlots) {
             if (slot >= 0) { into[count++] = lane.Read(ordinal: body, slot: slot); }
         }
@@ -99,7 +102,7 @@ public sealed partial class WorldInputRuntime {
             (owner.Producer is null) || !ReferenceEquals(objA: owner.Producer, objB: standing.Producer) ||
             m_host.Population.IsHumanOccupied(bodyIndex: body)) { return false; }
         EnsureSelectionPlan();
-        Span<long> selectors = stackalloc long[(m_selectorSlots.Length + 1)];
+        Span<long> selectors = stackalloc long[SelectorCapacity];
         var count = ReadSelectors(body: body, into: selectors);
 
         // The engagement is the grant table's and the machine table's answer: ProgramPermissionStands above found the
@@ -137,7 +140,7 @@ public sealed partial class WorldInputRuntime {
         if (m_programOwners.Length != m_host.Population.Capacity) { Array.Resize(array: ref m_programOwners, newSize: m_host.Population.Capacity); }
         m_programOwners[body] = owner;
         EnsureSelectionPlan();
-        Span<long> selectors = stackalloc long[(m_selectorSlots.Length + 1)];
+        Span<long> selectors = stackalloc long[SelectorCapacity];
         var count = ReadSelectors(body: body, into: selectors);
 
         if (standing.Selectors.Length != count) { standing.Selectors = new long[count]; }

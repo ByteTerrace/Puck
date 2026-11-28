@@ -67,6 +67,7 @@ same change.
 | A door or swap that changes part of a domain's geometry without re-baking the domain | `Domain.TryBeginRebakeFrom` over `IRegionalContactField.TryDifference`: a worker copies the predecessor's bake and proves again only the cells and edges the changed colliders reach; `world.navigation` counts `rebaked=` | [physics reference](../../../docs/reference/physics.md#navigation-kernel-navigation) |
 | Evolving scalar fields (water, heat, snow) and their solids | `FieldLattice` (reactions, `IFieldLatticeHost`), `FieldLatticeSolid`, `UnionField`, ordering by `ReadWriteHazard.Conflicts` | [field lattice](../../../docs/reference/physics.md#field-lattice-fields) |
 | Steering samples and flocks | `FixedSpatialNeighborhood` (bounded, never a broadphase), `FixedFlockSteering` | [perception](../../../docs/reference/physics.md#bounded-local-perception) |
+| Keep a moving body facing a point a rule names (a lock-on target, so a sideways push strafes round it) | a motion program's `face` counters (`BodyFaceSlots`), read by `SnapYawToPlanarIntent` (`WorldBody.TryFacedPoint`) ahead of the intent's facing; the standard walker's are `faceAt`, `faceAtX`, `faceAtZ` (`worlds/standard/motion.puck`), written by `setBodyState` | [lockon.puck](../../../worlds/standard/lockon.puck) |
 | How a body moves under its kit: drive, shaping, holds, actions | `CompiledBodyMotionProgram`, `BodyMotionOp`, `FixedMotionTuning` (Schema; gate-bearing host records), executed by `WorldBody` phases | [motion core](../../../docs/reference/physics.md#the-motion-program-core-motion) |
 | Sleep, wake on a moved carrier or lattice, rest | `WorldBody.Sleep.cs` (the authored idle floor; the standard's is `idleSleepAfter` in `worlds/standard/kits.puck`), `WorldPopulation.ObserveContactFieldChange`, which settles parked rigid islands and idle kit sleepers (`SettleIdleSleepers`) by the change's box, `WorldPopulation.ContactFieldVersion` | [server README](../../../src/Puck.World.Server/README.md#the-entity-table-worldpopulationcs-worldbodycs) |
 
@@ -319,7 +320,9 @@ A field row’s `simulationOnly` flag keeps the height scale in `FieldLattice.St
 - **No query crosses a portal door.** Line of sight (`WorldPopulation.HasLineOfSight`),
   a tether's aim, a hold's reach, body pairs and routes all stop at the glass,
   and a door that moves is not swept. `WorldPortalHoleContactField` only takes
-  back the push of the wall behind an opening.
+  back the push of the wall behind an opening, within the asking body's own band
+  (its collider's reach along the door's normal, its travel this step and the
+  contact skin), and hides a surface a hold or a tether reaches through the glass.
   [Portals in play](../../../docs/plans/portals-in-play.md#2-queries-through-doors)
   designs the one layer that carries every ray through, composed where the
   opening and seam layers are.

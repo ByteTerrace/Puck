@@ -137,6 +137,11 @@
             "Camera": "The camera\u0027s yaw, as on the ground: the direction pushed on screen is laid onto the face, so orbiting the camera changes which push climbs.",
             "Body": "The body\u0027s own heading: forward, back and sideways stay the body\u0027s on the face wherever the camera orbits. Under a hold row that faces its body into the face, forward climbs and sideways traverses."
           }
+        },
+        "headingFrame": {
+          "$ref": "./common.schema.json#/$defs/BindableScalar",
+          "description": "A literal or state.\u003Crow\u003E[.\u003Ckey\u003E] binding (a $body key reads the seat\u0027s body) that, while it reads nonzero, resolves the seat\u0027s movement in its body\u0027s heading and lets no travel turn that heading, as a held face under Body does: a body the rules keep facing a locked target then strafes round it whichever way the camera looks. null never does.",
+          "default": null
         }
       },
       "required": [

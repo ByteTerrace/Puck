@@ -70,14 +70,14 @@ public abstract record WorldFaceAperture {
     /// and the face's own frame extruded one-sidedly behind it, against <see cref="WorldFaceFrame.Normal"/>, the
     /// slab a body occupies once it has passed through.</summary>
     /// <param name="Frame">The face frame the slab is built on.</param>
-    /// <param name="Depth">How far the slab extends behind the glass, along <see cref="WorldFaceFrame.Normal"/>: the
-    /// slab is <c>[-Depth, 0]</c>. It bounds occupancy only; whether a body crossed is the glass test alone
-    /// (<see cref="WorldFaceRegion.Sweep"/>).</param>
+    /// <param name="Depth">How far the face's own slab extends behind the glass, along <see cref="WorldFaceFrame.Normal"/>:
+    /// <c>[-Depth, 0]</c>, which <see cref="WorldFaceRegion.Sweep"/> deepens by the tested segment's own travel along
+    /// the normal. It bounds occupancy only; whether a body crossed is the glass test alone.</param>
     public sealed record Box(WorldFaceFrame Frame, FixedQ4816 Depth) : WorldFaceAperture {
-        /// <summary>Gets a world-axis box that holds the whole slab, grown past the rounding of the region test by a
-        /// sixty-fourth of the slab's extents and a sixty-fourth of a metre. A segment whose bounds miss it neither
-        /// ends in the slab nor crosses it, so a scan skips the region test for it
-        /// (<see cref="WorldFaceRegion.Sweep"/>).</summary>
+        /// <summary>Gets a world-axis box that holds the face's own slab, grown past the rounding of the region test by a
+        /// sixty-fourth of the slab's extents and a sixty-fourth of a metre. A segment whose bounds miss it, grown by the
+        /// segment's own extent (<see cref="Reaches"/>), neither ends in the slab nor crosses it, so a scan skips the
+        /// region test for it (<see cref="WorldFaceRegion.Sweep"/>).</summary>
         public FixedAabb Bounds {
             get {
                 var halfDepth = (Depth / FixedQ4816.FromInteger(value: 2));
@@ -91,6 +91,17 @@ public abstract record WorldFaceAperture {
 
                 return FixedAabb.FromCenter(center: (Frame.Origin - (Frame.Normal * halfDepth)), extent: extent).Grow(margin: margin);
             }
+        }
+
+        /// <summary>Reports whether a segment may end in the slab or cross the glass as <see cref="WorldFaceRegion.Sweep"/>
+        /// tests it: whether the segment's bounds meet <paramref name="bounds"/> grown by the segment's extent, which is
+        /// at least its travel along the normal, the most the sweep deepens the slab by for it.</summary>
+        /// <param name="bounds">The face's <see cref="Bounds"/>, read once for every segment a scan tests.</param>
+        /// <param name="from">The segment start.</param>
+        /// <param name="to">The segment end.</param>
+        /// <returns><see langword="false"/> when the sweep cannot answer inside or crossed for the segment.</returns>
+        public static bool Reaches(in FixedAabb bounds, in FixedVector3 from, in FixedVector3 to) {
+            return bounds.Grow(margin: FixedVector3.L1Norm(value: (to - from))).Intersects(other: FixedAabb.Empty.Enclose(point: from).Enclose(point: to));
         }
     }
 }
@@ -139,15 +150,17 @@ public static class WorldFaceRegion {
             left: delta,
             right: frame.Up
         );
-        var inside = ((alongNormal <= FixedQ4816.Zero) && (alongNormal >= -box.Depth) &&
-            (FixedQ4816.Abs(value: alongRight) <= frame.HalfWidth) &&
-            (FixedQ4816.Abs(value: alongUp) <= frame.HalfHeight));
-
         var previousDelta = (from - frame.Origin);
         var previousAlongNormal = FixedVector3.Dot(
             left: previousDelta,
             right: frame.Normal
         );
+        // The slab reaches past the face's own depth by this segment's travel along the normal, so a segment that
+        // passed through the glass ends inside it however fast its body went, and a body at rest reads the face alone.
+        var inside = ((alongNormal <= FixedQ4816.Zero) &&
+            (alongNormal >= -(box.Depth + FixedQ4816.Abs(value: (previousAlongNormal - alongNormal)))) &&
+            (FixedQ4816.Abs(value: alongRight) <= frame.HalfWidth) &&
+            (FixedQ4816.Abs(value: alongUp) <= frame.HalfHeight));
         var previousAlongRight = FixedVector3.Dot(
             left: previousDelta,
             right: frame.Right

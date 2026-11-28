@@ -56,11 +56,7 @@ public sealed partial class WorldPopulation {
         entry.LookIndex = ResolveInhabitLook(placement: placement);
         entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
         entry.TravelTurn = FixedQ4816.Zero;
-        entry.ProducerState.PreferredAltitude = altitude;
-        entry.ProducerState.AcquiredTarget = -1;
-        entry.ProducerState.CurveArcRaw = 0L;
-        entry.ProducerState.CurveArcRemainder = 0L;
-        entry.ProducerState.StandDown = BodyProducerStandDown.None;
+        SeedInhabitantProducer(altitude: altitude, entry: entry, index: index, kitIndex: kitIndex);
         entry.AutonomyState.Clear();
         entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
@@ -104,6 +100,7 @@ public sealed partial class WorldPopulation {
         m_entries[index].CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
         m_entries[index].TravelTurn = FixedQ4816.Zero;
         m_entries[index].IsRemoteHuman = remoteHuman;
+        m_entries[index].ProducerState = BodyProducerState.Fresh;
         SeedSimulated(index: index);
         if (remoteHuman) {
             SeedSeatSteeringProducer(slot: index);
@@ -584,6 +581,13 @@ public sealed partial class WorldPopulation {
         index: index,
         generation: m_entries[index].Generation
     );
+    /// <summary>Returns the principal a body index stands for: a local seat below the seat count, the slot's current
+    /// generation-bearing peer identity above it.</summary>
+    /// <param name="index">The 0-based body index.</param>
+    /// <returns>The principal.</returns>
+    public Principal OccupantPrincipal(int index) => ((index < LocalSeatCount)
+        ? Principal.Seat(slot: index)
+        : PeerPrincipal(index: index));
     /// <summary>Returns whether the body a peer principal names stands here as that peer's, live or parked.</summary>
     /// <param name="principal">The peer principal.</param>
     /// <returns><see langword="true"/> when the principal is a peer whose body index holds a remote human of the same

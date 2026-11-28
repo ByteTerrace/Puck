@@ -113,7 +113,7 @@ A few rules apply to every limit on this page:
 
 | Limit | Value | Constant | Explained in |
 |---|---|---|---|
-| Rule work per tick | 4,200,000 work units | `RuleCapacity.MaxWorkUnitsPerTick` | [Rule analysis, scheduling, and work budgets](analysis.md) |
+| Rule work per tick | 4,400,000 work units | `RuleCapacity.MaxWorkUnitsPerTick` | [Rule analysis, scheduling, and work budgets](analysis.md) |
 | Firings in one iterating sweep | Every binding, or the rule's `maxFirings` (at least 1) | `Rule.MaxFirings` | [Rules and firing](rules.md#bound-how-many-bindings-fire) |
 | Locals per rule, including implicit ones | 64 | `RuleCapacity.MaxLocalsPerRule` | [Rules and firing](rules.md) |
 | Top-level effects per rule | 256 | `RuleCapacity.MaxEffectsPerRule` | [Rules and firing](rules.md) |
