@@ -3727,6 +3727,27 @@ door frames. Nothing of the plan is built.
 - [medium] A door on a row whose position reads a state cell fires where the
   row first stood: the face catalog caches its frame (`WorldFaceCatalog`).
   Step 1 fixes it, and its lane first writes the scenario that fails today.
+- [high] A way back leads to one fixed door, not the door a traveller came by.
+  A destination's `arrival` frame names one counterpart in one document (the
+  garden's leads to `painting-garden` in `debug`), so a traveller who reached
+  the garden through a routed portal on the gallery's level 3, the portal lab
+  or the gallery booted alone (`gallery-root.puck`) comes home to the debug
+  world's painting wing, and a gallery-root or lab visit starts the whole debug
+  world. Carry the source door with the traveller (the transfer already records
+  its border, `WorldInstanceHost.TransferResolution`'s `Border`) and let a way
+  back whose counterpart names a return route land at that door. Check: a
+  crossing from `portal-south-5` into the garden and back lands before
+  `portal-south-5`, in the instance it left.
+- [medium] A routed door draws no straddle clip (`WorldPortalStraddle` skips a
+  face with routes, whose destination is state its per-document derivation
+  cannot read). Same-world routes are rare; derive the clip per recorded route
+  when one is authored.
+- [low] A per-viewer route: a player's worn screen pointing a portal for that
+  player alone while everyone else sees the world's route (the owner's ruling,
+  [decision](../decisions/play.md#portals-and-their-panels)). A viewer-keyed
+  cell beside the world's, read by the presentation for its own viewer's
+  session; the window binds one session per screen index today, so this needs
+  a per-viewport session.
 
 ### Transfers, federation and server
 

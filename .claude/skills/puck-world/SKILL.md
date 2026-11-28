@@ -1195,6 +1195,16 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   this way (`displayPlacements` in `worlds/debug/shapes.puck`). A game station's
   tokens are bodies instead (`worlds/standard/holodeck.puck`), since a player
   lifts and knocks them.
+- A portal face can carry `routes` (`WorldFaceRoutes`): a list of destinations
+  and the state cell that chooses one, so a rule's write points the door
+  elsewhere without a document edit. The authority's door scan reads the cell
+  once a tick and records the route beside the door's closure
+  (`WorldPortalClosures.SetRoute`); the crossing, the window's session and the
+  counterpart a window fits through all follow that one record
+  (`WorldFaceRouting.On`/`To`), and a cell naming no route closes the door.
+  `world.portals` names a routed door's `route=<n>/<count>`. The standard's
+  portal module routes a portal by its control panel's `panelChoice`
+  (`worlds/standard/portal.puck`, `panel.puck`; gallery.md, "The portals").
 - A placement turns about its own up axis with a `turn` facet
   (`WorldPlacementTurn`): `clock`, `rate` and `phase`, each a literal or a
   numeric state binding, give `phase + rate × clock` turns on top of its yaw.
