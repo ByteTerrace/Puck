@@ -107,7 +107,9 @@ public static class WorldStaging {
     /// staging directory without changing their declared pins.</summary>
     /// <param name="world">The compiled world document.</param>
     /// <param name="name">The world's document name, which names the file it is written to.</param>
-    /// <param name="sourceDirectory">The full path of the directory of the source the world was compiled from.</param>
+    /// <param name="sourceDirectory">The full path of the directory <paramref name="name"/> leads from, so that the
+    /// two together give the world's authored location, against which its basis, imports and file references resolve;
+    /// for a document reached by a reference, the referring document's directory, not the document's own.</param>
     /// <param name="directory">The directory the world is staged into; created when absent.</param>
     /// <param name="portable">Receives the composed document relative to the source before device-local paths are materialized.</param>
     /// <param name="catalog">The host's machine catalog, whose providers name the content and asset paths of the
@@ -118,11 +120,13 @@ public static class WorldStaging {
     public static bool TryWrite(JsonObject world, string name, string sourceDirectory, string directory, IMachineValidationCatalog catalog, out string path, out string reason, Action<string, byte[]>? portable = null) {
         ArgumentNullException.ThrowIfNull(argument: catalog);
 
-        _ = Directory.CreateDirectory(path: directory);
         path = Path.GetFullPath(path: Path.Combine(
             path1: directory,
             path2: WorldDocumentName.DocumentFile(name: name)
         ));
+        // A nested name (`labs/climbing`) is staged in the subdirectory it names, as it stands beside its referrer, and
+        // what staging stores for the document (content folders, fonts) sits beside it there.
+        var home = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!).FullName;
         var authored = Path.Combine(
             path1: sourceDirectory,
             // This root is generated, not the source's same-named basis file. The resolver returns only .puck or
@@ -165,9 +169,9 @@ public static class WorldStaging {
         }
 
         if (!TryStageUnrelatableContentFolders(
-            directory: directory,
+            directory: home,
             document: document,
-            name: name,
+            name: name[(name.LastIndexOf(value: '/') + 1)..],
             reason: out reason
         )) {
             return false;
@@ -191,7 +195,7 @@ public static class WorldStaging {
                 continue;
             }
             try {
-                assets ??= new ContentAddressedStore(root: Path.Combine(path1: directory, path2: "assets"));
+                assets ??= new ContentAddressedStore(root: Path.Combine(path1: home, path2: "assets"));
                 var pin = assets.Put(content: File.ReadAllBytes(path: relocated));
 
                 row["source"] = $"assets/{ContentAddressedStore.ObjectRelativePath(pin: pin)}";
@@ -210,8 +214,8 @@ public static class WorldStaging {
     }
 
     // A machine's content folder that relocation could only spell rooted (a staging directory on another volume than
-    // the source) would fail the validator's relative-folder rule. Its files are copied under the staging directory
-    // instead, as `content/<world>/<machine>-<folder>`, keeping the folder's position in the list because the first folder
+    // the source) would fail the validator's relative-folder rule. Its files are copied beside the staged document
+    // (`directory`) instead, as `content/<world>/<machine>-<folder>`, keeping the folder's position in the list because the first folder
     // naming a default decides it. A folder that is absent stays absent there too: a device's local folders may be.
     private static bool TryStageUnrelatableContentFolders(JsonObject document, string name, string directory, out string reason) {
         reason = string.Empty;

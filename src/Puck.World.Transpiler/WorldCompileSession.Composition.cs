@@ -398,11 +398,12 @@ public sealed partial class WorldCompileSession {
     /// <c>puck test</c> stages the documents it yields.</summary>
     /// <param name="roots">The composed worlds the walk starts from, each with the path it stands at.</param>
     /// <param name="known">The names already standing beside the roots, which the walk neither reads nor yields.</param>
-    /// <returns>Each reached document once, in reach order: its name, its resolved path and the tree as read, which
-    /// the caller owns.</returns>
+    /// <returns>Each reached document once, in reach order: its name, its resolved path, the directory its name is
+    /// relative to (the referring document's, so a name such as <c>labs/climbing</c> does not lead from its own
+    /// directory) and the tree as read, which the caller owns.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="roots"/> or <paramref name="known"/> is
     /// <see langword="null"/>.</exception>
-    public IEnumerable<(string Name, string Path, JsonObject Document)> ReachDocuments(IEnumerable<(JsonObject World, string Path)> roots, IEnumerable<string> known) {
+    public IEnumerable<(string Name, string Path, string NamedFrom, JsonObject Document)> ReachDocuments(IEnumerable<(JsonObject World, string Path)> roots, IEnumerable<string> known) {
         ArgumentNullException.ThrowIfNull(argument: roots);
         ArgumentNullException.ThrowIfNull(argument: known);
 
@@ -423,7 +424,7 @@ public sealed partial class WorldCompileSession {
 
                 pending.Enqueue(item: (composed, resolved));
 
-                yield return (name, resolved, ((JsonObject)found.DeepClone()));
+                yield return (name, resolved, (Path.GetDirectoryName(path: next.Path) ?? string.Empty), ((JsonObject)found.DeepClone()));
             }
         }
 
