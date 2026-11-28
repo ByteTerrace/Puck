@@ -95,10 +95,12 @@ public static class WorldFormEffects {
     /// <param name="direction">The sweep's direction in the run's frame, or <see langword="null"/> for the effect's
     /// own.</param>
     /// <param name="seconds">The sweep's length, seconds, or <see langword="null"/> for the effect's own.</param>
+    /// <param name="side">The side the run is drawn on, or <see langword="null"/> for the one <paramref name="arriving"/>
+    /// gives; <see cref="SdfFormBandSide.Whole"/> cuts nothing (a shell flaring, a strand parting).</param>
     /// <returns>The band.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="effect"/> is <see langword="null"/>.</exception>
     public static SdfFormBand Band(WorldFormEffect effect, bool arriving, uint seed, int firstSlot, int slotCount, Vector3 origin, Quaternion rotation, float low, float high,
-        float elapsed, bool parted, Vector3? direction = null, float? seconds = null) {
+        float elapsed, bool parted, Vector3? direction = null, float? seconds = null, SdfFormBandSide? side = null) {
         ArgumentNullException.ThrowIfNull(argument: effect);
 
         var axis = Vector3.Transform(value: (direction ?? Direction(effect: effect)), rotation: rotation);
@@ -112,7 +114,7 @@ public static class WorldFormEffects {
         return new SdfFormBand {
             FirstSlot = firstSlot,
             SlotCount = slotCount,
-            Side = (arriving ? SdfFormBandSide.Swept : SdfFormBandSide.Ahead),
+            Side = (side ?? (arriving ? SdfFormBandSide.Swept : SdfFormBandSide.Ahead)),
             Parted = parted,
             Seed = seed,
             Origin = origin,

@@ -810,6 +810,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <inheritdoc/>
     public IReadOnlyList<SdfMeshFormRange> MeshForms => m_pool.MeshForms;
     /// <inheritdoc/>
+    public IReadOnlyList<SdfFormBand> FormBands => m_pool.FormBands;
+    /// <inheritdoc/>
     public IReadOnlyList<int> MeshInstanceChanges => m_pool.Rigid.ChangedCopies;
     /// <inheritdoc/>
     public long MeshInstancesRevision => m_pool.Rigid.CopiesRevision;

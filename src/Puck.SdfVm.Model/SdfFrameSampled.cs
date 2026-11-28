@@ -52,7 +52,8 @@ public static class SdfFrameSampled {
     public const int BandFirstSlotWord = 0;
     /// <summary>A form band's slot count.</summary>
     public const int BandSlotCountWord = 1;
-    /// <summary>A form band's flags (<see cref="BandSweptFlag"/>).</summary>
+    /// <summary>A form band's flags (<see cref="BandSweptFlag"/>, <see cref="BandPartedFlag"/>,
+    /// <see cref="BandWholeFlag"/>).</summary>
     public const int BandFlagsWord = 2;
     /// <summary>A form band's seed.</summary>
     public const int BandSeedWord = 3;
@@ -78,4 +79,7 @@ public static class SdfFrameSampled {
     /// <summary>The flag of a form band whose run's slots move apart (a form shed or assembled piece by piece): a draw
     /// blending several of its slots, a skinned seam, would stretch between them, so it is not drawn.</summary>
     public const uint BandPartedFlag = 2u;
+    /// <summary>The flag of a form band that cuts nothing: its run stays whole while its edge glows on both sides of the
+    /// front and its motes leave the surface the front crosses (a shell flaring, a strand parting).</summary>
+    public const uint BandWholeFlag = 4u;
 }

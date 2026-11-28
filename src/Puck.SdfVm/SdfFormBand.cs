@@ -11,6 +11,9 @@ public enum SdfFormBandSide : byte {
     /// <summary>The run materializes: it is drawn only where the front has passed, and its motes arrive at the surface
     /// just as the front reaches them.</summary>
     Swept = 1,
+    /// <summary>The run stays whole: the band cuts nothing, its edge glows on both sides of the front, and its motes leave
+    /// the surface where the front crosses it (a force-field shell flaring, a net's strands parting).</summary>
+    Whole = 2,
 }
 
 /// <summary>

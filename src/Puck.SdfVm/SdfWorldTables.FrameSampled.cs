@@ -177,7 +177,11 @@ public sealed partial class SdfWorldTables {
             record.Clear();
             record[SdfFrameSampled.BandFirstSlotWord] = (uint)band.FirstSlot;
             record[SdfFrameSampled.BandSlotCountWord] = (uint)band.SlotCount;
-            record[SdfFrameSampled.BandFlagsWord] = (((band.Side == SdfFormBandSide.Swept) ? SdfFrameSampled.BandSweptFlag : 0u) | (band.Parted ? SdfFrameSampled.BandPartedFlag : 0u));
+            record[SdfFrameSampled.BandFlagsWord] = (band.Side switch {
+                SdfFormBandSide.Swept => SdfFrameSampled.BandSweptFlag,
+                SdfFormBandSide.Whole => SdfFrameSampled.BandWholeFlag,
+                _ => 0u,
+            } | (band.Parted ? SdfFrameSampled.BandPartedFlag : 0u));
             record[SdfFrameSampled.BandSeedWord] = band.Seed;
             SdfProgram.WriteVector4(words: record, baseIndex: SdfFrameSampled.BandOriginWord, x: band.Origin.X, y: band.Origin.Y, z: band.Origin.Z, w: band.Low);
             SdfProgram.WriteVector4(words: record, baseIndex: SdfFrameSampled.BandAxisWord, x: axis.X, y: axis.Y, z: axis.Z, w: Math.Max(val1: band.High, val2: band.Low));

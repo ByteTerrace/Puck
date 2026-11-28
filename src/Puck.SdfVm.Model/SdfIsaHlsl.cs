@@ -486,6 +486,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_FORM_BAND_ROWS_WORD", value: SdfFrameSampled.BandRowsWord);
         declarations.Bits(name: "SDF_FORM_BAND_SWEPT_FLAG", value: SdfFrameSampled.BandSweptFlag);
         declarations.Bits(name: "SDF_FORM_BAND_PARTED_FLAG", value: SdfFrameSampled.BandPartedFlag);
+        declarations.Bits(name: "SDF_FORM_BAND_WHOLE_FLAG", value: SdfFrameSampled.BandWholeFlag);
         declarations.Tuning(name: "SDF_MOTE_LIGHT_SCALE", value: SdfWorldPackage.MoteLightScale);
         declarations.Count(name: "SDF_MOTE_LIGHT_TEXEL_WORDS", value: SdfWorldPackage.MoteLightTexelWords);
         declarations.Count(name: "SDF_MESH_LEVEL_SHIFT", value: SdfKernelInterfaces.MeshLevelShift);

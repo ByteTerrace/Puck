@@ -1069,7 +1069,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `SdfFrameSampled.TableHeaderWords` words (band count, band base, mote total), so a
   displacement handle's word sits past them (`sdfMeshDisplacementEntry`); a new reader of a
   handle adds the header. The bands are sorted by first slot and searched by the draw's frame
-  slot (`sdfFormBandOf`), so a run is a contiguous slot range and runs never overlap. A band
+  slot (`sdfFormBandOf`), so a run is a contiguous slot range and runs never overlap; a draw with
+  no frame slot (a net's displaced draw, a static placement) carries no band and lends a band no
+  mote rows. `SdfFormBandSide.Whole` cuts nothing: the edge glows either side of the front and the
+  motes leave where it crosses (a shell flaring, a strand parting). Mote work is one invocation a
+  mote of the frame's live bands, culled after its position is known, so it scales with the motes
+  asked for, not with what is seen. A band
   change moves the frame-sampled revision, a geometry value, so every pass of a view renders
   while a form changes. A form playing its leave stays drawn by the bake through
   `SdfMeshFormRange.Lingers` ([mesh bake](references/mesh-bake.md#the-mesh-region)).

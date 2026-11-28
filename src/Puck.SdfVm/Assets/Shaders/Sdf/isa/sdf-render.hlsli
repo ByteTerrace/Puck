@@ -230,6 +230,7 @@
 #define SDF_FORM_BAND_ROWS_WORD              32u
 #define SDF_FORM_BAND_SWEPT_FLAG             0x00000001u
 #define SDF_FORM_BAND_PARTED_FLAG            0x00000002u
+#define SDF_FORM_BAND_WHOLE_FLAG             0x00000004u
 #define SDF_MOTE_LIGHT_SCALE                 256.0
 #define SDF_MOTE_LIGHT_TEXEL_WORDS           3u
 #define SDF_MESH_LEVEL_SHIFT                 24u

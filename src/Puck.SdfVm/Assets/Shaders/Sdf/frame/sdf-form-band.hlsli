@@ -56,7 +56,7 @@ int sdfFormBandOf(uint slot) {
     }
     return -1;
 }
-// A band's flags (SDF_FORM_BAND_SWEPT_FLAG, SDF_FORM_BAND_PARTED_FLAG).
+// A band's flags (SDF_FORM_BAND_SWEPT_FLAG, SDF_FORM_BAND_PARTED_FLAG, SDF_FORM_BAND_WHOLE_FLAG).
 uint sdfFormBandFlags(uint band) {
     return sdfFrameSampled[sdfFormBandWord(band) + SDF_FORM_BAND_FLAGS_WORD];
 }
@@ -76,11 +76,14 @@ float sdfFormBandAhead(uint band, float3 p) {
     return ((dot((p - origin.xyz), axis.xyz) + rough) - front);
 }
 // How far a world point lies into the side of a band that stays drawn: behind the front for a materializing run, ahead
-// of it for a dissolving one; negative on the side that is cut.
+// of it for a dissolving one, and its distance from the front either way for a run that stays whole; negative on the
+// side that is cut.
 float sdfFormBandKept(uint band, float3 p) {
     float ahead = sdfFormBandAhead(band, p);
+    uint flags = sdfFormBandFlags(band);
 
-    return (((sdfFormBandFlags(band) & SDF_FORM_BAND_SWEPT_FLAG) != 0u) ? -ahead : ahead);
+    if ((flags & SDF_FORM_BAND_WHOLE_FLAG) != 0u) { return abs(ahead); }
+    return (((flags & SDF_FORM_BAND_SWEPT_FLAG) != 0u) ? -ahead : ahead);
 }
 // Discards a raster fragment at world point `p` of a draw on slot `slot` that its run's band cuts: on the cut side of
 // the front, or any fragment of a skinned draw (`skinned`) in a run whose slots move apart.
