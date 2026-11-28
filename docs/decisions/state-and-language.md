@@ -1080,6 +1080,20 @@ show runtime headroom separately on the debug world. Reference-throughput
 constants and a calibrated reference-cycle admission model are removed. Host
 timing never changes simulation admission, ordering, or results.
 
+**A world is admitted on a realistic tick, and a tick that runs over spreads
+its work** (the owner's ruling). The static sheet's total, which charges one
+change at every line in the same tick, is neither a true bound nor what a tick
+does, and an honest worst case (every player acting at every station at once)
+would refuse worlds whose real ticks spend a small share of the budget. So
+admission prices the realistic tick: the change-driven schedule with each
+input changing as play actually changes it. At run time the evaluator counts
+each tick's spend in work units against a deterministic allowance. When a tick
+would pass it, the remaining due work carries to the next ticks in a fixed
+order instead of the world being refused at load. Only a world whose sustained
+spend cannot keep up is reported. The allowance is a document constant derived
+from the slowest supported device's calibration, never host timing, so every
+machine defers identically and determinism holds.
+
 **A price reads declarations, never members.** Every price reads a row's room
 through one door, `RuleCompileContext.RowCapacity`, and the answer is a
 function of declarations alone: a slot is one cell, a lattice its topology's
