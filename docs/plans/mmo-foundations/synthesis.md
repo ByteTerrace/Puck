@@ -87,7 +87,7 @@ the memo:
    adoption asks `HomeIdentity`, which answers only for a non-peer arrival, and
    every reservation decoded from the federation wire is a peer admission
    ([puck-today, section 2](puck-today.md#2-write-back-and-the-travelling-projection)).
-   Reopened **[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:1684-1685`):
+   Reopened **[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:1691-1692`):
 
    ```csharp
    private WorldIdentity? HomeIdentity(WorldCrossingArrival arrival, int index, string id) => ((
