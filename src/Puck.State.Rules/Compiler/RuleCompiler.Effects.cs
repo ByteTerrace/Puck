@@ -696,14 +696,17 @@ public static partial class RuleCompiler {
         }
 
         // A live destination selects one row of a zone table or a declared family per firing; the selection's first
-        // candidate stands for the whole set at compile time, because every member shares its kind and shape.
-        _ = TryResolveLiveRow(
+        // candidate stands for the whole set at compile time, because every member shares its kind and shape. A family of
+        // slots is written by its member index at its one cell (`turn[$member] = 1`).
+        if (!TryResolveLiveRow(
             context: context,
             name: rowName.Spelling,
             row: out var liveRow,
             ruleName: ruleName,
             where: verb
-        );
+        ) && TrySlotMember(cell: key, context: context, live: out liveRow, name: rowName.Spelling, ruleName: ruleName, where: verb, whole: true)) {
+            key = null;
+        }
 
         var row = ((liveRow is { } selection)
             ? (context.FindRowAt(rowOrdinal: FirstCandidate(row: selection)) ?? throw new RuleException(

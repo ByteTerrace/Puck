@@ -275,6 +275,11 @@ public static class RuleDataflow {
             case HistoryOperand { AgeFrom: { Program: { } age } }:
                 CollectExpressionFacts(includeKeyDependencies: includeKeyDependencies, into: into, tokens: age);
                 break;
+            case MemberOperand chosen:
+                foreach (var member in chosen.Members) {
+                    CollectOperandFacts(includeKeyDependencies: includeKeyDependencies, into: into, operand: member);
+                }
+                break;
         }
         if (includeKeyDependencies && (operand is IStateAddressedOperand { KeyFrom: { } keyFrom })) {
             CompiledCellRef.CollectFacts(
@@ -349,7 +354,10 @@ public static class RuleDataflow {
     /// scratch values later rules may read, in ordinal order.</summary>
     /// <param name="rules">The rules evaluated in one frame.</param>
     /// <param name="score">An expression evaluated after the rules, or null.</param>
-    public static int[] KeyRows(CompiledRule[] rules, CompiledExpressionToken[]? score) {
+    /// <param name="member">The one family index the frame binds a sweep over a row family to
+    /// (<see cref="RuleEvaluator.MemberScope"/>), so another member's row, which only another binding reaches, is no
+    /// dependency; <see langword="null"/> for every member.</param>
+    public static int[] KeyRows(CompiledRule[] rules, CompiledExpressionToken[]? score, int? member = null) {
         ArgumentNullException.ThrowIfNull(argument: rules);
 
         var accesses = new List<CellAccess>();
@@ -361,7 +369,7 @@ public static class RuleDataflow {
             rule.CollectWrites(into: accesses);
 
             foreach (var access in accesses) {
-                if (access.RowOrdinal >= 0) {
+                if ((access.RowOrdinal >= 0) && InScope(access: access, member: member)) {
                     _ = rows.Add(item: access.RowOrdinal);
                 }
             }
@@ -382,4 +390,10 @@ public static class RuleDataflow {
 
         return [.. rows];
     }
+    /// <summary>Returns whether an access reaches a frame that binds sweeps over a row family to one member: any access
+    /// but one only another member's bindings make (<see cref="CellAccess.IsMember"/>).</summary>
+    /// <param name="access">The access.</param>
+    /// <param name="member">The family index the frame binds, or <see langword="null"/> for every member.</param>
+    /// <returns><see langword="true"/> when the access is the frame's.</returns>
+    public static bool InScope(CellAccess access, int? member) => ((member is not { } scope) || !access.IsMember || (access.Member == scope));
 }

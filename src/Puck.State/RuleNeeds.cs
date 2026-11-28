@@ -125,6 +125,11 @@ public sealed class RuleNeedsBuilder {
         if (fact is null) {
             return;
         }
+        if (fact is ICompositeFact composite) {
+            foreach (var part in composite.Parts) {
+                AddFact(fact: part);
+            }
+        }
         if (fact.RequiredFacet is { } declared) {
             Add(facet: declared);
             if (!m_facetFacts.Contains(item: fact)) {

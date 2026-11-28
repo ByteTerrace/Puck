@@ -4,15 +4,17 @@ public static partial class ArenaTransforms {
     // Membership algebra, not arithmetic: a cell is a member when its value is not its own board's empty value,
     // every member of the result is written as the declared value, and every other cell as the written board's
     // empty value.
-    private static bool TryBoardCombine(in ArenaTransformContext context, ArenaTransform.BoardCombine combine, out bool moved, out EffectRefusal refusal) {
+    private static bool TryBoardCombine(in ArenaTransformContext context, ArenaTransform.BoardCombine combine, in ArenaTransformBinding binding, out bool moved, out EffectRefusal refusal) {
         moved = false;
+
+        var rowOrdinal = binding.ToOr(own: combine.RowOrdinal);
 
         if (!TryBoardRow(
             code: TransformRefusal.BoardCombineBoard,
             context: in context,
             layout: out var target,
             refusal: out refusal,
-            rowOrdinal: combine.RowOrdinal,
+            rowOrdinal: rowOrdinal,
             topology: out var topology,
             verb: "boardCombine"
         )) {
@@ -35,7 +37,7 @@ public static partial class ArenaTransforms {
                 member: combine.Value,
                 nonMember: target.Empty,
                 refusal: out refusal,
-                rowOrdinal: combine.LeftRowOrdinal,
+                rowOrdinal: binding.FromOr(own: combine.LeftRowOrdinal),
                 set: combine.LeftSet,
                 topology: topology,
                 values: left
@@ -82,7 +84,7 @@ public static partial class ArenaTransforms {
             if (!context.Arena.TryWriteBoardCell(
                 cell: cell,
                 reason: out var reason,
-                rowOrdinal: combine.RowOrdinal,
+                rowOrdinal: rowOrdinal,
                 value: result[cell],
                 write: StateWriteKind.Set
             )) {

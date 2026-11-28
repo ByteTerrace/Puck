@@ -33,18 +33,20 @@ public static partial class RuleCompiler {
     private static IRuleEffect ResolveTallyWrite(StateChannelRef rowName, StateRowDeclaration row, StateDomain.Tally tally, LiveRow? liveRow, StateChannelRef? key, StateWriteKind write, decimal? value, StateChannelRef? fromState, StateChannelRef? fromKey, decimal? valueSeconds, string? text, ExpressionProgram? expression, string? vector, string ruleName, RuleCompileContext context, string verb) {
         RuleException Refuse(string detail) => new(detail: detail, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
 
-        if (liveRow is not null) {
-            throw Refuse(detail: $"'{verb}' selects tally '{rowName}' live — a tally is written by name");
-        }
         if ((text is not null) || (vector is not null) || (valueSeconds is not null)) {
             throw Refuse(detail: $"'{verb}' writes tally '{rowName}' with a text, vector or duration source — a tally counts with a whole number");
         }
 
-        var rowOrdinal = ResolveRowOrdinal(context: context, name: rowName.Spelling);
+        // A family member a firing selects live is written as its first candidate's shape: every member is a tally of
+        // the one capacity the family declares.
+        var rowOrdinal = ((liveRow is { } selection) ? FirstCandidate(row: selection) : ResolveRowOrdinal(context: context, name: rowName.Spelling));
 
+        if (liveRow is { } members) {
+            RequireOneTallyShape(live: members, context: context, ruleName: ruleName, tally: tally, verb: verb);
+        }
         if (write == StateWriteKind.Set) {
             if ((key is null) && (value == 0m) && (expression is null) && (fromState is null)) {
-                return new TallyResetEffect(describe: $"{verb} {rowName} = 0 (empties the tally)", rowOrdinal: rowOrdinal);
+                return new TallyResetEffect(describe: $"{verb} {rowName} = 0 (empties the tally)", rowFrom: liveRow, rowOrdinal: rowOrdinal);
             }
             throw Refuse(detail: $"'{verb}' sets tally '{rowName}' — a tally is counted with '{rowName}[key] += n' and emptied with '{rowName} = 0'");
         }
@@ -56,9 +58,26 @@ public static partial class RuleCompiler {
             describe: $"{verb} {rowName}[{key}] += n",
             keyFrom: keyFrom,
             literalKey: literalKey,
+            rowFrom: liveRow,
             rowOrdinal: rowOrdinal,
             source: ResolveWholeNumberSource(context: context, expression: expression, fromKey: fromKey, fromState: fromState, ruleName: ruleName, value: value, verb: verb)
         );
+    }
+    // Every member a live selection can reach is a tally of one capacity, so the capacity the effect walks with is each
+    // member's.
+    private static void RequireOneTallyShape(LiveRow live, StateDomain.Tally tally, string ruleName, string verb, RuleCompileContext context) {
+        var rows = new List<CellAccess>();
+
+        live.CollectRows(into: rows, isSet: false);
+        foreach (var row in rows) {
+            if (context.FindRowAt(rowOrdinal: row.RowOrdinal)?.EffectiveDomain is not StateDomain.Tally { } member || (member.Capacity != tally.Capacity)) {
+                throw new RuleException(
+                    detail: $"'{verb}' selects '{live.Spelling}' live, whose members are not all tallies of capacity {tally.Capacity.ToString(provider: CultureInfo.InvariantCulture)}",
+                    refusal: RuleRefusal.EffectKindInadmissible,
+                    ruleName: ruleName
+                );
+            }
+        }
     }
     // Exactly one whole-number source: a literal, an Int expression, or an Int copy of a cell.
     private static CompiledValueSource ResolveWholeNumberSource(decimal? value, ExpressionProgram? expression, StateChannelRef? fromState, StateChannelRef? fromKey, string ruleName, RuleCompileContext context, string verb) {

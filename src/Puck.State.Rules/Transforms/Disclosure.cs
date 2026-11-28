@@ -79,12 +79,12 @@ public static partial class ArenaTransforms {
                 case ArenaTransform.Arrange value:
                     Write(row: value.RowOrdinal, read: true); Read(row: value.FromRowOrdinal); Read(row: value.DomainRowOrdinal); break;
                 case ArenaTransform.BoardCombine value:
-                    Write(row: value.RowOrdinal); Read(row: value.LeftRowOrdinal); Read(row: value.RightRowOrdinal);
+                    Write(row: binding.ToOr(own: value.RowOrdinal)); Read(row: binding.FromOr(own: value.LeftRowOrdinal)); Read(row: value.RightRowOrdinal);
                     Set(set: value.LeftSet?.Set); Set(set: value.RightSet?.Set); break;
                 case ArenaTransform.ClearEnclosed value:
                     Write(row: value.RowOrdinal, read: true); break;
                 case ArenaTransform.CopyRow value:
-                    Write(row: value.RowOrdinal); Read(row: value.FromRowOrdinal); break;
+                    Write(row: binding.ToOr(own: value.RowOrdinal)); Read(row: binding.FromOr(own: value.FromRowOrdinal)); break;
                 case ArenaTransform.Mean value:
                     Write(row: value.IntoRowOrdinal); Read(row: value.FromRowOrdinal); Read(row: value.WhereRowOrdinal); break;
                 case ArenaTransform.Copy value:

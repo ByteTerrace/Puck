@@ -673,8 +673,10 @@ public static partial class WorldFactsCompiler {
     }
     internal static IRuleEffect ResolvePoseCell(WorldEffect.PoseCell effect, string ruleName, WorldFactsCompileContext context) {
         var body = context.ResolveBodyRef(channel: "poseCell.key", ruleName: ruleName, start: 0, tokens: effect.Key.Split(':'));
+        var members = MemberTopologies(context: context, ruleName: ruleName, spelling: effect.Topology);
+        var topology = ((members is null) ? effect.Topology : Array.Find(array: members, match: static name => (name is not null)));
 
-        if ((WorldTopologyCompilation.Find(definition: context.Definition, name: effect.Topology) is null) ||
+        if ((topology is null) || (WorldTopologyCompilation.Find(definition: context.Definition, name: topology) is null) ||
             !VectorFunctions.IsFinite(vector: effect.Offset) || !float.IsFinite(f: effect.RollDegrees) || !float.IsFinite(f: effect.PitchDegrees)) {
             throw new RuleException(detail: "poseCell requires a declared topology, a finite offset, a finite roll and a finite pitch", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
         }
@@ -688,8 +690,34 @@ public static partial class WorldFactsCompiler {
         }
         var expression = new CompiledProgram(tokens: RuleCompiler.CompileExpression(context: context, expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: "poseCell"));
 
-        return new WorldPoseCellEffect(context.Ordinals(body: in body), effect.Topology, expression,
-            FixedVector3.FromVector3(value: effect.Offset), effect.Glide, FixedQ4816.FromDegrees(degrees: effect.RollDegrees), FixedQ4816.FromDegrees(degrees: effect.PitchDegrees), effect.Frame);
+        return new WorldPoseCellEffect(context.Ordinals(body: in body), topology, expression,
+            FixedVector3.FromVector3(value: effect.Offset), effect.Glide, FixedQ4816.FromDegrees(degrees: effect.RollDegrees), FixedQ4816.FromDegrees(degrees: effect.PitchDegrees), effect.Frame, members);
+    }
+    // A pose's topology spelled `<family>[$member]` inside a sweep over a row family names the topology of the
+    // binding's own member of that family of board rows: each family index's member row's topology, null at a gap. Any
+    // other spelling names one topology.
+    private static string?[]? MemberTopologies(WorldFactsCompileContext context, string ruleName, string spelling) {
+        const string Suffix = "[$member]";
+
+        if ((context.ForEachFamily is null) || !spelling.EndsWith(value: Suffix, comparisonType: StringComparison.Ordinal) ||
+            !CellName.TryParse(candidate: spelling[..^Suffix.Length], name: out var name, reason: out _) ||
+            !context.Catalog.TryGetFamily(family: out var family, name: name)) {
+            return null;
+        }
+
+        var members = new string?[(RuleCompiler.FamilySpan(family: family) + 1)];
+
+        for (var index = 0; (index < members.Length); index++) {
+            if (!family.TryGetOrdinal(index: index, ordinal: out var ordinal)) {
+                continue;
+            }
+            if (context.FindRowAt(rowOrdinal: ordinal)?.EffectiveDomain is not StateDomain.CellsOf board) {
+                throw new RuleException(detail: $"poseCell topology '{spelling}' names a family whose member '{context.Catalog.Descriptors[ordinal].Name}' is no board row", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
+            }
+            members[index] = board.Topology;
+        }
+
+        return members;
     }
     internal static IRuleEffect ResolvePose(WorldEffect.Pose effect, string ruleName, WorldFactsCompileContext context) {
         CompiledCellRef? keyFrom = null;

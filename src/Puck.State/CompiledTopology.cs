@@ -588,6 +588,25 @@ public sealed partial class CompiledTopology {
 
         return true;
     }
+    /// <summary>Returns whether two topologies are one lattice wherever each stands: the same kind, cells, directions
+    /// and adjacency, so a query that reads cells and their neighbours (a mask, a ray, a neighbour) answers alike over
+    /// either. Their origins, cell sizes and anchors may differ.</summary>
+    /// <param name="left">The one topology.</param>
+    /// <param name="right">The other topology.</param>
+    /// <returns><see langword="true"/> when the two are one lattice.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="left"/> or <paramref name="right"/> is
+    /// <see langword="null"/>.</exception>
+    public static bool SameShape(CompiledTopology left, CompiledTopology right) {
+        ArgumentNullException.ThrowIfNull(argument: left);
+        ArgumentNullException.ThrowIfNull(argument: right);
+
+        return (ReferenceEquals(objA: left, objB: right) || (
+            (left.Kind == right.Kind) &&
+            (left.CellCount == right.CellCount) &&
+            left.m_directionNames.AsSpan().SequenceEqual(other: right.m_directionNames) &&
+            left.m_neighbours.AsSpan().SequenceEqual(other: right.m_neighbours)
+        ));
+    }
 }
 public sealed partial class CompiledTopology {
     private readonly int[][] m_images = [];

@@ -36,6 +36,7 @@ public static partial class ArenaTransforms {
             refusal: out refusal
         ),
             ArenaTransform.BoardCombine combine => TryBoardCombine(
+            binding: in binding,
             combine: combine,
             context: in context,
             moved: out moved,
@@ -109,6 +110,7 @@ public static partial class ArenaTransforms {
             binding: in binding
         ),
             ArenaTransform.CopyRow copyRow => TryCopyRow(
+            binding: in binding,
             context: in context,
             copy: copyRow,
             moved: out moved,

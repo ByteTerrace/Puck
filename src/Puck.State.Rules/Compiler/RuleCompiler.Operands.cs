@@ -40,6 +40,101 @@ public static partial class RuleCompiler {
         return context.DeclaresCell(key: key, row: row);
     }
 
+    // A channel argument spelled `<family>[$member]` inside a sweep over a row family names the binding's own member
+    // of that family: the channel compiles once per member with the member's row in the argument (MemberOperand). The
+    // channels that select a live row themselves (a pattern, a reduction, a zone) keep their own selection.
+    private static bool TryResolveMemberOperand(ChannelCall? call, StateChannelRef? cell, in OperandSite site, RuleCompileContext context, out ResolvedOperand resolved) {
+        resolved = default;
+
+        if ((call is null) || (context.ForEachFamily is null) || (call.Channel is "match" or "reduce" or "zones")) {
+            return false;
+        }
+
+        var position = -1;
+        var family = default(RowFamily);
+
+        for (var index = 0; (index < call.Count); index++) {
+            if (TryMemberSelection(context: context, family: out family, text: call.Text(index: index))) {
+                position = index;
+                break;
+            }
+        }
+        if (position < 0) {
+            return false;
+        }
+
+        var members = new IRuleOperand?[(FamilySpan(family: family) + 1)];
+        var kind = (CellKind?)null;
+        var addresses = -1;
+        string? describe = null;
+
+        for (var member = 0; (member < members.Length); member++) {
+            if (!family.TryGetOrdinal(index: member, ordinal: out var ordinal)) {
+                continue;
+            }
+
+            var arguments = call.Arguments.ToArray();
+
+            arguments[position] = new ChannelArgument.Word(Text: context.Catalog.Descriptors[ordinal].Name);
+
+            var compiled = ResolveOperand(cell: cell, context: context, operand: StateChannelRef.OfCall(call: call with { Arguments = arguments }), site: in site);
+
+            if (((kind is { } agreed) && (agreed != compiled.Operand.ValueKind)) || ((addresses >= 0) && (addresses != compiled.Operand.Addresses.Length))) {
+                throw new RuleException(
+                    detail: $"'{ChannelSpelling.Print(call: call)}' reads its family's members in different shapes, so one binding's member cannot stand for another's",
+                    refusal: RuleRefusal.StateCellUnaddressable,
+                    ruleName: site.RuleName
+                );
+            }
+
+            kind = compiled.Operand.ValueKind;
+            addresses = compiled.Operand.Addresses.Length;
+            describe ??= compiled.Describe;
+            members[member] = compiled.Operand;
+        }
+        if (kind is not { } valueKind) {
+            return false;
+        }
+
+        resolved = new ResolvedOperand(describe: Describe(key: cell?.Spelling, name: ChannelSpelling.Print(call: call)), operand: new MemberOperand(members: members, valueKind: valueKind));
+
+        return true;
+    }
+    // A family of slots read or written by its member index (`turn[$member]` over `slot turn[n]`): the member the index
+    // selects live, at its one cell. With `whole`, a family of tallies too, whose member a key-less write empties
+    // (`counts[$member] = 0`). A name that is a row, or a family of keyed rows, is not one.
+    private static bool TrySlotMember(string name, StateChannelRef? cell, string ruleName, string where, RuleCompileContext context, out LiveRow? live, bool whole = false) {
+        live = null;
+
+        return ((cell is not null) &&
+            (context.FindRow(name: name) is null) &&
+            CellName.TryParse(candidate: name, name: out var familyName, reason: out _) &&
+            context.Catalog.TryGetFamily(family: out var family, name: familyName) &&
+            family.TryGetOrdinal(index: FirstMemberIndex(family: family), ordinal: out var first) &&
+            (context.FindRowAt(rowOrdinal: first) is { } member) &&
+            (member.IsSlot || (whole && (member.EffectiveDomain is StateDomain.Tally))) &&
+            TryResolveLiveRow(context: context, name: $"{name}[{cell.Spelling}]", row: out live, ruleName: ruleName, where: where));
+    }
+    // The lowest family index that selects a member.
+    private static int FirstMemberIndex(RowFamily family) {
+        for (var index = 0; (index <= FamilySpan(family: family)); index++) {
+            if (family.TryGetOrdinal(index: index, ordinal: out _)) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+    // Whether a channel argument spells the binding's own member of a declared row family: `<family>[$member]`.
+    private static bool TryMemberSelection(string text, RuleCompileContext context, out RowFamily family) {
+        family = default;
+
+        const string Suffix = "[$member]";
+
+        return (text.EndsWith(value: Suffix, comparisonType: StringComparison.Ordinal) &&
+            CellName.TryParse(candidate: text[..^Suffix.Length], name: out var name, reason: out _) &&
+            context.Catalog.TryGetFamily(family: out family, name: name));
+    }
     private static IRuleOperand CreateCellRead(RuleCompileContext context, StateRowDeclaration row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) {
         var operand = context.CreateCellRead(key: key, keyFrom: keyFrom, row: row, rowOrdinal: rowOrdinal);
 
@@ -81,6 +176,10 @@ public static partial class RuleCompiler {
         var call = operand.Call;
         var key = cell?.Spelling;
         var name = operand.Spelling;
+
+        if (TryResolveMemberOperand(call: call, cell: cell, context: context, resolved: out var perMember, site: in site)) {
+            return perMember;
+        }
 
         foreach (var family in context.Vocabulary.Operands) {
             if (family.TryCompile(
@@ -307,6 +406,30 @@ public static partial class RuleCompiler {
                 detail: $"'{site.FieldLabel}' value '{name}' carries a '.' — a state row name is never dotted; address the cell with '{site.KeyFieldLabel}' instead of dotting it into '{site.FieldLabel}'",
                 refusal: RuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName
+            );
+        }
+
+        if ((call is null) && TrySlotMember(cell: cell, context: context, live: out var slotMember, name: name, ruleName: ruleName, where: $"'{site.Verb}' {site.FieldLabel}")) {
+            var slotKind = (context.FindRowAt(rowOrdinal: FirstCandidate(row: slotMember!))?.Kind ?? CellKind.Int);
+
+            if ((slotKind == CellKind.Text) && !site.AllowText) {
+                throw new RuleException(
+                    detail: $"state row '{name}' is kind=Text — a numeric expression cannot read text; use a Text equality gate",
+                    refusal: RuleRefusal.StateCellUnaddressable,
+                    ruleName: ruleName
+                );
+            }
+            slotMember!.CollectFacts(into: context.Needs);
+
+            return new ResolvedOperand(
+                describe: describe,
+                operand: new StateCellOperand(
+                    key: InternKey(context: context, name: StateRow.SlotKey.Value),
+                    keyFrom: null,
+                    rowFrom: slotMember,
+                    rowOrdinal: -1,
+                    valueKind: slotKind
+                )
             );
         }
 
@@ -542,6 +665,16 @@ public static partial class RuleCompiler {
         );
 
         live.CollectFacts(into: context.Needs);
+        if ((live.Family is not null) && (context.FindRowAt(rowOrdinal: FirstCandidate(row: live)) is { EffectiveDomain: StateDomain.Tally tally } tallyRow)) {
+            RequireOneTallyShape(context: context, live: live, ruleName: ruleName, tally: tally, verb: site.Verb);
+
+            var (tallyKey, tallyKeyFrom) = ResolveTallyKey(cell: key, context: context, key: key?.Spelling, row: tallyRow, ruleName: ruleName, site: in site);
+
+            return new ResolvedOperand(
+                describe: describe,
+                operand: new TallyOperand(capacity: tally.Capacity, key: tallyKey, keyFrom: tallyKeyFrom, rowFrom: live, rowOrdinal: FirstCandidate(row: live))
+            );
+        }
         if (TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: context,

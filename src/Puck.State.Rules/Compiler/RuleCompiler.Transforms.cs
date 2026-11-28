@@ -176,6 +176,15 @@ public static partial class RuleCompiler {
             ruleName: ruleName
         );
         StateRowDeclaration Row(string name) => (context.FindRow(name: name) ?? throw Invalid(message: $"unknown state row '{name}'"));
+        StateRowDeclaration RowAt(int ordinal, string name) => (context.FindRowAt(rowOrdinal: ordinal) ?? throw Invalid(message: $"unknown state row '{name}'"));
+        // A row end: a family member the binding selects live (its first candidate's ordinal standing for every member's
+        // shape), or the named row's ordinal.
+        int LiveEnd(string name, string where, out LiveRow? live) => (TryResolveLiveRow(context: context, name: name, row: out live, ruleName: ruleName, where: where)
+            ? FirstCandidate(row: live!)
+            : ResolveRowOrdinal(context: context, name: Row(name: name).Name.Value));
+        // Whether two topologies are one lattice in two places: members of a family of boards each over their own
+        // anchored copy of one grid.
+        bool SameShape(string left, string right) => ((context.FindTopology(name: left) is { } a) && (context.FindTopology(name: right) is { } b) && CompiledTopology.SameShape(left: a, right: b));
         int Ordinal(string name) => ResolveRowOrdinal(
             context: context,
             name: name
@@ -662,7 +671,8 @@ public static partial class RuleCompiler {
                 }
             case StateTransform.BoardCombine combine: {
                     var combineRow = combine.Row.Spelling;
-                    var target = Row(name: combineRow);
+                    var combineOrdinal = LiveEnd(name: combineRow, live: out toRow, where: "boardCombine 'row'");
+                    var target = RowAt(ordinal: combineOrdinal, name: combineRow);
 
                     if (
                         (target.EffectiveDomain is not StateDomain.CellsOf targetBoard) ||
@@ -714,24 +724,36 @@ public static partial class RuleCompiler {
                         }
 
                         var sourceName = source.Spelling;
+                        LiveRow? sourceLive = null;
+                        var sourceOrdinal = ((member == "left")
+                            ? LiveEnd(name: sourceName, live: out sourceLive, where: "boardCombine 'left'")
+                            : -1);
+
+                        var sourceRow = (((sourceLive is not null) ? context.FindRowAt(rowOrdinal: sourceOrdinal) : context.FindRow(name: sourceName))
+                            ?? throw Invalid(message: $"boardCombine '{member}' names '{sourceName}', which is neither a state row nor a declared set"));
 
                         if (
-                            ((context.FindRow(name: sourceName) ?? throw Invalid(message: $"boardCombine '{member}' names '{sourceName}', which is neither a state row nor a declared set"))
-                            .EffectiveDomain is not StateDomain.CellsOf sourceBoard) ||
-                            (sourceBoard.Topology != targetBoard.Topology)
+                            (sourceRow.EffectiveDomain is not StateDomain.CellsOf sourceBoard) ||
+                            ((sourceBoard.Topology != targetBoard.Topology) && !SameShape(left: sourceBoard.Topology, right: targetBoard.Topology))
                         ) {
                             throw Invalid(message: $"boardCombine source '{sourceName}' must be a board over '{targetBoard.Topology}' or a declared set");
                         }
 
-                        reads.Add(item: Ordinal(name: sourceName));
+                        if (sourceLive is not null) {
+                            fromRow = sourceLive;
+                        } else {
+                            reads.Add(item: Ordinal(name: sourceName));
+                        }
                     }
 
-                    writes.Add(item: Ordinal(name: combineRow));
+                    if (toRow is null) {
+                        writes.Add(item: combineOrdinal);
+                    }
                     resolved = new ArenaTransform.BoardCombine(
                         Direction: combineDirection,
                         Element: combineElement,
                         LeftRowOrdinal: (((leftSet is null) && (combine.Left is { } leftChannel))
-                        ? Ordinal(name: leftChannel.Spelling)
+                        ? ((fromRow is not null) ? FirstCandidate(row: fromRow) : Ordinal(name: leftChannel.Spelling))
                         : -1),
                         LeftSet: leftSet,
                         Operation: combine.Operation,
@@ -739,26 +761,34 @@ public static partial class RuleCompiler {
                         ? Ordinal(name: rightChannel.Spelling)
                         : -1),
                         RightSet: rightSet,
-                        RowOrdinal: Ordinal(name: combineRow),
+                        RowOrdinal: combineOrdinal,
                         Value: combineValue
                     );
 
                     break;
                 }
             case StateTransform.CopyRow copy: {
-                    var copyRow = Row(name: copy.Row.Spelling);
-                    var copyFrom = Row(name: copy.From.Spelling);
+                    // A live end selects one member of a family per firing (ArenaTransformBinding), and its first
+                    // candidate answers the compile-time questions every member shares.
+                    var copyIntoOrdinal = LiveEnd(name: copy.Row.Spelling, live: out toRow, where: "copyRow 'row'");
+                    var copyFromOrdinal = LiveEnd(name: copy.From.Spelling, live: out fromRow, where: "copyRow 'from'");
+                    var copyRow = RowAt(ordinal: copyIntoOrdinal, name: copy.Row.Spelling);
+                    var copyFrom = RowAt(ordinal: copyFromOrdinal, name: copy.From.Spelling);
 
                     if (!copyRow.IsKeyed || !copyFrom.IsKeyed || (copyRow.Kind != copyFrom.Kind) ||
                         (copyRow.Kind is not (CellKind.Int or CellKind.Fixed or CellKind.Bool))) {
                         throw Invalid(message: "copyRow requires two keyed numeric rows of one kind");
                     }
 
-                    reads.Add(item: Ordinal(name: copy.From.Spelling));
-                    writes.Add(item: Ordinal(name: copy.Row.Spelling));
+                    if (fromRow is null) {
+                        reads.Add(item: copyFromOrdinal);
+                    }
+                    if (toRow is null) {
+                        writes.Add(item: copyIntoOrdinal);
+                    }
                     resolved = new ArenaTransform.CopyRow(
-                        FromRowOrdinal: Ordinal(name: copy.From.Spelling),
-                        RowOrdinal: Ordinal(name: copy.Row.Spelling)
+                        FromRowOrdinal: copyFromOrdinal,
+                        RowOrdinal: copyIntoOrdinal
                     );
 
                     break;

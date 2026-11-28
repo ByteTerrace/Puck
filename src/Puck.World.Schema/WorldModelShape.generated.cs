@@ -6785,6 +6785,7 @@ public static partial class WorldModelShape {
                 M("scores", typeof(global::System.String), typeof(global::Puck.World.WorldSearchRow), "Scores", Read | Write, static value => ((global::Puck.World.WorldSearchRow)value).Scores, kind: WorldNameKind.State, role: WorldNameRole.Names, facet: WorldExportFacet.Read),
                 M("enabled", typeof(global::System.String), typeof(global::Puck.World.WorldSearchRow), "Enabled", Read | Write, static value => ((global::Puck.World.WorldSearchRow)value).Enabled, kind: WorldNameKind.State, role: WorldNameRole.Names, facet: WorldExportFacet.Read),
                 M("revision", typeof(global::System.String), typeof(global::Puck.World.WorldSearchRow), "Revision", Read | Write, static value => ((global::Puck.World.WorldSearchRow)value).Revision, kind: WorldNameKind.State, role: WorldNameRole.Names, facet: WorldExportFacet.Read),
+                M("member", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldSearchRow), "Member", Read | Write, static value => ((global::Puck.World.WorldSearchRow)value).Member),
                 M("effectiveShapes", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldSearchShape>), typeof(global::Puck.World.WorldSearchRow), "EffectiveShapes", None),
             ],
             []),

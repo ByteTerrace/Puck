@@ -76,3 +76,10 @@ public interface ICompiledFact {
     /// <summary>Gets the facet this fact's type declares, or <see langword="null"/> when it needs none.</summary>
     FacetRef? RequiredFacet { get; }
 }
+/// <summary>A compiled fact that answers through other compiled facts, one of which each read chooses (a channel compiled
+/// once per family member). A rule's needs fold every part, so a schedule versions and a disclosure classifies the facts
+/// a read can reach rather than the fact that chooses among them.</summary>
+public interface ICompositeFact : ICompiledFact {
+    /// <summary>Gets the facts a read can answer through, <see langword="null"/> at a position no read reaches.</summary>
+    IReadOnlyList<ICompiledFact?> Parts { get; }
+}
