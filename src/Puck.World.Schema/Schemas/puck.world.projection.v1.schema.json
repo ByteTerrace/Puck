@@ -17888,7 +17888,7 @@
         "stiffness": {
           "description": "One strand\u0027s stiffness against stretch past its length, in newtons per metre; positive.",
           "type": "number",
-          "default": 4000
+          "default": 20000
         },
         "damping": {
           "description": "The share of a node\u0027s speed lost each second; non-negative.",
@@ -17896,7 +17896,7 @@
           "default": 3
         },
         "sag": {
-          "description": "The slack each strand carries past its rest spacing, as a share of it, in [0, 1].",
+          "description": "The slack each strand carries past its rest spacing, as a share of it, in [\u22120.5, 1]: positive hangs the net loose, so it gives freely until its strands draw taut; negative strings it taut, each strand that share shorter than the spacing, so a load bellies it in proportion to its weight.",
           "type": "number",
           "default": 0
         },
@@ -17905,10 +17905,10 @@
           "type": "number",
           "default": 0.3
         },
-        "iterations": {
-          "description": "The projection passes a step makes over every strand, 1 to MaxIterations.",
+        "substeps": {
+          "description": "The slices a step is cut into, each solving every strand once, 1 to MaxSubsteps: more converge a stiffer net, at a strand solve each per strand.",
           "type": "integer",
-          "default": 4
+          "default": 8
         },
         "strand": {
           "description": "The thickness the net collides at, in metres before the row\u0027s scale: each node cell is a box this thick about the nodes\u0027 surface, and a body leaning on the net pushes its nodes until they stand this far beyond the box\u0027s face; positive.",

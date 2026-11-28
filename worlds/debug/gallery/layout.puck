@@ -575,19 +575,18 @@ let mouseHouseCake = [0, 0, ((mouseHouse.depth / 2) - 0.3)]
 // envelope (size.puck), and Alice's 0.15 is wider still. The panels stand on the balustrades' line (`balconyInset`).
 let toyLatticePitch = (galleryTile / 16)
 let toyLatticeBar = 0.025
-// The toybox's net: the lattice's bars and rails give way to a diamond net of rope strands threaded through a clear pane
-// that holds every body (architecture.puck's `lattice` net): 3.5 cm rope, knot to knot every 30 cm, a climbing net's
-// mesh rather than a fence's.
+// The toybox's net: the lattice's bars and rails give way to a diamond net of rope strands (architecture.puck's `lattice`
+// net): 3.5 cm rope, knot to knot every 30 cm, a climbing net's mesh rather than a fence's. Every panel's net is a real
+// one (the placement's `latticeNet` facet) but the loose panels', which is drawn over a clear pane.
 let toyLatticeNet = { strand: 0.035, pitch: 0.3 }
-// The loose panels: one panel on each edge that a rule can open, move or swap (gallery.md, "The lattice"), each named
-// `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
-// tile on the nave's axis.
+// The loose panels: panels a rule can open, move or swap (gallery.md, "The lattice"), each named
+// `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: the south edge's bay 8 (the north edge's is the
+// tree's gate) and the bridge's middle tile on the nave's axis.
 let toyLatticeLooseBay = 8
-// The rope net panel: the north edge's bay whose frame holds a net that gives and climbs (architecture.puck's `latticeNet`
-// facet, gallery.md "The lattice") rather than a net drawn over a pane. Its frame and its net still close the edge to
-// every body. Kept clear of the toybox's stairs, lifts, stations and house and of every tree branch's landing: bay 9
-// has none of them, standing between the tree's gate (bay 8) and the little house (bay 10), its aisle open to walk up
-// to the net from.
+// The rope net the benchmark climbs and `debug.go rope-net` stands a body before: the north edge's net in bay 9
+// (gallery.md "The lattice"). Kept clear of the toybox's stairs, lifts, stations and house and of every tree branch's
+// landing: bay 9 has none of them, standing between the tree's gate (bay 8) and the little house (bay 10), its aisle
+// open to walk up to the net from.
 let toyLatticeNetBay = 9
 
 // The central tree (tree.puck): a giant tree at the hall's exact centre, bay 6 (the middle rest bay) on the nave's

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Puck.Maths;
 
 namespace Puck.Physics;
@@ -72,13 +73,25 @@ public readonly record struct FixedColliderFrame(FixedVector3 AxisX, FixedVector
 /// <summary>Colliders with their <see cref="FixedStaticCollider.WorldBox"/> bounds and <see cref="FixedColliderFrame"/> certificates,
 /// computed from the colliders themselves: the only form in which <see cref="FixedStaticContactSolver"/> takes colliders,
 /// so every bound it culls by is the collider's own and no caller supplies one. A set is either compiled once over an
-/// array or refreshed by its owner with the colliders it recomputes each tick.</summary>
+/// array or refreshed by its owner with the colliders it recomputes each tick. Its colliders fall in groups, runs that
+/// share an owner's key (a moving row's colliders), each with the box its members' bounds lie in, so a query lists its
+/// candidates (<see cref="Candidates"/>) by passing over every group its region misses.</summary>
+/// <remarks>Invariant: each slot below <c>m_compiled</c> holds the bounds and certificate computed from the collider in
+/// that slot. <see cref="Compile"/> and <see cref="RefreshFrom"/> are their only writers, and both keep it: a refresh
+/// computes a slot again unless the collider it receives there equals the one already compiled, and a copy takes the
+/// bounds with their colliders.</remarks>
 public sealed class FixedStaticColliderSet {
     private readonly bool m_refreshable;
     private FixedStaticCollider[] m_colliders;
     private FixedAabb[] m_boxes;
     private FixedColliderFrame[] m_frames;
     private int m_count;
+    private int m_compiled;
+    // Group g holds slots [m_groupStarts[g], m_groupStarts[g + 1]), keyed by m_groupKeys[g] and bounded by m_groupBoxes[g].
+    private int[] m_groupStarts = [0];
+    private int[] m_groupKeys = [];
+    private FixedAabb[] m_groupBoxes = [];
+    private int m_groupCount;
 
     /// <summary>Initializes a new instance of the <see cref="FixedStaticColliderSet"/> class over an array it keeps.</summary>
     /// <param name="colliders">The colliders, in the order every query visits them; the set reads the array and the
@@ -89,7 +102,8 @@ public sealed class FixedStaticColliderSet {
         m_colliders = colliders;
         m_boxes = new FixedAabb[colliders.Length];
         m_frames = new FixedColliderFrame[colliders.Length];
-        Compile(count: colliders.Length);
+        Reserve(count: colliders.Length);
+        Compile(colliders: colliders, groups: default);
     }
     /// <summary>Initializes a new, empty instance of the <see cref="FixedStaticColliderSet"/> class that owns its storage
     /// and that <see cref="Refresh"/> fills.</summary>
@@ -113,25 +127,119 @@ public sealed class FixedStaticColliderSet {
     public int Count => m_count;
 
     /// <summary>Replaces the colliders of a set that owns its storage with copies of the given ones and compiles their
-    /// bounds; storage grows only past its largest earlier count.</summary>
+    /// bounds, computing them only for a slot whose collider changed; storage grows only past its largest earlier
+    /// count.</summary>
     /// <param name="colliders">The colliders, in the order every query visits them.</param>
+    /// <param name="groups">Each collider's group key, parallel to <paramref name="colliders"/>, a run of equal keys one
+    /// group; empty to hold every collider in one group.</param>
     /// <exception cref="InvalidOperationException">The set was compiled over a caller's array.</exception>
-    public void Refresh(ReadOnlySpan<FixedStaticCollider> colliders) {
+    /// <exception cref="ArgumentException"><paramref name="groups"/> is neither empty nor as long as
+    /// <paramref name="colliders"/>.</exception>
+    public void Refresh(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<int> groups = default) {
         if (!m_refreshable) { throw new InvalidOperationException(message: "A collider set compiled over a caller's array is fixed."); }
-        if (m_colliders.Length < colliders.Length) {
-            m_colliders = new FixedStaticCollider[colliders.Length];
-            m_boxes = new FixedAabb[colliders.Length];
-            m_frames = new FixedColliderFrame[colliders.Length];
+        if (!groups.IsEmpty && (groups.Length != colliders.Length)) {
+            throw new ArgumentException(message: "A collider set's group keys run parallel to its colliders.", paramName: nameof(groups));
         }
-        colliders.CopyTo(destination: m_colliders);
-        Compile(count: colliders.Length);
+        Reserve(count: colliders.Length);
+        Compile(colliders: colliders, groups: groups);
+    }
+    /// <summary>Replaces the colliders of a set that owns its storage with another set's, less every group whose key a
+    /// filter refuses, taking each kept collider's bounds and group as compiled there.</summary>
+    /// <param name="source">The set to copy.</param>
+    /// <param name="keeps">Returns whether a group key is kept.</param>
+    /// <exception cref="InvalidOperationException">The set was compiled over a caller's array.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="keeps"/> is
+    /// <see langword="null"/>.</exception>
+    public void RefreshFrom(FixedStaticColliderSet source, Func<int, bool> keeps) {
+        if (!m_refreshable) { throw new InvalidOperationException(message: "A collider set compiled over a caller's array is fixed."); }
+        ArgumentNullException.ThrowIfNull(argument: source);
+        ArgumentNullException.ThrowIfNull(argument: keeps);
+        Reserve(count: source.m_count);
+
+        var count = 0;
+        var groups = 0;
+
+        for (var group = 0; (group < source.m_groupCount); group++) {
+            if (!keeps(arg: source.m_groupKeys[group])) { continue; }
+            var start = source.m_groupStarts[group];
+            var length = (source.m_groupStarts[(group + 1)] - start);
+
+            source.m_colliders.AsSpan(start: start, length: length).CopyTo(destination: m_colliders.AsSpan(start: count));
+            source.m_boxes.AsSpan(start: start, length: length).CopyTo(destination: m_boxes.AsSpan(start: count));
+            source.m_frames.AsSpan(start: start, length: length).CopyTo(destination: m_frames.AsSpan(start: count));
+            m_groupStarts[groups] = count;
+            m_groupKeys[groups] = source.m_groupKeys[group];
+            m_groupBoxes[groups] = source.m_groupBoxes[group];
+            groups++;
+            count += length;
+        }
+        m_groupStarts[groups] = count;
+        m_groupCount = groups;
+        m_count = count;
+        m_compiled = Math.Max(val1: m_compiled, val2: count);
+    }
+    /// <summary>Lists the colliders whose bounds meet a region grown by the contact skin, ascending and distinct, for a
+    /// query whose body stays inside <paramref name="region"/>: a group whose box misses the region is passed over
+    /// whole. The solver checks every collider once the body's bounds leave the region, so the region trades only
+    /// speed, never the result.</summary>
+    /// <param name="region">The region a query's body stays inside.</param>
+    /// <param name="skin">The contact skin a collider acts across.</param>
+    /// <param name="scratch">The caller's list the indices are written into; the result reads it until the next call.</param>
+    /// <returns>The candidates, or the default value (every collider) for an empty set.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="scratch"/> is <see langword="null"/>.</exception>
+    public FixedColliderCandidates Candidates(FixedAabb region, FixedQ4816 skin, List<int> scratch) {
+        ArgumentNullException.ThrowIfNull(argument: scratch);
+        if (m_count == 0) { return default; }
+
+        var reach = region.Grow(margin: skin);
+
+        scratch.Clear();
+        for (var group = 0; (group < m_groupCount); group++) {
+            if (!m_groupBoxes[group].Intersects(other: in reach)) { continue; }
+            for (var index = m_groupStarts[group]; (index < m_groupStarts[(group + 1)]); index++) {
+                if (m_boxes[index].Intersects(other: in reach)) { scratch.Add(item: index); }
+            }
+        }
+        return new FixedColliderCandidates(indices: CollectionsMarshal.AsSpan(list: scratch), region: region);
     }
 
-    private void Compile(int count) {
-        for (var index = 0; (index < count); index++) {
-            m_boxes[index] = m_colliders[index].WorldBox();
-            m_frames[index] = FixedColliderFrame.Of(collider: in m_colliders[index]);
+    // Grows storage to hold a count; new collider storage holds no compiled slot.
+    private void Reserve(int count) {
+        if (m_colliders.Length < count) {
+            m_colliders = new FixedStaticCollider[count];
+            m_boxes = new FixedAabb[count];
+            m_frames = new FixedColliderFrame[count];
+            m_compiled = 0;
         }
+        if (m_groupStarts.Length <= count) {
+            m_groupStarts = new int[(count + 1)];
+            m_groupKeys = new int[count];
+            m_groupBoxes = new FixedAabb[count];
+        }
+    }
+    private void Compile(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<int> groups) {
+        var count = colliders.Length;
+        var group = -1;
+
+        for (var index = 0; (index < count); index++) {
+            if ((index >= m_compiled) || (m_colliders[index] != colliders[index])) {
+                m_colliders[index] = colliders[index];
+                m_boxes[index] = colliders[index].WorldBox();
+                m_frames[index] = FixedColliderFrame.Of(collider: in colliders[index]);
+            }
+            var key = (groups.IsEmpty ? 0 : groups[index]);
+
+            if ((group < 0) || (key != m_groupKeys[group])) {
+                group++;
+                m_groupStarts[group] = index;
+                m_groupKeys[group] = key;
+                m_groupBoxes[group] = FixedAabb.Empty;
+            }
+            m_groupBoxes[group] = m_groupBoxes[group].Enclose(other: m_boxes[index]);
+        }
+        m_groupCount = (group + 1);
+        m_groupStarts[m_groupCount] = count;
         m_count = count;
+        m_compiled = Math.Max(val1: m_compiled, val2: count);
     }
 }

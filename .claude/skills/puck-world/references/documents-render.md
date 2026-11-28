@@ -622,9 +622,10 @@ net of rope strands (a climbing net, a rope bridge, a hammock, a cargo net, a
 banner, a sail): `columns` by `rows` nodes (2 to 16 each) over `origin + s·across
 + t·up` in the row's frame, the edges `pinLeft`, `pinRight`, `pinBottom` and
 `pinTop` hold to the frame (all by default), and its material: `nodeMass`,
-`stiffness` (newtons per metre a strand), `damping`, `sag` (a strand's slack),
-`reach` (the farthest a node moves), `iterations`, `strand` (the thickness it
-collides at), `bodyMass` (what a full-size body holding it weighs; a shrunk one
+`stiffness` (newtons per metre a strand), `damping`, `sag` (a strand's slack,
+negative to string it taut, so a load bellies it in proportion), `reach` (the
+farthest a node moves), `substeps` (the slices a step is cut into, each solving
+every strand once), `strand` (the thickness it collides at), `bodyMass` (what a full-size body holding it weighs; a shrunk one
 weighs the cube of its size), `restSpeed`, `sleepSeconds` and `gravity`. The
 standard's `ropeNet` is a park climbing net's material and `latticeNet` lays
 one over a `lattice` frame built with `pane: 0` (`worlds/standard/architecture.puck`).
@@ -635,11 +636,13 @@ What runs:
 
 - The authority steps it after the tick's bodies (`WorldPopulation.StepNets`,
   `FixedNet`): a body that holds it (a `Pull` hold whose anchor lies on it)
-  loads it with its weight there, and every body volume within its strand and
-  the contact reach of it pushes its nodes out. A body that stands near it and
-  reaches no node neither wakes it nor keeps it awake (`FixedNet.Pressers`).
-  Untouched and still for `sleepSeconds`, it sleeps and costs one box test a
-  body, and a reach test over its nodes for a body inside that box.
+  hangs its mass there with its weight and the pull its hands take off the
+  face, and its feet push back in where they stand on the net; every volume of
+  a body near it that does not hold it pushes its nodes out. A body that stands
+  near it and reaches no node neither wakes it nor keeps it awake
+  (`FixedNet.Pressers`). Still for `sleepSeconds` under an unchanged touch (no
+  one, or a climber hanging still), it sleeps, and a sleeping net costs one
+  fingerprint a tick; a body far from every net costs one box test.
 - It collides as a sheet of rounded boxes over its cells, posed every tick in
   the analytic provider's live set (`WorldColliderSet.RecordNetColliders`), and a
   `grip { holdable: true }` row is climbable. A body standing on it or holding
@@ -652,7 +655,7 @@ What runs:
 Read it back with `world.nets` (nodes, awake, deepest deflection, reach,
 holders, leaners); a rule reads `net("<placement>", deflection|awake|holders|pushers)`
 (`$net:`); `world.budget`'s `nets` line and `world.counters physics.nets`
-(`steps`, `nodes-solved`, `strands-solved`, `iterations`, `sleeps`, `wakes`) give
-its cost. The gallery's rope net panel is the worked example (`worlds/debug/gallery.md`,
+(`steps`, `nodes-solved`, `strands-solved`, `substeps`, `sleeps`, `wakes`) give
+its cost. The gallery's level 1 nets are the worked example (`worlds/debug/gallery.md`,
 "The lattice"). A net drawn in a world seen through a portal or a session draws
 at rest; only the world's own scene displaces it.

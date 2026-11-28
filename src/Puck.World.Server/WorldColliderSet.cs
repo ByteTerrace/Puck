@@ -78,16 +78,22 @@ public sealed partial class WorldColliderSet : IContactField {
     // navigation plans against (StaticField).
     private readonly FixedStaticContactField m_static;
 
-    // m_attachedColliders with each one's world bounds, published from it at the end of every refresh or restore that
-    // rebuilds it, which are the only writers between solves.
-    private readonly FixedStaticColliderSet m_attachedSet = new();
-    // m_attachedColliders less the live rows the sweep in progress leaves out (Excludes), with the holdable subset and
-    // its grip overrides, rebuilt from the latest refresh whenever what is left out changes (RefreshExcluded).
+    // m_attachedColliders with each one's world bounds, grouped by row, published from it at the end of every refresh or
+    // restore that rebuilds it, which are the only writers between solves; and the set the refresh before published,
+    // which m_previousAttachedColliders matches index for index (TryRideDisplacement culls by its bounds). A refresh
+    // swaps the two, so a row that stood still keeps its compiled bounds from two refreshes back.
+    private FixedStaticColliderSet m_attachedSet = new();
+    private FixedStaticColliderSet m_previousAttachedSet = new();
+    // The candidate list a ride's support search reads, one a thread: kit partitions search in parallel.
+    [ThreadStatic]
+    private static List<int>? RideScratch;
+    // m_attachedSet less the live rows the sweep in progress leaves out (Excludes), with the holdable subset and its
+    // grip overrides, rebuilt from the latest refresh whenever what is left out changes (RefreshExcluded).
     private readonly FixedStaticColliderSet m_excludedSet = new();
-    private readonly List<FixedStaticCollider> m_excludedColliders = [];
-    private readonly List<FixedStaticCollider> m_excludedHoldable = [];
     private readonly FixedStaticColliderSet m_excludedHoldableSet = new();
     private readonly List<bool> m_excludedGripOverrides = [];
+    // Whether a row is kept by the sweep in progress, the filter RefreshExcluded copies the sets through.
+    private readonly Func<int, bool> m_keepsRow;
     private int m_rideExcludedRow = -1;
     // The pass bits (m_passSlots) the body whose sweeps are in progress holds, set only by HoldPasses.
     private ulong m_heldPasses;
@@ -114,21 +120,13 @@ public sealed partial class WorldColliderSet : IContactField {
     private void RefreshExcluded() {
         m_excluding = ((m_rideExcludedRow >= 0) || (m_heldPasses != 0UL));
         if (!m_excluding) { return; }
-        m_excludedColliders.Clear();
-        m_excludedHoldable.Clear();
         m_excludedGripOverrides.Clear();
-        for (var index = 0; (index < m_attachedColliders.Count); index++) {
-            var row = m_attachedColliderRows[index];
-
-            if (Excludes(row: row)) { continue; }
-            m_excludedColliders.Add(item: m_attachedColliders[index]);
-            if (MovingHoldable(grantedByOverride: out var grantedByOverride, row: row)) {
-                m_excludedHoldable.Add(item: m_attachedColliders[index]);
-                m_excludedGripOverrides.Add(item: grantedByOverride);
-            }
+        for (var index = 0; (index < m_movingHoldableRows.Count); index++) {
+            if (!Excludes(row: m_movingHoldableRows[index])) { m_excludedGripOverrides.Add(item: m_movingGripOverrides[index]); }
         }
-        m_excludedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_excludedColliders));
-        m_excludedHoldableSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_excludedHoldable));
+        // Copies of the published sets less the rows left out, their bounds carried rather than computed again.
+        m_excludedSet.RefreshFrom(keeps: m_keepsRow, source: m_attachedSet);
+        m_excludedHoldableSet.RefreshFrom(keeps: m_keepsRow, source: m_movingHoldableSet);
     }
 
     // During a ride only the support being displaced is omitted: its new pose may already enclose the start.
@@ -212,6 +210,8 @@ public sealed partial class WorldColliderSet : IContactField {
 
     // The holdable subset of m_attachedColliders, published with its bounds beside m_attachedSet.
     private readonly List<FixedStaticCollider> m_movingHoldable = [];
+    // The row each collider in m_movingHoldable came from, parallel to it.
+    private readonly List<int> m_movingHoldableRows = [];
     private readonly FixedStaticColliderSet m_movingHoldableSet = new();
     // Advances wherever m_movingHoldableSet can change content: a refresh whose fold moved, and every restore. The static
     // holdable set never changes, and what a probe leaves out is the stamp's mask (TryHoldableStamp).
@@ -259,6 +259,9 @@ public sealed partial class WorldColliderSet : IContactField {
                 placement.Solid!.Margin, partitioned: false);
         }
         m_attachedVisitor = RecordAttachedCopy;
+        m_keepsRow = row => !Excludes(row: row);
+        m_posedRows = new PosedRow[attachedRows.Count];
+        for (var row = 0; (row < attachedRows.Count); row++) { m_posedRows[row] = new PosedRow(); }
         m_attachedScales = new FixedQ4816[attachedRows.Count];
         m_previousAttachedScales = new FixedQ4816[attachedRows.Count];
         m_attachedOrigins = new FixedVector3[attachedRows.Count];
@@ -438,20 +441,13 @@ public sealed partial class WorldColliderSet : IContactField {
 
     private static void FoldCollider(in FixedStaticCollider collider, ref Fnv1aHash hash) {
         hash.Add(value: ((byte)collider.Kind));
-        hash.Add(value: collider.Center.X.Value);
-        hash.Add(value: collider.Center.Y.Value);
-        hash.Add(value: collider.Center.Z.Value);
-        hash.Add(value: collider.Extent.X.Value);
-        hash.Add(value: collider.Extent.Y.Value);
-        hash.Add(value: collider.Extent.Z.Value);
+        collider.Center.AppendHash(hash: ref hash);
+        collider.Extent.AppendHash(hash: ref hash);
         hash.Add(value: collider.Radius.Value);
         hash.Add(value: collider.Chamfer.Value);
         hash.Add(value: collider.Exponent.Value);
         hash.Add(value: collider.Elongation.Value);
-        hash.Add(value: collider.Rotation.X.Value);
-        hash.Add(value: collider.Rotation.Y.Value);
-        hash.Add(value: collider.Rotation.Z.Value);
-        hash.Add(value: collider.Rotation.W.Value);
+        collider.Rotation.AppendHash(hash: ref hash);
     }
 
     // Boxes retain their authored rounding (sharp without one), and circular cylinders, capsules and ellipsoids their
@@ -1011,17 +1007,24 @@ public sealed partial class WorldColliderSet : IContactField {
         (m_previousAttachedRotations, m_attachedRotations) = (m_attachedRotations, m_previousAttachedRotations);
         (m_previousAttachedResolved, m_attachedResolved) = (m_attachedResolved, m_previousAttachedResolved);
         (m_previousAttachedNetRevisions, m_attachedNetRevisions) = (m_attachedNetRevisions, m_previousAttachedNetRevisions);
+        (m_previousAttachedSet, m_attachedSet) = (m_attachedSet, m_previousAttachedSet);
         m_attachedColliders.Clear();
         m_attachedColliderRows.Clear();
-        m_movingHoldable.Clear(); m_movingGripOverrides.Clear();
+        m_movingHoldable.Clear(); m_movingHoldableRows.Clear(); m_movingGripOverrides.Clear();
         Array.Clear(array: m_attachedResolved);
         Array.Clear(array: m_liveFields);
         RefreshAttachedRows(definition: definition, engineTick: engineTick, population: population, tick: tick);
         FoldAttachedMoves(colliders: m_previousAttachedColliders, rows: m_previousAttachedColliderRows);
         FoldAttachedMoves(colliders: m_attachedColliders, rows: m_attachedColliderRows);
-        m_attachedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders));
-        m_movingHoldableSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_movingHoldable));
+        PublishAttached();
         RefreshExcluded();
+    }
+    // Publishes the attached colliders and their holdable subset, each grouped by row.
+    private void PublishAttached() {
+        m_attachedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders),
+            groups: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliderRows));
+        m_movingHoldableSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_movingHoldable),
+            groups: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_movingHoldableRows));
     }
 
     /// <summary>Collects the active bodies that carry an attached solid row (<see cref="WorldPlacementAttachment"/>),
@@ -1153,9 +1156,8 @@ public sealed partial class WorldColliderSet : IContactField {
         m_attachedColliders.Add(item: attached);
         m_attachedColliderRows.Add(item: m_refreshRow);
         if (MovingHoldable(grantedByOverride: out var grantedByOverride, row: m_refreshRow)) {
-            m_movingHoldable.Add(item: attached); m_movingGripOverrides.Add(item: grantedByOverride);
+            m_movingHoldable.Add(item: attached); m_movingHoldableRows.Add(item: m_refreshRow); m_movingGripOverrides.Add(item: grantedByOverride);
         }
-        FoldCollider(collider: in attached, hash: ref m_refreshHash);
     }
 
     /// <summary>Returns every attached solid row its carrier resolved at the latest refresh, at the pose that refresh
@@ -1275,8 +1277,18 @@ public sealed partial class WorldColliderSet : IContactField {
         var found = false;
         var bestDepth = FixedQ4816.Zero;
         var skin = ContactReach;
+        var bounds = FixedAabb.Empty;
 
-        for (var index = 0; (index < m_previousAttachedColliders.Count); index++) {
+        foreach (ref readonly var volume in volumes) {
+            bounds = bounds.Enclose(other: FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume));
+        }
+        // Only a collider whose bounds come within the skin of the body's can push it, so the rows whose bounds miss
+        // are passed over whole.
+        var candidates = m_previousAttachedSet.Candidates(region: bounds, scratch: (RideScratch ??= []), skin: skin);
+        var visits = (candidates.IsActive ? candidates.Indices.Length : m_previousAttachedColliders.Count);
+
+        for (var visit = 0; (visit < visits); visit++) {
+            var index = (candidates.IsActive ? candidates.Indices[visit] : visit);
             var collider = m_previousAttachedColliders[index];
             var row = m_previousAttachedColliderRows[index];
 

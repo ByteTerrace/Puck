@@ -65,12 +65,8 @@ public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
             var box = new FixedAabb(Maximum: high, Minimum: low);
             var hash = Fnv1aHash.Create();
 
-            hash.Add(value: low.X.Value);
-            hash.Add(value: low.Y.Value);
-            hash.Add(value: low.Z.Value);
-            hash.Add(value: high.X.Value);
-            hash.Add(value: high.Y.Value);
-            hash.Add(value: high.Z.Value);
+            low.AppendHash(hash: ref hash);
+            high.AppendHash(hash: ref hash);
             var set = ((int)(hash.Value & (Sets - 1)));
             var first = (set * Ways);
 

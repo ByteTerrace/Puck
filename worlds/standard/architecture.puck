@@ -1681,7 +1681,8 @@ template lounge(base) {
 // A construction lattice that runs along X, a toy building set's panel: a frame of square members `frame` thick round a
 // panel `cells × pitch` long and `height` tall standing on y 0, an upright bar `bar` square every `pitch` between its two
 // posts, and crossbars `rail` square that divide its height into `rails` equal courses. Its palette slots from `base`
-// are the frame, the uprights and the crossbars (`latticePalette` gives three plain ones from their colours). The
+// are the frame, the uprights, the crossbars, the pane and a net's knots (`latticePalette` gives plain ones from their
+// colours, `latticeNetPalette` a rope net's). The
 // uprights are one bar folded by a repeat and the crossbars another, so `cells` and `rails` are even (an odd number of
 // copies centres a fold) and `cells` is at most 64, the copies a solid's fold expands to for contact. Every shape is a
 // box joined by union, so the panel collides as drawn: no body wider than the gap between two uprights, `pitch - bar`,
@@ -1691,15 +1692,25 @@ let latticeFrame = 0
 let latticeBar = 1
 let latticeRail = 2
 let latticeGlass = 3
-function latticePalette(frame, bar, rail) = [
+let latticeKnot = 4
+function latticePalette(frame, bar, rail, knot = null) = [
   { color: frame, roughness: 0.4, specular: 0.05 }
   { color: bar, roughness: 0.4, specular: 0.05 }
   { color: rail, roughness: 0.4, specular: 0.05 }
   { color: "#EEF6F8", roughness: 0.03, glass { depth: 0.008, ior: 1.5 } }
+  { color: ((knot == null) ? frame : knot), roughness: 0.4, specular: 0.05 }
+]
+// A rope net's lattice palette: the frame in glossy toy plastic, and the two strand sets and the knots in matte rope.
+function latticeNetPalette(frame, strand, crossStrand, knot) = [
+  { color: frame, roughness: 0.4, specular: 0.05 }
+  { color: strand, roughness: 0.85, specular: 0.02 }
+  { color: crossStrand, roughness: 0.85, specular: 0.02 }
+  { color: "#EEF6F8", roughness: 0.03, glass { depth: 0.008, ior: 1.5 } }
+  { color: knot, roughness: 0.8, specular: 0.02 }
 ]
 // `net`, when set, fills the frame with a net instead of bars and rails: a clear pane holds every body, and over it a
 // diamond net of rope strands `net.strand` thick, knot to knot `net.pitch` apart, the two sets in the bar and rail
-// colours with a knot in the frame colour where they cross. The strands are drawn only (`detail`); the pane collides.
+// colours with a knot in the knot colour where they cross. The strands are drawn only (`detail`); the pane collides.
 // `pane: 0` leaves the pane out, for a frame whose placement carries a net facet (`latticeNet`): the facet's nodes then
 // collide, give and climb, and the drawn strands move with them.
 template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0.05, rails = 6, upright = 1, sill = 1, net = null, pane = 1) {
@@ -1725,7 +1736,7 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
     }
     for corner in [-1, 1] {
       shape Sphere $"lattice-net-knot-{corner}" {
-        material: (base + latticeFrame)
+        material: (base + latticeKnot)
         position [(0 - ((corner * cell) / 2)), ((corner * cell) / 2), 0]
         rotation: rotate([0, 1, 0], 180)
         scale [(net.strand * 0.8), (net.strand * 0.8), (net.strand * 0.8)]
@@ -1794,18 +1805,21 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
   }
 }
 
-// A rope net's material, a placement net facet's members (WorldPlacementNet): a park climbing net's 16 mm rope hung with
-// a little slack, so it drapes a touch at rest, bellies out under a climber's hands and in under her feet, gives a third
-// of a metre at most to a climber's weight or a body leaning on it, and settles in a second.
+// A rope net's material, a placement net facet's members (WorldPlacementNet): a park climbing net's 16 mm rope strung
+// taut (`sag` below zero: each strand three per cent short of its spacing), so a climber's weight bellies it by as much
+// as its strands give, about a fifth of a metre under a full-size climber and in proportion to the weight (half the
+// mass, half the belly; a shrunk body barely dimples it), bouncing once under her before it settles. It gives a third
+// of a metre at most, to any weight or a body leaning on it, and comes to rest in a second. Eight slices a step
+// converge its strands at this stiffness.
 // `strand` is the thickness it collides at, about a body's hand round a rope; `bodyMass` the mass a full-size body loads
 // it with while holding it (a shrunk body loads it with the cube of its size). Override any member with `with`.
 let ropeNet = {
   nodeMass: 0.25
-  stiffness: 3000
-  damping: 3
-  sag: 0.03
+  stiffness: 20000
+  damping: 6
+  sag: -0.03
   reach: 0.35
-  iterations: 4
+  substeps: 8
   strand: 0.035
   bodyMass: 60
   restSpeed: 0.01
@@ -1814,7 +1828,8 @@ let ropeNet = {
 }
 // The net facet over a `lattice` frame's opening, for its placement: `columns` by `rows` nodes from post to post and from
 // the sill's middle to the head's, pinned along all four members, of `rope`'s material. Pair it with the frame built
-// with `pane: 0`, whose drawn strands then move with the nodes.
+// with `pane: 0`, whose drawn strands then move with the nodes. A narrow frame takes fewer columns, so its nodes keep
+// about the spacing a full panel's do.
 function latticeNet(cells, pitch, height, frame = 0.09, columns = 12, rows = 9, rope = ropeNet) = rope with {
   columns: columns
   rows: rows

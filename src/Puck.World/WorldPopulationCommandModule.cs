@@ -520,19 +520,23 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
 
         return $"[world.budget: {string.Join(separator: Environment.NewLine, values: sections)}]";
     }
-    // The nets' cost: the nodes and strands every awake net solves a tick, times its iterations, and the cell colliders
-    // the analytic provider poses for every net, awake or asleep.
+    // The nets' cost: the nodes and strands every awake net solves a tick, once a substep, and the cell colliders the
+    // analytic provider poses for every net, awake or asleep.
     private static string DescribeNetBudget(WorldNets nets) {
         if (nets.Panels.IsEmpty) { return "nets none"; }
 
         var strandSolves = 0L;
+        var nodeSolves = 0L;
         var cells = 0;
 
         foreach (var panel in nets.Panels) {
             cells += panel.Net.CellCount;
-            if (panel.Net.Awake) { strandSolves += ((long)panel.Net.StrandCount * panel.Net.Spec.Iterations); }
+            if (panel.Net.Awake) {
+                strandSolves += ((long)panel.Net.StrandCount * panel.Net.Spec.Substeps);
+                nodeSolves += ((long)panel.Net.NodeCount * panel.Net.Spec.Substeps);
+            }
         }
-        return $"nets {nets.Panels.Length} net(s), {nets.NodeCount} node(s), {cells} cell collider(s), {nets.AwakeCount} awake solving {strandSolves} strand projection(s) / tick";
+        return $"nets {nets.Panels.Length} net(s), {nets.NodeCount} node(s), {cells} cell collider(s), {nets.AwakeCount} awake integrating {nodeSolves} node(s) and solving {strandSolves} strand projection(s) / tick";
     }
     private static string DescribeDistribution(WorldDistribution distribution) {
         var region = distribution.Region switch {
