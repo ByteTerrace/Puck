@@ -369,7 +369,22 @@ world rule writes the size from the body's live position, so every observer sees
 a world table the console retunes live. A field stands in a frame (`frame`, frame.puck): its zones are written in the
 group's coordinates and its sizes are the group's, multiplied by the frame's scale, so a body in a group stood at half
 size takes half the size and its physics follows. The gallery's level 1 and its entrance (`../debug/gallery.md`, "The
-size of level 1" and "One frame") are the worked example.
+size of level 1" and "One frame") are the worked example. A zone may also ease its curve still at both ends (`ease`,
+over `sizeFieldEase`) and cover a share of one longer path (`part`), and `sizeFieldPath` writes a whole turning path as
+one eased curve: the path is a polyline rounded into circular arcs (paths.puck's `roundedPath`), each arc a zone that
+reads a body's progress by its angle, so the size runs on continuously round every turn whatever line the body takes.
+
+`size-tunnel.puck` is a library of one template, `sizeTunnel`: a bored passage whose walker's size follows their place
+along it while the passage grows with them. A tunnel is a junction and the branches that leave it, each a polyline to a
+mouth, a hatch (a sized doorway only a body the hatch's size passes) or an exit (a false wall whose leaves, in the
+disguise of the wall they stand in, swing open before a body coming out and stay open a while, so a body outside can
+slip in). The bore is generated a walker's stride apart along each branch's rounded path, every section at the size a
+walker takes there (the size field's own curve, `sizeFieldAt`): a floor tile, uneven stone walls laid in strata, a
+crown, ribs, torches with short-reaching lights and a queue railing, so the passage looks the same at every size. Its
+look (`sizeTunnelPaletteOf`, the torch's light), proportions (`sizeTunnelBoreDefault`) and door (`sizeTunnelDoorDefault`)
+are the author's; `sizeTunnelMouths` gives a host each mouth's point, heading and the hole it cuts in the wall the mouth
+opens in. The gallery's escape tunnel (`../debug/gallery/tunnel.puck`) and its lab (`../debug/labs/tunnel.puck`) are
+the worked example.
 
 `kits.puck` is a library of kit parts: the gravity and the ground, fall and air holds a body wears (`groundHold`,
 `fallHold`, `airHold`), the motions a kit derives its own from with `with` (`walkerMotion`, the walker's 4 m/s walk

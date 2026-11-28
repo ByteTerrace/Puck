@@ -253,3 +253,29 @@ panelChoice portal <n>` points it from the console as a tap does. The way back
 from a world it leads to is that world's own frame, which leads to the debug
 world's painting or lab door rather than back here, until the way home travels
 with the traveller ([the decision](../../../docs/decisions/play.md#portals-and-their-panels)).
+
+### Tunnel
+
+[tunnel.puck](tunnel.puck): the gallery's escape tunnel ([gallery/tunnel.puck](../gallery/tunnel.puck),
+gallery.md ruling 9) standing alone before a west wall: the low hatch and the
+false-wall exit open into the hall at floor level, and the high hatch onto a
+balcony 4.5 m up the same wall. The hatches' bores climb and turn to a lit
+junction under the wall's far side, and the exit's bore turns from it to the
+false wall. A body's size follows its place along the tunnel, eased at both
+ends: the hatches' size at either hatch, the junction's in its chamber and full
+size at the exit. The lab shrinks a body on its way to each hatch, which a
+full-size body cannot pass: the floor before the low hatch eases it down to the
+hatch's size over 8 m, and the balcony holds it there, as level 1 does in the
+gallery. [tunnel-walk.puck](tunnel-walk.puck) holds the plan and the routes.
+
+Places: `hero` in the hall facing the false wall, `tunnel-hatch-low` at the
+start of the low hatch's approach, `tunnel-hatch-high` on the balcony;
+`debug.go <place>` poses a body there. The routes `tunnel-walk` (a small walker
+from the low hatch to the high one and back to the exit) and `tunnel-slip` (a
+full-size body slipping in through the open false wall) play through seat 1's
+own controls (`world.benchmark run tunnel-walk`), and
+[tunnel-tests.puck](../tunnel-tests.puck) runs them headless
+(`puck test worlds/debug/tunnel-tests.puck`). `world.state sizeTunnel-gallery`
+reads the false wall's state; `world.state.cell.set sizeTunnel-gallery due
+<seconds>` holds it open until that time on the tunnel's clock
+(`sizeTunnel-gallery-clock`).

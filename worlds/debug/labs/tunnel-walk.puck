@@ -1,0 +1,152 @@
+// The escape tunnel's lab plan and its walks: where the lab (tunnel.puck) stands the tunnel's junction, branches and
+// mouths, and the routes the standard's `walker` seat program plays through them with seat 1's own controls, as a player
+// would. A module library: the lab and tunnel-tests.puck both read it, and it emits no document.
+//
+//   tunnel-walk  a body made small on the floor before the low hatch walks in through it, through the junction and up
+//                the ramp, out of the high hatch onto the balcony, then back in and down to the junction and on through
+//                the false wall into the hall at full size
+//   tunnel-slip  a full-size body in the hall walks in through the false wall while it stands open and on to the
+//                junction, shrinking as it goes
+//
+// Every point is in the lab's frame (`labTunnelFrame`) and carried into the world for a route by `tunnelWalkWorld`.
+
+import "../gallery/look"
+import "../gallery/tunnel"
+import "../../standard/frame"
+import "../../standard/paths"
+
+let labTunnelFrame = frameOf()
+// The junction's floor point, `labTunnelX` west of the wall, and each branch's corners from it to its mouth: the low hatch
+// east at floor level, the high hatch up a 32-degree ramp and round to the balcony 4.5 m up, and the exit north and round
+// to the west wall.
+let labTunnelX = -5
+let labTunnelBalconyTop = 4.5
+let labTunnelHighZ = -14.7
+let labTunnelJunction = [labTunnelX, 0, -4]
+let labTunnelHatchLow = [[0, 0, -4]]
+let labTunnelHatchHigh = [
+  [labTunnelX, 0, -6.5]
+  [labTunnelX, labTunnelBalconyTop, -13.7]
+  [labTunnelX, labTunnelBalconyTop, labTunnelHighZ]
+  [0, labTunnelBalconyTop, labTunnelHighZ]
+]
+let labTunnelExit = [[labTunnelX, 0, 0], [0, 0, 0]]
+// The middles of the two level turns' arcs (the high hatch's turn east, and the exit's): a turn's corner moved in toward
+// its centre by the share 1 - 1/sqrt(2) of the radius the tunnel gives it there along each axis.
+let labTunnelHighTurn = [(labTunnelX + 0.127), labTunnelBalconyTop, (labTunnelHighZ + 0.127)]
+let labTunnelExitTurn = [(labTunnelX + 0.47), 0, -0.47]
+let labTunnelMouths = galleryTunnelMouths(labTunnelJunction, labTunnelHatchLow, labTunnelHatchHigh, labTunnelExit)
+
+// The floor before the low hatch that the lab's own field shrinks a body along, from full size at its start to the
+// hatch's size at its end, a step short of the wall.
+let tunnelWalkPadStart = [9, 0, -4]
+let tunnelWalkPadEnd = [0.7, 0, -4]
+
+// The pace the walker plays the routes at, and how near, in metres of the walker's own size at each point, it must come
+// to a waypoint to have reached it.
+let tunnelWalkPace = "walk"
+let tunnelWalkWithin = 0.6
+
+function tunnelWalkWorld(p) = frameAt(labTunnelFrame, p)
+// A waypoint: its name, its point, the walker's size there (which scales how near it must come), and whether a test
+// reads the body's size on reaching it.
+function tunnelWalkPoint(name, point, size) = {
+  name: name
+  point: tunnelWalkWorld(point)
+  within: (tunnelWalkWithin * size)
+}
+
+let tunnelWalkHatch = lookWonderSize
+let tunnelWalkJunctionSize = lookTunnelJunctionSize
+// The walk, a chapter a stretch.
+let tunnelWalkSections = [
+  {
+    name: "the floor before the low hatch, made small on the way"
+    points [
+      tunnelWalkPoint("pad end", tunnelWalkPadEnd, tunnelWalkHatch)
+      tunnelWalkPoint("low hatch", [0.25, 0, -4], tunnelWalkHatch)
+    ]
+  }
+  {
+    name: "the low hatch to the junction"
+    points [
+      tunnelWalkPoint("low bore", [-2.0, 0, -4], tunnelWalkHatch)
+      tunnelWalkPoint("junction east", [(labTunnelX + 1.0), 0, -4], tunnelWalkJunctionSize)
+      tunnelWalkPoint("junction south", [(labTunnelX + 0.4), 0, -4.9], tunnelWalkJunctionSize)
+    ]
+  }
+  {
+    name: "the junction up the ramp and out of the high hatch"
+    points [
+      tunnelWalkPoint("ramp foot", [labTunnelX, 0, -6.5], tunnelWalkJunctionSize)
+      tunnelWalkPoint("ramp middle", [labTunnelX, (labTunnelBalconyTop / 2), -10.1], tunnelWalkHatch)
+      tunnelWalkPoint("ramp head", [labTunnelX, labTunnelBalconyTop, -13.7], tunnelWalkHatch)
+      tunnelWalkPoint("high bend", labTunnelHighTurn, tunnelWalkHatch)
+      tunnelWalkPoint("high bore", [-1.0, labTunnelBalconyTop, labTunnelHighZ], tunnelWalkHatch)
+      tunnelWalkPoint("balcony", [1.0, labTunnelBalconyTop, labTunnelHighZ], tunnelWalkHatch)
+    ]
+  }
+  {
+    name: "back in through the high hatch and down to the junction"
+    points [
+      tunnelWalkPoint("high bore again", [-1.0, labTunnelBalconyTop, labTunnelHighZ], tunnelWalkHatch)
+      tunnelWalkPoint("high bend again", labTunnelHighTurn, tunnelWalkHatch)
+      tunnelWalkPoint("ramp head again", [labTunnelX, labTunnelBalconyTop, -13.7], tunnelWalkHatch)
+      tunnelWalkPoint("ramp foot again", [labTunnelX, 0, -6.5], tunnelWalkJunctionSize)
+      tunnelWalkPoint("junction west", [(labTunnelX - 0.4), 0, -4], tunnelWalkJunctionSize)
+    ]
+  }
+  {
+    name: "the junction out through the false wall"
+    points [
+      tunnelWalkPoint("exit bore", [labTunnelX, 0, -2], tunnelWalkJunctionSize)
+      tunnelWalkPoint("exit bend", labTunnelExitTurn, 1)
+      tunnelWalkPoint("vestibule", [-1.5, 0, 0], 1)
+      tunnelWalkPoint("hall", [2.5, 0, 0], 1)
+      tunnelWalkPoint("hall clear", [5, 0, 0], 1)
+    ]
+  }
+]
+let tunnelWalk = flatMap(tunnelWalkSections, s => s.points)
+
+// The slip: a full-size body before the false wall, which the test holds open, walks in and on to the junction.
+let tunnelSlipStart = [5, 0, 0]
+let tunnelSlip = [
+  tunnelWalkPoint("threshold", [-0.6, 0, 0], 1)
+  tunnelWalkPoint("vestibule", [-2.4, 0, 0], 1)
+  tunnelWalkPoint("exit bend", labTunnelExitTurn, 1)
+  tunnelWalkPoint("exit bore", [labTunnelX, 0, -2], tunnelWalkJunctionSize)
+]
+
+function tunnelGo(w) = { $type: "go", point: w.point, pace: tunnelWalkPace, direct: true, within: w.within }
+let tunnelWalkRoute = {
+  name: "tunnel-walk"
+  program: "walker"
+  chapters: map(range(0, length(tunnelWalkSections)), i => {
+    name: tunnelWalkSections[i].name
+    steps: concat(
+      ((i == 0) ? [
+        { $type: "pose", point: tunnelWalkWorld(tunnelWalkPadStart), yawDegrees: 90 }
+        { $type: "rest", seconds: 1 }
+      ] : []),
+      map(tunnelWalkSections[i].points, w => tunnelGo(w)),
+      ((i == (length(tunnelWalkSections) - 1)) ? [{ $type: "rest", seconds: 6 }] : [])
+    )
+  })
+}
+let tunnelSlipRoute = {
+  name: "tunnel-slip"
+  program: "walker"
+  chapters [
+    {
+      name: "the hall in through the open false wall to the junction"
+      steps: concat(
+        [
+          { $type: "pose", point: tunnelWalkWorld(tunnelSlipStart), yawDegrees: 90 }
+          { $type: "rest", seconds: 2 }
+        ],
+        map(tunnelSlip, w => tunnelGo(w))
+      )
+    }
+  ]
+}

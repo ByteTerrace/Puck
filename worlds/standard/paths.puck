@@ -10,6 +10,15 @@ function indexed(items) = map(range(0, length(items)), k => (items[k] with { ind
 // Vectors of any dimension: the length and the unit vector (the zero vector stays zero).
 function vectorLength(v) = squareRoot(dot(v, v))
 function vectorUnit(v) = (v * (1 / maximum(vectorLength(v), 0.000000001)))
+// A direction as a placement reads it: the heading in degrees that turns its front (-z) along the direction's horizontal
+// part, the pitch in degrees that tilts it up the direction, and the rotation that lays a shape's -z along the direction
+// with its +y as near up as the direction allows.
+function directionYaw(d) = (arcTangent2((0 - d[0]), (0 - d[2])) * (180 / pi))
+function directionPitch(d) = (arcSine(clamp(d[1], -1, 1)) * (180 / pi))
+function directionTurn(d) = compose(rotate([0, 1, 0], directionYaw(d)), rotate([1, 0, 0], directionPitch(d)))
+// The tangent of half the angle whose cosine is `c`: how far from a corner turning through that angle a circle of unit
+// radius meets its two sides.
+function halfAngleTangent(c) = squareRoot(((1 - c) / (1 + c)))
 // A share in [0, 1) for item `i` of a scatter that never repeats: the fractional part of `i * ratio + salt`, a Weyl
 // sequence. The golden ratio's conjugate (the default) spreads the first items most evenly; the plastic number's
 // reciprocal, 0.7548776662, gives a second sequence that does not line up with the first or with a golden-angle spiral.
@@ -33,6 +42,102 @@ function polylineDirection(points, s) = vectorUnit(loopSegment(points, polylineS
 function polylineAt(points, s) = (points[polylineSegment(points, s)] +
   (polylineDirection(points, s) * (s - loopDistance(points, polylineSegment(points, s)))))
 
+// An open polyline with each interior corner rounded to a true circular arc, in any plane its two segments span, as a
+// list of pieces walked by distance: each { kind, start, length } and, for a "line", its `from`, `to` and unit `along`;
+// for an "arc", its `centre`, `radius`, `sweep` (radians), and the unit vectors `e1` (from the centre to the arc's first
+// point) and `e2` (the arc's direction there), so the arc's point at angle a is centre + radius (cos a e1 + sin a e2).
+// Corner i (1 to length - 2) takes the radius `radii[i - 1]`, held so its arc meets each segment no further than half
+// way along it (a corner held so is rounded tighter); a corner that does not turn has no arc. `start` is the distance
+// along the rounded path where a piece begins, so a point's distance along it is continuous through every corner,
+// which a nearest point on the bare polyline is not (it jumps across a corner's inner bisector).
+function roundedIn(points, i) = vectorUnit((points[i] - points[(i - 1)]))
+function roundedOut(points, i) = vectorUnit((points[(i + 1)] - points[i]))
+function roundedCosine(points, i) = clamp(dot(roundedIn(points, i), roundedOut(points, i)), -0.999999, 1)
+function roundedReach(points, radii, i) = minimum(
+  (radii[(i - 1)] * halfAngleTangent(roundedCosine(points, i))),
+  (0.5 * minimum(vectorLength((points[i] - points[(i - 1)])), vectorLength((points[(i + 1)] - points[i]))))
+)
+function roundedCorner(points, radii, i) = let reach = roundedReach(points, radii, i) in
+let turns = (roundedCosine(points, i) < 0.999999) in
+let radius = (turns ? (reach / halfAngleTangent(roundedCosine(points, i))) : 0) in
+let inward = vectorUnit((roundedOut(points, i) - (roundedIn(points, i) * roundedCosine(points, i)))) in
+{
+  turns: turns
+  before: (points[i] - (roundedIn(points, i) * reach))
+  after: (points[i] + (roundedOut(points, i) * reach))
+  centre: ((points[i] - (roundedIn(points, i) * reach)) + (inward * radius))
+  radius: radius
+  sweep: arcCosine(roundedCosine(points, i))
+  e1: (inward * -1)
+  e2: roundedIn(points, i)
+}
+function roundedLine(from, to) = {
+  kind: "line"
+  from: from
+  to: to
+  along: vectorUnit((to - from))
+  length: vectorLength((to - from))
+}
+function roundedArc(c) = {
+  kind: "arc"
+  centre: c.centre
+  radius: c.radius
+  sweep: c.sweep
+  e1: c.e1
+  e2: c.e2
+  length: (c.radius * c.sweep)
+}
+function roundedPieces(points, corners) = flatMap(range(0, (length(points) - 1)), k => concat(
+  [
+    roundedLine(
+      ((k == 0) ? points[0] : corners[(k - 1)].after),
+      ((k == (length(points) - 2)) ? points[(k + 1)] : corners[k].before)
+    )
+  ],
+  (((k < (length(points) - 2)) and corners[k].turns) ? [roundedArc(corners[k])] : [])
+))
+function roundedStarted(pieces) = map(
+  range(0, length(pieces)),
+  j => (pieces[j] with { start: scan(map(pieces, p => p.length))[j] })
+)
+function roundedPath(points, radii) = roundedStarted(roundedPieces(
+  points,
+  map(range(1, (length(points) - 1)), i => roundedCorner(points, radii, i))
+))
+function roundedPathLength(pieces) = (pieces[(length(pieces) - 1)].start + pieces[(length(pieces) - 1)].length)
+// The piece holding the distance `s` (the first for any `s` before the start, the last for any past the end), and the
+// point and unit direction at `s`, and the curvature there (0 on a line).
+function roundedPiece(pieces, s) = pieces[count(range(1, length(pieces)), j => (pieces[j].start <= s))]
+function roundedPieceAt(p, s) = ((p.kind == "line") ? (p.from + (p.along * (s - p.start))) : (p.centre +
+  ((p.e1 * cosine(((s - p.start) / p.radius))) + (p.e2 * sine(((s - p.start) / p.radius)))) * p.radius))
+function roundedPieceDirection(p, s) = ((p.kind == "line") ? p.along : ((p.e2 * cosine(((s - p.start) / p.radius))) -
+  (p.e1 * sine(((s - p.start) / p.radius)))))
+function roundedPathAt(pieces, s) = roundedPieceAt(roundedPiece(pieces, s), s)
+function roundedPathDirection(pieces, s) = roundedPieceDirection(roundedPiece(pieces, s), s)
+function roundedPathCurvature(pieces, s) = ((roundedPiece(pieces, s).kind == "arc") ? (1 /
+  roundedPiece(pieces, s).radius) : 0)
+// The path cut at the distance `l`: the pieces before it, the one holding it shortened to end there.
+function roundedPathCut(pieces, l) = map(filter(pieces, p => (p.start < l)), p => (((p.start + p.length) <= l) ? p :
+  ((p.kind == "line") ? (p with { to: roundedPieceAt(p, l), length: (l - p.start) }) : (p with {
+    sweep: ((l - p.start) / p.radius)
+    length: (l - p.start)
+  }))))
+// The path from the distance `l` on: the pieces after it, the one holding it shortened to begin there (an arc turned on
+// by the angle it lost), every `start` counted from `l`.
+function roundedPieceFrom(p, l) = ((p.kind == "line") ? (p with {
+  from: roundedPieceAt(p, l)
+  length: (p.length - (l - p.start))
+}) : (p with {
+  e1: ((p.e1 * cosine(((l - p.start) / p.radius))) + (p.e2 * sine(((l - p.start) / p.radius))))
+  e2: ((p.e2 * cosine(((l - p.start) / p.radius))) - (p.e1 * sine(((l - p.start) / p.radius))))
+  sweep: (p.sweep - ((l - p.start) / p.radius))
+  length: (p.length - (l - p.start))
+}))
+function roundedPathFrom(pieces, l) = map(
+  filter(pieces, p => ((p.start + p.length) > l)),
+  p => (((p.start >= l) ? p : roundedPieceFrom(p, l)) with { start: maximum(0, (p.start - l)) })
+)
+
 // The polyline with each corner rounded to a circular arc of `radius`, as quadratic Bezier pieces a sweep follows, each
 // { a, b, c, at, index }: `at` is the fraction of the loop's length at the piece's middle. A corner's arc meets its two
 // segments `radius tan(turn / 2)` from the corner, held to half of each segment's length so neighbouring arcs never
@@ -44,24 +149,30 @@ function cornerIn(points, i) = vectorUnit(loopSegment(points, (i - 1)))
 function cornerOut(points, i) = vectorUnit(loopSegment(points, i))
 function cornerCosine(points, i) = maximum(-0.999, minimum(1, dot(cornerIn(points, i), cornerOut(points, i))))
 function cornerReach(points, i, radius) = minimum(
-  (radius * squareRoot(((1 - cornerCosine(points, i)) / (1 + cornerCosine(points, i))))),
+  (radius * halfAngleTangent(cornerCosine(points, i))),
   (0.5 * minimum(loopSegmentLength(points, (i - 1)), loopSegmentLength(points, i)))
 )
-function cornerStart(points, i, radius) = (loopItem(points, i) - (cornerIn(points, i) * cornerReach(points, i, radius)))
+function cornerStart(points, i, radius) = (loopItem(points, i) -
+  (cornerIn(points, i) * cornerReach(points, i, radius)))
 function cornerEnd(points, i, radius) = (loopItem(points, i) + (cornerOut(points, i) * cornerReach(points, i, radius)))
 function cornerWeight(points, i) = squareRoot(((1 + cornerCosine(points, i)) / 2))
-function cornerMiddle(points, i, radius) = ((cornerStart(points, i, radius) + (loopItem(points, i) * (2 * cornerWeight(points, i))) +
-  cornerEnd(points, i, radius)) * (1 / (2 + (2 * cornerWeight(points, i)))))
-function cornerArc(points, i, radius) = (((cornerReach(points, i, radius) < 0.0001) or (cornerCosine(points, i) < -0.99)) ? [] : [
+function cornerMiddle(points, i, radius) = ((cornerStart(points, i, radius) +
+  (loopItem(points, i) * (2 * cornerWeight(points, i))) +
+  cornerEnd(points, i, radius)) *
+  (1 / (2 + (2 * cornerWeight(points, i)))))
+function cornerArc(points, i, radius) = (((cornerReach(points, i, radius) < 0.0001) or
+  (cornerCosine(points, i) < -0.99)) ? [] : [
   {
     a: cornerStart(points, i, radius)
-    b: ((cornerStart(points, i, radius) + (loopItem(points, i) * cornerWeight(points, i))) * (1 / (1 + cornerWeight(points, i))))
+    b: ((cornerStart(points, i, radius) + (loopItem(points, i) * cornerWeight(points, i))) *
+      (1 / (1 + cornerWeight(points, i))))
     c: cornerMiddle(points, i, radius)
     at: ((loopDistance(points, i) - (0.5 * cornerReach(points, i, radius))) / loopLength(points))
   }
   {
     a: cornerMiddle(points, i, radius)
-    b: (((loopItem(points, i) * cornerWeight(points, i)) + cornerEnd(points, i, radius)) * (1 / (1 + cornerWeight(points, i))))
+    b: (((loopItem(points, i) * cornerWeight(points, i)) + cornerEnd(points, i, radius)) *
+      (1 / (1 + cornerWeight(points, i))))
     c: cornerEnd(points, i, radius)
     at: ((loopDistance(points, i) + (0.5 * cornerReach(points, i, radius))) / loopLength(points))
   }
@@ -69,15 +180,19 @@ function cornerArc(points, i, radius) = (((cornerReach(points, i, radius) < 0.00
 function straightFrom(points, i, radius) = cornerEnd(points, i, radius)
 function straightTo(points, i, radius) = cornerStart(points, (i + 1), radius)
 function straightCount(points, i, radius, longest) = maximum(1, ceiling((vectorLength((straightTo(points, i, radius) -
-  straightFrom(points, i, radius))) / longest)))
-function straightPoint(points, i, radius, longest, j) = (straightFrom(points, i, radius) + ((straightTo(points, i, radius) -
-  straightFrom(points, i, radius)) * (j / straightCount(points, i, radius, longest))))
+  straightFrom(points, i, radius))) /
+  longest)))
+function straightPoint(points, i, radius, longest, j) = (straightFrom(points, i, radius) +
+  ((straightTo(points, i, radius) - straightFrom(points, i, radius)) * (j / straightCount(points, i, radius, longest))))
 function straightPieces(points, i, radius, longest) = map(range(0, straightCount(points, i, radius, longest)), j => {
   a: straightPoint(points, i, radius, longest, j)
   b: ((straightPoint(points, i, radius, longest, j) + straightPoint(points, i, radius, longest, (j + 1))) * 0.5)
   c: straightPoint(points, i, radius, longest, (j + 1))
-  at: ((loopDistance(points, i) + cornerReach(points, i, radius) + ((loopSegmentLength(points, i) - cornerReach(points, i, radius) -
-    cornerReach(points, (i + 1), radius)) * ((j + 0.5) / straightCount(points, i, radius, longest)))) / loopLength(points))
+  at: ((loopDistance(points, i) +
+    cornerReach(points, i, radius) +
+    ((loopSegmentLength(points, i) - cornerReach(points, i, radius) - cornerReach(points, (i + 1), radius)) *
+      ((j + 0.5) / straightCount(points, i, radius, longest)))) /
+    loopLength(points))
 })
 function closedRoundedPolyline(points, radius, longest) = indexed(flatMap(
   range(0, length(points)),
@@ -87,9 +202,13 @@ function closedRoundedPolyline(points, radius, longest) = indexed(flatMap(
 // Where the polyline crosses each height of `heights` (ascending or not), each { point, height, segment }: the height's
 // index, and the segment whose ends stand either side of it.
 function loopCrossingsOf(points, heights, i) = map(
-  filter(range(0, length(heights)), h => (((loopItem(points, i)[1] - heights[h]) * (loopItem(points, (i + 1))[1] - heights[h])) < 0)),
+  filter(
+    range(0, length(heights)),
+    h => (((loopItem(points, i)[1] - heights[h]) * (loopItem(points, (i + 1))[1] - heights[h])) < 0)
+  ),
   h => {
-    point: (loopItem(points, i) + (loopSegment(points, i) * ((heights[h] - loopItem(points, i)[1]) / loopSegment(points, i)[1])))
+    point: (loopItem(points, i) +
+      (loopSegment(points, i) * ((heights[h] - loopItem(points, i)[1]) / loopSegment(points, i)[1])))
     height: h
     segment: i
   }
@@ -98,17 +217,31 @@ function loopCrossings(points, heights) = flatMap(range(0, length(points)), i =>
 // The polyline's straight stretches, each segment cut where it crosses a height of `heights` and its parts cut again into
 // stretches no longer than `longest`, each { from, to, at }: `at` is the fraction of the loop's length at its middle.
 function loopCutsOf(points, heights, i) = sort(concat([0, 1], map(loopCrossingsOf(points, heights, i), x => ((x.point[1] -
-  loopItem(points, i)[1]) / loopSegment(points, i)[1]))))
-function loopPartsOf(points, i, t0, t1, longest) = maximum(1, ceiling(((loopSegmentLength(points, i) * (t1 - t0)) / longest)))
+  loopItem(points, i)[1]) /
+  loopSegment(points, i)[1]))))
+function loopPartsOf(points, i, t0, t1, longest) = maximum(
+  1,
+  ceiling(((loopSegmentLength(points, i) * (t1 - t0)) / longest))
+)
 function loopStretchesOf(points, heights, longest, i, t0, t1) = map(range(0, loopPartsOf(points, i, t0, t1, longest)), j => {
-  from: (loopItem(points, i) + (loopSegment(points, i) * (t0 + (((t1 - t0) * j) / loopPartsOf(points, i, t0, t1, longest)))))
-  to: (loopItem(points, i) + (loopSegment(points, i) * (t0 + (((t1 - t0) * (j + 1)) / loopPartsOf(points, i, t0, t1, longest)))))
-  at: ((loopDistance(points, i) + (loopSegmentLength(points, i) * (t0 + (((t1 - t0) * (j + 0.5)) / loopPartsOf(points, i, t0, t1,
-    longest))))) / loopLength(points))
+  from: (loopItem(points, i) +
+    (loopSegment(points, i) * (t0 + (((t1 - t0) * j) / loopPartsOf(points, i, t0, t1, longest)))))
+  to: (loopItem(points, i) +
+    (loopSegment(points, i) * (t0 + (((t1 - t0) * (j + 1)) / loopPartsOf(points, i, t0, t1, longest)))))
+  at: ((loopDistance(points, i) +
+    (loopSegmentLength(points, i) * (t0 + (((t1 - t0) * (j + 0.5)) / loopPartsOf(points, i, t0, t1, longest))))) /
+    loopLength(points))
 })
 function loopStretches(points, heights, longest) = indexed(flatMap(range(0, length(points)), i => flatMap(
   range(0, (length(loopCutsOf(points, heights, i)) - 1)),
-  k => loopStretchesOf(points, heights, longest, i, loopCutsOf(points, heights, i)[k], loopCutsOf(points, heights, i)[(k + 1)])
+  k => loopStretchesOf(
+    points,
+    heights,
+    longest,
+    i,
+    loopCutsOf(points, heights, i)[k],
+    loopCutsOf(points, heights, i)[(k + 1)]
+  )
 )))
 // A path has a/b/c [x, z] controls. Segment distance plus the chord-error bound conservatively excludes its corridor.
 function quadraticPathPoint(path, t) = {
@@ -162,4 +295,7 @@ function pathSegmentClear(x, z, radius, segment) = (x < minimum(segment.a.x, seg
   radius * radius)
 function pathCorridorClear(x, z, radius, corridor) = (pathBoundsClear(x, z, radius + corridor.error, corridor) or
   all(corridor.segments, segment => pathSegmentClear(x, z, radius + corridor.error, segment)))
-function pathCorridorsClear(x, z, radius, corridors) = all(corridors, corridor => pathCorridorClear(x, z, radius, corridor))
+function pathCorridorsClear(x, z, radius, corridors) = all(
+  corridors,
+  corridor => pathCorridorClear(x, z, radius, corridor)
+)
