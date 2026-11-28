@@ -35,7 +35,7 @@
             "type": "number"
           },
           "scale": {
-            "description": "The uniform stamp scale (clamped to the placement policy envelope by validation).",
+            "description": "The uniform stamp scale in Parent\u0027s frame (clamped to the placement policy envelope by validation). A parent\u0027s scale multiplies it as it multiplies the row\u0027s offset, as an SVG group\u0027s does (LocalFrame), so the row\u0027s size in the world is its composed frame\u0027s FixedScale (its stamp\u0027s Frame): every consumer that sizes the row\u0027s drawn form, colliders, faces, net, region, board or anchored light reads that, never this local value. An attached or inhabited row has no static frame, so its own scale is its whole one.",
             "type": "number"
           },
           "distribution": {
