@@ -10,7 +10,15 @@
 //
 // in its size register every tick: `start` at `from`, `end` at `to`, and the same factor over every equal step between.
 // That is the curve a flight of stairs into a small place needs: a body a sixth its size takes steps a sixth as long, so
-// each tread costs it the same share of its stride all the way up. A vertical path inside a box (from a storey's floor
+// each tread costs it the same share of its stride all the way up. A zone's `ease` bends that curve still at both ends:
+// the exponent is `sizeFieldEase(t, ease)`, t itself at 0 and smoothstep's 3t^2 - 2t^3 at 1, so a body's size starts and
+// stops changing gently instead of at once. A zone's `part` names the share [a, b] of one longer path it covers, so a
+// path that turns is one curve written as several zones (`sizeFieldPath`): each zone reads its progress as
+// `a + t (b - a)` of the whole before the curve, so a size eased along the whole path stands still only at the path's two
+// ends, not at every corner. Such a path turns on circular arcs (paths.puck's `roundedPath`): an `arc` zone reads a
+// body's progress by its angle about the arc's centre, so the progress, and the size, run on continuously through the
+// turn whichever line a body takes round it, where the nearest point of a bare corner would jump across its inner
+// bisector. A vertical path inside a box (from a storey's floor
 // to the next one's, over a stair's well or a lift's shaft) sizes a body by its height alone, whatever the stair's
 // form, a switchback's flights and a spiral's helix alike. A zone whose `from` and `to` meet (or that names neither)
 // gives `start` throughout: a whole floor held at one size.
@@ -53,11 +61,17 @@
 //
 // sizeField(
 //   name:     the field's name; names its rule `size-field-<name>` and its table `sizeField-<name>`
-//   zones:    the zones, first match wins, each { from, to, start, end, reach, box }, in the frame's coordinates:
+//   zones:    the zones, first match wins, each { from, to, start, end, reach, box, ease, part }, in the frame's
+//             coordinates:
 //               from, to   the path's two points, [x, y, z] (both omitted: one size throughout)
 //               start, end keys of `sizes`: the size at `from` and at `to` (`end` omitted: `start` throughout)
 //               reach      how far either side of the path, in metres, the zone holds a body (omitted: no capsule)
 //               box        { x0, x1, y0, y1, z0, z1 }, metres, the box the zone holds a body in (omitted: none)
+//               ease       0 to 1, how still the curve stands at its ends (omitted: 0, the plain power curve)
+//               part       [a, b], the share of a longer path `from` to `to` covers (omitted: [0, 1])
+//               arc        { centre, radius, sweep, e1, e2 }: the zone is an arc of a path, not a segment
+//                          (paths.puck's arc pieces): it holds a body within `reach` of the arc and reads its
+//                          progress as its angle about `centre` from `e1` toward `e2`, over `sweep` radians
 //   sizes:    the named sizes, [{ key, value }], each a multiplier of the body's authored size in the frame
 //   register: the body register its size lives in; the one bodies.scale names
 //   passes:   body registers that, nonzero, give a body `passSize` inside every zone
@@ -66,25 +80,100 @@
 // )
 
 import "frame"
+import "paths"
 
 
 // A zone as the rule reads it: its box and capsule flags, which axes its path moves along, and the path's span and
 // squared length, whose quotient with the foot's offset dotted along the span is its progress. Every value here folds
 // at expansion.
 let sizeFieldNoBox = { x0: 0, x1: 0, y0: 0, y1: 0, z0: 0, z1: 0 }
-function sizeFieldZone(frame, zone) = sizeFieldPrepared(sizeFieldPlaced(frame, ({ from [0, 0, 0], to [0, 0, 0], reach: 0, box: sizeFieldNoBox, end: zone.start } with zone)))
-// A zone carried from its frame into the world: its path's points, its reach and its box.
+function sizeFieldZone(frame, zone) = sizeFieldPrepared(sizeFieldPlaced(frame, ({
+  from [0, 0, 0]
+  to [0, 0, 0]
+  reach: 0
+  box: sizeFieldNoBox
+  end: zone.start
+  ease: 0
+  part [0, 1]
+  arc: null
+} with zone)))
+
+// The exponent a progress t in [0, 1] along a path gives its size curve: t itself at `ease` 0, smoothstep's 3t^2 - 2t^3
+// at 1 (still at both ends), and the blend between. The field's rule reads it over a body's progress and an importer
+// reads it over a point it builds at (size-tunnel.puck), so what is drawn for a size and the size a body takes there
+// follow one curve.
+function sizeFieldEase(t, ease) = (t + (ease * (((t * t) * (3 - (2 * t))) - t)))
+// The size the curve gives at a progress t of the whole path, between the sizes `start` and `end` (numbers).
+function sizeFieldAt(start, end, t, ease = 0) = (start * power((end / start), sizeFieldEase(t, ease)))
+// The local the rule reads a zone's exponent from: its progress along its own path where the zone is a whole plain
+// path, otherwise the local `share{z}` holding that progress carried into the zone's span of the whole path and eased,
+// which the rule declares for such a zone alone, so a plain field's rule reads exactly what it read before.
+function sizeFieldShareName(zone, z) = (zone.plain ? $"along{z}" : $"share{z}")
+// The square of the nearest an arc zone holds a foot to its centre, its radius less its reach (none past the centre).
+function sizeFieldInner(zone) = ((zone.arc.radius > zone.reach) ? ((zone.arc.radius - zone.reach) *
+  (zone.arc.radius - zone.reach)) : 0)
+
+// The zones that size a body along a rounded path (paths.puck's `roundedPath`) as one curve: a zone a piece, each
+// covering its share of the whole length, from the size `start` at the path's first point to `end` at its last (keys of
+// `sizes`, the field's named sizes). Each zone holds a body within `reach.base + reach.bySize * size` of its piece, the
+// size the larger of its piece's two ends, so a path whose bore grows with its size holds a body only as far out as the
+// bore reaches there. The arcs come first, since the first zone that holds a body decides: a line's end reaches round
+// its corner, where the arc reads the body's progress truly. So the size runs on continuously everywhere as long as each
+// arc's radius is at least its reach and its ends stand further apart than the reach of the lines it joins
+// (2 radius sin(sweep / 2) > reach), which the caller chooses the radii to keep.
+function sizeFieldPath(pieces, start, end, sizes, reach, ease = 0) = let curve = {
+  start: start
+  end: end
+  from: sizeFieldValue(sizes, start)
+  to: sizeFieldValue(sizes, end)
+  reach: reach
+  ease: ease
+  total: roundedPathLength(pieces)
+} in
+concat(
+  map(filter(pieces, p => (p.kind == "arc")), p => sizeFieldPathZone(p, curve)),
+  map(filter(pieces, p => (p.kind == "line")), p => sizeFieldPathZone(p, curve))
+)
+function sizeFieldValue(sizes, key) = find(sizes, s => (s.key == key)).value
+function sizeFieldPathZone(p, curve) = let a = (p.start / curve.total) in
+let b = ((p.start + p.length) / curve.total) in
+{
+  from: roundedPieceAt(p, p.start)
+  to: roundedPieceAt(p, (p.start + p.length))
+  start: curve.start
+  end: curve.end
+  reach: (curve.reach.base + (curve.reach.bySize * maximum(
+    sizeFieldAt(curve.from, curve.to, a, curve.ease),
+    sizeFieldAt(curve.from, curve.to, b, curve.ease)
+  )))
+  ease: curve.ease
+  part [a, b]
+  arc: ((p.kind == "arc") ? { centre: p.centre, radius: p.radius, sweep: p.sweep, e1: p.e1, e2: p.e2 } : null)
+}
+// A zone carried from its frame into the world: its path's points (and an arc's centre, radius and axes), its reach and
+// its box.
 function sizeFieldPlaced(frame, zone) = zone with {
   from: frameAt(frame, zone.from)
   to: frameAt(frame, zone.to)
   reach: frameLength(frame, zone.reach)
   box: ((zone.box.x1 > zone.box.x0) ? frameBox(frame, zone.box) : sizeFieldNoBox)
+  arc: ((zone.arc == null) ? null : {
+    centre: frameAt(frame, zone.arc.centre)
+    radius: frameLength(frame, zone.arc.radius)
+    sweep: zone.arc.sweep
+    e1: rotatePoint(frameTurn(frame), zone.arc.e1)
+    e2: rotatePoint(frameTurn(frame), zone.arc.e2)
+  })
 }
 function sizeFieldPrepared(zone) = sizeFieldFolded(
   zone,
   [(zone.to[0] - zone.from[0]), (zone.to[1] - zone.from[1]), (zone.to[2] - zone.from[2])]
 )
-function sizeFieldFolded(zone, span) = sizeFieldSpanned(zone, span, ((span[0] * span[0]) + (span[1] * span[1]) + (span[2] * span[2])))
+function sizeFieldFolded(zone, span) = sizeFieldSpanned(
+  zone,
+  span,
+  ((span[0] * span[0]) + (span[1] * span[1]) + (span[2] * span[2]))
+)
 function sizeFieldSpanned(zone, span, spanSquared) = zone with {
   span: span
   boxed: (zone.box.x1 > zone.box.x0)
@@ -94,6 +183,8 @@ function sizeFieldSpanned(zone, span, spanSquared) = zone with {
   az: ((spanSquared > 0) and (span[2] != 0))
   moving: (spanSquared > 0)
   spanSquared: ((spanSquared > 0) ? spanSquared : 1)
+  plain: ((zone.ease == 0) and (zone.part[0] == 0) and (zone.part[1] == 1))
+  curved: (zone.arc != null)
 }
 
 template sizeField(name, zones, sizes, register = "size", passes = [], passSize = "", frame = frameIdentity) {
@@ -122,42 +213,140 @@ template sizeField(name, zones, sizes, register = "size", passes = [], passSize 
       local $"held{f + 1}" = (bodyState(each, pass) != 0) or $"held{f}"
     }
     // The zones in order: `size{z}` the size the first of the first z zones that holds the body gives it, 0 while none
-    // does (every size is positive). Two locals a zone, so a field of thirty zones stays inside a rule's locals.
+    // does (every size is positive). Two locals a plain zone, three an eased one or one covering part of a path, and five
+    // an arc, so a field of a dozen pieces of a turning path stays inside a rule's locals.
     local size0 = 0.0
     for (zone, z) in prepared {
-      // The foot's progress along the path, held to its two ends. The dot product is divided by the span's squared
-      // length here rather than multiplied by a folded reciprocal, so a foot at either end reads exactly 0 or 1.
-      local $"along{z}" = zone.moving ? clamp(
+      // An arc's progress: the foot's offset from the centre along its two axes, and the angle they make over the arc's
+      // sweep, not held to the arc's ends (a foot outside them is outside the zone).
+      for e in (zone.curved ? [z] : []) {
+        local $"arcA{e}" = (
+          ((px - zone.arc.centre[0]) * zone.arc.e1[0]) +
+          ((py - zone.arc.centre[1]) * zone.arc.e1[1]) +
+          ((pz - zone.arc.centre[2]) * zone.arc.e1[2])
+        )
+        local $"arcB{e}" = (
+          ((px - zone.arc.centre[0]) * zone.arc.e2[0]) +
+          ((py - zone.arc.centre[1]) * zone.arc.e2[1]) +
+          ((pz - zone.arc.centre[2]) * zone.arc.e2[2])
+        )
+        local $"along{e}" = arcTangent2($"arcB{e}", $"arcA{e}") / zone.arc.sweep
+      }
+      // A segment's progress: the foot's progress along the path, held to its two ends. The dot product is divided by the
+      // span's squared length here rather than multiplied by a folded reciprocal, so a foot at either end reads exactly 0
+      // or 1.
+      for e in (zone.curved ? [] : [z]) {
+        local $"along{e}" = (
+          zone.moving ?
+            clamp(
+              (
+                (zone.ax ? ((px - zone.from[0]) * zone.span[0]) : 0) +
+                (zone.ay ? ((py - zone.from[1]) * zone.span[1]) : 0) +
+                (zone.az ? ((pz - zone.from[2]) * zone.span[2]) : 0)
+              ) / zone.spanSquared,
+              0,
+              1
+            ) :
+          0.0
+        )
+      }
+      // A zone eased or covering part of a longer path reads its exponent from its progress carried into its part and
+      // eased (sizeFieldShareName); a plain zone declares nothing more.
+      for e in (zone.plain ? [] : [z]) {
+        local $"share{e}" = sizeFieldEase(
+          (zone.part[0] + (clamp($"along{e}", 0, 1) * (zone.part[1] - zone.part[0]))),
+          zone.ease
+        )
+      }
+      // An arc holds a foot between its ends, within reach of its circle in its plane and of its plane.
+      for e in (zone.curved ? [z] : []) {
+        local $"size{e + 1}" = (
+          ($"size{e}" != 0) ? $"size{e}" :
           (
-            (zone.ax ? ((px - zone.from[0]) * zone.span[0]) : 0) + (zone.ay ? ((py - zone.from[1]) * zone.span[1]) : 0) +
-              (zone.az ? ((pz - zone.from[2]) * zone.span[2]) : 0)
-          ) / zone.spanSquared,
-          0,
-          1
-        ) : 0.0
-      // Inside the box, and within reach of the path's nearest point: a capsule, so a body stepping off either end
-      // within reach takes that end's size exactly.
-      local $"size{z + 1}" = ($"size{z}" != 0) ? $"size{z}" : (((zone.boxed ? (
-          (px >= zone.box.x0) and (px <= zone.box.x1) and (py >= zone.box.y0) and (py <= zone.box.y1) and (pz >= zone.box.z0) and
-            (pz <= zone.box.z1)
-        ) : 1) and (zone.capsule ? (
+            (
+              ($"along{e}" >= 0) and
+              ($"along{e}" <= 1) and
+              ((($"arcA{e}" * $"arcA{e}") + ($"arcB{e}" * $"arcB{e}")) >= sizeFieldInner(zone)) and
+              (
+                (($"arcA{e}" * $"arcA{e}") + ($"arcB{e}" * $"arcB{e}")) <=
+                  ((zone.arc.radius + zone.reach) * (zone.arc.radius + zone.reach))
+              ) and
+              (
+                (
+                  ((px - zone.arc.centre[0]) * (px - zone.arc.centre[0])) +
+                  ((py - zone.arc.centre[1]) * (py - zone.arc.centre[1])) +
+                  ((pz - zone.arc.centre[2]) * (pz - zone.arc.centre[2]))
+                ) -
+                  (($"arcA{e}" * $"arcA{e}") + ($"arcB{e}" * $"arcB{e}"))
+              ) <=
+                (zone.reach * zone.reach)
+            ) ?
+              (
+                $"sizeField-{name}"[zone.start] *
+                power($"sizeField-{name}"[zone.end] / $"sizeField-{name}"[zone.start], $"share{e}")
+              ) :
+            0.0
+          )
+        )
+      }
+      // A segment holds a foot inside its box, and within reach of the path's nearest point: a capsule, so a body
+      // stepping off either end within reach takes that end's size exactly.
+      for e in (zone.curved ? [] : [z]) {
+        local $"size{e + 1}" = (
+          ($"size{e}" != 0) ? $"size{e}" :
           (
-            ((px - zone.from[0] - ($"along{z}" * zone.span[0])) * (px - zone.from[0] - ($"along{z}" * zone.span[0]))) +
-              ((py - zone.from[1] - ($"along{z}" * zone.span[1])) * (py - zone.from[1] - ($"along{z}" * zone.span[1]))) +
-              ((pz - zone.from[2] - ($"along{z}" * zone.span[2])) * (pz - zone.from[2] - ($"along{z}" * zone.span[2])))
-          ) <= (zone.reach * zone.reach)
-        ) : 1)) ? (
-          $"sizeField-{name}"[zone.start] * power($"sizeField-{name}"[zone.end] / $"sizeField-{name}"[zone.start], $"along{z}")
-        ) : 0.0)
+            (
+              (
+                zone.boxed ?
+                  (
+                    (px >= zone.box.x0) and
+                    (px <= zone.box.x1) and
+                    (py >= zone.box.y0) and
+                    (py <= zone.box.y1) and
+                    (pz >= zone.box.z0) and
+                    (pz <= zone.box.z1)
+                  ) :
+                1
+              ) and
+              (
+                zone.capsule ?
+                    (
+                      (
+                        (
+                          (px - zone.from[0] - ($"along{e}" * zone.span[0])) *
+                          (px - zone.from[0] - ($"along{e}" * zone.span[0]))
+                        ) +
+                        (
+                          (py - zone.from[1] - ($"along{e}" * zone.span[1])) *
+                          (py - zone.from[1] - ($"along{e}" * zone.span[1]))
+                        ) +
+                        (
+                          (pz - zone.from[2] - ($"along{e}" * zone.span[2])) *
+                          (pz - zone.from[2] - ($"along{e}" * zone.span[2]))
+                        )
+                      ) <=
+                      (zone.reach * zone.reach)
+                    ) :
+                  1
+              )
+            ) ?
+              (
+                $"sizeField-{name}"[zone.start] *
+                power($"sizeField-{name}"[zone.end] / $"sizeField-{name}"[zone.start], $"{sizeFieldShareName(zone, e)}")
+              ) :
+            0.0
+          )
+        )
+      }
     }
     local hold = bodyState(each, sizeHold)
     local inside = $"size{count}" != 0
     local target = ($"held{length(passes)}" or (hold != 0)) ? $"sizeField-{name}"[passKey] : $"size{count}"
     local holdNext = ((hold == 1) and not inside) ? 0.0 : hold
-    when ((inside or (hold != 0)) and bodyState(each, register) != target) or (hold != holdNext)
+    when ((inside or hold) and bodyState(each, register) != target) or hold != holdNext
     mode: Level
     forEach: $players
-    if (inside or (hold != 0)) and bodyState(each, register) != target {
+    if (inside or hold) and bodyState(each, register) != target {
       setBodyState(key: $each, state: register, expression: target)
     }
     if hold != holdNext {

@@ -1263,6 +1263,29 @@ under the gallery's own ceiling (`WorldBody.SetScaleWithinClearance`).
 `world.state` reads nothing new here: `body.state 0` shows `wonderPass`, and
 `gallery.wonder pass off` takes the pass back to try the house again.
 
+### The escape tunnel
+
+Ruling 9's tunnel is a module, [gallery/tunnel.puck](gallery/tunnel.puck)'s
+`galleryTunnel`, over the standard's size tunnel
+([size-tunnel.puck](../standard/size-tunnel.puck), its README entry): a junction
+and three branches, the two hatches' and the exit's, each a polyline in the
+building's frame from the junction to its mouth. A walker's size is Alice's
+(`lookWonderSize`) at either hatch, `lookTunnelJunctionSize` in the junction's
+chamber and full size at the exit, eased along each branch as one curve that
+runs on through every turn, and the bore is built at the walker's size wherever
+they stand. The exit is a false wall in the hall's wall paint whose two leaves
+swing open into the hall before a walker coming out and stay open three
+seconds after the last one leaves its bore, long enough for a full-size player
+to slip in. It stands in its lab ([labs/tunnel.puck](labs/tunnel.puck)), which
+[tunnel-tests.puck](tunnel-tests.puck) walks; the building does not place it
+yet, and its points in the building's frame are still to be chosen.
+
+| Console line | What it reads |
+|---|---|
+| `world.state sizeTunnel-gallery` | The false wall: `due` (the clock time it stays open until), `target` (1 opening, 0 closing), `left` and `right` (each leaf's turn) |
+| `world.state sizeField-tunnel-gallery` | The tunnel's named sizes, which `world.state.cell.set` retunes live |
+| `body.state 0` | `size`, the walker's size as the tunnel sets it |
+
 ## What is still open
 
 - **Dormant pool runtimes.** A gated-off pool machine is not advanced but its

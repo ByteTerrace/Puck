@@ -1,0 +1,73 @@
+// The escape tunnel (gallery.md, ruling 9): two mouse holes, one on level 0 and one on level 1, whose bores meet at a
+// junction a walker plainly sees (a round chamber under a lantern, its signpost's arms pointing down each bore), and a
+// single exit beyond it, a false wall disguised as the wall it stands in. A walker's size follows their place along
+// the tunnel, eased at both ends: Alice's size at either hatch (look.puck's `lookWonderSize`, level 1's size),
+// `lookTunnelJunctionSize` at the junction and full size at the exit, so a small player crossing from one hatch to the
+// other, or going on to the exit, changes size in one unbroken stretch, and the bore grows with them. The false wall
+// parts before a walker coming out and returns them to the hall at full size; while it stands parted a full-size player
+// can slip in and shrink as they go. The tunnel is the standard's size tunnel (../../standard/size-tunnel.puck), in the
+// gallery's techno-natural look: canyon stone walls, terracotta paving, brass ribs, torches and a teal queue railing.
+//
+// A module library: `galleryTunnel(frame, parent, junction, hatchLow, hatchHigh, exit)` stands it in a frame
+// (../../standard/frame.puck), every point in that frame's coordinates. `junction` is the junction's floor point;
+// `hatchLow`, `hatchHigh` and `exit` are each branch's corners from the junction (left out of the list) to its mouth,
+// the mouth's point on the face of the wall it opens in, the last segment square to that wall. The host builds that
+// wall with a hole the mouth's size (`galleryTunnelMouths`). The tunnel's lab, labs/tunnel.puck, stands it alone; the
+// world that expands it imports the size register (../size.puck), the size hold and place.puck.
+
+import "../../standard/size-tunnel"
+import "layout"
+import "look"
+
+// The walker's size at the junction: between Alice's at the hatches and full size at the exit.
+let lookTunnelJunctionSize = 0.4
+let galleryTunnelSizes = [
+  { key: "hatch", value: lookWonderSize }
+  { key: "junction", value: lookTunnelJunctionSize }
+  { key: "exit", value: 1 }
+]
+// The tunnel's look: canyon sandstone a step warm and a step deep, the hall's terracotta paving underfoot, the kit's
+// brass and teal, a torch's flame, the hall's wall paint on the false wall's face, and the junction lantern's glass.
+let lookTunnelRock = "#B07A58"
+let lookTunnelRockDeep = "#8A5A40"
+let lookTunnelFlame = "#FFB45A"
+let lookTunnelLantern = "#FFE2A8"
+let galleryTunnelLook = {
+  palette: sizeTunnelPaletteOf(
+    rock: { color: lookTunnelRock, roughness: 0.88, specular: 0.03 },
+    rockDeep: { color: lookTunnelRockDeep, roughness: 0.9, specular: 0.03 },
+    floor: { color: lookPaving, roughness: 0.7, specular: 0.04 },
+    trim: { color: lookBrass, roughness: 0.3, metal: 1 },
+    accent: { color: lookTeal, roughness: 0.45, specular: 0.08 },
+    flame: { color: lookTunnelFlame, roughness: 0.6, emissive: 1400nit },
+    disguise: { color: lookWall, roughness: 0.75, specular: 0.04 },
+    lantern: { color: lookTunnelLantern, roughness: 0.4, emissive: 1800nit }
+  )
+  torch { temperature: 1900K, power: 220 }
+}
+
+// The tunnel's branches as the standard lays them, each from the junction to its mouth.
+function galleryTunnelBranches(junction, hatchLow, hatchHigh, exit) = [
+  { id: "hatch-low", points: concat([junction], hatchLow), size: "hatch", mouth: "hatch" }
+  { id: "hatch-high", points: concat([junction], hatchHigh), size: "hatch", mouth: "hatch" }
+  { id: "exit", points: concat([junction], exit), size: "exit", mouth: "exit" }
+]
+let galleryTunnelJunction = { size: "junction" }
+// Each mouth's point, heading and the hole its host cuts (../../standard/size-tunnel.puck's `sizeTunnelMouths`).
+function galleryTunnelMouths(junction, hatchLow, hatchHigh, exit) = sizeTunnelMouths(
+  galleryTunnelBranches(junction, hatchLow, hatchHigh, exit),
+  galleryTunnelSizes
+)
+
+template galleryTunnel(frame, parent, junction, hatchLow, hatchHigh, exit) {
+  sizeTunnel(
+    name: "gallery",
+    junction: (galleryTunnelJunction with { at: junction }),
+    branches: galleryTunnelBranches(junction, hatchLow, hatchHigh, exit),
+    sizes: galleryTunnelSizes,
+    body: { radius: galleryVisitorRadius, tall: galleryVisitorHeight },
+    look: galleryTunnelLook,
+    parent: parent,
+    frame: frame
+  )
+}

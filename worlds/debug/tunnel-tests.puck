@@ -1,0 +1,141 @@
+// The escape tunnel, walked as a player walks it, in its lab (labs/tunnel.puck): seat 1 plays the lab's routes
+// (labs/tunnel-walk.puck) with the standard's `walker` program, working the seat's own stick toward each waypoint in
+// turn. Rules in this test world latch each walk as it goes: the last waypoint the body reached, the body's size on
+// reaching each, the largest change of size between two ticks, and how far the false wall's leaves turned. The
+// expectations at the export tick read them:
+//
+//   reached     every waypoint of the walk reached, in order
+//   size        the body's size at the waypoints that pin the curve: Alice's at both hatches, the junction's in the
+//               chamber, between them on the bores and the ramp, and full size in the hall
+//   continuous  no tick changed the body's size by more than `tunnelSizeStepMost`: the size follows the body's place,
+//               never a zone's edge
+//   parted      the false wall's leaves turned their whole swing as the walker came out, and stood shut again once it
+//               had walked clear (the walk), or stood open the whole time the test held it so (the slip)
+//
+// A waypoint's size row reads -1 until the walker reaches it, so a failing line names where the walk stopped.
+
+schema: "puck.world.definition.v1"
+basis: "labs/tunnel"
+documentId: "lab-tunnel"
+import "labs/tunnel-walk"
+
+// How much further than its arrival distance a waypoint's latch reaches across the plan, and how far along up.
+let tunnelWalkMargin = 0.1
+let tunnelWalkRise = 0.4
+// The largest change of size a tick may carry: a body walking the steepest stretch of the exit's curve at a walk changes
+// size by about three hundredths a tick at 30 Hz, where a zone's edge would jump by a tenth or more.
+let tunnelSizeStepMost = 0.045
+// The false wall's whole swing, in turns (size-tunnel.puck's `sizeTunnelDoorDefault.angle`, 92 degrees), less a margin.
+let tunnelDoorSwing = 0.25
+let tunnelWalkLast = (length(tunnelWalk) - 1)
+let tunnelSlipLast = (length(tunnelSlip) - 1)
+
+// One latch per waypoint of a walk, in walking order: it fires on the tick the body stands within reach of its waypoint
+// once the waypoint before it is reached, and records the body's size there.
+template tunnelLatches(prefix, walk) {
+  state {
+    world {
+      slot $"{prefix}Reached" = -1
+      table $"{prefix}Size" capacity(length(walk)) {
+        for k in range(0, length(walk)) {
+          $"{k}" = -1.0
+        }
+      }
+    }
+  }
+  for (w, k) in walk {
+    rule $"{prefix}-{k}" {
+      when $"{prefix}Reached" == (k - 1) and abs((bodyPosition(body, 0, x) - w.point[0])) <= (
+          w.within + tunnelWalkMargin
+        ) and abs((bodyPosition(body, 0, z) - w.point[2])) <= (w.within + tunnelWalkMargin) and abs(
+          (bodyPosition(body, 0, y) - w.point[1])
+        ) <= tunnelWalkRise
+      mode: Level
+      $"{prefix}Size"[$"{k}"] = bodyState(body, 0, size)
+      $"{prefix}Reached" = k
+    }
+  }
+}
+tunnelLatches(prefix: "tunnelWalk", walk: tunnelWalk)
+tunnelLatches(prefix: "tunnelSlip", walk: tunnelSlip)
+
+// The index of a walk's waypoint by name.
+function tunnelAt(walk, name) = indexOf(map(walk, w => w.name), name)
+
+state {
+  world {
+    slot tunnelSizeLast = 1.0
+    slot tunnelSizeStepPeak = 0.0
+    slot tunnelDoorPeak = 0.0
+    slot tunnelDoorLeast = 1.0
+  }
+}
+
+// The largest change of the body's size between two ticks.
+rule "tunnel-size-step" {
+  local now = bodyState(body, 0, size)
+  local step = abs((now - tunnelSizeLast))
+  when now != tunnelSizeLast
+  mode: Level
+  if step > tunnelSizeStepPeak {
+    tunnelSizeStepPeak = step
+  }
+  tunnelSizeLast = now
+}
+// The furthest the false wall's left leaf turned, and the least it stood turned once the walk had begun its exit.
+rule "tunnel-door-peak" {
+  when `sizeTunnel-gallery`.left > tunnelDoorPeak
+  mode: Level
+  tunnelDoorPeak = `sizeTunnel-gallery`.left
+}
+rule "tunnel-door-least" {
+  when tunnelSlipReached >= 0 and `sizeTunnel-gallery`.left < tunnelDoorLeast
+  mode: Level
+  tunnelDoorLeast = `sizeTunnel-gallery`.left
+}
+
+test "a small walker crosses from hatch to hatch and on out of the false wall at full size" {
+  when {
+    seat1: route.play tunnel-walk
+    ticks 12000
+  }
+  expect {
+    tunnelWalkReached == tunnelWalkLast
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "low hatch")}"] > 0.149
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "low hatch")}"] < 0.151
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "low bore")}"] > 0.2
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "low bore")}"] < 0.38
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "junction south")}"] > 0.399
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "junction south")}"] < 0.401
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "ramp middle")}"] > 0.2
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "ramp middle")}"] < 0.36
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "balcony")}"] > 0.149
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "balcony")}"] < 0.151
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "exit bend")}"] > 0.45
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "exit bend")}"] < 0.85
+    tunnelWalkSize[$"{tunnelAt(tunnelWalk, "hall")}"] > 0.999
+    tunnelSizeStepPeak <= tunnelSizeStepMost
+    tunnelDoorPeak >= tunnelDoorSwing
+    `sizeTunnel-gallery`.left == 0
+  }
+}
+
+test "a full-size visitor slips in through the parted false wall and shrinks on the way to the junction" {
+  when {
+    seat1: world.state.cell.set sizeTunnel-gallery due 100000
+    seat1: route.play tunnel-slip
+    ticks 2400
+  }
+  expect {
+    tunnelSlipReached == tunnelSlipLast
+    tunnelSlipSize[$"{tunnelAt(tunnelSlip, "threshold")}"] > 0.999
+    tunnelSlipSize[$"{tunnelAt(tunnelSlip, "vestibule")}"] > 0.85
+    tunnelSlipSize[$"{tunnelAt(tunnelSlip, "vestibule")}"] < 0.999
+    tunnelSlipSize[$"{tunnelAt(tunnelSlip, "exit bend")}"] > 0.45
+    tunnelSlipSize[$"{tunnelAt(tunnelSlip, "exit bend")}"] < 0.85
+    tunnelSlipSize[$"{tunnelAt(tunnelSlip, "exit bore")}"] > 0.38
+    tunnelSlipSize[$"{tunnelAt(tunnelSlip, "exit bore")}"] < 0.55
+    tunnelSizeStepPeak <= tunnelSizeStepMost
+    tunnelDoorLeast >= tunnelDoorSwing
+  }
+}

@@ -1,0 +1,885 @@
+// A size tunnel: a bored passage whose walker's size follows their place along it, and which grows with them, so its
+// walls, lights and railing stand at the walker's own scale wherever they are while the world outside changes size
+// about them. A module library: it hands its importers templates and functions and emits no document.
+//
+// A tunnel is a junction and the branches that leave it. Each branch is a polyline from the junction to its mouth whose
+// corners round into circular arcs (paths.puck's `roundedPath`), level or not, and a body walking it takes the size
+// `sizeFieldAt` gives at its place along that rounded path: the junction's size at the junction, the mouth's at the
+// mouth, eased still at both ends (`ease`), as one curve along the whole branch however many corners it turns
+// (size-field.puck's `sizeFieldPath`, whose arc zones read the progress round a turn by its angle, so it never jumps).
+// Each corner's radius is the size field's reach there or wider, so a body may take any line round it. The size field
+// holds a body only inside the bore: each zone reaches out as far as
+// the bore is wide there, and the curve ends a little inside each mouth, so nothing outside the tunnel is sized and a
+// walker stepping out of a mouth already stands at the mouth's size. Walking a branch from one mouth to another through
+// the junction is one continuous change of size.
+//
+// The bore is generated along each branch's rounded path, one section a walker's stride apart (`bore.spacing` times the
+// size there, shorter round a turn so the outer wall closes), each section built at that section's size and turned to
+// the path there: a floor tile, uneven rock walls laid in strata (superellipsoids jittered by a Weyl sequence, so each
+// section differs and the same document always draws the same walls), haunches and a crown overhead, a metal rib every
+// few sections, a torch on alternate walls with a short-reaching light on some of them, and a queue railing along one
+// side. So a walker sees the same passage at every size, and the size of the world reads only through the change.
+//
+// A mouth is a hatch or an exit. A hatch is a doorway only a body the hatch's size passes (architecture.puck's
+// sizedDoorway) in an end wall across the bore. An exit is a false wall: two leaves, whose outer faces wear the
+// `disguise` material of the wall they stand in, close the bore. They swing open into the room outside while any body
+// stands in the last stretch of the exit's bore and for `door.window` seconds after the last one leaves, so a walker
+// coming out finds the wall parting before them and a body outside can slip in while it stands open; from outside
+// nothing opens it. The leaves are turning placements (WorldPlacementTurn) whose phases a rule eases over `door.swing`
+// seconds, so their colliders swing with them.
+//
+// The tunnel stands in a frame (frame.puck), as the group it belongs to does: its points are the group's coordinates,
+// its sizes the group's, and every row it stands is parented to the group's root (`parent`). The host builds the wall a
+// mouth opens in, with a hole the bore's size there: `sizeTunnelMouth` gives each mouth's point, heading and opening.
+//
+// The world that expands a tunnel imports size.puck's size register (bodies.scale) and size-hold.puck, as a size field
+// needs, and place.puck for the door's reach.
+//
+// sizeTunnel(
+//   name:      names its rows (`sizeTunnel-<name>`), prototypes, placements, rules and size field (`tunnel-<name>`)
+//   junction:  { at, size }: the junction's point and the key of `sizes` a body there takes
+//   branches:  [{ id, points, size, mouth }]: each branch's polyline from the junction (its first point is `junction.at`)
+//              to its mouth, the key of `sizes` a body at the mouth takes, and the mouth's kind, "hatch" or "exit"
+//              (at most one exit)
+//   sizes:     the named sizes, [{ key, value }], multipliers of the body's authored size in the frame
+//   body:      { radius, tall }: the walker's collider at full size, metres, which a hatch's doorway is sized round
+//   look:      the palette (`sizeTunnelPaletteOf`) and the torch's light, `{ palette, torch: { temperature, power } }`;
+//              a torch's power is its lumens at full size, scaled by the square of the size it burns at
+//   bore:      the bore's proportions at full size (`sizeTunnelBoreDefault`)
+//   door:      the exit's timing and reach (`sizeTunnelDoorDefault`)
+//   ease:      0 to 1, how still the size curve stands at each branch's ends
+//   frame:     the frame the points and sizes stand in (frameIdentity when omitted)
+//   parent:    the frame's root placement, every row's parent
+// )
+
+import "frame"
+import "paths"
+import "size-field"
+import "architecture"
+import "reach"
+
+// The palette's slots, in the order `sizeTunnelPaletteOf` lays them.
+let sizeTunnelRock = 0
+let sizeTunnelRockDeep = 1
+let sizeTunnelFloor = 2
+let sizeTunnelTrim = 3
+let sizeTunnelAccent = 4
+let sizeTunnelFlame = 5
+let sizeTunnelDisguise = 6
+let sizeTunnelLantern = 7
+function sizeTunnelPaletteOf(rock, rockDeep, floor, trim, accent, flame, disguise, lantern) = [
+  rock
+  rockDeep
+  floor
+  trim
+  accent
+  flame
+  disguise
+  lantern
+]
+
+// The bore at full size, metres: its clear width and height, its walls' and crown's thickness, the stride between
+// sections and how far a wall stone may stand proud of its wall; the strata its walls are laid in, each a stone's middle
+// and half height in bore heights; a rib every `ribEvery` sections, a torch every `torchEvery` (`torchHeight` up its
+// wall) and a light on every `lightEvery`th torch; the railing's height, a post every `postEvery` sections, its inset
+// from the wall and its side (1 the right of a walker heading for the mouth, -1 the left); the least radius a turn takes,
+// in bore half widths at its size; the junction chamber's radius in bore half widths and its height in bore heights; and
+// the junction's signpost's height.
+let sizeTunnelBoreDefault = {
+  width: 2.8
+  height: 3.4
+  wall: 0.45
+  crown: 0.4
+  spacing: 1.6
+  rough: 0.12
+  strata [{ at: 0.24, half: 0.27 }, { at: 0.7, half: 0.25 }]
+  ribEvery: 4
+  torchEvery: 3
+  lightEvery: 2
+  torchHeight: 1.75
+  railHeight: 1.0
+  postEvery: 2
+  railInset: 0.3
+  railSide: 1
+  turn: 2
+  chamber: 2.6
+  chamberHeight: 1.45
+  post: 1.7
+}
+// The exit's false wall: how long it stays open after the last body leaves its bore and how long a swing takes,
+// seconds; how far into the bore from the mouth a body opens it, metres at the mouth's size; how far its leaves turn,
+// degrees; and their thickness, metres at the mouth's size.
+let sizeTunnelDoorDefault = { window: 3, swing: 0.9, trigger: 4.5, angle: 92, leaf: 0.1 }
+// How much further than the bore's half width a zone holds a body, metres; and how much further still inside a mouth
+// the size curve ends than its zone reaches.
+let sizeTunnelReachMargin = 0.05
+let sizeTunnelInsetMargin = 0.05
+
+// Directions: a heading in degrees that turns a placement's front (-z) along a direction's horizontal part, its pitch,
+// and the rotation that lays a shape's -z along the direction with its +y as near up as the direction allows.
+function sizeTunnelYaw(d) = (arcTangent2((0 - d[0]), (0 - d[2])) * (180 / pi))
+function sizeTunnelPitch(d) = (arcSine(clamp(d[1], -1, 1)) * (180 / pi))
+function sizeTunnelTurn(d) = compose(rotate([0, 1, 0], sizeTunnelYaw(d)), rotate([1, 0, 0], sizeTunnelPitch(d)))
+
+// A branch's corners' radii, each at the size its corner stands at along the bare polyline: `bore.turn` bore half widths,
+// so the inner wall stands clear of the turn's centre; and no less than its zone's reach, nor so little that a turn
+// barely turning puts its arc's two ends nearer than that reach, so the size field reads a body's progress continuously
+// round it (size-field.puck's `sizeFieldPath`).
+function sizeTunnelRadius(t, b, i, to) = let s = sizeFieldAt(
+  t.junctionSize,
+  to,
+  clamp(((loopDistance(b.points, i) - t.chamber) / (polylineLength(b.points) - t.chamber)), 0, 1),
+  t.ease
+) in
+let reach = (t.reach.base + (t.reach.bySize * s)) in
+maximum(
+  (((t.bore.turn * t.bore.width) / 2) * s),
+  maximum((1.1 * reach), ((1.05 * reach) / maximum(0.0001, (2 * sine((arcCosine(roundedCosine(b.points, i)) / 2))))))
+)
+// A branch laid out: its rounded path, its length, its sizes at the junction (`from`) and the mouth (`to`), where its
+// size curve runs (from `begin`, the chamber's wall, where the chamber's own size meets it, to `curve`, `inset` inside the
+// mouth), and the first and last distances a section stands at (the chamber's wall, and a stride's share short of the
+// mouth). Every distance is along the rounded path from the junction.
+function sizeTunnelLay(t, b, index) = let to = sizeFieldValue(t.sizes, b.size) in
+let pieces = roundedPath(
+  b.points,
+  map(range(1, (length(b.points) - 1)), i => sizeTunnelRadius(t, b, i, to))
+) in
+let total = roundedPathLength(pieces) in
+let inset = ((t.reach.base + (t.reach.bySize * to)) + sizeTunnelInsetMargin) in
+b with {
+  index: index
+  pieces: pieces
+  total: total
+  from: t.junctionSize
+  to: to
+  ease: t.ease
+  inset: inset
+  begin: t.chamber
+  curve: (total - inset)
+  first: (t.chamber - ((t.bore.spacing * t.junctionSize) * 0.3))
+  last: (total - ((0.7 * t.bore.spacing) * to))
+}
+// The size a walker takes at a distance `l` along a branch from the junction: the field's own curve.
+function sizeTunnelSize(br, l) = sizeFieldAt(
+  br.from,
+  br.to,
+  clamp(((l - br.begin) / (br.curve - br.begin)), 0, 1),
+  br.ease
+)
+
+// The distances along a branch its sections stand at: from `first`, each a stride at the size halfway to the next
+// (a midpoint step), to `last`. Round a turn the stride shortens so the outer wall's stones still meet. The count bounds
+// the march by the stride at the branch's smallest size.
+function sizeTunnelStride(br, bore, l) = let s = sizeTunnelSize(
+  br,
+  (l + ((0.5 * bore.spacing) * sizeTunnelSize(br, l)))
+) in
+((bore.spacing * s) / (1 + (roundedPathCurvature(br.pieces, l) * (((bore.width / 2) + bore.wall) * s))))
+function sizeTunnelMost(br, bore) = (ceiling((((br.last - br.first) * 3) / (bore.spacing * minimum(br.from, br.to)))) +
+  2)
+function sizeTunnelMarch(br, bore) = filter(
+  reduce(
+    range(0, sizeTunnelMost(br, bore)),
+    [br.first],
+    (ls, i) => ((ls[(length(ls) - 1)] > br.last) ? ls : concat(
+      ls,
+      [(ls[(length(ls) - 1)] + sizeTunnelStride(br, bore, ls[(length(ls) - 1)]))]
+    ))
+  ),
+  l => (l <= br.last)
+)
+// The level turn near a distance `l` along a branch, within the reach of a section's stones there: its arc, or null.
+function sizeTunnelTurnNear(br, bore, l, s) = first(
+  br.pieces,
+  p => ((p.kind == "arc") and
+    (absolute(p.e1[1]) < 0.001) and
+    (absolute(p.e2[1]) < 0.001) and
+    ((l + (((0.8 * bore.spacing) + (bore.width / 2)) * s)) > p.start) and
+    ((l - (((0.8 * bore.spacing) + (bore.width / 2)) * s)) < (p.start + p.length))),
+  p => p,
+  null
+)
+// A section's inner side at a level turn (the side the turn's centre stands on, 1 its right, -1 its left, 0 off a turn),
+// and how much of a stone's half length a stone on that side keeps toward the mouth (`fore`) and toward the junction
+// (`aft`): on the turn, the share of the inner wall's circle to the bore's middle, so its stones meet round the tighter
+// circle; on a straight beside it, no further toward the turn than the turn begins, so no stone reaches across the bore
+// along the straight.
+function sizeTunnelInner(near, at, turn) = ((near == null) ? 0 :
+  ((dot((near.centre - at), rotatePoint(turn, [1, 0, 0])) > 0) ? 1 : -1))
+function sizeTunnelReach(bore, s) = ((0.68 * bore.spacing) * s)
+function sizeTunnelCircleShare(near, bore, s) = clamp(
+  ((near.radius - (((bore.width / 2) + bore.wall) * s)) / near.radius),
+  0.25,
+  1
+)
+function sizeTunnelFore(near, bore, l, s) = ((near == null) ? 1 : ((l < near.start) ? clamp(
+  ((near.start - l) / sizeTunnelReach(bore, s)),
+  0.15,
+  1
+) : ((l <= (near.start + near.length)) ? sizeTunnelCircleShare(near, bore, s) : 1)))
+function sizeTunnelAft(near, bore, l, s) = ((near == null) ? 1 : ((l > (near.start + near.length)) ? clamp(
+  ((l - (near.start + near.length)) / sizeTunnelReach(bore, s)),
+  0.15,
+  1
+) : ((l >= near.start) ? sizeTunnelCircleShare(near, bore, s) : 1)))
+// A section: its index along its branch, its distance and size, its point on the branch's floor, its rotation (the
+// branch's direction there) and heading, how far along its floor tile reaches either way, its inner side at a level turn
+// and the shares of their half length its stones keep there toward the mouth and the junction, and three shares of a
+// Weyl sequence salted by its branch, which jitter its stones.
+function sizeTunnelSection(br, bore, ls, k) = let l = ls[k] in
+let d = roundedPathDirection(br.pieces, l) in
+let s = sizeTunnelSize(br, l) in
+let at = roundedPathAt(br.pieces, l) in
+let near = sizeTunnelTurnNear(br, bore, l, s) in
+{
+  k: k
+  l: l
+  s: s
+  at: at
+  turn: sizeTunnelTurn(d)
+  yaw: sizeTunnelYaw(d)
+  inner: sizeTunnelInner(near, at, sizeTunnelTurn(d))
+  fore: sizeTunnelFore(near, bore, l, s)
+  aft: sizeTunnelAft(near, bore, l, s)
+  tile: ((k == (length(ls) - 1)) ? maximum(((0.6 * bore.spacing) * s), (br.total - l)) : ((0.6 * bore.spacing) * s))
+  j0: weylShare(k, 0.6180339887, (br.index * 0.37))
+  j1: weylShare(k, 0.7548776662, (br.index * 0.37))
+  j2: weylShare(k, 0.569840291, (br.index * 0.37))
+}
+function sizeTunnelSections(br, bore) = let ls = sizeTunnelMarch(br, bore) in
+map(
+  range(0, length(ls)),
+  k => sizeTunnelSection(br, bore, ls, k)
+)
+// A point of a section's frame, `local` across (x), up its floor's normal (y) and along (-z toward the mouth); and the
+// same with up the world's up, for what stands upright on a ramp.
+function sizeTunnelAt(sec, local) = (sec.at + rotatePoint(sec.turn, local))
+function sizeTunnelUpright(sec, local) = (sec.at + rotatePoint(rotate([0, 1, 0], sec.yaw), local))
+// The side a section's torch hangs on, alternating torch by torch, and whether it carries a light.
+function sizeTunnelTorchSide(sec, bore) = ((floorModulo((sec.k / bore.torchEvery), 2) == 0) ? -1 : 1)
+function sizeTunnelTorches(sections, bore) = filter(sections, sec => (floorModulo(sec.k, bore.torchEvery) == 0))
+function sizeTunnelFlameAt(sec, bore) = sizeTunnelUpright(sec, [
+  (sizeTunnelTorchSide(sec, bore) * (((bore.width / 2) - 0.1) * sec.s)),
+  ((bore.torchHeight + 0.08) * sec.s),
+  0
+])
+function sizeTunnelLit(sec, bore) = (floorModulo((sec.k / bore.torchEvery), bore.lightEvery) == 0)
+// The top of a section's railing post, `share` of the way up it.
+function sizeTunnelRailAt(sec, bore, share) = sizeTunnelUpright(sec, [
+  (bore.railSide * (((bore.width / 2) - bore.railInset) * sec.s)),
+  ((bore.railHeight * share) * sec.s),
+  0
+])
+
+// A mouth: its point, the unit direction out of it, its heading (a placement's front facing out), its size, its bore at
+// that size (the clear width and height, and the outer half width and height with its walls and crown), and the hole
+// (`hole`, { width, height } from the mouth's floor point) its host cuts in the wall it stands in: the bore's whole
+// outline for a hatch, whose end wall closes it round the doorway, and the leaves' opening for an exit.
+function sizeTunnelMouthOf(points, s, bore, mouth) = let n = length(points) in
+let d = vectorUnit((points[(n - 1)] - points[(n - 2)])) in
+{
+  at: points[(n - 1)]
+  out: d
+  yaw: sizeTunnelYaw(d)
+  s: s
+  width: (bore.width * s)
+  height: (bore.height * s)
+  outerWidth: (((bore.width / 2) + bore.wall) * s)
+  outerHeight: ((bore.height + bore.crown) * s)
+  hole: ((mouth == "exit") ? { width: (bore.width * s), height: ((bore.height * 0.95) * s) } : {
+    width: (((bore.width / 2) + bore.wall) * (2 * s))
+    height: ((bore.height + bore.crown) * s)
+  })
+}
+function sizeTunnelMouth(t, br) = sizeTunnelMouthOf(br.points, br.to, t.bore, br.mouth)
+// Every branch's mouth, with its branch's id and kind, for the host that builds the walls they open in.
+function sizeTunnelMouths(branches, sizes, bore = sizeTunnelBoreDefault) = map(
+  branches,
+  b => (sizeTunnelMouthOf(b.points, sizeFieldValue(sizes, b.size), bore, b.mouth) with { id: b.id, mouth: b.mouth })
+)
+// A point in a mouth's frame (x across, y up, z into the bore), in the group's coordinates.
+function sizeTunnelMouthAt(m, local) = (m.at + rotatePoint(rotate([0, 1, 0], m.yaw), local))
+
+// One section of bore: a floor tile, each wall laid in the bore's strata, a stone a stratum, each stone standing proud or back, longer
+// or shorter and rounder or squarer by its own share; two haunches and a crown; a rib on every `ribEvery`th, a torch on
+// every `torchEvery`th, and a railing post.
+template sizeTunnelSectionShapes(sec, bore) {
+  let s = sec.s
+  let w = ((bore.width / 2) * s)
+  let h = (bore.height * s)
+  let wall = (bore.wall * s)
+  let crown = (bore.crown * s)
+  let pitch = (bore.spacing * s)
+  let rough = (bore.rough * s)
+  shape Box $"floor-{sec.k}" {
+    material: sizeTunnelFloor
+    position: sizeTunnelAt(sec, [0, (-0.15 * s), 0])
+    rotation: sec.turn
+    scale [(w + wall), (0.15 * s), sec.tile]
+  }
+  for side in [-1, 1] {
+    let j = ((side < 0) ? sec.j0 : sec.j1)
+    let fore = ((side == sec.inner) ? sec.fore : 1)
+    let aft = ((side == sec.inner) ? sec.aft : 1)
+    for (stratum, n) in bore.strata {
+      let jn = fraction((j + (0.381966 * n)))
+      shape Superellipsoid $"wall-{sec.k}-{side}-{n}" {
+        material: ((jn > 0.62) ? sizeTunnelRockDeep : sizeTunnelRock)
+        exponent: (2.8 + (1.4 * jn))
+        position: sizeTunnelAt(sec, [
+          (side * ((w + (wall / 2)) - (rough * jn))),
+          (h * stratum.at),
+          ((((jn - 0.5) * (0.3 * pitch)) * minimum(fore, aft)) + ((aft - fore) * ((pitch * (0.62 + (0.12 * jn))) / 2)))
+        ])
+        rotation: compose(sec.turn, rotate([0, 1, 0], (((jn - 0.5) * 10) * minimum(fore, aft))))
+        scale [
+          ((wall / 2) + rough),
+          (h * (stratum.half + (0.05 * jn))),
+          (((pitch * (0.62 + (0.12 * jn))) * (fore + aft)) / 2)
+        ]
+      }
+    }
+    shape Superellipsoid $"haunch-{sec.k}-{side}" {
+      material: sizeTunnelRock
+      exponent: 2.6
+      position: sizeTunnelAt(sec, [(side * (w * 0.74)), (h * (0.9 + (0.03 * j))), 0])
+      rotation: compose(sec.turn, rotate([0, 0, 1], (0 - (side * 38))))
+      scale [(w * 0.34), (crown * 0.55), (pitch * 0.64)]
+    }
+  }
+  shape Superellipsoid $"crown-{sec.k}" {
+    material: sizeTunnelRockDeep
+    exponent: 2.8
+    position: sizeTunnelAt(sec, [((sec.j2 - 0.5) * rough), (h + (crown * (0.3 + (0.2 * sec.j0)))), 0])
+    rotation: sec.turn
+    scale [(w + (wall * 0.6)), (crown / 2), (pitch * 0.66)]
+  }
+  if floorModulo(sec.k, bore.ribEvery) == 0 {
+    for side in [-1, 1] {
+      shape Box $"rib-post-{sec.k}-{side}" {
+        detail: true
+        material: sizeTunnelTrim
+        position: sizeTunnelAt(sec, [(side * (w - (0.03 * s))), (h * 0.47), 0])
+        rotation: sec.turn
+        scale [(0.035 * s), (h * 0.47), (0.05 * s)]
+        rounding: (0.012 * s)
+      }
+    }
+    shape Box $"rib-head-{sec.k}" {
+      detail: true
+      material: sizeTunnelTrim
+      position: sizeTunnelAt(sec, [0, (h * 0.95), 0])
+      rotation: sec.turn
+      scale [w, (0.035 * s), (0.05 * s)]
+      rounding: (0.012 * s)
+    }
+    shape Box $"rib-glow-{sec.k}" {
+      detail: true
+      material: sizeTunnelAccent
+      position: sizeTunnelAt(sec, [0, ((h * 0.95) - (0.04 * s)), 0])
+      rotation: sec.turn
+      scale [(w * 0.6), (0.008 * s), (0.02 * s)]
+    }
+  }
+  if floorModulo(sec.k, bore.torchEvery) == 0 {
+    let side = sizeTunnelTorchSide(sec, bore)
+    shape Box $"torch-bracket-{sec.k}" {
+      detail: true
+      material: sizeTunnelTrim
+      position: sizeTunnelUpright(sec, [(side * (w - (0.05 * s))), ((bore.torchHeight - 0.06) * s), 0])
+      rotation: rotate([0, 1, 0], sec.yaw)
+      scale [(0.06 * s), (0.014 * s), (0.02 * s)]
+    }
+    shape Cylinder $"torch-bowl-{sec.k}" {
+      detail: true
+      material: sizeTunnelTrim
+      position: sizeTunnelUpright(sec, [(side * (w - (0.1 * s))), (bore.torchHeight * s), 0])
+      scale [(0.045 * s), (0.03 * s), (0.045 * s)]
+    }
+    shape Ellipsoid $"torch-flame-{sec.k}" {
+      detail: true
+      material: sizeTunnelFlame
+      position: sizeTunnelFlameAt(sec, bore)
+      scale [(0.032 * s), (0.065 * s), (0.032 * s)]
+    }
+  }
+  if floorModulo(sec.k, bore.postEvery) == 0 {
+    shape Cylinder $"rail-post-{sec.k}" {
+      detail: true
+      material: sizeTunnelAccent
+      position: sizeTunnelRailAt(sec, bore, 0.5)
+      scale [(0.022 * s), ((bore.railHeight / 2) * s), (0.022 * s)]
+    }
+  }
+}
+
+// The railing's two rails between one post and the next.
+template sizeTunnelRails(a, b, bore) {
+  for share in [0.55, 1] {
+    let p = sizeTunnelRailAt(a, bore, share)
+    let q = sizeTunnelRailAt(b, bore, share)
+    shape Box $"rail-{a.k}-{share * 100}" {
+      detail: true
+      material: sizeTunnelTrim
+      position: ((p + q) * 0.5)
+      rotation: sizeTunnelTurn(vectorUnit((q - p)))
+      scale [(0.016 * a.s), (0.016 * a.s), ((vectorLength((q - p)) / 2) + (0.01 * a.s))]
+      rounding: (0.008 * a.s)
+    }
+  }
+}
+
+// The junction's chamber: a round pad, a ring of stones broken where each branch leaves (with a lintel over each
+// opening), a crown, and at its middle a signpost whose arms point down the branches under a lantern.
+template sizeTunnelChamber(t, laid) {
+  let at = t.junction.at
+  let s = t.junctionSize
+  let r = t.chamber
+  let wall = (t.bore.wall * s)
+  let rough = (t.bore.rough * s)
+  let tall = ((t.bore.height * t.bore.chamberHeight) * s)
+  let bore = (t.bore.height * s)
+  let half = ((t.bore.width / 2) * s)
+  let count = ceiling((((2 * pi) * r) / (t.bore.spacing * s)))
+  let gap = (arcSine(minimum(0.99, ((half + (0.2 * wall)) / r))) + (pi / count))
+  let leaves = map(laid, br => vectorUnit((br.points[1] - br.points[0]) * [1, 0, 1]))
+  let post = (t.bore.post * s)
+  shape Cylinder "chamber-floor" {
+    material: sizeTunnelFloor
+    position: (at - [0, (0.15 * s), 0])
+    scale [(r + wall), (0.15 * s), (r + wall)]
+  }
+  for i in range(0, count) {
+    let angle = (((2 * pi) * i) / count)
+    let out = [cosine(angle), 0, sine(angle)]
+    let j = weylShare(i, 0.6180339887, 0.11)
+    if not any(leaves, d => (dot(out, d) > cosine(gap))) {
+      // The exit's false wall: how long it stays open after the last body leaves its bore and how long a swing takes,
+      // seconds; how far into the bore from the mouth a body opens it, metres at the mouth's size; how far its leaves turn,
+      // degrees; and their thickness, metres at the mouth's size.
+      // How much further than the bore's half width a zone holds a body, metres; and how much further still inside a mouth
+      // the size curve ends than its zone reaches.
+
+      // Directions: a heading in degrees that turns a placement's front (-z) along a direction's horizontal part, its pitch,
+      // and the rotation that lays a shape's -z along the direction with its +y as near up as the direction allows.
+
+      // A branch's corners' radii, each at the size its corner stands at along the bare polyline: `bore.turn` bore half widths,
+      // so the inner wall stands clear of the turn's centre; and no less than its zone's reach, nor so little that a turn
+      // barely turning puts its arc's two ends nearer than that reach, so the size field reads a body's progress continuously
+      // round it (size-field.puck's `sizeFieldPath`).
+      // A branch laid out: its rounded path, its length, its sizes at the junction (`from`) and the mouth (`to`), where its
+      // size curve runs (from `begin`, the chamber's wall, where the chamber's own size meets it, to `curve`, `inset` inside the
+      // mouth), and the first and last distances a section stands at (the chamber's wall, and a stride's share short of the
+      // mouth). Every distance is along the rounded path from the junction.
+      // The size a walker takes at a distance `l` along a branch from the junction: the field's own curve.
+
+      // The distances along a branch its sections stand at: from `first`, each a stride at the size halfway to the next
+      // (a midpoint step), to `last`. Round a turn the stride shortens so the outer wall's stones still meet. The count bounds
+      // the march by the stride at the branch's smallest size.
+      // The level turn near a distance `l` along a branch, within the reach of a section's stones there: its arc, or null.
+      // A section's inner side at a level turn (the side the turn's centre stands on, 1 its right, -1 its left, 0 off a turn),
+      // and how much of a stone's half length a stone on that side keeps toward the mouth (`fore`) and toward the junction
+      // (`aft`): on the turn, the share of the inner wall's circle to the bore's middle, so its stones meet round the tighter
+      // circle; on a straight beside it, no further toward the turn than the turn begins, so no stone reaches across the bore
+      // along the straight.
+      // A section: its index along its branch, its distance and size, its point on the branch's floor, its rotation (the
+      // branch's direction there) and heading, how far along its floor tile reaches either way, its inner side at a level turn
+      // and the shares of their half length its stones keep there toward the mouth and the junction, and three shares of a
+      // Weyl sequence salted by its branch, which jitter its stones.
+      // A point of a section's frame, `local` across (x), up its floor's normal (y) and along (-z toward the mouth); and the
+      // same with up the world's up, for what stands upright on a ramp.
+      // The side a section's torch hangs on, alternating torch by torch, and whether it carries a light.
+      // The top of a section's railing post, `share` of the way up it.
+
+      // A mouth: its point, the unit direction out of it, its heading (a placement's front facing out), its size, its bore at
+      // that size (the clear width and height, and the outer half width and height with its walls and crown), and the hole
+      // (`hole`, { width, height } from the mouth's floor point) its host cuts in the wall it stands in: the bore's whole
+      // outline for a hatch, whose end wall closes it round the doorway, and the leaves' opening for an exit.
+      // Every branch's mouth, with its branch's id and kind, for the host that builds the walls they open in.
+      // A point in a mouth's frame (x across, y up, z into the bore), in the group's coordinates.
+
+      // One section of bore: a floor tile, each wall laid in the bore's strata, a stone a stratum, each stone standing proud or back, longer
+      // or shorter and rounder or squarer by its own share; two haunches and a crown; a rib on every `ribEvery`th, a torch on
+      // every `torchEvery`th, and a railing post.
+
+      // The railing's two rails between one post and the next.
+
+      // The junction's chamber: a round pad, a ring of stones broken where each branch leaves (with a lintel over each
+      // opening), a crown, and at its middle a signpost whose arms point down the branches under a lantern.
+      shape Superellipsoid $"chamber-stone-{i}" {
+        material: ((j > 0.62) ? sizeTunnelRockDeep : sizeTunnelRock)
+        exponent: (2.4 + j)
+        position: (at + (out * ((r + (wall / 2)) - (rough * j))) + [0, (tall * 0.46), 0])
+        rotation: rotate([0, 1, 0], (0 - (angle * (180 / pi))))
+        scale [((wall / 2) + rough), (tall * (0.52 + (0.05 * j))), (((pi * r) / count) * 1.3)]
+      }
+    }
+  }
+  for (d, b) in leaves {
+    shape Superellipsoid $"chamber-lintel-{b}" {
+      material: sizeTunnelRockDeep
+      exponent: 2.6
+      position: (at + (d * (r + (wall / 2))) + [0, ((bore + tall) / 2), 0])
+      rotation: rotate([0, 1, 0], sizeTunnelYaw(d))
+      scale [(half + wall), (((tall - bore) / 2) + (0.3 * wall)), ((wall / 2) + rough)]
+    }
+  }
+  shape Superellipsoid "chamber-crown" {
+    material: sizeTunnelRockDeep
+    exponent: 2.2
+    position: (at + [0, tall, 0])
+    scale [(r + wall), ((t.bore.crown * 1.2) * s), (r + wall)]
+  }
+  shape Cylinder "sign-post" {
+    material: sizeTunnelTrim
+    position: (at + [0, (post / 2), 0])
+    scale [(0.05 * s), (post / 2), (0.05 * s)]
+  }
+  for (d, b) in leaves {
+    let rise = (post * (0.86 - (0.08 * b)))
+    shape Box $"sign-arm-{b}" {
+      detail: true
+      material: sizeTunnelTrim
+      position: (at + (d * (0.36 * s)) + [0, rise, 0])
+      rotation: sizeTunnelTurn(d)
+      scale [(0.012 * s), (0.05 * s), (0.32 * s)]
+      rounding: (0.006 * s)
+    }
+    shape Box $"sign-tip-{b}" {
+      detail: true
+      material: sizeTunnelAccent
+      position: (at + (d * (0.68 * s)) + [0, rise, 0])
+      rotation: compose(sizeTunnelTurn(d), rotate([1, 0, 0], 45))
+      scale [(0.014 * s), (0.05 * s), (0.05 * s)]
+    }
+  }
+  shape Sphere "lantern" {
+    detail: true
+    material: sizeTunnelLantern
+    position: (at + [0, (post + (0.08 * s)), 0])
+    scale [(0.07 * s), (0.07 * s), (0.07 * s)]
+  }
+}
+
+// A hatch's end wall across its bore, built round the doorway as a union of boxes so the analytic provider collides it
+// exactly, and the doorway, in the mouth's frame (x across, y up, z into the bore). Its palette is the standard kit's
+// followed by the tunnel's, so the doorway reads the kit's slots and the wall the tunnel's from `base`.
+template sizeTunnelHatch(m, t, base) {
+  let admits = (m.s * 1.2)
+  let room = 1.3
+  let thick = ((t.bore.wall * m.s) * 0.5)
+  let side = ((sizedDoorwayWidth(t.body.radius, admits, room) / 2) + sizedDoorwayPost(t.body.tall, admits))
+  let top = (sizedDoorwayHeight(t.body.tall, admits, room) + sizedDoorwayLintel(t.body.tall, admits))
+  // The doorway first: the cut its lintel's arch makes reaches only the shapes before it in the creation.
+  sizedDoorway(
+    base: 0,
+    radius: t.body.radius,
+    tall: t.body.tall,
+    admits: admits,
+    room: room,
+    depth: (thick + (0.02 * m.s))
+  )
+  for sign in [-1, 1] {
+    shape Box $"hatch-wall-{sign}" {
+      material: (base + sizeTunnelRock)
+      position [(sign * ((m.outerWidth + side) / 2)), (m.outerHeight / 2), 0]
+      scale [((m.outerWidth - side) / 2), (m.outerHeight / 2), (thick / 2)]
+    }
+  }
+  shape Box "hatch-head" {
+    material: (base + sizeTunnelRock)
+    position [0, ((top + m.outerHeight) / 2), 0]
+    scale [side, ((m.outerHeight - top) / 2), (thick / 2)]
+  }
+}
+
+// The exit's frame on the bore's side of its leaves: two posts and a lintel in the trim, a glowing seam under the
+// lintel, and a threshold, in the mouth's frame.
+template sizeTunnelExitFrame(m, t) {
+  let s = m.s
+  let half = (m.width / 2)
+  let tall = (m.height * 0.95)
+  let inside = ((t.door.leaf * s) + (0.07 * s))
+  for sign in [-1, 1] {
+    shape Box $"exit-post-{sign}" {
+      detail: true
+      material: sizeTunnelTrim
+      position [(sign * (half - (0.04 * s))), (tall / 2), inside]
+      scale [(0.05 * s), (tall / 2), (0.05 * s)]
+      rounding: (0.015 * s)
+    }
+  }
+  shape Box "exit-lintel" {
+    detail: true
+    material: sizeTunnelTrim
+    position [0, (tall + (0.05 * s)), inside]
+    scale [half, (0.05 * s), (0.05 * s)]
+    rounding: (0.015 * s)
+  }
+  shape Box "exit-seam" {
+    detail: true
+    material: sizeTunnelAccent
+    position [0, (tall - (0.02 * s)), (inside - (0.05 * s))]
+    scale [(half * 0.8), (0.01 * s), (0.01 * s)]
+  }
+  shape Box "exit-threshold" {
+    material: sizeTunnelTrim
+    position [0, (0.01 * s), inside]
+    scale [half, (0.01 * s), (0.08 * s)]
+  }
+}
+
+// One leaf of the exit, hinged at its frame's origin on the `sign` side of the mouth (-1 the left facing out), reaching
+// to the mouth's middle; its outer face (-z, toward the room) wears the disguise, its inner a trim panel.
+template sizeTunnelLeaf(m, t, sign) {
+  let s = m.s
+  let half = (m.width / 2)
+  let tall = (m.height * 0.95)
+  let thick = (t.door.leaf * s)
+  shape Box "leaf" {
+    material: sizeTunnelDisguise
+    position [(0 - ((sign * half) / 2)), (tall / 2), (thick / 2)]
+    scale [((half / 2) - (0.004 * s)), (tall / 2), (thick / 2)]
+  }
+  shape Box "leaf-panel" {
+    detail: true
+    material: sizeTunnelAccent
+    position [(0 - ((sign * half) / 2)), (tall / 2), (thick + (0.004 * s))]
+    scale [((half / 2) * 0.78), ((tall / 2) * 0.86), (0.004 * s)]
+    rounding: (0.003 * s)
+  }
+}
+
+template sizeTunnel(name, junction, branches, sizes, body, look, parent, bore = sizeTunnelBoreDefault, door = sizeTunnelDoorDefault, ease = 1, frame = frameIdentity) {
+  let junctionSize = sizeFieldValue(sizes, junction.size)
+  let reachOf = { base: sizeTunnelReachMargin, bySize: ((bore.width / 2) + bore.rough) }
+  let t = {
+    name: name
+    junction: junction
+    junctionSize: junctionSize
+    sizes: sizes
+    body: body
+    bore: bore
+    door: door
+    ease: ease
+    reach: reachOf
+    chamber: (((bore.chamber * bore.width) / 2) * junctionSize)
+  }
+  let laid = map(range(0, length(branches)), i => sizeTunnelLay(t, branches[i], i))
+  let exits = filter(laid, br => (br.mouth == "exit"))
+  let row = $"sizeTunnel-{name}"
+  let kitBase = length(kitPalette)
+
+  // The size field: the chamber at the junction's size, then each branch's bore as one eased curve from the junction to
+  // just inside its mouth.
+  sizeField(
+    name: $"tunnel-{name}",
+    zones: concat(
+      [{ from: junction.at, to: junction.at, start: junction.size, reach: (t.chamber + sizeTunnelReachMargin) }],
+      flatMap(
+        laid,
+        br => sizeFieldPath(
+          roundedPathFrom(roundedPathCut(br.pieces, br.curve), br.begin),
+          junction.size,
+          br.size,
+          sizes,
+          reachOf,
+          ease
+        )
+      )
+    ),
+    sizes: sizes,
+    frame: frame
+  )
+
+  prototypes {
+    prototype $"{row}-junction" {
+      document {
+        name: $"{row}-junction"
+        schema: "puck.creation.v2"
+        palette: look.palette
+        sizeTunnelChamber(t: t, laid: laid)
+      }
+      lights [
+        point(
+          name: "lantern",
+          position: (junction.at + [0, ((bore.post + 0.08) * junctionSize), 0]),
+          temperature: look.torch.temperature,
+          power: ((look.torch.power * 2) * (junctionSize * junctionSize))
+        )
+      ]
+    }
+    for br in laid {
+      let sections = sizeTunnelSections(br, bore)
+      prototype $"{row}-{br.id}" {
+        document {
+          name: $"{row}-{br.id}"
+          schema: "puck.creation.v2"
+          palette: look.palette
+          for sec in sections {
+            sizeTunnelSectionShapes(sec: sec, bore: bore)
+          }
+          for k in filter(range(0, (length(sections) - 1)), k => (floorModulo(k, bore.postEvery) == 0)) {
+            sizeTunnelRails(
+              a: sections[k],
+              b: sections[minimum((k + bore.postEvery), (length(sections) - 1))],
+              bore: bore
+            )
+          }
+        }
+        lights: map(
+          filter(sizeTunnelTorches(sections, bore), sec => sizeTunnelLit(sec, bore)),
+          sec => point(
+            name: $"torch-{sec.k}",
+            position: sizeTunnelFlameAt(sec, bore),
+            temperature: look.torch.temperature,
+            power: (look.torch.power * (sec.s * sec.s))
+          )
+        )
+      }
+      if br.mouth == "hatch" {
+        prototype $"{row}-{br.id}-hatch" {
+          document {
+            name: $"{row}-{br.id}-hatch"
+            schema: "puck.creation.v2"
+            palette: concat(kitPalette, look.palette)
+            sizeTunnelHatch(m: sizeTunnelMouth(t, br), t: t, base: kitBase)
+          }
+        }
+      }
+    }
+    for br in exits {
+      let m = sizeTunnelMouth(t, br)
+      prototype $"{row}-exit-frame" {
+        document {
+          name: $"{row}-exit-frame"
+          schema: "puck.creation.v2"
+          palette: look.palette
+          sizeTunnelExitFrame(m: m, t: t)
+        }
+      }
+      for sign in [-1, 1] {
+        prototype $"{row}-leaf-{sign}" {
+          document {
+            name: $"{row}-leaf-{sign}"
+            schema: "puck.creation.v2"
+            palette: look.palette
+            sizeTunnelLeaf(m: m, t: t, sign: sign)
+          }
+        }
+      }
+    }
+  }
+
+  placements {
+    placement $"{row}-junction" {
+      prototype: $"{row}-junction"
+      parent: parent
+      position [0, 0, 0]
+      solid
+    }
+    for br in laid {
+      let m = sizeTunnelMouth(t, br)
+      placement $"{row}-{br.id}" {
+        prototype: $"{row}-{br.id}"
+        parent: parent
+        position [0, 0, 0]
+        solid
+      }
+      if br.mouth == "hatch" {
+        placement $"{row}-{br.id}-hatch" {
+          prototype: $"{row}-{br.id}-hatch"
+          parent: parent
+          position: m.at
+          yawDegrees: m.yaw
+          solid
+        }
+      }
+    }
+    for br in exits {
+      let m = sizeTunnelMouth(t, br)
+      placement $"{row}-exit-frame" {
+        prototype: $"{row}-exit-frame"
+        parent: parent
+        position: m.at
+        yawDegrees: m.yaw
+        solid
+      }
+      for sign in [-1, 1] {
+        placement $"{row}-leaf-{sign}" {
+          prototype: $"{row}-leaf-{sign}"
+          parent: parent
+          position: sizeTunnelMouthAt(m, [(sign * (m.width / 2)), 0, 0])
+          yawDegrees: m.yaw
+          solid
+          turn {
+            clock: 0
+            phase: $"state.{row}.{(sign < 0) ? "left" : "right"}"
+          }
+        }
+      }
+      // The last stretch of the exit's bore, where a body standing opens the false wall: the box about it in the
+      // group's axes.
+      let deep = (door.trigger * m.s)
+      reach(
+        id: $"{row}-door",
+        parent: parent,
+        capacity: 4,
+        box: {
+          x0: (minimum(m.at[0], (m.at[0] - (m.out[0] * deep))) - (absolute(m.out[2]) * (m.width / 2)))
+          x1: (maximum(m.at[0], (m.at[0] - (m.out[0] * deep))) + (absolute(m.out[2]) * (m.width / 2)))
+          y0: (m.at[1] - (0.2 * m.s))
+          y1: (m.at[1] + m.height)
+          z0: (minimum(m.at[2], (m.at[2] - (m.out[2] * deep))) - (absolute(m.out[0]) * (m.width / 2)))
+          z1: (maximum(m.at[2], (m.at[2] - (m.out[2] * deep))) + (absolute(m.out[0]) * (m.width / 2)))
+        }
+      )
+    }
+  }
+
+  // The false wall's state: a seconds clock, and the door's cells: the clock time it stays open until (`due`), whether it
+  // is opening (`target`, 1) or closing, the clock time and openness (`mark`, `from`) its present swing started from,
+  // and each leaf's turn (`left`, `right`, in turns, which the leaves' turn facets read).
+  if length(exits) > 0 {
+    state {
+      world {
+        slot $"{row}-clock" = 0.0 advance(perSecond: 1)
+        table $"{row}" {
+          due = 0.0
+          target = 0.0
+          mark = 0.0
+          from = 0.0
+          left = 0.0
+          right = 0.0
+        }
+      }
+    }
+
+    // While a body stands in the exit's last stretch the wall stays open `door.window` seconds on, and a rule or an
+    // operator that writes a later `due` holds it open until then; it swings toward open or shut over `door.swing`
+    // seconds from wherever it stood when it turned, eased still at both ends, so a body arriving mid-close reopens it
+    // from where it is.
+    rule $"{row}-door" {
+      local now = $"{row}-clock"
+      local inside = (region($"{row}-door") >= 1) ? 1 : 0
+      local due = ((inside == 1) and ((now + door.window) > $"{row}".due)) ? (now + door.window) : $"{row}".due
+      local target = (now < due) ? 1 : 0
+      local was = $"{row}".target
+      local open = clamp(($"{row}".from + ((((was * 2) - 1) * (now - $"{row}".mark)) / door.swing)), 0, 1)
+      local turned = ((open * open) * (3 - (2 * open))) * (door.angle / 360)
+      when target != was or $"{row}".left != turned or $"{row}".due != due
+      mode: Level
+      if target != was {
+        $"{row}".from = open
+        $"{row}".mark = now
+        $"{row}".target = target
+      }
+      if $"{row}".due != due {
+        $"{row}".due = due
+      }
+      $"{row}".left = turned
+      $"{row}".right = 0 - turned
+    }
+  }
+}

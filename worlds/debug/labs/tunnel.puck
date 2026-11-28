@@ -1,0 +1,174 @@
+// The escape tunnel's lab: the gallery's tunnel (gallery/tunnel.puck) alone, with just enough hall for its three mouths
+// to open into: a floor before a west wall, the low hatch and the false-wall exit in that wall at floor level, and a
+// balcony 4.5 m up it with the high hatch, under the debug world's day. The tunnel is built, walked and judged here
+// (AGENTS.md, the labs ruling); `tunnel-tests.puck` walks it. Boot it with `--world worlds/debug/labs/tunnel.puck`.
+//
+// A full-size body cannot pass a hatch, so the lab shrinks one on its way to each: the floor before the low hatch eases
+// a body to Alice's size as it walks up to it, and the balcony holds a body at that size, as level 1 does in the
+// gallery. Spawn points: `hero` in the hall facing the false wall, `tunnel-hatch-low` before the low hatch's approach and
+// `tunnel-hatch-high` on the balcony (`body.pose spawn:<id>`).
+//
+// The lab stands the tunnel in its own frame, as the gallery stands it in the building's: every point below is in the
+// frame `labTunnelFrame`, whose root is the placement `tunnel`.
+//
+// Its document id, `lab-tunnel`, is the address the gallery's lab wing would reach it by.
+
+schema: "puck.world.definition.v1"
+basis: "../stage"
+documentId: "lab-tunnel"
+
+import "../day-alone"
+import "../set-controls"
+import "../size"
+import "../gallery/layout"
+import "../gallery/look"
+import "../gallery/tunnel"
+import "../../standard/frame"
+import "../../standard/bounds"
+import "../../standard/place"
+import "../../standard/size-field"
+import "../../standard/size-hold"
+import "../../standard/benchmark"
+import "lab-kit"
+import "tunnel-walk"
+
+metadata {
+  title: "The escape tunnel's lab"
+  description: "Two mouse holes, one on the floor and one on a balcony, whose bores meet at a lit junction and go on to a false-wall exit, sizing a walker continuously along the way."
+}
+
+// The hall: its floor east of the west wall, the wall itself, and the balcony on it.
+let labTunnelHall = { x0: 0, x1: 14, z0: -18, z1: 6 }
+let labTunnelWall = { x0: -0.3, x1: 0, y0: -0.3, y1: 7.5 }
+let labTunnelBalcony = { x0: 0, x1: 3.5, z0: -16.5, z1: -12.9 }
+let labTunnelParapet = 0.9
+// The palette of the hall: the gallery's wall paint, its paving and its teal.
+let labTunnelPalette = [
+  { color: lookWall, roughness: 0.75, specular: 0.04 }
+  { color: lookPaving, roughness: 0.7, specular: 0.04 }
+  { color: lookTeal, roughness: 0.5, specular: 0.06 }
+]
+
+// The west wall's face (z across, y up) as boxes left round each mouth's hole, cut with the bounds library's plan cut
+// over that face, and turned back into the wall's boxes.
+let labTunnelHoles = map(labTunnelMouths, m => {
+  x0: (m.at[2] - (m.hole.width / 2))
+  x1: (m.at[2] + (m.hole.width / 2))
+  z0: m.at[1]
+  z1: (m.at[1] + m.hole.height)
+})
+let labTunnelWallBoxes = map(
+  boundsCutAll(
+    [{ id: "wall", x0: labTunnelHall.z0, x1: labTunnelHall.z1, z0: labTunnelWall.y0, z1: labTunnelWall.y1 }],
+    labTunnelHoles
+  ),
+  b => { id: b.id, x0: labTunnelWall.x0, x1: labTunnelWall.x1, y0: b.z0, y1: b.z1, z0: b.x0, z1: b.x1 }
+)
+
+spawnPoints [
+  { id: "hero", parent: tunnel, position [7, 0, 0], yawDegrees: 90 }
+  { id: "tunnel-hatch-low", parent: tunnel, position: tunnelWalkPadStart, yawDegrees: 90 }
+  { id: "tunnel-hatch-high", parent: tunnel, position [2.5, labTunnelBalconyTop, labTunnelHighZ], yawDegrees: 90 }
+]
+
+commands [goCommand(help: "Poses a body at one of the lab's places: hero, tunnel-hatch-low or tunnel-hatch-high.")]
+
+routes [tunnelWalkRoute, tunnelSlipRoute]
+
+prototypes {
+  prototype "lab-tunnel-hall" {
+    document {
+      name: "lab-tunnel-hall"
+      schema: "puck.creation.v2"
+      palette: labTunnelPalette
+      boundsBox(
+        label: "floor",
+        x0: labTunnelHall.x0,
+        x1: labTunnelHall.x1,
+        y0: -0.3,
+        y1: 0,
+        z0: labTunnelHall.z0,
+        z1: labTunnelHall.z1,
+        slot: 1
+      )
+      for b in labTunnelWallBoxes {
+        boundsBox(label: b.id, x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z0: b.z0, z1: b.z1, slot: 0)
+      }
+      boundsBox(
+        label: "balcony",
+        x0: labTunnelBalcony.x0,
+        x1: labTunnelBalcony.x1,
+        y0: (labTunnelBalconyTop - 0.3),
+        y1: labTunnelBalconyTop,
+        z0: labTunnelBalcony.z0,
+        z1: labTunnelBalcony.z1,
+        slot: 1
+      )
+      // The balcony's parapet on its three open sides, so a small walker coming out of the high hatch stays on it.
+      boundsBox(
+        label: "parapet-east",
+        x0: (labTunnelBalcony.x1 - 0.15),
+        x1: labTunnelBalcony.x1,
+        y0: labTunnelBalconyTop,
+        y1: (labTunnelBalconyTop + labTunnelParapet),
+        z0: labTunnelBalcony.z0,
+        z1: labTunnelBalcony.z1,
+        slot: 2
+      )
+      for p in [{ z: labTunnelBalcony.z0, side: "south" }, { z: (labTunnelBalcony.z1 - 0.15), side: "north" }] {
+        boundsBox(
+          label: $"parapet-{p.side}",
+          x0: labTunnelBalcony.x0,
+          x1: labTunnelBalcony.x1,
+          y0: labTunnelBalconyTop,
+          y1: (labTunnelBalconyTop + labTunnelParapet),
+          z0: p.z,
+          z1: (p.z + 0.15),
+          slot: 2
+        )
+      }
+    }
+  }
+}
+
+placements {
+  frameRoot(id: "tunnel", frame: labTunnelFrame)
+  placement "lab-tunnel-hall" {
+    prototype: "lab-tunnel-hall"
+    parent: "tunnel"
+    position [0, 0, 0]
+    solid
+  }
+}
+
+galleryTunnel(
+  frame: labTunnelFrame,
+  parent: "tunnel",
+  junction: labTunnelJunction,
+  hatchLow: labTunnelHatchLow,
+  hatchHigh: labTunnelHatchHigh,
+  exit: labTunnelExit
+)
+
+// The lab's own shrinking: the floor before the low hatch eases a body from full size to the hatch's as it walks up to
+// the hatch, and the balcony holds a body at the hatch's size. Both stop short of the wall, so they never meet the
+// tunnel's own field.
+sizeField(
+  name: "lab-tunnel",
+  zones: [
+    { from: tunnelWalkPadStart, to: tunnelWalkPadEnd, start: "full", end: "small", reach: 0.6, ease: 1 }
+    {
+      box {
+        x0: 0.05
+        x1: labTunnelBalcony.x1
+        y0: (labTunnelBalconyTop - 0.2)
+        y1: (labTunnelBalconyTop + 2)
+        z0: labTunnelBalcony.z0
+        z1: labTunnelBalcony.z1
+      }
+      start: "small"
+    }
+  ],
+  sizes: [{ key: "full", value: 1 }, { key: "small", value: lookWonderSize }],
+  frame: labTunnelFrame
+)
