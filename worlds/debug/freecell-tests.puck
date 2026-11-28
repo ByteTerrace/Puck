@@ -40,13 +40,11 @@ state {
   }
 }
 
-use gameStationGames as one(station: stations[0], index: 0)
-use gameStationGames as two(station: stations[1], index: 1)
 
 // The deal: a card a tick gathers, shuffles, then deals the 52 cards across the eight columns, 7, 7, 7, 7, 6, 6, 6, 6.
 test "the seeded deal fills the eight columns and leaves the cells and foundations empty" {
   given {
-    gameStationGame.one = 2
+    gameStationGame[0] = 2
   }
   when {
     ticks 400
@@ -67,7 +65,7 @@ test "the seeded deal fills the eight columns and leaves the cells and foundatio
 // A free cell is empty after the deal, so a move out of it is refused and the piles stand as dealt.
 test "a move out of an empty free cell is refused" {
   given {
-    gameStationGame.one = 2
+    gameStationGame[0] = 2
   }
   when {
     ticks 400
@@ -89,7 +87,7 @@ test "a move out of an empty free cell is refused" {
 // its chess game where it began.
 test "a game at one station never touches another" {
   given {
-    gameStationGame.one = 2
+    gameStationGame[0] = 2
   }
   when {
     ticks 400
@@ -105,7 +103,7 @@ test "a game at one station never touches another" {
     freecellDeals[1] == 0
     count(freecellDeckOf1) == 52
     solitaireTable[1] == 0
-    two.turn == 0
+    chessTurn1 == 0
     freecellRequest[1] == 0
   }
 }

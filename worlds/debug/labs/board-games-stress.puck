@@ -67,7 +67,7 @@ let stressOpenings = [
   [8, 24]
 ]
 
-gameStationRoom(stations: stressStations)
+gameStationRoom(stations: stressStations, autoplay: map(range(0, 12), index => stressAutoplay(index)))
 
 state {
   // The chess game's vocabularies (../game-stations.puck's header).
@@ -95,18 +95,6 @@ state {
   }
 }
 
-use gameStationGames as s0(station: stressStations[0], index: 0, autoplay: stressAutoplay(0))
-use gameStationGames as s1(station: stressStations[1], index: 1, autoplay: stressAutoplay(1))
-use gameStationGames as s2(station: stressStations[2], index: 2, autoplay: stressAutoplay(2))
-use gameStationGames as s3(station: stressStations[3], index: 3, autoplay: stressAutoplay(3))
-use gameStationGames as s4(station: stressStations[4], index: 4, autoplay: stressAutoplay(4))
-use gameStationGames as s5(station: stressStations[5], index: 5, autoplay: stressAutoplay(5))
-use gameStationGames as s6(station: stressStations[6], index: 6, autoplay: stressAutoplay(6))
-use gameStationGames as s7(station: stressStations[7], index: 7, autoplay: stressAutoplay(7))
-use gameStationGames as s8(station: stressStations[8], index: 8, autoplay: stressAutoplay(8))
-use gameStationGames as s9(station: stressStations[9], index: 9, autoplay: stressAutoplay(9))
-use gameStationGames as s10(station: stressStations[10], index: 10, autoplay: stressAutoplay(10))
-use gameStationGames as s11(station: stressStations[11], index: 11, autoplay: stressAutoplay(11))
 
 render {
   farDistance: 200
@@ -130,17 +118,17 @@ test "twelve stations each play their turns, and two runs agree" {
     ticks 1800
   }
   expect {
-    s0.chessStationPlies >= 16
-    s1.chessStationPlies >= 16
-    s2.chessStationPlies >= 16
-    s3.chessStationPlies >= 16
-    s4.chessStationPlies >= 16
-    s5.chessStationPlies >= 16
-    s6.chessStationPlies >= 16
-    s7.chessStationPlies >= 16
-    s8.chessStationPlies >= 16
-    s9.chessStationPlies >= 16
-    s10.chessStationPlies >= 16
-    s11.chessStationPlies >= 16
+    chessStationPlies0 >= 16
+    chessStationPlies1 >= 16
+    chessStationPlies2 >= 16
+    chessStationPlies3 >= 16
+    chessStationPlies4 >= 16
+    chessStationPlies5 >= 16
+    chessStationPlies6 >= 16
+    chessStationPlies7 >= 16
+    chessStationPlies8 >= 16
+    chessStationPlies9 >= 16
+    chessStationPlies10 >= 16
+    chessStationPlies11 >= 16
   }
 }

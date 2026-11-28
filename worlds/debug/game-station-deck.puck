@@ -7,8 +7,7 @@ import "game-stations"
 // population's top slots (shapes.puck's cardBodies) and every body below keeps its index; its cards stand always, not as
 // a holodeck pool, since a pool's bodies take free slots and the bodies below would no longer be numbered from a fixed
 // deck. Its chess pieces take the free slots the population keeps for them (shapes.puck's galleryPopulation). The
-// gallery booted alone stands all twelve of the room's stations instead (gallery/games.puck); the debug world's rule work
-// sheet has room for this one (game-station.md, "Cost").
+// gallery booted alone stands all twelve of the room's stations instead (gallery/games.puck).
 
 // The deck's back and its ace to six of each suit, which the shedding table (shedding.puck) deals in the same debug world.
 export read `card-back`, `card-s-a`, `card-s-2`, `card-s-3`, `card-s-4`, `card-s-5`, `card-s-6`, `card-h-a`, `card-h-2`, `card-h-3`, `card-h-4`, `card-h-5`, `card-h-6`, `card-c-a`, `card-c-2`, `card-c-3`, `card-c-4`, `card-c-5`, `card-c-6`, `card-d-a`, `card-d-2`, `card-d-3`, `card-d-4`, `card-d-5`, `card-d-6`
@@ -49,4 +48,3 @@ state {
   }
 }
 
-use gameStationGames as a1(station: debugStations[0], index: 0)

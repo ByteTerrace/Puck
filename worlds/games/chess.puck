@@ -1,19 +1,24 @@
 // The rules of chess as a library: the pieces, the board's game state, the settled-board judge (captures,
-// promotion, castling, en passant, check, the 75-move rule and repetition), the move door (`chessInput`, which the
+// promotion, castling, en passant, check, the 75-move rule and repetition), the move door (`chessInputOf`, which the
 // console's and a replay's moves and a seated player's put-downs share) and a one-ply computer opponent searching
-// the same rules. A table imports it and expands each template where its rows belong, in the order the debug
-// table does (the rules run in document order):
+// the same rules. One set of rules plays every game of a world at once, as the patience games do (klondike.puck): a
+// game is a station's place in the world's list (`$member` in every rule), each rule sweeps the games
+// (`forEach: gameStationOf`, one cell a game) or every game's pieces (`forEach: chessPieceCodeOf`, `$each` a piece),
+// and each game's state is the member at its place of a family of rows (`chessTurn[$member]`, `chessMoveOf[$member].from`,
+// `chessBoard[$member]`), so a move at one game wakes and costs that game's bindings alone, and each game's computer
+// search judges its own game's bindings alone (`chessSearch`, `member:`). A world imports it and expands each template
+// where its rows belong, in the order the game stations do (the rules run in document order):
 //
 //   import "../games/chess"
 //   state {
 //     enum PieceKind { None Pawn Knight Bishop Rook Queen King }
 //     enum MoveKind { Illegal Quiet Capture EnPassant Castle }
 //     enum TurnColor { White Black }
-//     chessBoardGrid(cellSize: 0.2, origin: [-0.8, 1.25, -0.8], band: 0.3)
-//     world { chessGameState(settleTicks: 9) }
+//     chessBoardGrids(count: 1, cellSize: 0.2, origin: [-0.8, 1.25, -0.8], band: 0.3)
+//     world { chessGameState(keys: [map(range(0, 32), k => $"piece{k}")], settleTicks: 9) }
 //   }
-//   chessSearch()
-//   chessJudge(settleTicks: 9, scope: "my-table")
+//   chessSearch(name: "chessAI", index: 0)
+//   chessJudge(settleTicks: 9)
 //   chessComputer(settleTicks: 9)
 //   chessMoveDoor(settleTicks: 9)
 //   chessMoveDone()
@@ -27,20 +32,21 @@
 // the board has rested and nothing holds the game (`chessHold`). Either may start its pieces on their squares
 // (`chessGameState(placed: true)`), and pass `restoresCells: true` to the put-down's judgement, so an arrangement judged
 // illegal is put back by writing its cells (a holodeck then stands its bodies where the cells say). Either may also
-// expand `chessFreshGame()`, the door (`chessFresh.request`) that sets every piece back and starts the game afresh. A
-// world holding several games names each one's search job (`chessSearch(name:)`).
+// expand `chessFreshGame()`, the door (`chessFreshOf[$member].request`) that sets every piece back and starts the game
+// afresh. Each game's search job is its own (`chessSearch`), named by the world.
 //
-// The table declares the three vocabularies itself, each on its own lines as above: the compiler folds an enum's
+// The world declares the three vocabularies itself, each on its own lines as above: the compiler folds an enum's
 // members only from declarations the compiled source spells, so a template cannot carry them, and declaring them
 // keeps their names readable to every document built on the table.
 //
-// A world of physical pieces owns everything physical: the 32 piece placements `piece0` to `piece31` (piece n starting on
-// `initialPieceCodes[n]`'s square), their bodies and looks, the board placement whose `board` block names this
-// library's rows (`occupancy: "board"`, `move`, `plan`, `turn`, `verdict`, topology `chessBoard`), the replay or
-// placement scope `scope` names (whose physical rest gates the judge), and posing the pieces a move door relocates. The
-// `chessBoard` grid is cell = 8 * row + column, its rows running +Z and its columns +X; a rank is a row (rank 1 on the
-// -Z side, White's) and a file runs the other way, column = 7 - file. The judge reads the arrangement once the scope has
-// rested `settleTicks` ticks. A game station's holodeck chess (chess-station.puck) is the worked example.
+// A world of physical pieces owns everything physical: each game's 32 piece placements, named by the keys it gives its
+// game's pieces (`chessGameState(keys:)`, piece n starting on `initialPieceCodes[n]`'s square), their bodies and looks,
+// each game's board placement whose `board` block anchors its topology (`occupancy` and `topology` both
+// `chessBoard<i>`, game i's member of the `chessBoard` family over its own grid of the same name), and posing the pieces
+// a move door relocates. A `chessBoard<i>` grid is cell = 8 * row + column, its rows running +Z and its columns +X; a rank
+// is a row (rank 1 on the -Z side, White's) and a file runs the other way, column = 7 - file. The judge reads the
+// arrangement once the game's pieces have rested `settleTicks` ticks. A game station's holodeck chess
+// (chess-station.puck) is the worked example.
 
 // The back rank's piece codes from file a to h (rook, knight, bishop, queen, king, bishop, knight, rook), White
 // positive and Black negative; the board's cells hold them by column.
@@ -88,333 +94,305 @@ let chessMoves = concat(
 function chessEnPassantFrom(source, occupied) = ((source >= 0) and
   (source < 64) and
   ((source / 8) == (victim / 8)) and
-  (board[source] == sign) and
+  (chessBoard[$member][source] == sign) and
   (rooks &
-    (boardSlide(kingMask, occupied, chessBoard, N) |
-      boardSlide(kingMask, occupied, chessBoard, S) |
-      boardSlide(kingMask, occupied, chessBoard, E) |
-      boardSlide(kingMask, occupied, chessBoard, W)) ==
+    (boardSlide(kingMask, occupied, chessBoard0, N) |
+      boardSlide(kingMask, occupied, chessBoard0, S) |
+      boardSlide(kingMask, occupied, chessBoard0, E) |
+      boardSlide(kingMask, occupied, chessBoard0, W)) ==
     0) and
   (bishops &
-    (boardSlide(kingMask, occupied, chessBoard, NE) |
-      boardSlide(kingMask, occupied, chessBoard, SE) |
-      boardSlide(kingMask, occupied, chessBoard, SW) |
-      boardSlide(kingMask, occupied, chessBoard, NW)) ==
+    (boardSlide(kingMask, occupied, chessBoard0, NE) |
+      boardSlide(kingMask, occupied, chessBoard0, SE) |
+      boardSlide(kingMask, occupied, chessBoard0, SW) |
+      boardSlide(kingMask, occupied, chessBoard0, NW)) ==
     0))
 
-// The board's grid, expanded inside a table's `state` block: `cellSize` is one square in metres, `origin` the
-// grid's corner in the table's frame and `band` how far above a square a piece still counts as standing on it.
-template chessBoardGrid(cellSize, origin, band) {
+// Every game's board grid, expanded inside the world's `state` block: game i's `chessBoard<i>`, `cellSize` one square in
+// metres, `origin` the grid's corner in the frame of the placement that anchors it and `band` how far above a square a
+// piece still counts as standing on it; and the families of each game's boards (`chessBoard`, `chessLastLegal`) and
+// repetition tallies (`chessPositionCounts`) whose members chessGameState declares.
+template chessBoardGrids(count, cellSize, origin, band) {
   lattices [
-    grid(
-      band: band,
-      cellSize: cellSize,
-      depth: 8,
-      directions: [
-        {
-          name: "N"
-          x: 0
-          y: -1
-          z: 0
-        }
-        {
-          name: "NE"
-          x: 1
-          y: -1
-          z: 0
-        }
-        {
-          name: "E"
-          x: 1
-          y: 0
-          z: 0
-        }
-        {
-          name: "SE"
-          x: 1
-          y: 1
-          z: 0
-        }
-        {
-          name: "S"
-          x: 0
-          y: 1
-          z: 0
-        }
-        {
-          name: "SW"
-          x: -1
-          y: 1
-          z: 0
-        }
-        {
-          name: "W"
-          x: -1
-          y: 0
-          z: 0
-        }
-        {
-          name: "NW"
-          x: -1
-          y: -1
-          z: 0
-        }
-      ],
-      name: "chessBoard",
-      origin: origin,
-      width: 8,
-      wrap: None
-    )
+    for index in range(0, count) {
+      grid(
+        band: band,
+        cellSize: cellSize,
+        depth: 8,
+        directions: [
+          {
+            name: "N"
+            x: 0
+            y: -1
+            z: 0
+          }
+          {
+            name: "NE"
+            x: 1
+            y: -1
+            z: 0
+          }
+          {
+            name: "E"
+            x: 1
+            y: 0
+            z: 0
+          }
+          {
+            name: "SE"
+            x: 1
+            y: 1
+            z: 0
+          }
+          {
+            name: "S"
+            x: 0
+            y: 1
+            z: 0
+          }
+          {
+            name: "SW"
+            x: -1
+            y: 1
+            z: 0
+          }
+          {
+            name: "W"
+            x: -1
+            y: 0
+            z: 0
+          }
+          {
+            name: "NW"
+            x: -1
+            y: -1
+            z: 0
+          }
+        ],
+        name: $"chessBoard{index}",
+        origin: origin,
+        width: 8,
+        wrap: None
+      )
+    }
+  ]
+  families [
+    { name: "chessBoard", size: count }
+    { name: "chessLastLegal", size: count }
+    { name: "chessPositionCounts", size: count }
   ]
 }
 
-// The game's state rows, expanded inside a table's `state.world` block. With `placed` the pieces start on their squares
-// (a drawn board, or a holodeck that stands its bodies where the cells say); without it they are read off the board once
-// it first rests.
-template chessGameState(settleTicks, placed = false) {
-  table chessInput capacity(auto) {
+// Every game's state rows, expanded inside the world's `state.world` block: `keys` lists each game's 32 piece keys in
+// piece order (the names of its piece placements), game i at place i. With `placed` the pieces start on their squares (a
+// drawn board, or a holodeck that stands its bodies where the cells say); without it they are read off the board once it
+// first rests.
+template chessGameState(keys, settleTicks, placed = false) {
+  let count = length(keys)
+
+  // Each game's pieces, keyed by its own keys: the cell each stands on (-1 off the board) and its code, the board they
+  // make (its inverse), and what the start, the computer and a put-down hold of them.
+  table chessPieceCellOf[count] as g capacity(32) bounds(-1..63) {
+    for k in range(0, 32) {
+      [keys[g][k]] = (placed ? initialPieceCells[k] : -1)
+    }
+  }
+  table chessPieceCodeOf[count] as g capacity(32) bounds(-6..6) {
+    for k in range(0, 32) {
+      [keys[g][k]] = initialPieceCodes[k]
+    }
+  }
+  for g in range(0, count) {
+    row {
+      capacity: 64
+      domain: cellsOf(topology: $"chessBoard{g}")
+      kind: "Int"
+      max: 6
+      min: -6
+      name: $"chessBoard{g}"
+      inverse {
+        tokens: $"chessPieceCellOf{g}"
+        codes: $"chessPieceCodeOf{g}"
+      }
+    }
+  }
+  for g in range(0, count) {
+    row {
+      capacity: 64
+      cells: map(initialBoard, (code, i) => { key: $"{i}", value: code })
+      domain: cellsOf(topology: $"chessBoard{g}")
+      kind: "Int"
+      max: 6
+      min: -6
+      name: $"chessLastLegal{g}"
+    }
+  }
+  // How many times each position of the current stretch of reversible play has stood, by position key. The 75-move
+  // limit ends play after 150 reversible plies, so a stretch holds at most 151 positions, the initial one included.
+  for g in range(0, count) {
+    row {
+      name: $"chessPositionCounts{g}"
+      kind: "Int"
+      domain: tally(capacity: 151)
+    }
+  }
+  table chessPieceStartCellOf[count] as g capacity(32) {
+    for k in range(0, 32) {
+      [keys[g][k]] = initialPieceCells[k]
+    }
+  }
+  table chessPieceStartCodeOf[count] as g capacity(32) {
+    for k in range(0, 32) {
+      [keys[g][k]] = initialPieceCodes[k]
+    }
+  }
+  table chessAiBeforeOf[count] as g capacity(32) {
+    for k in range(0, 32) {
+      [keys[g][k]] = -1
+    }
+  }
+  // What a put-down is judged against: every piece's cell and code the tick it was made.
+  table chessPutBeforeOf[count] as g capacity(32) bounds(-1..63) {
+    for k in range(0, 32) {
+      [keys[g][k]] = -1
+    }
+  }
+  table chessPutBeforeCodeOf[count] as g capacity(32) bounds(-6..6) {
+    for k in range(0, 32) {
+      [keys[g][k]] = initialPieceCodes[k]
+    }
+  }
+
+  // The move door (`chessInputOf`), the computer's working cells and its answer, the candidate move the judge reads, and
+  // each side's pending promotion, check and the castling transits.
+  table chessInputOf[count] capacity(4) {
     from = -1
     to = -1
     request = 0
     accepted = 0
   }
-
-  row {
-    capacity: 64
-    domain: cellsOf(topology: chessBoard)
-    kind: "Int"
-    max: 6
-    min: -6
-    name: "board"
-    inverse {
-      tokens: "pieceCell"
-      codes: "pieceCode"
-    }
-  }
-
-  row {
-    capacity: 64
-    cells: map(initialBoard, (code, i) => { key: $"{i}", value: code })
-    domain: cellsOf(topology: chessBoard)
-    kind: "Int"
-    max: 6
-    min: -6
-    name: "lastLegal"
-  }
-
-  row {
-    capacity: 64
-    domain: cellsOf(topology: chessBoard)
-    kind: "Int"
-    name: "plan"
-  }
-
-  table ai capacity(6) {
-    evaluation = 0
+  table chessAiOf[count] capacity(5) {
     metadata = -1
     pending = 0
     from = -1
     to = -1
     mover = 0
   }
-  slot aiSide = 1 bounds(-1..1)
-  slot aiEnabled = 0 bounds(0..1)
-  slot aiRevision = 0
-  table aiBest capacity(auto) {
+  slot chessAiEvaluation[count] = 0
+  table chessAiBestOf[count] capacity(4) {
     token = -1
     to = -1
     score = 0
     revision = -1
   }
-  row {
-    name: "pieceOrdinal"
-    kind: "Int"
-    capacity: 32
-    cells: map(range(0, 32), i => { key: $"piece{i}", value: i })
-  }
-  row {
-    name: "aiBefore"
-    kind: "Int"
-    capacity: 32
-    cells: map(range(0, 32), i => { key: $"piece{i}", value: -1 })
-  }
-
-  slot turn = 0 bounds(0..1)
-
-  slot verdict = 1 bounds(0..1)
-
-  slot illegalCount = 0 bounds(0..50400)
-
-  slot settleHold = 0 bounds(0..settleTicks)
-
-  slot gameStarted = 0 bounds(0..1)
-
-  table move capacity(5) bounds(-6..63) {
+  slot chessAiSide[count] = 1 bounds(-1..1)
+  slot chessAiEnabled[count] = 0 bounds(0..1)
+  slot chessAiRevision[count] = 0
+  table chessMoveOf[count] capacity(5) bounds(-6..63) {
     captured = 0
     from = -1
     kind = 0
     mover = 0
     to = -1
   }
-
-  row {
-    name: "pieceCode"
-    kind: "Int"
-    capacity: 32
-    min: -6
-    max: 6
-    cells: map(initialPieceCodes, (code, i) => { key: $"piece{i}", value: code })
-  }
-
-  row {
-    name: "pieceCell"
-    kind: "Int"
-    capacity: 32
-    min: -1
-    max: 63
-    cells: map(range(0, 32), i => { key: $"piece{i}", value: (placed ? initialPieceCells[i] : -1) })
-  }
-
-  table promotionPending capacity(2) bounds(-1..63) {
+  table chessPromotionPendingOf[count] capacity(2) bounds(-1..63) {
     "0" = -1
     "1" = -1
   }
-
-  slot enPassantTarget = -1 bounds(-1..63)
-
-  table inCheck capacity(2) bounds(0..1) {
+  table chessInCheckOf[count] capacity(2) bounds(0..1) {
     "0" = 0
     "1" = 0
   }
-
-  // How many times each position of the current stretch of reversible play has stood, by position key. The 75-move
-  // limit ends play after 150 reversible plies, so a stretch holds at most 151 positions, the initial one included.
-  row {
-    name: "positionCounts"
-    kind: "Int"
-    domain: tally(capacity: 151)
-  }
-
-  slot repetitionEnPassant = -1 bounds(-1..63)
-  slot historyPending = 0 bounds(0..1)
-  slot historyReset = 0 bounds(0..1)
-  slot historyLength = 0 bounds(0..151)
-  slot halfmoveClock = 0 bounds(0..150)
-  slot repetitionCount = 0 bounds(0..76)
-
-  slot shapeLegal = 0 bounds(0..1)
-
-  // Whether the board's pieces rest (a drawn board always does), and whether the computer and the doors hold off (a
-  // table's demonstration sets it while it plays).
-  slot chessRested = 1 bounds(0..1)
-  slot chessHold = 0 bounds(0..1)
-
-  // The display door (chessPutDown): the squares a move leaves and lands on and the request a presentation of the game
-  // away from its board posts, and whether a seat plays the game there now. While a physical table's seated player holds
-  // a piece up (`chessGrip`, which such a table keeps), the door takes no move: the board is the player's until the
-  // piece is down.
-  table chessPut capacity(auto) {
-    from = -1
-    to = -1
-    request = 0
-  }
-  slot chessSeated = 0 bounds(0..1)
-  slot chessGrip = 0 bounds(0..1)
-
-  // The fresh-game door (chessFreshGame) and each piece's starting square and code.
-  table chessFresh capacity(auto) {
-    request = 0
-  }
-  row {
-    name: "pieceStartCell"
-    kind: "Int"
-    capacity: 32
-    cells: map(range(0, 32), i => { key: $"piece{i}", value: initialPieceCells[i] })
-  }
-  row {
-    name: "pieceStartCode"
-    kind: "Int"
-    capacity: 32
-    cells: map(initialPieceCodes, (code, i) => { key: $"piece{i}", value: code })
-  }
-
-  // A put-down awaiting its verdict (`judging`), the arrangement being put back this tick (`revert`), and what the
-  // put-down is judged against: every piece's cell and code the tick it was made.
-  table putDown capacity(auto) {
-    judging = 0
-    revert = 0
-  }
-  row {
-    name: "putBefore"
-    kind: "Int"
-    capacity: 32
-    min: -1
-    max: 63
-    cells: map(range(0, 32), i => { key: $"piece{i}", value: -1 })
-  }
-  row {
-    name: "putBeforeCode"
-    kind: "Int"
-    capacity: 32
-    min: -6
-    max: 6
-    cells: map(initialPieceCodes, (code, i) => { key: $"piece{i}", value: code })
-  }
-
-  slot castleLegal = 0 bounds(0..1)
-
-
-  slot castleRights = 0 bounds(0..15)
-
-  table previousInCheck capacity(2) bounds(0..1) {
+  table chessPreviousInCheckOf[count] capacity(2) bounds(0..1) {
     "0" = 0
     "1" = 0
   }
-
-  table castleTransitAttacked capacity(4) bounds(0..1) {
+  table chessCastleTransitOf[count] capacity(4) bounds(0..1) {
     wk = 0
     wq = 0
     bk = 0
     bq = 0
   }
 
-  slot boardMismatch = 0 bounds(0..64)
+  slot chessTurn[count] = 0 bounds(0..1)
+  slot chessVerdict[count] = 1 bounds(0..1)
+  slot chessIllegalCount[count] = 0 bounds(0..50400)
+  slot chessSettleHold[count] = 0 bounds(0..settleTicks)
+  slot chessGameStarted[count] = 0 bounds(0..1)
+  slot chessEnPassantTarget[count] = -1 bounds(-1..63)
+  slot chessRepetitionEnPassant[count] = -1 bounds(-1..63)
+  slot chessHistoryPending[count] = 0 bounds(0..1)
+  slot chessHistoryReset[count] = 0 bounds(0..1)
+  slot chessHistoryLength[count] = 0 bounds(0..151)
+  slot chessHalfmoveClock[count] = 0 bounds(0..150)
+  slot chessRepetitionCount[count] = 0 bounds(0..76)
+  slot chessShapeLegal[count] = 0 bounds(0..1)
+  slot chessCastleLegal[count] = 0 bounds(0..1)
+  slot chessCastleRights[count] = 0 bounds(0..15)
+  slot chessBoardMismatch[count] = 0 bounds(0..64)
+  slot chessBoardChanged[count] = 0 bounds(0..64)
+  slot chessBoardCollisions[count] = 0 bounds(0..64)
 
-  slot boardChanged = 0 bounds(0..64)
+  // Whether the board's pieces rest (a drawn board always does), and whether the computer and the doors hold off (a
+  // table's demonstration sets it while it plays).
+  slot chessRested[count] = 1 bounds(0..1)
+  slot chessHold[count] = 0 bounds(0..1)
 
-  slot boardCollisions = 0 bounds(0..64)
+  // The display door (chessPutDown): the squares a move leaves and lands on and the request a presentation of the game
+  // away from its board posts, and whether a seat plays the game there now. While a physical table's seated player holds
+  // a piece up (`chessGrip`, which such a table keeps), the door takes no move: the board is the player's until the
+  // piece is down.
+  table chessPutOf[count] capacity(3) {
+    from = -1
+    to = -1
+    request = 0
+  }
+  slot chessSeated[count] = 0 bounds(0..1)
+  slot chessGrip[count] = 0 bounds(0..1)
+
+  // The fresh-game door (chessFreshGame), and a put-down awaiting its verdict (`judging`) and the arrangement being put
+  // back this tick (`revert`).
+  table chessFreshOf[count] capacity(1) {
+    request = 0
+  }
+  table chessPutDownOf[count] capacity(2) {
+    judging = 0
+    revert = 0
+  }
 }
 
-// The computer opponent's search over the same rules. A search job's name is the search section's own, never an
-// instance's, so a world holding several games names each game's job.
-template chessSearch(name = "chessAI") {
+// Game `index`'s computer opponent, searching the same rules over its own game's rows alone: its judge binds every rule
+// to the game's member (`member`), so a move at another game never restarts it. A job's name is the search section's own.
+template chessSearch(name, index) {
   search {
     jobs [
       {
         name: name
-        tokens: pieceCell
-        board: board
-        turn: turn
-        verdict: verdict
-        enabled: aiEnabled
-        revision: aiRevision
+        member: index
+        tokens: $"chessPieceCellOf{index}"
+        board: $"chessBoard{index}"
+        turn: $"chessTurn{index}"
+        verdict: $"chessVerdict{index}"
+        enabled: $"chessAiEnabled{index}"
+        revision: $"chessAiRevision{index}"
         depth: 1
-        best: aiBest
+        best: $"chessAiBestOf{index}"
         shapes [
-          relocate(displace: true, codes: pieceCode, moves: chessMoves)
+          relocate(displace: true, codes: $"chessPieceCodeOf{index}", moves: chessMoves)
         ]
         // The score is from the side that just moved. One ply, automatic queen
         // promotion, material first, then central occupation and pawn progress.
-        score: (2 * turn - 1) * ai.evaluation
+        score: (2 * $"chessTurn{index}" - 1) * $"chessAiEvaluation{index}"
       }
     ]
   }
 }
 
-// The settled-board judge: once the board has rested `settleTicks` ticks, the rules read the arrangement off the board
-// and judge it against the last legal position. A physical table's board rests while its scope's bodies do, and each
-// piece's cell is read from where its body settled; a drawn board (`digital`) always rests and its cells are its pieces.
-template chessJudge(settleTicks, scope = "", digital = false) {
+// The settled-board judge: once a game's board has rested `settleTicks` ticks, the rules read the arrangement off the
+// board and judge it against the last legal position. A physical table's board rests while its game's piece bodies do,
+// and each piece's cell is read from where its body settled; a drawn board (`digital`) always rests and its cells are its
+// pieces.
+template chessJudge(settleTicks, digital = false) {
   pattern chessRayEmpty: Int {
     symbols {
       vacant = 0
@@ -425,23 +403,26 @@ template chessJudge(settleTicks, scope = "", digital = false) {
   // A held game is never read off its bodies: a holodeck releases them while it shows another game.
   if digital {} else {
     rule "tabletop-rested" {
-      local rested = physics(quiescent, scope) and chessHold == 0
-      when chessRested != rested
+      local rested = physics(quiescent, chessPieceCodeOf[$member]) and chessHold[$member] == 0
+      when chessRested[$member] != rested
       mode: Level
-      chessRested = rested
+      forEach: gameStationOf
+      chessRested[$member] = rested
     }
   }
 
   rule "tabletop-settle-hold-advance" {
-    when chessRested == 1 and settleHold < settleTicks
+    when chessRested[$member] == 1 and chessSettleHold[$member] < settleTicks
     mode: Level
-    settleHold += 1
+    forEach: gameStationOf
+    chessSettleHold[$member] += 1
   }
 
   rule "tabletop-settle-hold-reset" {
-    when chessRested != 1
+    when chessRested[$member] != 1
     mode: Level
-    settleHold = 0
+    forEach: gameStationOf
+    chessSettleHold[$member] = 0
   }
 
   // Each piece is read as its body comes to rest: the square under an upright body, or none for a body knocked over. The
@@ -452,104 +433,117 @@ template chessJudge(settleTicks, scope = "", digital = false) {
     rule "tabletop-derive-cell" {
       when fact(placement, $each, Resting)
       mode: Edge
-      forEach: pieceCode
-      if chessHold == 0 {
+      forEach: chessPieceCodeOf
+      if chessHold[$member] == 0 {
         if upright(placement, $each) >= 0.5 {
-          pieceCell[$each] = board(cellOf, board, placement, $each)
+          chessPieceCellOf[$member][$each] = board(cellOf, chessBoard[$member], placement, $each)
         } else {
-          pieceCell[$each] = -1
+          chessPieceCellOf[$member][$each] = -1
         }
       }
     }
   }
 
   // Keep the established rule names while sharing the settled-board gate and edge mode.
-  rules "" when settleHold == settleTicks {
+  rules "" when chessSettleHold[$member] == settleTicks {
     mode: "Edge"
     rule "tabletop-board-collisions" {
-      boardCollisions = count(pieceCell, atLeast: 0, atMost: 63) + setBitCount(board(mask, board, 0, 0)) - 64
+      forEach: gameStationOf
+      chessBoardCollisions[$member] = count(chessPieceCellOf[$member], atLeast: 0, atMost: 63) + setBitCount(
+        board(mask, chessBoard[$member], 0, 0)
+      ) - 64
     }
 
     rule "tabletop-game-start-snapshot" {
-      when gameStarted == 0 and boardCollisions == 0
-      transform boardCombine(left: board, operation: Copy, row: lastLegal)
+      when chessGameStarted[$member] == 0 and chessBoardCollisions[$member] == 0
+      forEach: gameStationOf
+      transform boardCombine(left: chessBoard[$member], operation: Copy, row: chessLastLegal[$member])
     }
 
     rule "tabletop-candidate-cells" {
-      local ownBefore = turn == 0 ? board(mask, lastLegal, 1, 6) : board(mask, lastLegal, -6, -1)
-      local ownAfter = turn == 0 ? board(mask, board, 1, 6) : board(mask, board, -6, -1)
-      local sources = ownBefore & ~(board(mask, board, 1, 6) | board(mask, board, -6, -1))
+      local turn = chessTurn[$member]
+      local ownBefore = turn == 0 ? board(mask, chessLastLegal[$member], 1, 6) : board(mask, chessLastLegal[$member], -6, -1)
+      local ownAfter = turn == 0 ? board(mask, chessBoard[$member], 1, 6) : board(mask, chessBoard[$member], -6, -1)
+      local sources = ownBefore & ~(board(mask, chessBoard[$member], 1, 6) | board(mask, chessBoard[$member], -6, -1))
       local destinations = ownAfter & ~ownBefore
-      local kingBefore = turn == 0 ? board(mask, lastLegal, 6, 6) : board(mask, lastLegal, -6, -6)
-      local kingAfter = turn == 0 ? board(mask, board, 6, 6) : board(mask, board, -6, -6)
+      local kingBefore = turn == 0 ? board(mask, chessLastLegal[$member], 6, 6) : board(mask, chessLastLegal[$member], -6, -6)
+      local kingAfter = turn == 0 ? board(mask, chessBoard[$member], 6, 6) : board(mask, chessBoard[$member], -6, -6)
       local target = sources & kingBefore != 0 ? destinations & kingAfter : destinations
-      move.from = sources == 0 ? -1 : trailingZeroCount(sources & kingBefore != 0 ? sources & kingBefore : sources)
-      move.to = target == 0 ? -1 : trailingZeroCount(target)
+      forEach: gameStationOf
+      chessMoveOf[$member].from = sources == 0 ? -1 : trailingZeroCount(sources & kingBefore != 0 ? sources & kingBefore : sources)
+      chessMoveOf[$member].to = target == 0 ? -1 : trailingZeroCount(target)
     }
 
     rule "tabletop-candidate-move" {
-      local mover = lastLegal[move.from]
+      local turn = chessTurn[$member]
+      local from = chessMoveOf[$member].from
+      local to = chessMoveOf[$member].to
+      local mover = chessLastLegal[$member][from]
       local kind = (
-        (move.from < 0) or (move.to < 0) or (move.to > 63) ? MoveKind.Illegal :
-        (absolute(mover) == PieceKind.King) and (absolute(move.to - move.from) == 2) ? MoveKind.Castle :
-        (absolute(mover) == PieceKind.Pawn) and ((move.from ^ move.to) & 7 != 0) and (lastLegal[move.to] == 0) ?
+        (from < 0) or (to < 0) or (to > 63) ? MoveKind.Illegal :
+        (absolute(mover) == PieceKind.King) and (absolute(to - from) == 2) ? MoveKind.Castle :
+        (absolute(mover) == PieceKind.Pawn) and ((from ^ to) & 7 != 0) and (chessLastLegal[$member][to] == 0) ?
           MoveKind.EnPassant :
-        lastLegal[move.to] != 0 ? MoveKind.Capture :
+        chessLastLegal[$member][to] != 0 ? MoveKind.Capture :
         MoveKind.Quiet
       )
-      move.mover = mover
-      move.kind = kind
-      move.captured = kind == MoveKind.EnPassant ? lastLegal[move.to - 8 * (1 - 2 * turn)] : lastLegal[move.to]
+      forEach: gameStationOf
+      chessMoveOf[$member].mover = mover
+      chessMoveOf[$member].kind = kind
+      chessMoveOf[$member].captured = kind == MoveKind.EnPassant ? chessLastLegal[$member][to - 8 * (1 - 2 * turn)] : chessLastLegal[$member][to]
     }
 
     // Search relocates the primary token; these hypothetical-only rules complete
     // the compound move before the same validator used for physical play judges it. Each names one piece.
     rule "tabletop-search-en-passant" {
-      when search(ply) > 0 and move.kind == MoveKind.EnPassant and move.to == enPassantTarget and pieceCell[$each] == (
-          move.to - 8 * (1 - 2 * turn)
+      when search(ply) > 0 and chessMoveOf[$member].kind == MoveKind.EnPassant and chessMoveOf[$member].to == chessEnPassantTarget[$member] and chessPieceCellOf[$member][$each] == (
+          chessMoveOf[$member].to - 8 * (1 - 2 * chessTurn[$member])
         )
-      forEach: pieceCode
+      forEach: chessPieceCodeOf
       maxFirings: 1
-      pieceCell[$each] = -1
+      chessPieceCellOf[$member][$each] = -1
     }
 
     rule "tabletop-search-castle" {
-      when search(ply) > 0 and move.kind == MoveKind.Castle and pieceCell[$each] == (
-          (move.from & 56) + (move.to > move.from ? 7 : 0)
-        ) and pieceCode[$each] == (4 * (1 - 2 * turn))
-      forEach: pieceCode
+      when search(ply) > 0 and chessMoveOf[$member].kind == MoveKind.Castle and chessPieceCellOf[$member][$each] == (
+          (chessMoveOf[$member].from & 56) + (chessMoveOf[$member].to > chessMoveOf[$member].from ? 7 : 0)
+        ) and chessPieceCodeOf[$member][$each] == (4 * (1 - 2 * chessTurn[$member]))
+      forEach: chessPieceCodeOf
       maxFirings: 1
-      pieceCell[$each] = move.from + move.to >> 1
+      chessPieceCellOf[$member][$each] = chessMoveOf[$member].from + chessMoveOf[$member].to >> 1
     }
 
     rule "tabletop-search-promotion" {
       when (search(ply) > 0 and
-        absolute(move.mover) == PieceKind.Pawn and
-        pieceCell[$each] == move.to and
-        (move.to / 8) == (turn == TurnColor.White ? 7 : 0))
-      forEach: pieceCode
+        absolute(chessMoveOf[$member].mover) == PieceKind.Pawn and
+        chessPieceCellOf[$member][$each] == chessMoveOf[$member].to and
+        (chessMoveOf[$member].to / 8) == (chessTurn[$member] == TurnColor.White ? 7 : 0))
+      forEach: chessPieceCodeOf
       maxFirings: 1
-      pieceCode[$each] = PieceKind.Queen * (1 - 2 * turn)
+      chessPieceCodeOf[$member][$each] = PieceKind.Queen * (1 - 2 * chessTurn[$member])
     }
 
     rule "tabletop-candidate-match" {
       local changed = (
-        (board(mask, board, -3, -2) | board(mask, board, 1, 2) | board(mask, board, 5, 6)) ^
-          (board(mask, lastLegal, -3, -2) | board(mask, lastLegal, 1, 2) | board(mask, lastLegal, 5, 6)) |
-        (board(mask, board, -5, -3) | board(mask, board, 2, 5)) ^
-          (board(mask, lastLegal, -5, -3) | board(mask, lastLegal, 2, 5)) |
-        board(mask, board, -4, 3) ^ board(mask, lastLegal, -4, 3) |
-        board(mask, board, 0, 7) ^ board(mask, lastLegal, 0, 7)
+        (board(mask, chessBoard[$member], -3, -2) | board(mask, chessBoard[$member], 1, 2) | board(mask, chessBoard[$member], 5, 6)) ^
+          (board(mask, chessLastLegal[$member], -3, -2) | board(mask, chessLastLegal[$member], 1, 2) | board(mask, chessLastLegal[$member], 5, 6)) |
+        (board(mask, chessBoard[$member], -5, -3) | board(mask, chessBoard[$member], 2, 5)) ^
+          (board(mask, chessLastLegal[$member], -5, -3) | board(mask, chessLastLegal[$member], 2, 5)) |
+        board(mask, chessBoard[$member], -4, 3) ^ board(mask, chessLastLegal[$member], -4, 3) |
+        board(mask, chessBoard[$member], 0, 7) ^ board(mask, chessLastLegal[$member], 0, 7)
       )
-      local from = move.from
-      local to = move.to
+      local from = chessMoveOf[$member].from
+      local to = chessMoveOf[$member].to
+      local kind = chessMoveOf[$member].kind
+      local mover = chessMoveOf[$member].mover
+      local turn = chessTurn[$member]
       local sign = 1 - 2 * turn
       local clear = (
-        move.kind == MoveKind.Castle ? (from & 56) + (to > from ? 7 : 0) :
-        move.kind == MoveKind.EnPassant ? to - 8 * sign :
+        kind == MoveKind.Castle ? (from & 56) + (to > from ? 7 : 0) :
+        kind == MoveKind.EnPassant ? to - 8 * sign :
         -1
       )
-      local rook = move.kind == MoveKind.Castle ? from + to >> 1 : -1
+      local rook = kind == MoveKind.Castle ? from + to >> 1 : -1
       local clearUnique = (clear >= 0) and (clear < 64) and (clear != from) and (clear != to)
       local rookUnique = (rook >= 0) and (rook < 64) and (rook != from) and (rook != to) and (rook != clear)
       local footprint = (
@@ -559,70 +553,72 @@ template chessJudge(settleTicks, scope = "", digital = false) {
         rookUnique * (1 << clamp(rook, 0, 63))
       )
       local landed = (
-        (absolute(move.mover) == PieceKind.Pawn) and (to / 8 == (turn == TurnColor.White ? 7 : 0)) ? board[move.to] :
-        move.mover
+        (absolute(mover) == PieceKind.Pawn) and (to / 8 == (turn == TurnColor.White ? 7 : 0)) ? chessBoard[$member][to] :
+        mover
       )
-      boardMismatch = (
+      forEach: gameStationOf
+      chessBoardMismatch[$member] = (
         setBitCount(changed & ~(footprint)) +
-        (from >= 0) * (board[move.from] != 0) +
-        (to >= 0) * (board[move.to] != landed) +
-        clearUnique * (board[clear] != 0) +
-        rookUnique * (board[rook] != 4 * sign)
+        (from >= 0) * (chessBoard[$member][from] != 0) +
+        (to >= 0) * (chessBoard[$member][to] != landed) +
+        clearUnique * (chessBoard[$member][clear] != 0) +
+        rookUnique * (chessBoard[$member][rook] != 4 * sign)
       )
-      boardChanged = setBitCount(changed)
+      chessBoardChanged[$member] = setBitCount(changed)
     }
 
     // The square a castling king passes over, f1 (cell 2) or d1 (cell 4), or f8 (58) or d8 (60), attacked by a pawn,
     // knight or king standing on the mask's cells or by a slider; kingside runs toward column 0.
     rule "tabletop-castle-transit-attacked" {
-      when move.kind == MoveKind.Castle
-      castleTransitAttacked.wk = 0
-      castleTransitAttacked.wq = 0
-      castleTransitAttacked.bk = 0
-      castleTransitAttacked.bq = 0
-      if turn == TurnColor.White and move.to < move.from {
-        castleTransitAttacked.wk = (
+      when chessMoveOf[$member].kind == MoveKind.Castle
+      forEach: gameStationOf
+      chessCastleTransitOf[$member].wk = 0
+      chessCastleTransitOf[$member].wq = 0
+      chessCastleTransitOf[$member].bk = 0
+      chessCastleTransitOf[$member].bq = 0
+      if chessTurn[$member] == TurnColor.White and chessMoveOf[$member].to < chessMoveOf[$member].from {
+        chessCastleTransitOf[$member].wk = (
           (
-            (board(mask, lastLegal, -1, -1) & 2560 != 0) or
-            (board(mask, lastLegal, -2, -2) & 659712 != 0) or
-            (board(mask, lastLegal, -6, -6) & 3594 != 0)
+            (board(mask, chessLastLegal[$member], -1, -1) & 2560 != 0) or
+            (board(mask, chessLastLegal[$member], -2, -2) & 659712 != 0) or
+            (board(mask, chessLastLegal[$member], -6, -6) & 3594 != 0)
           ) |
-          board(attacks, lastLegal, -5, -4, "N,S,E,W")[2] |
-          board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[2] |
-          board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[2]
+          board(attacks, chessLastLegal[$member], -5, -4, "N,S,E,W")[2] |
+          board(attacks, chessLastLegal[$member], -3, -3, "NE,SE,SW,NW")[2] |
+          board(attacks, chessLastLegal[$member], -5, -5, "NE,SE,SW,NW")[2]
         )
-      } else if turn == TurnColor.White {
-        castleTransitAttacked.wq = (
+      } else if chessTurn[$member] == TurnColor.White {
+        chessCastleTransitOf[$member].wq = (
           (
-            (board(mask, lastLegal, -1, -1) & 10240 != 0) or
-            (board(mask, lastLegal, -2, -2) & 2638848 != 0) or
-            (board(mask, lastLegal, -6, -6) & 14376 != 0)
+            (board(mask, chessLastLegal[$member], -1, -1) & 10240 != 0) or
+            (board(mask, chessLastLegal[$member], -2, -2) & 2638848 != 0) or
+            (board(mask, chessLastLegal[$member], -6, -6) & 14376 != 0)
           ) |
-          board(attacks, lastLegal, -5, -4, "N,S,E,W")[4] |
-          board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[4] |
-          board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[4]
+          board(attacks, chessLastLegal[$member], -5, -4, "N,S,E,W")[4] |
+          board(attacks, chessLastLegal[$member], -3, -3, "NE,SE,SW,NW")[4] |
+          board(attacks, chessLastLegal[$member], -5, -5, "NE,SE,SW,NW")[4]
         )
-      } else if move.to < move.from {
-        castleTransitAttacked.bk = (
+      } else if chessMoveOf[$member].to < chessMoveOf[$member].from {
+        chessCastleTransitOf[$member].bk = (
           (
-            (board(mask, lastLegal, 1, 1) & byteSwap(2560) != 0) or
-            (board(mask, lastLegal, 2, 2) & byteSwap(659712) != 0) or
-            (board(mask, lastLegal, 6, 6) & byteSwap(3594) != 0)
+            (board(mask, chessLastLegal[$member], 1, 1) & byteSwap(2560) != 0) or
+            (board(mask, chessLastLegal[$member], 2, 2) & byteSwap(659712) != 0) or
+            (board(mask, chessLastLegal[$member], 6, 6) & byteSwap(3594) != 0)
           ) |
-          board(attacks, lastLegal, 4, 5, "N,S,E,W")[58] |
-          board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[58] |
-          board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[58]
+          board(attacks, chessLastLegal[$member], 4, 5, "N,S,E,W")[58] |
+          board(attacks, chessLastLegal[$member], 3, 3, "NE,SE,SW,NW")[58] |
+          board(attacks, chessLastLegal[$member], 5, 5, "NE,SE,SW,NW")[58]
         )
       } else {
-        castleTransitAttacked.bq = (
+        chessCastleTransitOf[$member].bq = (
           (
-            (board(mask, lastLegal, 1, 1) & byteSwap(10240) != 0) or
-            (board(mask, lastLegal, 2, 2) & byteSwap(2638848) != 0) or
-            (board(mask, lastLegal, 6, 6) & byteSwap(14376) != 0)
+            (board(mask, chessLastLegal[$member], 1, 1) & byteSwap(10240) != 0) or
+            (board(mask, chessLastLegal[$member], 2, 2) & byteSwap(2638848) != 0) or
+            (board(mask, chessLastLegal[$member], 6, 6) & byteSwap(14376) != 0)
           ) |
-          board(attacks, lastLegal, 4, 5, "N,S,E,W")[60] |
-          board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[60] |
-          board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[60]
+          board(attacks, chessLastLegal[$member], 4, 5, "N,S,E,W")[60] |
+          board(attacks, chessLastLegal[$member], 3, 3, "NE,SE,SW,NW")[60] |
+          board(attacks, chessLastLegal[$member], 5, 5, "NE,SE,SW,NW")[60]
         )
       }
     }
@@ -630,222 +626,246 @@ template chessJudge(settleTicks, scope = "", digital = false) {
     // The king starts in column 3; a rising column (direction 1) castles queenside with the column-7 rook, a falling one
     // kingside with the column-0 rook. A right's bit names its rook's column: 1 column 0, 2 column 7, Black's two above.
     rule "tabletop-castle-legal" {
+      local turn = chessTurn[$member]
+      local from = chessMoveOf[$member].from
+      local to = chessMoveOf[$member].to
       local sign = 1 - 2 * turn
       local home = 3 + 56 * turn
-      local direction = move.to > move.from ? 1 : -1
+      local direction = to > from ? 1 : -1
       local rook = home + (direction == 1 ? 4 : -3)
       local right = (direction == 1 ? 2 : 1) << 2 * turn
       local attacked = (
-        turn == TurnColor.White ? direction == 1 ? castleTransitAttacked.wq :
-        castleTransitAttacked.wk :
-        direction == 1 ? castleTransitAttacked.bq :
-        castleTransitAttacked.bk
+        turn == TurnColor.White ? direction == 1 ? chessCastleTransitOf[$member].wq :
+        chessCastleTransitOf[$member].wk :
+        direction == 1 ? chessCastleTransitOf[$member].bq :
+        chessCastleTransitOf[$member].bk
       )
-      castleLegal = 0
-      if move.kind == MoveKind.Castle {
-        castleLegal = (
-          (move.kind == MoveKind.Castle) and
-          (move.from == home) and
-          (move.to == home + 2 * direction) and
-          (castleRights & right == 0) and
-          (lastLegal[rook] == PieceKind.Rook * sign) and
+      forEach: gameStationOf
+      chessCastleLegal[$member] = 0
+      if chessMoveOf[$member].kind == MoveKind.Castle {
+        chessCastleLegal[$member] = (
+          (from == home) and
+          (to == home + 2 * direction) and
+          (chessCastleRights[$member] & right == 0) and
+          (chessLastLegal[$member][rook] == PieceKind.Rook * sign) and
           (
             (
-              direction == 1 ? match(chessRayEmpty, lastLegal, E, cell)[move.from] :
-              match(chessRayEmpty, lastLegal, W, cell)[move.from]
+              direction == 1 ? match(chessRayEmpty, chessLastLegal[$member], E, cell)[from] :
+              match(chessRayEmpty, chessLastLegal[$member], W, cell)[from]
             ) == rook
           ) and
-          (previousInCheck[turn] == 0) and
+          (chessPreviousInCheckOf[$member][turn] == 0) and
           (attacked == 0)
         )
       }
     }
 
     rule "tabletop-shape-final" {
-      local piece = absolute(move.mover)
-      local dx = absolute(move.to % 8 - move.from % 8)
-      local dy = (move.to / 8 - move.from / 8) * (1 - 2 * turn)
-      local middle = move.from + 8 * (1 - 2 * turn)
-      shapeLegal = 0
+      local turn = chessTurn[$member]
+      local from = chessMoveOf[$member].from
+      local to = chessMoveOf[$member].to
+      local kind = chessMoveOf[$member].kind
+      local piece = absolute(chessMoveOf[$member].mover)
+      local dx = absolute(to % 8 - from % 8)
+      local dy = (to / 8 - from / 8) * (1 - 2 * turn)
+      local middle = from + 8 * (1 - 2 * turn)
+      forEach: gameStationOf
+      chessShapeLegal[$member] = 0
       if piece == PieceKind.Pawn {
-        shapeLegal = (
+        chessShapeLegal[$member] = (
           (dx == 0) and
-            (lastLegal[move.to] == 0) and
-            (dy == 1 or (dy == 2) and (move.from / 8 == (turn == TurnColor.White ? 1 : 6)) and (lastLegal[middle] == 0)) or
+            (chessLastLegal[$member][to] == 0) and
+            (dy == 1 or (dy == 2) and (from / 8 == (turn == TurnColor.White ? 1 : 6)) and (chessLastLegal[$member][middle] == 0)) or
           (dx == 1) and
             (dy == 1) and
             (
-              move.kind == MoveKind.Capture or
-                (move.kind == MoveKind.EnPassant) and (move.to == enPassantTarget) and (move.captured == 2 * turn - 1)
+              kind == MoveKind.Capture or
+                (kind == MoveKind.EnPassant) and (to == chessEnPassantTarget[$member]) and (chessMoveOf[$member].captured == 2 * turn - 1)
             )
         )
       } else if piece == PieceKind.Knight {
-        shapeLegal = dx * absolute(dy) == 2
+        chessShapeLegal[$member] = dx * absolute(dy) == 2
       } else if piece == PieceKind.King {
-        shapeLegal = (maximum(dx, absolute(dy)) == 1) and (move.kind != MoveKind.Castle) or castleLegal
+        chessShapeLegal[$member] = (maximum(dx, absolute(dy)) == 1) and (kind != MoveKind.Castle) or chessCastleLegal[$member]
       } else {
         if piece == PieceKind.Rook or piece == PieceKind.Queen {
-          shapeLegal = any([N, S, E, W], ray => match(chessRayEmpty, lastLegal, ray, cell)[move.to] == move.from)
+          chessShapeLegal[$member] = any([N, S, E, W], ray => match(chessRayEmpty, chessLastLegal[$member], ray, cell)[to] == from)
         }
         if piece == PieceKind.Bishop or piece == PieceKind.Queen {
-          shapeLegal |= any([NE, SE, SW, NW], ray => match(chessRayEmpty, lastLegal, ray, cell)[move.to] == move.from)
+          chessShapeLegal[$member] |= any([NE, SE, SW, NW], ray => match(chessRayEmpty, chessLastLegal[$member], ray, cell)[to] == from)
         }
       }
     }
 
     rule "tabletop-check-white" {
-      local kingMask = lowestSetBit(board(mask, board, 6, 6))
+      local kingMask = lowestSetBit(board(mask, chessBoard[$member], 6, 6))
       local kingSquare = kingMask == 0 ? -1 : trailingZeroCount(kingMask)
-      local nearFiles = boardShift(kingMask, chessBoard, E) | boardShift(kingMask, chessBoard, W)
-      local farFiles = (boardShift(nearFiles, chessBoard, E) | boardShift(nearFiles, chessBoard, W)) & ~(kingMask)
+      local nearFiles = boardShift(kingMask, chessBoard0, E) | boardShift(kingMask, chessBoard0, W)
+      local farFiles = (boardShift(nearFiles, chessBoard0, E) | boardShift(nearFiles, chessBoard0, W)) & ~(kingMask)
       local kingBand = kingMask | nearFiles
       local closeHit = (
-        boardShift(nearFiles, chessBoard, S) & board(mask, board, -1, -1) |
-          (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
-            board(mask, board, -6, -6) !=
+        boardShift(nearFiles, chessBoard0, S) & board(mask, chessBoard[$member], -1, -1) |
+          (kingBand | boardShift(kingBand, chessBoard0, S) | boardShift(kingBand, chessBoard0, N)) &
+            board(mask, chessBoard[$member], -6, -6) !=
         0
       )
       local knightHit = (
         (
-          boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
-          boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
-          boardShift(farFiles, chessBoard, S) |
-          boardShift(farFiles, chessBoard, N)
+          boardShift(boardShift(nearFiles, chessBoard0, S), chessBoard0, S) |
+          boardShift(boardShift(nearFiles, chessBoard0, N), chessBoard0, N) |
+          boardShift(farFiles, chessBoard0, S) |
+          boardShift(farFiles, chessBoard0, N)
         ) &
-          board(mask, board, -2, -2) !=
+          board(mask, chessBoard[$member], -2, -2) !=
         0
       )
       local slideHit = (
         (kingMask != 0) &
         (
-          board(attacks, board, -5, -4, "N,S,E,W")[kingSquare] |
-          board(attacks, board, -3, -3, "NE,SE,SW,NW")[kingSquare] |
-          board(attacks, board, -5, -5, "NE,SE,SW,NW")[kingSquare]
+          board(attacks, chessBoard[$member], -5, -4, "N,S,E,W")[kingSquare] |
+          board(attacks, chessBoard[$member], -3, -3, "NE,SE,SW,NW")[kingSquare] |
+          board(attacks, chessBoard[$member], -5, -5, "NE,SE,SW,NW")[kingSquare]
         )
       )
-      inCheck[0] = closeHit | knightHit | slideHit
+      forEach: gameStationOf
+      chessInCheckOf[$member][0] = closeHit | knightHit | slideHit
     }
 
     rule "tabletop-check-black" {
-      local kingMask = lowestSetBit(board(mask, board, -6, -6))
+      local kingMask = lowestSetBit(board(mask, chessBoard[$member], -6, -6))
       local kingSquare = kingMask == 0 ? -1 : trailingZeroCount(kingMask)
-      local nearFiles = boardShift(kingMask, chessBoard, E) | boardShift(kingMask, chessBoard, W)
-      local farFiles = (boardShift(nearFiles, chessBoard, E) | boardShift(nearFiles, chessBoard, W)) & ~(kingMask)
+      local nearFiles = boardShift(kingMask, chessBoard0, E) | boardShift(kingMask, chessBoard0, W)
+      local farFiles = (boardShift(nearFiles, chessBoard0, E) | boardShift(nearFiles, chessBoard0, W)) & ~(kingMask)
       local kingBand = kingMask | nearFiles
       local closeHit = (
-        boardShift(nearFiles, chessBoard, N) & board(mask, board, 1, 1) |
-          (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
-            board(mask, board, 6, 6) !=
+        boardShift(nearFiles, chessBoard0, N) & board(mask, chessBoard[$member], 1, 1) |
+          (kingBand | boardShift(kingBand, chessBoard0, S) | boardShift(kingBand, chessBoard0, N)) &
+            board(mask, chessBoard[$member], 6, 6) !=
         0
       )
       local knightHit = (
         (
-          boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
-          boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
-          boardShift(farFiles, chessBoard, S) |
-          boardShift(farFiles, chessBoard, N)
+          boardShift(boardShift(nearFiles, chessBoard0, S), chessBoard0, S) |
+          boardShift(boardShift(nearFiles, chessBoard0, N), chessBoard0, N) |
+          boardShift(farFiles, chessBoard0, S) |
+          boardShift(farFiles, chessBoard0, N)
         ) &
-          board(mask, board, 2, 2) !=
+          board(mask, chessBoard[$member], 2, 2) !=
         0
       )
       local slideHit = (
         (kingMask != 0) &
         (
-          board(attacks, board, 4, 5, "N,S,E,W")[kingSquare] |
-          board(attacks, board, 3, 3, "NE,SE,SW,NW")[kingSquare] |
-          board(attacks, board, 5, 5, "NE,SE,SW,NW")[kingSquare]
+          board(attacks, chessBoard[$member], 4, 5, "N,S,E,W")[kingSquare] |
+          board(attacks, chessBoard[$member], 3, 3, "NE,SE,SW,NW")[kingSquare] |
+          board(attacks, chessBoard[$member], 5, 5, "NE,SE,SW,NW")[kingSquare]
         )
       )
-      inCheck[1] = closeHit | knightHit | slideHit
+      forEach: gameStationOf
+      chessInCheckOf[$member][1] = closeHit | knightHit | slideHit
     }
 
     rule "tabletop-game-start-check" {
-      when gameStarted == 0 and boardCollisions == 0
-      previousInCheck[0] = inCheck[0]
-      previousInCheck[1] = inCheck[1]
-      gameStarted = 1
-      historyPending = 1
-      historyReset = 1
+      when chessGameStarted[$member] == 0 and chessBoardCollisions[$member] == 0
+      forEach: gameStationOf
+      chessPreviousInCheckOf[$member][0] = chessInCheckOf[$member][0]
+      chessPreviousInCheckOf[$member][1] = chessInCheckOf[$member][1]
+      chessGameStarted[$member] = 1
+      chessHistoryPending[$member] = 1
+      chessHistoryReset[$member] = 1
     }
 
     rule "tabletop-verdict" {
+      local turn = chessTurn[$member]
+      local to = chessMoveOf[$member].to
+      local mover = chessMoveOf[$member].mover
       local sign = 1 - 2 * turn
-      local promotes = (absolute(move.mover) == PieceKind.Pawn) and (move.to / 8 == (turn == TurnColor.White ? 7 : 0))
+      local promotes = (absolute(mover) == PieceKind.Pawn) and (to / 8 == (turn == TurnColor.White ? 7 : 0))
       local replacement = (
-        promotes ? (board[move.to] * sign >= PieceKind.Knight) and (board[move.to] * sign <= PieceKind.Queen) :
-        board[move.to] == move.mover
+        promotes ? (chessBoard[$member][to] * sign >= PieceKind.Knight) and (chessBoard[$member][to] * sign <= PieceKind.Queen) :
+        chessBoard[$member][to] == mover
       )
-      local kings = (setBitCount(board(mask, board, 6, 6)) == 1) and (setBitCount(board(mask, board, -6, -6)) == 1)
-      verdict = (
+      local kings = (setBitCount(board(mask, chessBoard[$member], 6, 6)) == 1) and (setBitCount(board(mask, chessBoard[$member], -6, -6)) == 1)
+      forEach: gameStationOf
+      chessVerdict[$member] = (
         (
-          (halfmoveClock < 150) and
-          (move.kind >= MoveKind.Quiet) and
-          (move.kind <= MoveKind.Castle) and
-          (boardMismatch == 0) and
-          (boardCollisions == 0) and
-          shapeLegal
+          (chessHalfmoveClock[$member] < 150) and
+          (chessMoveOf[$member].kind >= MoveKind.Quiet) and
+          (chessMoveOf[$member].kind <= MoveKind.Castle) and
+          (chessBoardMismatch[$member] == 0) and
+          (chessBoardCollisions[$member] == 0) and
+          chessShapeLegal[$member]
         ) &
         replacement &
-        (move.mover * sign > 0) &
-        (move.captured * sign <= 0) &
-        (inCheck[turn] == 0) &
+        (mover * sign > 0) &
+        (chessMoveOf[$member].captured * sign <= 0) &
+        (chessInCheckOf[$member][turn] == 0) &
         kings
       )
-      promotionPending[0] = boardChanged == 0 ? -1 : promotionPending[0]
-      promotionPending[1] = boardChanged == 0 ? -1 : promotionPending[1]
+      chessPromotionPendingOf[$member][0] = chessBoardChanged[$member] == 0 ? -1 : chessPromotionPendingOf[$member][0]
+      chessPromotionPendingOf[$member][1] = chessBoardChanged[$member] == 0 ? -1 : chessPromotionPendingOf[$member][1]
     }
 
     rule "tabletop-promotion-pending" {
-      when verdict == 0 and (absolute(move.mover) == PieceKind.Pawn and (move.to / 8) == (
+      local turn = chessTurn[$member]
+      local to = chessMoveOf[$member].to
+      local mover = chessMoveOf[$member].mover
+      when chessVerdict[$member] == 0 and (absolute(mover) == PieceKind.Pawn and (to / 8) == (
             turn == TurnColor.White ? 7 : 0
-          ) and board[move.to] == move.mover and shapeLegal and boardMismatch == 0 and boardCollisions == 0 and inCheck[turn] == 0 and setBitCount(
-            board(mask, board, 6, 6)
-          ) == 1 and setBitCount(board(mask, board, -6, -6)) == 1)
-      promotionPending[turn] = move.to
+          ) and chessBoard[$member][to] == mover and chessShapeLegal[$member] and chessBoardMismatch[$member] == 0 and chessBoardCollisions[$member] == 0 and chessInCheckOf[$member][turn] == 0 and setBitCount(
+            board(mask, chessBoard[$member], 6, 6)
+          ) == 1 and setBitCount(board(mask, chessBoard[$member], -6, -6)) == 1)
+      forEach: gameStationOf
+      chessPromotionPendingOf[$member][turn] = to
     }
 
     rule "tabletop-advance-turn" {
+      local mover = chessMoveOf[$member].mover
+      local from = chessMoveOf[$member].from
+      local to = chessMoveOf[$member].to
       local lostRooks = (
-        board(mask, lastLegal, 4, 4) & ~(board(mask, board, 4, 4)) & 129 |
-        board(mask, lastLegal, -4, -4) & ~(board(mask, board, -4, -4)) & 129 << 56
+        board(mask, chessLastLegal[$member], 4, 4) & ~(board(mask, chessBoard[$member], 4, 4)) & 129 |
+        board(mask, chessLastLegal[$member], -4, -4) & ~(board(mask, chessBoard[$member], -4, -4)) & 129 << 56
       )
       local lostKings = (
-        board(mask, lastLegal, 6, 6) & ~(board(mask, board, 6, 6)) & 1 << 3 |
-        board(mask, lastLegal, -6, -6) & ~(board(mask, board, -6, -6)) & 1 << 59
+        board(mask, chessLastLegal[$member], 6, 6) & ~(board(mask, chessBoard[$member], 6, 6)) & 1 << 3 |
+        board(mask, chessLastLegal[$member], -6, -6) & ~(board(mask, chessBoard[$member], -6, -6)) & 1 << 59
       )
       local lostRights = (
         parallelBitExtract(lostRooks, 129 | 129 << 56) |
         parallelBitDeposit(parallelBitExtract(lostKings, 1 << 3 | 1 << 59), 5) * 3
       )
-      when verdict == 1 and move.kind != MoveKind.Illegal
+      when chessVerdict[$member] == 1 and chessMoveOf[$member].kind != MoveKind.Illegal
+      forEach: gameStationOf
       transaction {
         // A pawn move, capture or lost castling right makes every earlier position unreachable.
-        historyReset = (
-          (absolute(move.mover) == PieceKind.Pawn) or (move.captured != 0) or (lostRights & ~((castleRights)) != 0)
+        chessHistoryReset[$member] = (
+          (absolute(mover) == PieceKind.Pawn) or (chessMoveOf[$member].captured != 0) or (lostRights & ~((chessCastleRights[$member])) != 0)
         )
-        halfmoveClock = (absolute(move.mover) == PieceKind.Pawn) or (move.captured != 0) ? 0 : halfmoveClock + 1
-        historyPending = 1
-        castleRights |= lostRights
-        transform boardCombine(left: board, operation: Copy, row: lastLegal)
-        previousInCheck[0] = inCheck[0]
-        previousInCheck[1] = inCheck[1]
-        enPassantTarget = (
-          (absolute(move.mover) == PieceKind.Pawn) and (absolute(move.to - move.from) == 16) ? move.from + move.to >> 1 :
+        chessHalfmoveClock[$member] = (absolute(mover) == PieceKind.Pawn) or (chessMoveOf[$member].captured != 0) ? 0 : chessHalfmoveClock[$member] + 1
+        chessHistoryPending[$member] = 1
+        chessCastleRights[$member] |= lostRights
+        transform boardCombine(left: chessBoard[$member], operation: Copy, row: chessLastLegal[$member])
+        chessPreviousInCheckOf[$member][0] = chessInCheckOf[$member][0]
+        chessPreviousInCheckOf[$member][1] = chessInCheckOf[$member][1]
+        chessEnPassantTarget[$member] = (
+          (absolute(mover) == PieceKind.Pawn) and (absolute(to - from) == 16) ? from + to >> 1 :
           -1
         )
-        turn = 1 - turn
-        promotionPending[0] = -1
-        promotionPending[1] = -1
+        chessTurn[$member] = 1 - chessTurn[$member]
+        chessPromotionPendingOf[$member][0] = -1
+        chessPromotionPendingOf[$member][1] = -1
       }
     }
 
     // A reset starts a new stretch of play: every position of the old one is unreachable.
     rule "tabletop-history-prepare" {
-      when historyPending == 1
-      repetitionEnPassant = -1
-      if historyReset == 1 {
-        historyLength = 0
-        positionCounts = 0
+      when chessHistoryPending[$member] == 1
+      forEach: gameStationOf
+      chessRepetitionEnPassant[$member] = -1
+      if chessHistoryReset[$member] == 1 {
+        chessHistoryLength[$member] = 0
+        chessPositionCounts[$member] = 0
       }
     }
 
@@ -854,74 +874,80 @@ template chessJudge(settleTicks, scope = "", digital = false) {
     // target is filled. No attacker but a slider moves with the capture (the victim is a pawn, read out of the pawns), so
     // only the sliders' rays are read again, over the occupancy after it (`boardSlide`), and the board is never copied.
     rule "tabletop-history-en-passant" {
+      local turn = chessTurn[$member]
+      local target = chessEnPassantTarget[$member]
       local sign = 1 - 2 * turn
-      local victim = enPassantTarget - 8 * sign
-      local kingMask = turn == TurnColor.White ? board(mask, board, 6, 6) : board(mask, board, -6, -6)
-      local nearFiles = boardShift(kingMask, chessBoard, E) | boardShift(kingMask, chessBoard, W)
-      local farFiles = (boardShift(nearFiles, chessBoard, E) | boardShift(nearFiles, chessBoard, W)) & ~(kingMask)
+      local victim = target - 8 * sign
+      local kingMask = turn == TurnColor.White ? board(mask, chessBoard[$member], 6, 6) : board(mask, chessBoard[$member], -6, -6)
+      local nearFiles = boardShift(kingMask, chessBoard0, E) | boardShift(kingMask, chessBoard0, W)
+      local farFiles = (boardShift(nearFiles, chessBoard0, E) | boardShift(nearFiles, chessBoard0, W)) & ~(kingMask)
       local kingBand = kingMask | nearFiles
       local pawnFront = (
-        turn == TurnColor.White ? boardShift(nearFiles, chessBoard, S) : boardShift(nearFiles, chessBoard, N)
+        turn == TurnColor.White ? boardShift(nearFiles, chessBoard0, S) : boardShift(nearFiles, chessBoard0, N)
       )
-      local pawns = turn == TurnColor.White ? board(mask, board, -1, -1) : board(mask, board, 1, 1)
-      local knights = turn == TurnColor.White ? board(mask, board, -2, -2) : board(mask, board, 2, 2)
-      local kings = turn == TurnColor.White ? board(mask, board, -6, -6) : board(mask, board, 6, 6)
-      local rooks = turn == TurnColor.White ? board(mask, board, -5, -4) : board(mask, board, 4, 5)
+      local pawns = turn == TurnColor.White ? board(mask, chessBoard[$member], -1, -1) : board(mask, chessBoard[$member], 1, 1)
+      local knights = turn == TurnColor.White ? board(mask, chessBoard[$member], -2, -2) : board(mask, chessBoard[$member], 2, 2)
+      local kings = turn == TurnColor.White ? board(mask, chessBoard[$member], -6, -6) : board(mask, chessBoard[$member], 6, 6)
+      local rooks = turn == TurnColor.White ? board(mask, chessBoard[$member], -5, -4) : board(mask, chessBoard[$member], 4, 5)
       local bishops = (
-        turn == TurnColor.White ? board(mask, board, -5, -5) | board(mask, board, -3, -3) :
-        board(mask, board, 5, 5) | board(mask, board, 3, 3)
+        turn == TurnColor.White ? board(mask, chessBoard[$member], -5, -5) | board(mask, chessBoard[$member], -3, -3) :
+        board(mask, chessBoard[$member], 5, 5) | board(mask, chessBoard[$member], 3, 3)
       )
       local steadyCheck = (
         pawnFront & pawns & ~(1 << (victim & 63)) |
-          (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & kings |
+          (kingBand | boardShift(kingBand, chessBoard0, S) | boardShift(kingBand, chessBoard0, N)) & kings |
           (
-            boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
-            boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
-            boardShift(farFiles, chessBoard, S) |
-            boardShift(farFiles, chessBoard, N)
+            boardShift(boardShift(nearFiles, chessBoard0, S), chessBoard0, S) |
+            boardShift(boardShift(nearFiles, chessBoard0, N), chessBoard0, N) |
+            boardShift(farFiles, chessBoard0, S) |
+            boardShift(farFiles, chessBoard0, N)
           ) & knights !=
         0
       )
-      local after = ~(board(mask, board, 0, 0)) & ~(1 << (victim & 63)) | 1 << enPassantTarget
+      local after = ~(board(mask, chessBoard[$member], 0, 0)) & ~(1 << (victim & 63)) | 1 << target
       local afterWest = after & ~(1 << ((victim - 1) & 63))
       local afterEast = after & ~(1 << ((victim + 1) & 63))
-      when historyPending == 1 and enPassantTarget >= 0
-      if ((enPassantTarget / 8) == (turn == TurnColor.White ? 5 : 2) and
-        board[victim] == -(sign) and
-        board[enPassantTarget] == 0 and
+      when chessHistoryPending[$member] == 1 and target >= 0
+      forEach: gameStationOf
+      if ((target / 8) == (turn == TurnColor.White ? 5 : 2) and
+        chessBoard[$member][victim] == -(sign) and
+        chessBoard[$member][target] == 0 and
         setBitCount(kingMask) == 1 and
         steadyCheck == 0 and
         (chessEnPassantFrom(victim - 1, afterWest) or chessEnPassantFrom(victim + 1, afterEast))) {
-        repetitionEnPassant = enPassantTarget
+        chessRepetitionEnPassant[$member] = target
       }
     }
 
     // A position's key hashes its identity: four injective piece-code bitplanes, plus side to move, castling rights,
     // and an en-passant target only when a legal capture exists.
     rule "tabletop-board-history" {
-      local planeA = board(mask, board, -3, -2) | board(mask, board, 1, 2) | board(mask, board, 5, 6)
-      local planeB = board(mask, board, -5, -3) | board(mask, board, 2, 5)
-      local planeC = board(mask, board, -4, 3)
-      local planeD = board(mask, board, 0, 6)
-      local position = hash(planeA, planeB, planeC, planeD, turn | castleRights << 1 | repetitionEnPassant + 1 << 5)
-      when historyPending == 1
-      historyLength += 1
-      positionCounts[position] += 1
-      repetitionCount = positionCounts[position]
+      local planeA = board(mask, chessBoard[$member], -3, -2) | board(mask, chessBoard[$member], 1, 2) | board(mask, chessBoard[$member], 5, 6)
+      local planeB = board(mask, chessBoard[$member], -5, -3) | board(mask, chessBoard[$member], 2, 5)
+      local planeC = board(mask, chessBoard[$member], -4, 3)
+      local planeD = board(mask, chessBoard[$member], 0, 6)
+      local position = hash(planeA, planeB, planeC, planeD, chessTurn[$member] | chessCastleRights[$member] << 1 | chessRepetitionEnPassant[$member] + 1 << 5)
+      when chessHistoryPending[$member] == 1
+      forEach: gameStationOf
+      chessHistoryLength[$member] += 1
+      chessPositionCounts[$member][position] += 1
+      chessRepetitionCount[$member] = chessPositionCounts[$member][position]
     }
 
     rule "tabletop-history-finish" {
-      when historyPending == 1
-      historyPending = 0
+      when chessHistoryPending[$member] == 1
+      forEach: gameStationOf
+      chessHistoryPending[$member] = 0
     }
 
     rule "tabletop-apply-illegal" {
-      when (verdict == 0 and
-        move.kind != MoveKind.Illegal and
-        boardMismatch == 0 and
-        promotionPending[0] == -1 and
-        promotionPending[1] == -1)
-      illegalCount += 1
+      when (chessVerdict[$member] == 0 and
+        chessMoveOf[$member].kind != MoveKind.Illegal and
+        chessBoardMismatch[$member] == 0 and
+        chessPromotionPendingOf[$member][0] == -1 and
+        chessPromotionPendingOf[$member][1] == -1)
+      forEach: gameStationOf
+      chessIllegalCount[$member] += 1
     }
   }
 }
@@ -931,21 +957,21 @@ template chessComputer(settleTicks) {
   rule "chess-ai-evaluate" {
     when search(ply) > 0
     mode: Level
-    ai.evaluation = 100 * (setBitCount(board(mask, board, 1, 1)) - setBitCount(board(mask, board, -1, -1)))
-    ai.evaluation += 320 * (setBitCount(board(mask, board, 2, 2)) - setBitCount(board(mask, board, -2, -2)))
-    ai.evaluation += 330 * (setBitCount(board(mask, board, 3, 3)) - setBitCount(board(mask, board, -3, -3)))
-    ai.evaluation += 500 * (setBitCount(board(mask, board, 4, 4)) - setBitCount(board(mask, board, -4, -4)))
-    ai.evaluation += 900 * (setBitCount(board(mask, board, 5, 5)) - setBitCount(board(mask, board, -5, -5)))
-    ai.evaluation += (
-      12 *
-      (
-        setBitCount(board(mask, board, 1, 3) & 66229406269440) -
-        setBitCount(board(mask, board, -3, -1) & 66229406269440)
+    forEach: gameStationOf
+    chessAiEvaluation[$member] = (
+      100 * (setBitCount(board(mask, chessBoard[$member], 1, 1)) - setBitCount(board(mask, chessBoard[$member], -1, -1))) +
+      320 * (setBitCount(board(mask, chessBoard[$member], 2, 2)) - setBitCount(board(mask, chessBoard[$member], -2, -2))) +
+      330 * (setBitCount(board(mask, chessBoard[$member], 3, 3)) - setBitCount(board(mask, chessBoard[$member], -3, -3))) +
+      500 * (setBitCount(board(mask, chessBoard[$member], 4, 4)) - setBitCount(board(mask, chessBoard[$member], -4, -4))) +
+      900 * (setBitCount(board(mask, chessBoard[$member], 5, 5)) - setBitCount(board(mask, chessBoard[$member], -5, -5))) +
+      12 * (
+        setBitCount(board(mask, chessBoard[$member], 1, 3) & 66229406269440) -
+        setBitCount(board(mask, chessBoard[$member], -3, -1) & 66229406269440)
+      ) +
+      8 * (
+        setBitCount(board(mask, chessBoard[$member], 1, 1) & 72057589742960640) -
+        setBitCount(board(mask, chessBoard[$member], -1, -1) & 4294967040)
       )
-    )
-    ai.evaluation += (
-      8 *
-      (setBitCount(board(mask, board, 1, 1) & 72057589742960640) - setBitCount(board(mask, board, -1, -1) & 4294967040))
     )
   }
 
@@ -958,175 +984,181 @@ template chessComputer(settleTicks) {
   // reads only its own cells, so a move wakes the pieces it moved; the revision moves whenever either changes, and the
   // search runs only once the board has rested (`chess-ai-enable`).
   rule "chess-ai-revision" {
-    local pieceState = pieceCell[$each] + 1 | pieceCode[$each] + 6 << 7
-    when pieceState != aiBefore[$each]
+    local pieceState = chessPieceCellOf[$member][$each] + 1 | chessPieceCodeOf[$member][$each] + 6 << 7
+    when pieceState != chessAiBeforeOf[$member][$each]
     mode: Level
-    forEach: pieceCode
-    aiBefore[$each] = pieceState
-    aiRevision += 1
+    forEach: chessPieceCodeOf
+    chessAiBeforeOf[$member][$each] = pieceState
+    chessAiRevision[$member] += 1
   }
   rule "chess-ai-revision-metadata" {
     local metadata = (
-      turn |
-      castleRights << 1 |
-      enPassantTarget + 1 << 5 |
-      halfmoveClock << 12 |
-      repetitionCount << 20 |
-      previousInCheck[0] << 27 |
-      previousInCheck[1] << 28
+      chessTurn[$member] |
+      chessCastleRights[$member] << 1 |
+      chessEnPassantTarget[$member] + 1 << 5 |
+      chessHalfmoveClock[$member] << 12 |
+      chessRepetitionCount[$member] << 20 |
+      chessPreviousInCheckOf[$member][0] << 27 |
+      chessPreviousInCheckOf[$member][1] << 28
     )
-    when metadata != ai.metadata
+    when metadata != chessAiOf[$member].metadata
     mode: Level
-    ai.metadata = metadata
-    aiRevision += 1
+    forEach: gameStationOf
+    chessAiOf[$member].metadata = metadata
+    chessAiRevision[$member] += 1
   }
 
   // The computer moves once the board has rested, the last arrangement was legal (or nothing moved), it is its turn,
   // nothing holds it off and the game has not reached a draw limit.
   rule "chess-ai-enable" {
     mode: Level
-    aiEnabled = (
-      (aiSide == turn) and
-      (chessHold == 0) and
-      (chessRested == 1) and
-      (settleHold == settleTicks) and
-      (gameStarted == 1) and
-      (boardCollisions == 0) and
-      ((verdict == 1) or (boardChanged == 0)) and
-      (halfmoveClock < 150) and
-      (repetitionCount < 5)
+    forEach: gameStationOf
+    chessAiEnabled[$member] = (
+      (chessAiSide[$member] == chessTurn[$member]) and
+      (chessHold[$member] == 0) and
+      (chessRested[$member] == 1) and
+      (chessSettleHold[$member] == settleTicks) and
+      (chessGameStarted[$member] == 1) and
+      (chessBoardCollisions[$member] == 0) and
+      ((chessVerdict[$member] == 1) or (chessBoardChanged[$member] == 0)) and
+      (chessHalfmoveClock[$member] < 150) and
+      (chessRepetitionCount[$member] < 5)
     )
   }
 }
 
-// The move door: a computer answer or a `chessInput` request becomes one relocation of the pieces' cells, which
+// The move door: a computer answer or a `chessInputOf` request becomes one relocation of the pieces' cells, which
 // the table then poses.
 template chessMoveDoor(settleTicks) {
   rule "chess-ai-request" {
-    when (aiEnabled == 1 and
-      aiBest.revision == aiRevision and
-      aiBest.token == pieceOrdinal[$each] and
-      aiBest.to >= 0 and
-      aiBest.to < 64 and
-      chessRested == 1)
+    when (chessAiEnabled[$member] == 1 and
+      chessAiBestOf[$member].revision == chessAiRevision[$member] and
+      chessAiBestOf[$member].token == reduce(position, chessPieceCellOf[$member])[$each] and
+      chessAiBestOf[$member].to >= 0 and
+      chessAiBestOf[$member].to < 64 and
+      chessRested[$member] == 1)
     mode: Level
-    forEach: pieceCode
+    forEach: chessPieceCodeOf
     // The answer names one token, so one binding at most matches it.
     maxFirings: 1
-    ai.from = pieceCell[$each]
-    ai.to = aiBest.to
-    ai.mover = pieceCode[$each]
-    ai.pending = 1
+    chessAiOf[$member].from = chessPieceCellOf[$member][$each]
+    chessAiOf[$member].to = chessAiBestOf[$member].to
+    chessAiOf[$member].mover = chessPieceCodeOf[$member][$each]
+    chessAiOf[$member].pending = 1
   }
 
   // A numeric move mailbox is the console's and replay's real move door. It joins the seated player's apply path:
   // captures, castling and promotion are placed by the chess-ai-relocate rules, then the ordinary settled-board judge decides.
   // Its physical resting read also keeps live mailbox inputs out of hypothetical search candidates.
   rule "chess-input-move" {
-    when (chessInput.request == 1 and
-      chessInput.from == pieceCell[$each] and
-      (pieceCode[$each] * (1 - 2 * turn)) > 0 and
-      ai.pending == 0 and
-      settleHold == settleTicks and
-      chessRested == 1)
+    when (chessInputOf[$member].request == 1 and
+      chessInputOf[$member].from == chessPieceCellOf[$member][$each] and
+      (chessPieceCodeOf[$member][$each] * (1 - 2 * chessTurn[$member])) > 0 and
+      chessAiOf[$member].pending == 0 and
+      chessSettleHold[$member] == settleTicks and
+      chessRested[$member] == 1)
     mode: Level
-    forEach: pieceCode
+    forEach: chessPieceCodeOf
     // A firing clears the request, which closes the gate for every later binding.
     maxFirings: 1
-    ai.from = chessInput.from
-    ai.to = chessInput.to
-    ai.mover = pieceCode[$each]
-    ai.pending = 1
-    chessInput.request = 0
-    chessInput.accepted += 1
+    chessAiOf[$member].from = chessInputOf[$member].from
+    chessAiOf[$member].to = chessInputOf[$member].to
+    chessAiOf[$member].mover = chessPieceCodeOf[$member][$each]
+    chessAiOf[$member].pending = 1
+    chessInputOf[$member].request = 0
+    chessInputOf[$member].accepted += 1
   }
 
   // A relocation moves at most one piece each way: the piece taken on the target square (or en passant behind it), the
   // mover, and a castling rook. Each is one rule that fires for the one piece it names, in that order, so the capture
   // reads the target square before the mover lands on it.
   rule "chess-ai-relocate-capture" {
-    when ai.pending == 1 and pieceCell[$each] == ai.to
+    when chessAiOf[$member].pending == 1 and chessPieceCellOf[$member][$each] == chessAiOf[$member].to
     mode: Level
-    forEach: pieceCode
+    forEach: chessPieceCodeOf
     maxFirings: 1
-    pieceCell[$each] = -1
+    chessPieceCellOf[$member][$each] = -1
   }
   rule "chess-ai-relocate-move" {
-    when ai.pending == 1 and pieceCell[$each] == ai.from
+    when chessAiOf[$member].pending == 1 and chessPieceCellOf[$member][$each] == chessAiOf[$member].from
     mode: Level
-    forEach: pieceCode
+    forEach: chessPieceCodeOf
     maxFirings: 1
-    pieceCell[$each] = ai.to
-    if absolute(ai.mover) == PieceKind.Pawn and (ai.to / 8) == (turn == TurnColor.White ? 7 : 0) {
-      pieceCode[$each] = PieceKind.Queen * (1 - 2 * turn)
+    chessPieceCellOf[$member][$each] = chessAiOf[$member].to
+    if absolute(chessAiOf[$member].mover) == PieceKind.Pawn and (chessAiOf[$member].to / 8) == (chessTurn[$member] == TurnColor.White ? 7 : 0) {
+      chessPieceCodeOf[$member][$each] = PieceKind.Queen * (1 - 2 * chessTurn[$member])
     }
   }
   rule "chess-ai-relocate-en-passant" {
-    when ai.pending == 1 and absolute(ai.mover) == PieceKind.Pawn and ai.to == enPassantTarget and (ai.from & 7) != (
-        ai.to & 7
-      ) and pieceCell[$each] == (ai.to - 8 * (1 - 2 * turn))
+    when chessAiOf[$member].pending == 1 and absolute(chessAiOf[$member].mover) == PieceKind.Pawn and chessAiOf[$member].to == chessEnPassantTarget[$member] and (chessAiOf[$member].from & 7) != (
+        chessAiOf[$member].to & 7
+      ) and chessPieceCellOf[$member][$each] == (chessAiOf[$member].to - 8 * (1 - 2 * chessTurn[$member]))
     mode: Level
-    forEach: pieceCode
+    forEach: chessPieceCodeOf
     maxFirings: 1
-    pieceCell[$each] = -1
+    chessPieceCellOf[$member][$each] = -1
   }
   rule "chess-ai-relocate-castle" {
-    when (ai.pending == 1 and
-      absolute(ai.mover) == PieceKind.King and
-      absolute(ai.to - ai.from) == 2 and
-      pieceCell[$each] == ((ai.from & 56) + (ai.to > ai.from ? 7 : 0)))
+    when (chessAiOf[$member].pending == 1 and
+      absolute(chessAiOf[$member].mover) == PieceKind.King and
+      absolute(chessAiOf[$member].to - chessAiOf[$member].from) == 2 and
+      chessPieceCellOf[$member][$each] == ((chessAiOf[$member].from & 56) + (chessAiOf[$member].to > chessAiOf[$member].from ? 7 : 0)))
     mode: Level
-    forEach: pieceCode
+    forEach: chessPieceCodeOf
     maxFirings: 1
-    pieceCell[$each] = ai.from + ai.to >> 1
+    chessPieceCellOf[$member][$each] = chessAiOf[$member].from + chessAiOf[$member].to >> 1
   }
 }
 
 // Closes a relocation once the table has posed it, and restarts the settle hold.
 template chessMoveDone() {
   rule "chess-ai-finish" {
-    when ai.pending == 1
+    when chessAiOf[$member].pending == 1
     mode: Level
-    aiBest.token = -1
-    ai.pending = 0
-    aiEnabled = 0
-    settleHold = 0
+    forEach: gameStationOf
+    chessAiBestOf[$member].token = -1
+    chessAiOf[$member].pending = 0
+    chessAiEnabled[$member] = 0
+    chessSettleHold[$member] = 0
   }
 }
 
 // The put-down path a move takes when a player makes it rather than the computer: the display door, through which a
 // presentation of the game away from its board asks for a move (a game station's glass), and the capture of what the
-// move is judged against. A seated player's put-down at a physical table sets `ai` and `putDown.judging` itself, ahead
-// of this template. A request waits while the board settles, a move is applied or judged, or something holds the doors
-// off (a physical player's held piece among them, `chessGrip`), and lapses once its square holds no piece of the side to
-// move or that side is the computer's.
+// move is judged against. A seated player's put-down at a physical table sets `chessAiOf` and `chessPutDownOf.judging`
+// itself, ahead of this template. A request waits while the board settles, a move is applied or judged, or something
+// holds the doors off (a physical player's held piece among them, `chessGrip`), and lapses once its square holds no piece
+// of the side to move or that side is the computer's.
 template chessPutDown(settleTicks) {
   rule "chess-put" {
-    local mover = board[chessPut.from]
+    local from = chessPutOf[$member].from
+    local mover = chessBoard[$member][from]
     local ready = (
-      chessHold == 0 and chessGrip == 0 and ai.pending == 0 and putDown.judging == 0 and settleHold == settleTicks
+      chessHold[$member] == 0 and chessGrip[$member] == 0 and chessAiOf[$member].pending == 0 and chessPutDownOf[$member].judging == 0 and chessSettleHold[$member] == settleTicks
     )
-    when chessPut.request == 1
+    when chessPutOf[$member].request == 1
     mode: Level
-    if (mover * (1 - 2 * turn)) <= 0 or aiSide == turn {
-      chessPut.request = 0
+    forEach: gameStationOf
+    if (mover * (1 - 2 * chessTurn[$member])) <= 0 or chessAiSide[$member] == chessTurn[$member] {
+      chessPutOf[$member].request = 0
     } else if ready {
-      ai.from = chessPut.from
-      ai.to = chessPut.to
-      ai.mover = mover
-      ai.pending = 1
-      putDown.judging = 1
-      chessPut.request = 0
+      chessAiOf[$member].from = chessPutOf[$member].from
+      chessAiOf[$member].to = chessPutOf[$member].to
+      chessAiOf[$member].mover = mover
+      chessAiOf[$member].pending = 1
+      chessPutDownOf[$member].judging = 1
+      chessPutOf[$member].request = 0
     }
   }
 
   // What the put-down is judged against, captured the tick it is made: every piece's square and code, each row copied
   // whole in one firing.
   rule "chess-put-before" {
-    when putDown.judging == 1 and ai.pending == 1
+    when chessPutDownOf[$member].judging == 1 and chessAiOf[$member].pending == 1
     mode: Level
-    transform copyRow(row: putBefore, from: pieceCell)
-    transform copyRow(row: putBeforeCode, from: pieceCode)
+    forEach: gameStationOf
+    transform copyRow(row: chessPutBeforeOf[$member], from: chessPieceCellOf[$member])
+    transform copyRow(row: chessPutBeforeCodeOf[$member], from: chessPieceCodeOf[$member])
   }
 }
 
@@ -1134,39 +1166,43 @@ template chessPutDown(settleTicks) {
 // with `restoresCells` its cells too (a drawn board, or a holodeck that then stands its bodies where the cells say).
 template chessPutJudged(settleTicks, restoresCells = false) {
   rule "chess-play-judged" {
-    when putDown.judging == 1 and ai.pending == 0 and settleHold == settleTicks
+    when chessPutDownOf[$member].judging == 1 and chessAiOf[$member].pending == 0 and chessSettleHold[$member] == settleTicks
     mode: Level
-    putDown.judging = 0
-    putDown.revert = verdict == 0
+    forEach: gameStationOf
+    chessPutDownOf[$member].judging = 0
+    chessPutDownOf[$member].revert = chessVerdict[$member] == 0
   }
 
   if restoresCells {
     rule "chess-play-revert-codes" {
-      when putDown.revert == 1
+      when chessPutDownOf[$member].revert == 1
       mode: Level
-      transform copyRow(row: pieceCode, from: putBeforeCode)
-      transform copyRow(row: pieceCell, from: putBefore)
+      forEach: gameStationOf
+      transform copyRow(row: chessPieceCodeOf[$member], from: chessPutBeforeCodeOf[$member])
+      transform copyRow(row: chessPieceCellOf[$member], from: chessPutBeforeOf[$member])
     }
   } else {
     rule "chess-play-revert-codes" {
-      when putDown.revert == 1
+      when chessPutDownOf[$member].revert == 1
       mode: Level
-      transform copyRow(row: pieceCode, from: putBeforeCode)
+      forEach: gameStationOf
+      transform copyRow(row: chessPieceCodeOf[$member], from: chessPutBeforeCodeOf[$member])
     }
   }
 }
 
 template chessPutSettled() {
   rule "chess-put-settled" {
-    when putDown.revert == 1
+    when chessPutDownOf[$member].revert == 1
     mode: Level
-    putDown.revert = 0
+    forEach: gameStationOf
+    chessPutDownOf[$member].revert = 0
   }
 }
 
 // The fresh-game door of a drawn board: a request sets every piece on its starting square with its starting code and
 // the game's turn, rights, clocks and doors as they stood at the start, then the judge reads the board again as at boot
-// (`gameStarted` 0 takes the starting position as the last legal one once the board has settled). It is a live door,
+// (`chessGameStarted` 0 takes the starting position as the last legal one once the board has settled). It is a live door,
 // never a candidate's, so the computer's search does not judge it. A physical table stands its own pieces back instead.
 //
 // It writes only what something reads before the judge's first settled pass recomputes it: the status line and the
@@ -1177,28 +1213,29 @@ template chessPutSettled() {
 // and the pending promotions; and a search answer belongs to the revision the moved pieces bump.
 template chessFreshGame() {
   rule "chess-fresh" {
-    when search(ply) == 0 and chessFresh.request == 1
+    when search(ply) == 0 and chessFreshOf[$member].request == 1
     mode: Level
-    transform copyRow(row: pieceCode, from: pieceStartCode)
-    transform copyRow(row: pieceCell, from: pieceStartCell)
-    turn = 0
-    verdict = 1
-    castleRights = 0
-    enPassantTarget = -1
-    halfmoveClock = 0
-    repetitionCount = 0
-    gameStarted = 0
-    settleHold = 0
-    illegalCount = 0
-    inCheck[0] = 0
-    inCheck[1] = 0
-    move.from = -1
-    move.to = -1
-    ai.pending = 0
-    aiEnabled = 0
-    putDown.judging = 0
-    chessPut.request = 0
-    chessInput.request = 0
-    chessFresh.request = 0
+    forEach: gameStationOf
+    transform copyRow(row: chessPieceCodeOf[$member], from: chessPieceStartCodeOf[$member])
+    transform copyRow(row: chessPieceCellOf[$member], from: chessPieceStartCellOf[$member])
+    chessTurn[$member] = 0
+    chessVerdict[$member] = 1
+    chessCastleRights[$member] = 0
+    chessEnPassantTarget[$member] = -1
+    chessHalfmoveClock[$member] = 0
+    chessRepetitionCount[$member] = 0
+    chessGameStarted[$member] = 0
+    chessSettleHold[$member] = 0
+    chessIllegalCount[$member] = 0
+    chessInCheckOf[$member][0] = 0
+    chessInCheckOf[$member][1] = 0
+    chessMoveOf[$member].from = -1
+    chessMoveOf[$member].to = -1
+    chessAiOf[$member].pending = 0
+    chessAiEnabled[$member] = 0
+    chessPutDownOf[$member].judging = 0
+    chessPutOf[$member].request = 0
+    chessInputOf[$member].request = 0
+    chessFreshOf[$member].request = 0
   }
 }

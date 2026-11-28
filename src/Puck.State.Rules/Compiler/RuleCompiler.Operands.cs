@@ -100,6 +100,15 @@ public static partial class RuleCompiler {
 
         return true;
     }
+    // A family member chosen live and then its literal cell, `move[$member].from`, is the member and the key: what the
+    // expression grammar reads that spelling as, wherever a row and a key are named apart.
+    private static void SplitMemberField(ref StateChannelRef name, ref StateChannelRef? key) {
+        if ((key is null) && (name.Call is null) && (name.PoolField is null) && (name.Spelling.LastIndexOf(value: "].", comparisonType: StringComparison.Ordinal) is var dot and > 0) &&
+            CellName.TryParse(candidate: name.Spelling[(dot + 2)..], name: out _, reason: out _)) {
+            key = StateChannelRef.OfName(name: name.Spelling[(dot + 2)..]);
+            name = StateChannelRef.OfName(name: name.Spelling[..(dot + 1)]);
+        }
+    }
     // A family of slots read or written by its member index (`turn[$member]` over `slot turn[n]`): the member the index
     // selects live, at its one cell. With `whole`, a family of tallies too, whose member a key-less write empties
     // (`counts[$member] = 0`). A name that is a row, or a family of keyed rows, is not one.
@@ -171,6 +180,8 @@ public static partial class RuleCompiler {
     public static ResolvedOperand ResolveOperand(StateChannelRef operand, StateChannelRef? cell, in OperandSite site, RuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: operand);
+
+        SplitMemberField(key: ref cell, name: ref operand);
 
         // The spellings are what a refusal and a read-back quote; the call is what the walk dispatches on.
         var call = operand.Call;
@@ -419,18 +430,8 @@ public static partial class RuleCompiler {
                     ruleName: ruleName
                 );
             }
-            slotMember!.CollectFacts(into: context.Needs);
 
-            return new ResolvedOperand(
-                describe: describe,
-                operand: new StateCellOperand(
-                    key: InternKey(context: context, name: StateRow.SlotKey.Value),
-                    keyFrom: null,
-                    rowFrom: slotMember,
-                    rowOrdinal: -1,
-                    valueKind: slotKind
-                )
-            );
+            return ResolveLiveRowCell(context: context, describe: describe, key: null, live: slotMember!, site: in site);
         }
 
         var row = (context.FindRow(name: name)
@@ -688,6 +689,19 @@ public static partial class RuleCompiler {
                 operand: new StateCellOperand(
                     key: default,
                     keyFrom: dynamicKey,
+                    rowFrom: live,
+                    rowOrdinal: -1,
+                    valueKind: kind
+                )
+            );
+        }
+        // A family of slots' member is read at its one cell, as a slot is.
+        if ((key is null) && (live.Family is not null) && (context.FindRowAt(rowOrdinal: FirstCandidate(row: live)) is { IsSlot: true })) {
+            return new ResolvedOperand(
+                describe: describe,
+                operand: new StateCellOperand(
+                    key: InternKey(context: context, name: StateRow.SlotKey.Value),
+                    keyFrom: null,
                     rowFrom: live,
                     rowOrdinal: -1,
                     valueKind: kind

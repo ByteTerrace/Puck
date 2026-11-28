@@ -391,9 +391,9 @@ public static class RuleDataflow {
         return [.. rows];
     }
     /// <summary>Returns whether an access reaches a frame that binds sweeps over a row family to one member: any access
-    /// but one only another member's bindings make (<see cref="CellAccess.IsMember"/>).</summary>
+    /// but one only another member's bindings make (<see cref="CellAccess.OwnMember"/>).</summary>
     /// <param name="access">The access.</param>
     /// <param name="member">The family index the frame binds, or <see langword="null"/> for every member.</param>
     /// <returns><see langword="true"/> when the access is the frame's.</returns>
-    public static bool InScope(CellAccess access, int? member) => ((member is not { } scope) || !access.IsMember || (access.Member == scope));
+    public static bool InScope(CellAccess access, int? member) => ((member is not { } scope) || !access.OwnMember || (access.Member == scope));
 }

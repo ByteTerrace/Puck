@@ -109,6 +109,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         // key's binding in every member. Any other sweep's own reads open one binding.
         var members = ((rule.ForEachFamily is { } family) ? MemberShape(context: context, family: family) : (Count: 1L, Capacity: 1L));
 
+        // A member-each read (`family[$member][$each]`) opens the one binding its cell names.
         long Own(CellAccess access) => (access.Members ? 1L : (access.Each ? members.Count : ((access.IsMember || access.MemberKey) ? members.Capacity : 1L)));
         // A read at rest under $each, or a host fact read for $each's body, opens that key in every member.
         var eachRead = false;
@@ -119,7 +120,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
             (deadline.TickOnLeft ? token.RightSource : token.LeftSource).CollectReads(into: due);
 
-            var ownDue = ((due.Count > 0) && due.TrueForAll(match: static access => (access.Each || access.IsMember || access.MemberKey)));
+            var ownDue = ((due.Count > 0) && due.TrueForAll(match: static access => (access.Each || access.OwnMember || access.MemberKey)));
 
             opened = (ownDue ? due.Max(selector: Own) : multiplier);
             shared = (!ownDue || (RuleDueList.SweepKind(rule: rule) == RuleDueList.Visit.Whole));
@@ -148,7 +149,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
                 continue;
             }
-            if (access.Each || access.Members || access.IsMember || access.MemberKey) {
+            if (access.Each || access.Members || access.OwnMember || access.MemberKey) {
                 opened = Math.Max(val1: opened, val2: Own(access: access));
                 eachRead |= access.Each;
 

@@ -57,7 +57,7 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
         ArgumentNullException.ThrowIfNull(argument: into);
 
         if (RowFrom is { } live) {
-            live.CollectReads(into: into);
+            live.CollectCellReads(into: into, key: KeyFrom);
         } else {
             into.Add(item: new CellAccess(
                 Key: ((KeyFrom is null)

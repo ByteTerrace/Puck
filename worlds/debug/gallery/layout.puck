@@ -492,7 +492,8 @@ function toyboxAt(s) = [bayX(s.bay), galleryFloor[toyboxLevel], tileZ(s.row)]
 // gallery's fourth tile row, its far chairs a tile short of the arcade's piers, and the back row out in the wing, its
 // near chairs a tile and a half short of the wing's south wall, so every chair keeps 2 m of aisle behind it. Each
 // station's near chair faces north (+z) across its glass and its far chair south. A station's id is its row and column
-// (`a1` to `a6` the front row west to east, `b1` to `b6` the back), and is the alias of its instance (games.puck).
+// (`a1` to `a6` the front row west to east, `b1` to `b6` the back), which names its table, board and bodies; the
+// console and the stations' rows name it by its place in the list, 0 to 11 in that order.
 let gameStationLevel = wingLevel
 let galleryGameBays = range(5, 11)
 let galleryGameRows = [
@@ -505,10 +506,9 @@ let galleryGameStations = flatMap(galleryGameRows, row => map(range(0, length(ga
   id: $"{row.name}{n + 1}"
   at: galleryWorld(bayX(galleryGameBays[n]), (galleryFloor[gameStationLevel] - 0.5), row.z)
 }))
-// The stations the gallery booted alone stands (games.puck): the plan's first `galleryRoomStood`. The rule work sheet
-// admits eleven beside the rest of the building; the twelfth, b6, waits on the stations' rules becoming one set over
-// every station (game-station.md, "Cost").
-let galleryRoomStood = 11
+// The stations the gallery booted alone stands (games.puck): the plan's first `galleryRoomStood`, every one, since the
+// stations play one set of rules (game-station.md, "Cost").
+let galleryRoomStood = 12
 let galleryRoomStations = map(range(0, galleryRoomStood), i => galleryGameStations[i])
 
 // Level 1's handheld rentals (rentals.puck): a pool of one brick and one advanced brick for each seat's body (bodies 0

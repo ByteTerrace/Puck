@@ -273,6 +273,24 @@ public sealed class LiveRow {
         CollectMembers(into: into, isSet: isSet);
     }
     private void CollectMembers(List<CellAccess> into, bool isSet) => CollectMembers(each: SelectsOwnMember, family: m_family, into: into, isSet: isSet);
+    /// <summary>Appends what a read of one cell through this reference reaches, plus the cells the index resolves
+    /// through: the cell under the binding's <c>$each</c> key of the member the binding's own key selects
+    /// (<see cref="CellReach.MemberEach"/>), or every row the reference can select when the cell or the member is any
+    /// other.</summary>
+    /// <param name="key">The cell's key indirection, or <see langword="null"/> for a literal key.</param>
+    /// <param name="into">The read set being collected.</param>
+    public void CollectCellReads(CompiledCellRef? key, List<CellAccess> into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        if ((Table is null) && SelectsOwnMember && (key is { IsEach: true })) {
+            CollectMembers(each: true, family: m_family, into: into, isSet: false, reach: CellReach.MemberEach);
+            CollectIndexReads(into: into);
+
+            return;
+        }
+
+        CollectReads(into: into);
+    }
     /// <summary>Appends every member row of a family, as any cell of it. A member the binding's own key selects is
     /// tagged with the family index that selects it (<see cref="CellReach.Member"/>), so a due list wakes the bindings
     /// whose own key spells it.</summary>
@@ -280,7 +298,9 @@ public sealed class LiveRow {
     /// <param name="each">Whether the binding's own key selects the member.</param>
     /// <param name="into">The access set being collected.</param>
     /// <param name="isSet">Whether the access replaces the row's contents.</param>
-    internal static void CollectMembers(RowFamily family, bool each, List<CellAccess> into, bool isSet) {
+    /// <param name="reach">How a member the binding's own key selects is reached: whole (<see cref="CellReach.Member"/>), or
+    /// at the cell under its <c>$each</c> key (<see cref="CellReach.MemberEach"/>).</param>
+    internal static void CollectMembers(RowFamily family, bool each, List<CellAccess> into, bool isSet, CellReach reach = CellReach.Member) {
         var slots = family.Slots;
         var count = ((slots is null) ? family.Count : slots.Length);
 
@@ -294,7 +314,7 @@ public sealed class LiveRow {
                 IsSet: isSet,
                 Key: default,
                 Member: (each ? index : -1),
-                Reach: (each ? CellReach.Member : CellReach.Key),
+                Reach: (each ? reach : CellReach.Key),
                 RowOrdinal: ordinal
             ));
         }

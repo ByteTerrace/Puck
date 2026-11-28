@@ -695,6 +695,8 @@ public static partial class RuleCompiler {
             throw new UnreachableException();
         }
 
+        SplitMemberField(key: ref key, name: ref rowName);
+
         // A live destination selects one row of a zone table or a declared family per firing; the selection's first
         // candidate stands for the whole set at compile time, because every member shares its kind and shape. A family of
         // slots is written by its member index at its one cell (`turn[$member] = 1`).
