@@ -10,6 +10,7 @@
 // style rows and programs and bakes nothing. She boots Cel, the debug world's treatment.
 import "../../../standard/inputs"
 import "../../../standard/rig"
+import "../../../standard/form-transition"
 import "body"
 import "suits"
 import "../../../standard/menu"
@@ -52,6 +53,11 @@ text {
 // flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is flight mode itself, the heel and nozzle
 // glows it lights. Lane 3 is the heel jets' flame under the air jump. The scout suit grants no jetpack and no air jump,
 // so only its dash lights its pods.
+//
+// How she changes form (../../../standard/form-transition.puck): a suit comes apart and goes together plate by plate, its
+// moving parts blown off when she sheds it and flown on and locked when she suits up, while her bare body dissolves into
+// motes and rebuilds behind a sweeping edge. Between the two suits the plates fly both ways; between the scout suit and
+// her body, motes.
 looks [
   {
     motion {
@@ -71,6 +77,7 @@ looks [
     name: "moth"
     scale: 1
     source: creation(prototypeId: moth)
+    transition: formPieces()
   }
   {
     motion {
@@ -85,6 +92,11 @@ looks [
     name: "moth-scout"
     scale: 1
     source: creation(prototypeId: `moth-scout`)
+    transition: {
+      arrive: formMaterialize()
+      leave: formDissolve()
+      switches [{ look: "moth", arrive: formAssemble(), leave: formShed() }]
+    }
   }
   {
     motion {
@@ -102,6 +114,7 @@ looks [
     name: "moth-pilot"
     scale: 1
     source: creation(prototypeId: `moth-pilot`)
+    transition: formMotes()
   }
 ]
 

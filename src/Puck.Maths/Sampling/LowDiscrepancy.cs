@@ -54,6 +54,21 @@ public static class LowDiscrepancy {
         return new Vector3(x: (radius * MathF.Cos(x: angle)), y: y, z: (radius * MathF.Sin(x: angle)));
     }
 
+    /// <summary>Returns the direction on the unit sphere at a point of the unit square, by Archimedes' equal-area map:
+    /// <paramref name="u"/> sets the height along Z and <paramref name="v"/> the turn about it, so a uniform point of the
+    /// square (two draws of a stream, or a pair of a low-discrepancy sequence) gives a uniform direction. Presentation tier
+    /// (float).</summary>
+    /// <param name="u">The height coordinate, in [0, 1]: zero is −Z, one is +Z.</param>
+    /// <param name="v">The turn coordinate, in [0, 1]: one whole turn about Z from +X.</param>
+    /// <returns>The unit direction.</returns>
+    public static Vector3 SphereAt(float u, float v) {
+        var z = ((2f * u) - 1f);
+        var radius = MathF.Sqrt(x: MathF.Max(x: 0f, y: (1f - (z * z))));
+        var angle = (2f * MathF.PI * v);
+
+        return new Vector3(x: (radius * MathF.Cos(x: angle)), y: (radius * MathF.Sin(x: angle)), z: z);
+    }
+
     /// <summary>Returns the radical inverse of <paramref name="index"/> in base <paramref name="radix"/>: its digits
     /// mirrored about the radix point, the <paramref name="index"/>-th point of the van der Corput sequence, whose pairs in
     /// coprime bases are the Halton sequence. The digits accumulate exactly as an integer numerator over the radix power

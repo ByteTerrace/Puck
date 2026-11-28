@@ -1325,7 +1325,13 @@ laws exercise that boundary.
   would pose every frame at a stride's speed in some view, every other look
   its look assignment's selectors switch between, so a switch near a view
   draws the new form on the next frame; a form neither named nor drawn
-  rests on the root and costs no pose. `world.residency` prints `forms`,
+  rests on the root and costs no pose. A form whose look plays a leave
+  effect lingers past the hand-over (`SdfMeshFormRange.Lingers`, set by
+  the pool when the form loses the name while drawn): it is neither
+  dormant nor held, so its rows draw beside the new form until the pool
+  publishes it without the mark (`WorldCreationInstances.Transitions.cs`'s
+  `ForgetLinger`, the one door), and it rests on nothing meanwhile.
+  `world.residency` prints `forms`,
   `forms-held`, `forms-handed`, `form-holds` and the dormant groups,
   meshes and bytes (an upper bound: a mesh a drawn group shares costs
   nothing more).

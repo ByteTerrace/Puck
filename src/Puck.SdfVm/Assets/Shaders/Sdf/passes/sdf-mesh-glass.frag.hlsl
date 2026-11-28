@@ -6,6 +6,7 @@
 #include "../frame/sdf-mesh.hlsli"
 #include "../frame/sdf-mesh-raster.hlsli"
 #include "../frame/sdf-stamp-fade.hlsli"
+#include "../frame/sdf-form-band.hlsli"
 #include "../frame/sdf-visibility.hlsli"
 #define SDF_GLASS_ACCUMULATES
 #include "../frame/sdf-glass.hlsli"
@@ -19,6 +20,7 @@ struct GlassFragment {
 
 GlassFragment PSMain(MeshRasterVertex input, uint primitive : SV_PrimitiveID) {
     sdfStampFade(input.draw, uint2(input.position.xy));
+    sdfMeshFormBandClip(input.draw, input.world);
     ViewportData view = worldView();
     uint2 pixel = uint2(input.position.xy);
     float t = length(input.world - view.position.xyz);

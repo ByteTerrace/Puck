@@ -109,6 +109,10 @@ public readonly record struct WorldLookMotion(
 /// collision volume.</param>
 /// <param name="Motion">How the look animates with the body (see <see cref="WorldLookMotion"/>).</param>
 public sealed record WorldLook(DocumentIdentifier Name, WorldLookSource Source, float Scale, WorldLookMotion Motion) {
+    /// <summary>Gets how a body's form changes on screen as it starts or stops wearing the look (see
+    /// <see cref="WorldFormTransition"/>), or <see langword="null"/>, the default, for an instant switch.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldFormTransition? Transition { get; init; }
     /// <summary>Gets the implicit single look every body wears when a world authors no <c>looks</c> section — the
     /// occupant-owned catalog pick at full gait.</summary>
     public static WorldLook Implicit { get; } = new WorldLook(

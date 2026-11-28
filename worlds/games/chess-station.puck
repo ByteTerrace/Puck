@@ -123,6 +123,7 @@ template chessStationSet(stations) {
       name: name
       scale: chessStationPieceScale
       source: creation(prototypeId: name)
+      transition: holodeckTransition
     }),
     holodeckLooks(looks: chessStationPawnLooks(stations), scale: chessStationPieceScale)
   )

@@ -274,7 +274,7 @@ float sdfMeshClipDistance(uint record, float3 world) {
 uint sdfMeshDisplacementEntry(uint record) {
     uint handle = sdfMeshRecordWord(record + SDF_MESH_DISPLACEMENT_WORD);
 
-    return ((handle == SDF_FRAME_SAMPLED_NONE) ? SDF_FRAME_SAMPLED_NONE : sdfFrameSampled[handle]);
+    return ((handle == SDF_FRAME_SAMPLED_NONE) ? SDF_FRAME_SAMPLED_NONE : sdfFrameSampled[SDF_FRAME_SAMPLED_TABLE_HEADER_WORDS + handle]);
 }
 // A height field's height above its origin at a point's x and z, and its gradient along x and z, in world units: the
 // bilinear height over the four nearest column centres, the frame's heights or the previous frame's, weighed over the

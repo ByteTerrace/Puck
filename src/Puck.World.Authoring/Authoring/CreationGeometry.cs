@@ -45,6 +45,44 @@ public static class CreationGeometry {
         ), ScalarCount: scalarCount);
     }
 
+    /// <summary>Returns the box a creation's shapes fill at rest, in its own frame at unit scale: every shape that adds
+    /// to the solid (a carving shape is left out, since it only removes), each by its stamp box, or by its bound sphere's
+    /// box where no box holds it (a flared, twisted or swept shape).</summary>
+    /// <param name="document">The creation's engine document.</param>
+    /// <returns>The least and greatest corners; an inverted box (positive infinity low, negative infinity high) for a
+    /// creation with no finite solid shape.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    public static (System.Numerics.Vector3 Low, System.Numerics.Vector3 High) RestBox(CreationDocument document) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        var shapes = (document.Shapes ?? []);
+        var low = new System.Numerics.Vector3(value: float.PositiveInfinity);
+        var high = new System.Numerics.Vector3(value: float.NegativeInfinity);
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            if (Puck.SignedDistance.SdfBoundAlgebra.Carves(blend: (shapes[index].Blend ?? Puck.SignedDistance.SdfBlendOp.Union))) {
+                continue;
+            }
+
+            var box = CreationStampEmitter.ShapeStampBox(document: document, shapeIndex: index, transform: RestTransform);
+
+            if (box is not { } corners) {
+                var (center, radius) = CreationStampEmitter.ShapeStampBound(document: document, shapeIndex: index, transform: RestTransform);
+
+                corners = ((center - new System.Numerics.Vector3(value: radius)), (center + new System.Numerics.Vector3(value: radius)));
+            }
+            if (!float.IsFinite(f: ((corners.Low.X + corners.Low.Y) + corners.Low.Z)) || !float.IsFinite(f: ((corners.High.X + corners.High.Y) + corners.High.Z))) {
+                continue;
+            }
+
+            low = System.Numerics.Vector3.Min(value1: low, value2: corners.Low);
+            high = System.Numerics.Vector3.Max(value1: high, value2: corners.High);
+        }
+
+        return (low, high);
+    }
+    private static readonly CreationStampTransform RestTransform = new(System.Numerics.Vector3.Zero, System.Numerics.Quaternion.Identity, 1f, null);
+
     /// <summary>A whole creation's worst-case reach from its own local origin — the largest
     /// <see cref="CreationStampEmitter.ShapeReach"/> across every authored shape (folds, warps, cells, dilation and
     /// onion charged) and a catalog-free estimate of every text run, the instance bound a stamp of it needs (a

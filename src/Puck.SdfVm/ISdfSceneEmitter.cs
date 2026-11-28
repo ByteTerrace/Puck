@@ -152,6 +152,11 @@ public interface ISdfSceneEmitter {
     /// (<see cref="SdfSlotClip"/>), in absolute slots. The host reads it after packing, every frame. The default, an
     /// empty list, is correct for an emitter whose bodies never straddle one.</summary>
     IReadOnlyList<SdfSlotClip> SlotClips => [];
+    /// <summary>Gets the form bands this emitter's last <see cref="PackDynamicTransforms"/> found sweeping its slots
+    /// (<see cref="SdfFormBand"/>), in absolute slots. The host reads it after packing, every frame; the emitter hands a
+    /// new list whenever a band changes and never rewrites one it handed. The default, an empty list, is correct for an
+    /// emitter whose forms never change.</summary>
+    IReadOnlyList<SdfFormBand> FormBands => [];
     /// <summary>Gets the revision of <see cref="MeshDraws"/>' content: moved whenever the emitter rewrote its list in
     /// place. An emitter that supplies a new list instead may leave it 0.</summary>
     long MeshDrawsRevision => 0;

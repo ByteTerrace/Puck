@@ -80,6 +80,11 @@ public readonly record struct SdfFrameContent(SdfProgram Program, bool ProgramCh
     /// <see cref="ISdfSceneEmitter.SlotClips"/>), and the mesh bake's dressing clips each draw in a range and adds its
     /// carried copy through <see cref="SdfMeshRows.Writer.SetClips"/>. Empty when no body straddles a portal.</summary>
     public IReadOnlyList<SdfSlotClip> SlotClips { get; init; } = [];
+    /// <summary>Gets the form bands this frame draws (<see cref="SdfFormBand"/>): the frame's producer fills it from every
+    /// emitter's <see cref="ISdfSceneEmitter.FormBands"/>, and a residency's tables pack it into the frame's sampled table.
+    /// The producer publishes a new list whenever a band changes and never rewrites one it published. Empty when no form
+    /// is changing.</summary>
+    public IReadOnlyList<SdfFormBand> FormBands { get; init; } = [];
     /// <summary>The lit path's lights table, its shadow slots and its curvature shading, or <see langword="null"/>, the
     /// default, for the pinned sun an unauthored world renders (<see cref="SdfFrame.Lights"/>).</summary>
     public SdfLights? Lights { get; init; }

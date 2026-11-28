@@ -26,6 +26,16 @@ public static partial class SdfWorldPackage {
     /// the output pixels whose exposed luminance falls in its log bin, which the composite adds to and its recorder reads
     /// back (<c>uint</c>).</summary>
     public const string ExposureMeterWritten = "exposureMeterRW";
+    /// <summary>The motes' light at half the output extent, three words a texel (red, green, blue in fixed point,
+    /// <c>SDF_MOTE_LIGHT_SCALE</c> a nit), which the mote pass adds every visible mote into and the composite adds to its
+    /// pixel before the exposure (<c>uint</c>). The composite's recorder owns it and clears it before the mote pass; a
+    /// buffer shorter than the grid (the tables' dummy, bound while no mote flies) holds no mote.</summary>
+    public const string MoteLightWritten = "moteLightRW";
+    /// <summary>The fixed-point steps a nit of the motes' light (<see cref="MoteLightWritten"/>) holds: a word reaches about
+    /// sixteen million nits, and a mote adds no less than a step's share.</summary>
+    public const float MoteLightScale = 256f;
+    /// <summary>The words a texel of the motes' light holds: red, green and blue.</summary>
+    public const int MoteLightTexelWords = 3;
     /// <summary>The lit image the sky and composite passes read: views' color at the render extent for the sky, and the
     /// lit image at the output extent for the composite.</summary>
     public const string LitImage = "lit";
@@ -73,6 +83,7 @@ public static partial class SdfWorldPackage {
             Read(element: ShaderValueType.Uint, name: VisibilityRecords),
             Read(element: ShaderValueType.Uint2, name: TransportRead),
             Written(element: ShaderValueType.Uint, name: ExposureMeterWritten),
+            Written(element: ShaderValueType.Uint, name: MoteLightWritten),
             Read(element: ShaderValueType.Uint, name: FieldColors),
             Read(element: ShaderValueType.Uint, name: GlassSkyFilter),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyBaseImage, type: ShaderValueType.Float4),

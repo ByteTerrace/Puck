@@ -8,10 +8,12 @@
 #include "../frame/sdf-mesh.hlsli"
 #include "../frame/sdf-mesh-raster.hlsli"
 #include "../frame/sdf-stamp-fade.hlsli"
+#include "../frame/sdf-form-band.hlsli"
 
 // Discard must precede depth writes: an early-depth annotation would leave invisible avatar depth in the holes.
 float4 PSMain(MeshRasterVertex input, uint primitive : SV_PrimitiveID) : SV_Target0 {
     sdfStampFade(input.draw, uint2(input.position.xy));
+    sdfMeshFormBandClip(input.draw, input.world);
     ViewportData view = worldView();
     float3 relative = (input.world - view.position.xyz);
 

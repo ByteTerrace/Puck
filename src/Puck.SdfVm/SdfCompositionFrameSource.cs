@@ -516,6 +516,39 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource, IDispos
     }
 
     private readonly List<SdfSlotClip> m_composedClips = [];
+    // Reads every emitter's form bands after packing: one emitter's list passes through as it is, several are joined into
+    // a new list in emitter order (each emitter's list is immutable once handed, so a frame copy may keep it), and none is
+    // the one empty list. The list it composed last is kept while every emitter hands the same lists.
+    private IReadOnlyList<SdfFormBand> ComposeFormBands() {
+        IReadOnlyList<SdfFormBand>? only = null;
+        var lists = 0;
+        var same = (m_formBandSources.Count == m_emitters.Count);
+
+        for (var index = 0; (index < m_emitters.Count); index++) {
+            var bands = m_emitters[index].FormBands;
+
+            if (bands.Count > 0) { only = bands; lists++; }
+            same = (same && ReferenceEquals(objA: m_formBandSources[index], objB: bands));
+        }
+        if (lists == 0) { return []; }
+        if (lists == 1) { return only!; }
+        if (same) { return m_composedFormBands; }
+        m_formBandSources.Clear();
+
+        var joined = new List<SdfFormBand>();
+
+        for (var index = 0; (index < m_emitters.Count); index++) {
+            var bands = m_emitters[index].FormBands;
+
+            m_formBandSources.Add(item: bands);
+            joined.AddRange(collection: bands);
+        }
+        m_composedFormBands = joined;
+        return joined;
+    }
+
+    private readonly List<IReadOnlyList<SdfFormBand>> m_formBandSources = [];
+    private IReadOnlyList<SdfFormBand> m_composedFormBands = [];
     // Reads every emitter's mesh draws after packing and recomposes the rows an emitter's journal names changed.
     private void ComposeMeshDraws() {
         m_meshDraws.Begin(parts: m_emitters.Count);
@@ -908,7 +941,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource, IDispos
             for (var owner = 0; (owner < m_emitters.Count); owner++) { m_meshForms.AddRange(collection: m_emitters[owner].MeshForms); }
         }
         dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshInstances: m_meshInstances, meshTemplateRanges: m_meshTemplateRanges, sampled: m_sampled, slotClips: ComposeSlotClips(),
-            copyChanges: m_copyChanges.Reader, copyChangesSerial: m_copyChanges.Serial, meshForms: m_meshForms);
+            copyChanges: m_copyChanges.Reader, copyChangesSerial: m_copyChanges.Serial, meshForms: m_meshForms, formBands: ComposeFormBands());
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         if (Frames == 0) { Console.Error.WriteLine(value: $"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.WordCount} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }
         Frames++;

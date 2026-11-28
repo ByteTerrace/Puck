@@ -299,6 +299,7 @@ public sealed partial class WorldCreationInstances {
         PackGuess(client: client, deltaSeconds: deltaSeconds, moved: moved, parkPosition: parkPosition, slotBase: slotBase, transforms: transforms);
         WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Packs);
         PublishRates(client: client, slotBase: slotBase);
+        StepFormTransitions(client: client, deltaSeconds: deltaSeconds, moved: moved, slotBase: slotBase, transforms: transforms);
         PublishForms(slotBase: slotBase);
 
         // The runs are composed again, in pool order, only in a pack that changed a registration's clip. Keep unchanged

@@ -1630,7 +1630,17 @@ public sealed partial class SdfProgram {
         PackedWords[((entryBase + WordsPerVector) + 3)] = ((uint)record.End);
     }
 
-    internal static void WriteVector4(Span<uint> words, int baseIndex, float x, float y, float z, float w) {
+    /// <summary>Writes four floats into four consecutive words of a GPU table as their bits: the one way a table packer
+    /// lays a <c>float4</c> a kernel reads back with <c>asfloat</c>.</summary>
+    /// <param name="words">The table's words.</param>
+    /// <param name="baseIndex">The first word written.</param>
+    /// <param name="x">The first float.</param>
+    /// <param name="y">The second float.</param>
+    /// <param name="z">The third float.</param>
+    /// <param name="w">The fourth float.</param>
+    /// <exception cref="IndexOutOfRangeException"><paramref name="words"/> holds fewer than four words from
+    /// <paramref name="baseIndex"/>.</exception>
+    public static void WriteVector4(Span<uint> words, int baseIndex, float x, float y, float z, float w) {
         words[baseIndex] = BitConverter.SingleToUInt32Bits(value: x);
         words[(baseIndex + 1)] = BitConverter.SingleToUInt32Bits(value: y);
         words[(baseIndex + 2)] = BitConverter.SingleToUInt32Bits(value: z);

@@ -66,6 +66,11 @@ public sealed partial class WorldRigidAssets {
 
         public int CarryEpoch;
 
+        // The occupant the copy was last packed for and its stamp, which tell a new occupant of the body's population
+        // slot from the one before (WorldRigidAssets.Transitions); null before the first pack.
+        public WorldEntityAddress? Occupant;
+        public WorldCreationInstances.BodyStamp? Occupied;
+
         public readonly WorldStateLease Reads = new();
     }
 
@@ -180,6 +185,10 @@ public sealed partial class WorldRigidAssets {
             m_offsets.Add(item: m_slotCount);
             m_slotCount += metadata.Slots;
         }
+        // A body the census no longer holds leaves a remnant playing its leave effect, from its copy as it last stood.
+        var census = new HashSet<int>(collection: bodies.Select(selector: static body => body.BodyIndex));
+
+        LeaveRetired(stays: census.Contains);
         m_bodies.Clear();
         m_liveBodies.Clear();
         // Every index may name another body now: what is kept by index starts again, and the next pack reads them all.
@@ -205,8 +214,12 @@ public sealed partial class WorldRigidAssets {
         // PrepareFrame reads this count before the first pack sizes the root table.
         m_bodySlotCount = m_slotCount;
         var copyCount = (m_bodies.Count + m_staticCopies.Count);
+
+        // The remnants come off the tail first, so no body or static copy is laid out on a remnant's row.
+        while ((m_copies.Count > 0) && m_remnants.Contains(item: m_copies[^1])) { m_copies.RemoveAt(index: (m_copies.Count - 1)); }
         while (m_copies.Count < copyCount) { m_copies.Add(item: new SdfMeshInstance(0, new object(), new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), 1, IsDynamic: true)); }
         if (m_copies.Count > copyCount) { m_copies.RemoveRange(copyCount, (m_copies.Count - copyCount)); }
+        SeatRemnants();
     }
     /// <summary>Emits each local template once. Body membership and styling do not affect this program.</summary>
     public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, int slotBase, PackedFontAtlasCatalog? text, WorldPickMapBuilder picks, WorldShapeIsolation? isolation = null) {
@@ -371,6 +384,8 @@ public sealed partial class WorldRigidAssets {
             VisitCount = count;
         }
         PackRiding(source: source);
+        StepFormPlays(deltaSeconds: deltaSeconds);
+        m_formsArmed = true;
         if (anyMoved) {
             m_poseRevision++;
         }
@@ -415,6 +430,8 @@ public sealed partial class WorldRigidAssets {
         var endSlot = (slotBase + (((asset + 1) < m_offsets.Count) ? m_offsets[(asset + 1)] : m_bodySlotCount));
         var previous = m_copies[index];
         var addressKey = source.EntityAddress(index: body.BodyIndex);
+
+        NoteOccupant(address: addressKey, body: body, copy: previous, motion: motion);
         var epochKey = source.PoseEpoch(index: body.BodyIndex);
         var motionIdentity = (((previous.MotionIdentity is ValueTuple<WorldPickTarget, WorldEntityAddress, int> key) && ReferenceEquals(objA: key.Item1, objB: target) && (key.Item2 == addressKey) && (key.Item3 == epochKey))
             ? previous.MotionIdentity : (target, addressKey, epochKey));

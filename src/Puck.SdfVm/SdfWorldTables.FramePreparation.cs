@@ -332,5 +332,6 @@ public sealed partial class SdfWorldTables {
         );
         PackFrameSampled(frame: frame);
         StageMeshRegion(frame: frame);
+        PackFormBandRows();
     }
 }

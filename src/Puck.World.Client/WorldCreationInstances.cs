@@ -115,9 +115,11 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         // A body-rooted registration's form (WorldCreationInstances.Forms): one of the creations its body's look can wear,
         // drawn by the bake one an owner. FormNamed says the body's look wears it now (m_bodySlots holds it), Rested that
         // the last pack held it at rest on the root as a form neither named nor drawn, and FormDrawnSeen the drawn flag
-        // the pool last acted on. Null for a row-rooted registration.
+        // the pool last acted on. Null for a row-rooted registration. FormLingers says the form, no longer named, is kept
+        // drawn while its look's leave effect plays (WorldCreationInstances.Transitions).
         public SdfMeshForm? Form;
         public bool FormNamed;
+        public bool FormLingers;
         public bool Rested;
         public bool FormDrawnSeen;
 
