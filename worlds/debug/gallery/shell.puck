@@ -648,21 +648,30 @@ let shellRails = concat(
 )
 // Level 1's lattice (layout.puck's toyLattice values): a four-tile panel in each arcade bay along the void's south and
 // north edges, from pier to pier, but the lifts' bay, whose shafts' fronts close it, and a half-tile one from the last
-// pier to the east wall; and the bridge's edge in
-// four-tile panels about one tile on the nave's axis. Each panel stands
-// on level 1's floor and reaches into the fascia hanging under level 2's balcony edge, and neighbouring panels' posts overlap at every joint and corner. A loose panel (`slat`, its
-// `toyboxSlats` cell) shows its `open` prototype while its cell is 1.
+// pier to the east wall; and the bridge's edge in four-tile panels about one tile on the nave's axis. Each panel stands
+// on level 1's floor and reaches into the fascia hanging under level 2's balcony edge, and neighbouring panels' posts
+// overlap at every joint and corner. Every panel but the loose ones is a rope net (`cells` and `columns` lay its net
+// facet), its strands in the pair `n` of look.puck's `lookToyNet`. A loose panel (`slat`, its `toyboxSlats` cell) is a
+// net drawn over a pane and shows its `open` prototype while its cell is 1.
 let shellLatticeHeight = ((((galleryStorey * 2) - shellFascia) - galleryFloor[1]) + 0.05)
 let shellLatticeTileCells = (galleryTile / toyLatticePitch)
 let shellLatticeBayCells = (galleryBayTiles * shellLatticeTileCells)
 let shellLatticeBays = filter(range(arcadeWestBays, galleryBays), b => (b != liftBay))
 let shellBridgeMid = ((galleryNaveTiles - 1) / 2)
+// The bridge's four net panels, north to south about its loose middle tile.
+let shellBridgeTiles = [0, 4, (shellBridgeMid + 1), (shellBridgeMid + 5)]
+// The strand pairs: a bay's by its index, so the panels across the nave wear one; the half panels' after the last bay's;
+// the bridge's continuing from the half panels round the void's west end.
+let shellNetPairs = length(lookToyNetPairs)
+let shellLooseNet = (toyLatticeLooseBay % shellNetPairs)
+let shellHalfNet = (galleryBays % shellNetPairs)
 function shellBridgeZ(tile, tiles) = (tileEdgeZ((galleryAisleTiles + tile)) + ((tiles * galleryTile) / 2))
 function shellLatticeBay(b, edge, z) = ((b == toyLatticeLooseBay) ? {
-  id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: edge, open: $"gallery-lattice-open-{(b % 6)}", net: 0
+  id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-loose-{shellLooseNet}", slat: edge
+  open: $"gallery-lattice-open-{shellLooseNet}", cells: shellLatticeBayCells, columns: 12
 } : {
-  id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: "", open: ""
-  net: (((b == toyLatticeNetBay) and (edge == "north")) ? 1 : 0)
+  id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % shellNetPairs)}", slat: "", open: ""
+  cells: shellLatticeBayCells, columns: 12
 })
 // Where each level-1 branch lands (layout.puck's treeLimbs), the bay stands open and a magic barrier fills the arch behind
 // it (architecture.puck's filmArch, in the arcade's plane): a dead end that sells a way across. Its pane holds
@@ -681,17 +690,18 @@ let shellLatticeGates = map(shellGateEdges, e => { id: $"barrier-{e.edge}", x: b
 let shellLattices = concat(
   map(filter(shellLatticeBays, b => (b != shellGateEdges[0].bay)), b => shellLatticeBay(b, "south", (naveSouth - balconyInset))),
   map(filter(shellLatticeBays, b => (b != shellGateEdges[1].bay)), b => shellLatticeBay(b, "north", (naveNorth + balconyInset))),
-  [
-    { id: "east-south", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveSouth - balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "", net: 0 }
-    { id: "east-north", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveNorth + balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "", net: 0 }
-  ],
-  map([0, 4, (shellBridgeMid + 1), (shellBridgeMid + 5)], tile => {
-    id: $"bridge-{tile}", x: (naveWest - balconyInset), z: shellBridgeZ(tile, 4), yaw: 90, prototype: $"gallery-lattice-{(tile % 6)}", slat: "", open: "", net: 0
+  map(["south", "north"], edge => {
+    id: $"east-{edge}", x: ((pierX(galleryBays) + galleryEast) / 2), z: ((edge == "south") ? (naveSouth - balconyInset) : (naveNorth + balconyInset))
+    yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "", cells: (shellLatticeTileCells / 2), columns: 3
+  }),
+  map(range(0, length(shellBridgeTiles)), k => {
+    id: $"bridge-{shellBridgeTiles[k]}", x: (naveWest - balconyInset), z: shellBridgeZ(shellBridgeTiles[k], 4), yaw: 90
+    prototype: $"gallery-lattice-{((shellHalfNet + 1 + k) % shellNetPairs)}", slat: "", open: "", cells: shellLatticeBayCells, columns: 12
   }),
   [
     {
       id: "loose-bridge", x: (naveWest - balconyInset), z: shellBridgeZ(shellBridgeMid, 1), yaw: 90, prototype: "gallery-lattice-tile", slat: "bridge"
-      open: "gallery-lattice-tile-open", net: 0
+      open: "gallery-lattice-tile-open", cells: shellLatticeTileCells, columns: 4
     }
   ]
 )
@@ -1011,21 +1021,18 @@ template shellPrototypes() {
       balustrade(base: 0, length: 2, posts: 2)
     }
   }
-  // Level 1's lattice panels, each in the colours of a pastel `n` (look.puck's lookToyLattice): a bay's four tiles, the
-  // half tile at each east end, the bridge's middle tile, the stairs' head, and the open panels a loose one swaps to.
+  // Level 1's lattice panels, each strung in the strand pair `n` (look.puck's lookToyNet): a net frame for a bay's or the
+  // bridge's four tiles in each pair and one for the half tile at each east end, whose nets give and collide through
+  // their placements' net facets, so they hold no pane; and the loose panels' closed forms, a net drawn over a pane,
+  // with the open forms they swap to.
   let latticeKinds = concat(
-    map(range(0, length(lookToyPiers)), n => {
-      id: $"gallery-lattice-{n}", n: n, cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1, pane: 1
-    }),
-    map(distinct([(toyLatticeLooseBay % 6)]), n => {
-      id: $"gallery-lattice-open-{n}", n: n, cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0, pane: 1
-    }),
+    map(range(0, shellNetPairs), n => { id: $"gallery-lattice-{n}", n: n, cells: shellLatticeBayCells, upright: 1, pane: 0 }),
     [
-      { id: "gallery-lattice-half", n: galleryBays, cells: (shellLatticeTileCells / 2), pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1, pane: 1 }
-      { id: "gallery-lattice-tile", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1, pane: 1 }
-      { id: "gallery-lattice-tile-open", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0, pane: 1 }
-      // The rope net panel's frame: its net gives and collides through the placement's net facet, so it holds no pane.
-      { id: "gallery-lattice-net", n: (toyLatticeNetBay % 6), cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1, pane: 0 }
+      { id: "gallery-lattice-half", n: shellHalfNet, cells: (shellLatticeTileCells / 2), upright: 1, pane: 0 }
+      { id: $"gallery-lattice-loose-{shellLooseNet}", n: shellLooseNet, cells: shellLatticeBayCells, upright: 1, pane: 1 }
+      { id: $"gallery-lattice-open-{shellLooseNet}", n: shellLooseNet, cells: shellLatticeBayCells, upright: 0, pane: 1 }
+      { id: "gallery-lattice-tile", n: shellHalfNet, cells: shellLatticeTileCells, upright: 1, pane: 1 }
+      { id: "gallery-lattice-tile-open", n: shellHalfNet, cells: shellLatticeTileCells, upright: 0, pane: 1 }
     ]
   )
   for kind in latticeKinds {
@@ -1034,16 +1041,16 @@ template shellPrototypes() {
         name: kind.id
         schema: "puck.creation.v2"
         palette: map(
-          latticePalette(lookToyLattice(kind.n).frame, lookToyLattice(kind.n).bar, lookToyLattice(kind.n).rail),
+          latticeNetPalette(lookToyNet(kind.n).frame, lookToyNet(kind.n).bar, lookToyNet(kind.n).rail, lookToyNet(kind.n).knot),
           entry => ((entry.glass != null) ? entry : shellBrushed(entry, lookBrushStructure))
         )
         lattice(
           base: 0,
           cells: kind.cells,
-          pitch: kind.pitch,
-          height: kind.height,
+          pitch: toyLatticePitch,
+          height: shellLatticeHeight,
           bar: toyLatticeBar,
-          rails: shellLatticeRails(kind.height),
+          rails: shellLatticeRails(shellLatticeHeight),
           upright: kind.upright,
           sill: kind.upright,
           net: toyLatticeNet,
@@ -1252,20 +1259,12 @@ template shellPlacements() {
       solid
     }
   }
-  for panel in filter(shellLattices, p => ((p.slat == "") and (p.net == 0))) {
+  // Level 1's rope nets (gallery.md "The lattice"): every panel but the loose ones is a lattice frame whose opening the
+  // standard's rope net fills, holdable, so it holds every body and gives: a body leaning on it bulges it, one that takes
+  // it climbs it and bellies it by its weight, and it settles and sleeps when no one touches it.
+  for panel in filter(shellLattices, p => (p.slat == "")) {
     placement $"gallery-lattice-{panel.id}" {
       prototype: panel.prototype
-      parent: "gallery"
-      position [panel.x, galleryFloor[1], panel.z]
-      yawDegrees: panel.yaw
-      solid
-    }
-  }
-  // The rope net panel (layout.puck's toyLatticeNetBay): a lattice frame whose net is the standard's rope net over its
-  // opening, holdable, so a body climbs it and its weight pulls it in, and one leaning on it bulges it.
-  for panel in filter(shellLattices, p => (p.net == 1)) {
-    placement $"gallery-lattice-{panel.id}" {
-      prototype: "gallery-lattice-net"
       parent: "gallery"
       position [panel.x, galleryFloor[1], panel.z]
       yawDegrees: panel.yaw
@@ -1273,7 +1272,7 @@ template shellPlacements() {
       grip {
         holdable: true
       }
-      net: latticeNet(cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight)
+      net: latticeNet(cells: panel.cells, pitch: toyLatticePitch, height: shellLatticeHeight, columns: panel.columns)
     }
   }
   for panel in filter(shellLattices, p => (p.slat != "")) {

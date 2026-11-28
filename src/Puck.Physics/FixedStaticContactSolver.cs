@@ -104,6 +104,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     /// <param name="candidates">The colliders of <paramref name="colliders"/> reachable from a region covering the
     /// volume grown by the margin, or the default value to visit every collider.</param>
     /// <param name="destination">The destination for the surfaces, in collider order, static before attached.</param>
+    /// <param name="dynamicCandidates">The colliders of <paramref name="dynamicColliders"/> reachable from the same
+    /// region, or the default value to visit every one.</param>
     /// <returns>The number of surfaces written, surfaces past the destination's length unreported; or -1 when a field
     /// collider lies within the margin and its partition does not narrow the region to one exact analytic collider or
     /// to none of its solid (<see cref="FixedFieldPartition"/>), since a field certifies contact only inside its own
@@ -112,7 +114,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     /// <see langword="null"/>.</exception>
     public int CollectContacts(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders, FixedVector3 position,
         in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin, in FixedColliderCandidates candidates,
-        Span<FixedSurfaceContact> destination) {
+        Span<FixedSurfaceContact> destination, in FixedColliderCandidates dynamicCandidates = default) {
         ArgumentNullException.ThrowIfNull(argument: colliders);
         ArgumentNullException.ThrowIfNull(argument: dynamicColliders);
 
@@ -123,7 +125,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             frames: colliders.Frames, grown: in grown, reach: reach, orientation: in orientation, position: position,
             source: FixedSurfaceColliderSource.Static, volume: in volume, written: 0);
 
-        return (written < 0) ? written : Collect(boxes: dynamicColliders.Boxes, candidates: default, colliders: dynamicColliders.Colliders, destination: destination,
+        return (written < 0) ? written : Collect(boxes: dynamicColliders.Boxes, candidates: in dynamicCandidates, colliders: dynamicColliders.Colliders, destination: destination,
             frames: dynamicColliders.Frames, grown: in grown, reach: reach, orientation: in orientation, position: position,
             source: FixedSurfaceColliderSource.Dynamic, volume: in volume, written: written);
     }
@@ -397,6 +399,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     /// <param name="up">The body's up axis, which the grounded test measures a contact normal's alignment against.</param>
     /// <param name="candidates">The colliders of <paramref name="colliders"/> reachable from a region around the body,
     /// or the default value to visit every collider.</param>
+    /// <param name="dynamicCandidates">The colliders of <paramref name="dynamicColliders"/> reachable from the same
+    /// region, or the default value to visit every one.</param>
     /// <returns>The grounded verdict, the surface it grounded on, and the last resolved non-walkable contact normal.</returns>
     public ContactResolution Resolve(
         FixedStaticColliderSet colliders,
@@ -406,9 +410,10 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         in FixedQuaternion orientation,
         ReadOnlySpan<FixedBodyColliderVolume> volumes,
         in FixedVector3 up,
-        FixedColliderCandidates candidates = default
+        FixedColliderCandidates candidates = default,
+        FixedColliderCandidates dynamicCandidates = default
     ) {
-        return ResolveSweep(candidates: candidates, colliders: colliders,
+        return ResolveSweep(candidates: candidates, dynamicCandidates: dynamicCandidates, colliders: colliders,
             dynamicColliders: dynamicColliders, orientation: in orientation, position: ref position, previousPosition: position, up: in up,
             velocity: ref velocity, volumes: volumes);
     }
@@ -426,12 +431,15 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     /// <param name="up">The body's unit up axis.</param>
     /// <param name="candidates">The colliders of <paramref name="colliders"/> reachable from a region around the move,
     /// or the default value to visit every collider.</param>
+    /// <param name="dynamicCandidates">The colliders of <paramref name="dynamicColliders"/> reachable from the same
+    /// region, or the default value to visit every one.</param>
     /// <returns>The support and obstruction witnesses.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="colliders"/> or <paramref name="dynamicColliders"/> is
     /// <see langword="null"/>.</exception>
     public ContactResolution ResolveSweep(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders,
         in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
-        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedColliderCandidates candidates = default) {
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedColliderCandidates candidates = default,
+        FixedColliderCandidates dynamicCandidates = default) {
         ArgumentNullException.ThrowIfNull(argument: colliders);
         ArgumentNullException.ThrowIfNull(argument: dynamicColliders);
         FixedStaticContactWork.Process.CountResolve();
@@ -440,7 +448,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             return new ContactResolution(Grounded: false, ObstructionNormal: default, Refusal: ContactRefusal.UnrepresentableSweep);
         }
         if ((volumes.IsEmpty) || ((colliders.Count == 0) && (dynamicColliders.Count == 0))) {
-            return ResolveEndpoint(candidates: candidates, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
+            return ResolveEndpoint(candidates: candidates, dynamicCandidates: dynamicCandidates, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
         }
         var radius = FixedQ4816.MaxValue;
 
@@ -453,9 +461,9 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         var travel = ((Int128.Abs(value: movement.X.Value) + Int128.Abs(value: movement.Y.Value)) + Int128.Abs(value: movement.Z.Value));
         var parts = travel.CeilingDivide(divisor: ((Int128)slice));
 
-        if ((parts <= 1) || !SweptBoundsMeetCollider(candidates: in candidates, colliders: colliders,
+        if ((parts <= 1) || !SweptBoundsMeetCollider(candidates: in candidates, dynamicCandidates: in dynamicCandidates, colliders: colliders,
             dynamicColliders: dynamicColliders, orientation: in orientation, position: in position, previousPosition: in previousPosition, volumes: volumes)) {
-            return ResolveEndpoint(candidates: candidates, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
+            return ResolveEndpoint(candidates: candidates, dynamicCandidates: dynamicCandidates, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
         }
         if (parts > long.MaxValue) {
             position = previousPosition;
@@ -475,11 +483,13 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         // The colliders every proof below reads are the ones the whole move can reach.
         var wholeMove = SweptBounds(orientation: in orientation, position: in position, previousPosition: in previousPosition, volumes: volumes);
         var indexed = (candidates.IsActive && candidates.Contains(box: in wholeMove));
+        var dynamicIndexed = (dynamicCandidates.IsActive && dynamicCandidates.Contains(box: in wholeMove));
 
         // Conservative advancement by the boxes' own closing speed: a run of slices no collider can reach is crossed
         // in one step, and only the slices that can meet a collider are solved, within the solve budget.
         while ((done < total) && (solved < budget)) {
             var clear = ClearSlices(candidates: in candidates, colliders: colliders, dynamicColliders: dynamicColliders, indexed: indexed,
+                dynamicCandidates: in dynamicCandidates, dynamicIndexed: dynamicIndexed,
                 movement: in movement, orientation: in orientation, remaining: (total - done), start: in resolved, total: total, volumes: volumes);
             var advance = ((clear > 0L) ? clear : 1L);
             var increment = split.Integrate(elapsedTicks: ((ulong)advance), ratePerSecond: movement);
@@ -498,7 +508,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 continue;
             }
 
-            result = ResolveEndpoint(candidates: candidates, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: resolved, up: up, velocity: ref velocity, volumes: volumes);
+            result = ResolveEndpoint(candidates: candidates, dynamicCandidates: dynamicCandidates, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: resolved, up: up, velocity: ref velocity, volumes: volumes);
             resolved = position;
             ++solved;
             if (result.ObstructionNormal != FixedVector3.Zero) { obstruction = result.ObstructionNormal; }
@@ -555,7 +565,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     // it: the least over every collider of the fraction ClearFractionOf proves, taken over the whole move and floored to
     // whole slices. Zero when any collider is within reach already or cannot be bounded, or a set carries no bounds.
     private long ClearSlices(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders, in FixedColliderCandidates candidates, bool indexed,
-        in FixedVector3 start, in FixedVector3 movement, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, long remaining, long total) {
+        in FixedColliderCandidates dynamicCandidates, bool dynamicIndexed, in FixedVector3 start, in FixedVector3 movement, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, long remaining, long total) {
         if ((colliders.Boxes.Length != colliders.Colliders.Length) || (dynamicColliders.Boxes.Length != dynamicColliders.Colliders.Length)) {
             return 0L;
         }
@@ -589,12 +599,23 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             }
         }
 
-        for (var index = 0; (index < dynamicColliders.Colliders.Length); index++) {
-            least = FixedQ4816.Min(x: least, y: ClearFractionOf(body: in body, box: in dynamicColliders.Boxes[index], collider: in dynamicColliders.Colliders[index], margin: margin,
-                movement: in movement, orientation: in orientation, start: in start, volumes: volumes));
+        if (dynamicIndexed) {
+            foreach (var index in dynamicCandidates.Indices) {
+                least = FixedQ4816.Min(x: least, y: ClearFractionOf(body: in body, box: in dynamicColliders.Boxes[index], collider: in dynamicColliders.Colliders[index], margin: margin,
+                    movement: in movement, orientation: in orientation, start: in start, volumes: volumes));
 
-            if (least.Value <= 0L) {
-                return 0L;
+                if (least.Value <= 0L) {
+                    return 0L;
+                }
+            }
+        } else {
+            for (var index = 0; (index < dynamicColliders.Colliders.Length); index++) {
+                least = FixedQ4816.Min(x: least, y: ClearFractionOf(body: in body, box: in dynamicColliders.Boxes[index], collider: in dynamicColliders.Colliders[index], margin: margin,
+                    movement: in movement, orientation: in orientation, start: in start, volumes: volumes));
+
+                if (least.Value <= 0L) {
+                    return 0L;
+                }
             }
         }
 
@@ -618,13 +639,15 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     /// <param name="descent">The least descent, in metres, at which the body first comes within the skin of a collider.</param>
     /// <param name="candidates">The colliders of <paramref name="colliders"/> reachable from a region around the descent,
     /// or the default value to visit every collider.</param>
+    /// <param name="dynamicCandidates">The colliders of <paramref name="dynamicColliders"/> reachable from the same
+    /// region, or the default value to visit every one.</param>
     /// <returns><see langword="true"/> when a collider is met within the reach; <see langword="false"/> as well for a
     /// non-positive reach or a descent outside the Q48.16 carrier.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="colliders"/> or <paramref name="dynamicColliders"/> is
     /// <see langword="null"/>.</exception>
     public bool TrySupportDistance(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders, in FixedVector3 position,
         in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedQ4816 reach,
-        out FixedQ4816 descent, FixedColliderCandidates candidates = default) {
+        out FixedQ4816 descent, FixedColliderCandidates candidates = default, FixedColliderCandidates dynamicCandidates = default) {
         ArgumentNullException.ThrowIfNull(argument: colliders);
         ArgumentNullException.ThrowIfNull(argument: dynamicColliders);
         FixedStaticContactWork.Process.CountSupportDistance();
@@ -639,7 +662,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         foreach (ref readonly var volume in volumes) {
             Descend(boxes: colliders.Boxes, candidates: in candidates, colliders: colliders.Colliders, swept: in swept,
                 frames: colliders.Frames, met: ref met, nearest: ref nearest, orientation: in orientation, position: in position, up: in up, volume: in volume);
-            Descend(boxes: dynamicColliders.Boxes, candidates: default, colliders: dynamicColliders.Colliders, swept: in swept,
+            Descend(boxes: dynamicColliders.Boxes, candidates: in dynamicCandidates, colliders: dynamicColliders.Colliders, swept: in swept,
                 frames: dynamicColliders.Frames, met: ref met, nearest: ref nearest, orientation: in orientation, position: in position, up: in up, volume: in volume);
         }
         descent = (met ? nearest : FixedQ4816.Zero);
@@ -680,7 +703,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     // A collider without bounds (a half-space) may meet any move.
     private bool SweptBoundsMeetCollider(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders,
         in FixedVector3 previousPosition, in FixedVector3 position, in FixedQuaternion orientation,
-        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedColliderCandidates candidates) {
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedColliderCandidates candidates, in FixedColliderCandidates dynamicCandidates) {
         var swept = SweptBounds(orientation: in orientation, position: in position, previousPosition: in previousPosition, volumes: volumes);
         var reach = swept.Grow(margin: ContactReach);
         var boxes = colliders.Boxes;
@@ -693,6 +716,12 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             foreach (ref readonly var box in boxes) {
                 if (box.Intersects(other: in reach)) { return true; }
             }
+        }
+        if (dynamicCandidates.IsActive && dynamicCandidates.Contains(box: in swept)) {
+            foreach (var index in dynamicCandidates.Indices) {
+                if (dynamicColliders.Boxes[index].Intersects(other: in reach)) { return true; }
+            }
+            return false;
         }
         foreach (ref readonly var box in dynamicColliders.Boxes) {
             if (box.Intersects(other: in reach)) { return true; }
@@ -732,7 +761,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     // FixedStepUp raises from that start; sliceStart begins this slice, whose displacement is the approach direction.
     private ContactResolution ResolveEndpoint(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders,
         in FixedVector3 previousPosition, in FixedVector3 sliceStart, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
-        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedColliderCandidates candidates) {
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedColliderCandidates candidates, FixedColliderCandidates dynamicCandidates) {
         var movement = (position - sliceStart);
         var requiredStepHeight = FixedQ4816.Zero;
         var grounded = false;
@@ -781,7 +810,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     volumeIndex: volumeIndex
                 );
                 pushed |= Sweep(
-                    candidates: default,
+                    candidates: in dynamicCandidates,
                     colliders: dynamicColliders.Colliders,
                     boxes: dynamicColliders.Boxes,
                     frames: dynamicColliders.Frames,

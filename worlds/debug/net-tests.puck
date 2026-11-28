@@ -6,7 +6,10 @@
 //
 //   reached     the climb's last stage: 1 took the net, 2 a metre up on it, 3 back on the floor after letting go
 //   held        the most bodies the net carried at once while she climbed: one
-//   dipped      the net's deepest deflection while she hung on it, past a strand's thickness: her weight pulled it
+//   dipped      the net's deepest deflection while she was on it, grab included, past a strand's thickness, so her
+//               weight pulled it, and short of its reach, so the bound never stopped it
+//   bellied     the net's deflection as she hangs a metre up, settled from the grab: past a strand and within four fifths
+//               of the reach, the belly her weight makes in the taut net, about a fifth of a metre
 //   bounded     never past the net's reach: the solver's bound held
 //   settled     the net asleep again at the export tick: it came to rest and costs nothing
 //
@@ -21,9 +24,12 @@ import "../standard/architecture"
 
 // The rope net placement (the lab's `climbNetPanel`), and the readings that judge it: a strand's thickness is the least
 // dip worth calling one, and the net's reach (standard/architecture.puck's ropeNet) the most any node may stand off rest.
+// A full-size climber's weight bellies the taut net about a fifth of a metre (half her weight, half that), so a belly
+// within four fifths of the reach is her weight's and not the bound's.
 let netPanel = climbNetPanel
 let netStrand = ropeNet.strand
 let netReach = ropeNet.reach
+let netBelly = (ropeNet.reach * 0.8)
 // How far over the lab's floor the body's foot is a metre up the net, and the band over the floor it stands in again.
 let netFloor = 0
 let netClimb = 1
@@ -44,6 +50,11 @@ state {
       kind: Fixed
       value: "0"
     }
+    row {
+      name: "netHanging"
+      kind: Fixed
+      value: "0"
+    }
   }
 }
 
@@ -56,6 +67,7 @@ rule "net-climbed" {
   when netReached == 1 and fact(body, 0, HoldingUnwalkable) == 1 and bodyPosition(body, 0, y) >= (netFloor + netClimb)
   mode: Level
   netReached = 2
+  netHanging = net(netPanel, deflection)
 }
 rule "net-dropped" {
   when (netReached == 2 and fact(body, 0, HoldingUnwalkable) == 0 and fact(body, 0, Grounded) == 1 and
@@ -89,6 +101,9 @@ test "the rope net, taken, climbed a metre and let go" {
     netReached == 3
     netHeld == 1
     netDeepest > netStrand
+    netDeepest < netReach
+    netHanging > netStrand
+    netHanging < netBelly
     netFarthest <= netReach
     net(netPanel, awake) == 0
     fact(body, 0, Grounded) == 1

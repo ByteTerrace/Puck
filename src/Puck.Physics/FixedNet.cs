@@ -31,9 +31,12 @@ public enum FixedNetPins : byte {
 /// <param name="NodeMass">The mass one free node carries, in kilograms; positive.</param>
 /// <param name="Stiffness">One strand's stiffness against stretch past its length, in newtons per metre; positive.</param>
 /// <param name="Damping">The share of a node's speed lost each second; non-negative.</param>
-/// <param name="Sag">The slack each strand carries past its rest spacing, as a share of it; non-negative.</param>
+/// <param name="Sag">The slack each strand carries past its rest spacing, as a share of it: positive hangs the net
+/// loose, so it gives freely until its strands draw taut; negative strings it taut, each strand that share shorter
+/// than the spacing and so pulling at rest, which makes a load's give proportional to the load. Above −1.</param>
 /// <param name="Reach">The farthest a node moves from its rest position, in metres; positive.</param>
-/// <param name="Iterations">The projection passes a step makes over every strand, at least one.</param>
+/// <param name="Substeps">The slices a step is cut into, at least one: each integrates its slice and solves every strand
+/// once, so a stiff net converges where a few passes over one long step would not.</param>
 /// <param name="RestSpeed">The speed, in metres a second, under which every node counts as still.</param>
 /// <param name="SleepTicks">The engine ticks every node must stay still, untouched, before the net sleeps.</param>
 public readonly record struct FixedNetSpec(
@@ -48,18 +51,21 @@ public readonly record struct FixedNetSpec(
     FixedQ4816 Damping,
     FixedQ4816 Sag,
     FixedQ4816 Reach,
-    int Iterations,
+    int Substeps,
     FixedQ4816 RestSpeed,
     ulong SleepTicks
 );
 
-/// <summary>A force a step applies to the net at a point of its grid: <paramref name="Column"/> and
-/// <paramref name="Row"/> in node units (node <c>(c, r)</c> at <c>(c, r)</c>), the force spread over the four nodes about
-/// the point by their bilinear shares. A body's weight on a held net is one.</summary>
+/// <summary>A mass hung on the net at a point of its grid for one step, and the force it pulls with:
+/// <paramref name="Column"/> and <paramref name="Row"/> in node units (node <c>(c, r)</c> at <c>(c, r)</c>), the force and
+/// the mass both spread over the four nodes about the point by their bilinear shares. A body holding the net is one: its
+/// weight and its pull off the face, and its mass, which the nodes under its hands carry, so the strands hold the body
+/// up rather than a light node flung by the body's whole weight.</summary>
 /// <param name="Column">The point's grid column, in node units.</param>
 /// <param name="Row">The point's grid row, in node units.</param>
 /// <param name="Force">The force, in newtons.</param>
-public readonly record struct FixedNetLoad(FixedQ4816 Column, FixedQ4816 Row, FixedVector3 Force);
+/// <param name="Mass">The mass the point carries, in kilograms; non-negative.</param>
+public readonly record struct FixedNetLoad(FixedQ4816 Column, FixedQ4816 Row, FixedVector3 Force, FixedQ4816 Mass);
 
 /// <summary>A capsule that pushes the net's nodes out of it: every node closer than <paramref name="Radius"/> to the
 /// segment from <paramref name="Start"/> to <paramref name="End"/> moves out to that distance. A body leaning on the net
@@ -70,54 +76,83 @@ public readonly record struct FixedNetLoad(FixedQ4816 Column, FixedQ4816 Row, Fi
 public readonly record struct FixedNetPusher(FixedVector3 Start, FixedVector3 End, FixedQ4816 Radius);
 
 /// <summary>The complete deterministic state of a <see cref="FixedNet"/>: each node's offset from its rest position and
-/// its velocity, whether it is awake, and how long it has stood still.</summary>
-/// <param name="Offsets">Each node's offset from rest, in metres, row by row.</param>
-/// <param name="Velocities">Each node's velocity, in metres a second, row by row.</param>
+/// its velocities, whether it is awake, how long it has stood still, and the touch it last stepped under.</summary>
+/// <param name="Offsets">Each node's offset from rest, in net units (<see cref="FixedNet.UnitsPerMetre"/> to the metre),
+/// row by row.</param>
+/// <param name="Velocities">Each node's latest step's whole movement over the step, in metres a second, row by row.</param>
+/// <param name="SliceVelocities">Each node's velocity at the end of its latest step's last slice, in net units a second,
+/// row by row: what the next step's first slice starts from.</param>
 /// <param name="Awake">Whether the net steps.</param>
-/// <param name="StillTicks">The engine ticks every node has stood still, untouched.</param>
-public sealed record FixedNetState(FixedVector3[] Offsets, FixedVector3[] Velocities, bool Awake, ulong StillTicks);
+/// <param name="StillTicks">The engine ticks every node has stood still under one unchanged touch.</param>
+/// <param name="Touch">The fingerprint of the loads and pushers the latest step was handed.</param>
+public sealed record FixedNetState(FixedVector3[] Offsets, FixedVector3[] Velocities, FixedVector3[] SliceVelocities, bool Awake, ulong StillTicks, ulong Touch);
 
 /// <summary>
 /// A net of rope strands as a coarse grid of point masses (a rope bridge, a hammock, a cargo net, a banner, a sail):
-/// each step integrates the free nodes under gravity and the loads and pushes it is handed, then projects every strand's
-/// cap between neighbouring nodes a few times (<see cref="FixedTetherConstraint.SolvePair"/>, compliant, so a strand may
-/// go slack but stretches past its length only as its stiffness allows), holds each node within its reach of rest
-/// (<see cref="FixedTetherConstraint.Solve"/>, the bound every reader of the net's extent relies on), and derives each
-/// node's velocity from how far the step moved it. Every quantity is <see cref="FixedQ4816"/> over a fixed node and
-/// strand order, so the same inputs give the same nodes bit for bit. A node's stored velocity is its latest step's
-/// whole movement; <see cref="FixedNetSpec.Damping"/> takes its share as the next step integrates.
+/// each step is cut into <see cref="FixedNetSpec.Substeps"/> slices, and each slice integrates the free nodes under
+/// gravity and the loads it is handed, solves every strand's cap between neighbouring nodes once
+/// (<see cref="FixedTetherConstraint.SolvePair"/>, compliant, so a strand may go slack but stretches past its length only
+/// as its stiffness allows), pushes the nodes out of the pushers, and holds each node within its reach of rest
+/// (<see cref="FixedTetherConstraint.Solve"/>, the bound every reader of the net's extent relies on). Small slices with
+/// one pass each converge a stiff net where many passes over one long step do not (XPBD's substepping), and a load's
+/// mass rides the nodes under it, so a body's weight bellies the net by as much as the strands give under it rather than
+/// flinging light nodes to their reach. Every quantity is <see cref="FixedQ4816"/> over a fixed node and strand order, so
+/// the same inputs give the same nodes bit for bit.
 /// </summary>
-/// <remarks>The kernel decides nothing about bodies: the host turns the bodies that hold or lean on the net into
+/// <remarks>The nodes are solved in net units, metres times <see cref="UnitsPerMetre"/> about
+/// <see cref="FixedNetSpec.Origin"/>: a slice moves a node by a few micrometres, far below a metre's Q48.16 step, and the
+/// finer unit keeps that motion from rounding into a buzz that never comes to rest. Everything the net hands out
+/// (<see cref="Offsets"/>, <see cref="Position"/>, <see cref="DisplacementAt"/>, the colliders) is in metres.
+/// <para>The kernel decides nothing about bodies: the host turns the bodies that hold or lean on the net into
 /// <see cref="FixedNetLoad"/> and <see cref="FixedNetPusher"/> records, and the net decides from its nodes whether a pusher touches it (reaches a
-/// free node). A net that no step touches and whose every node stays under <see cref="FixedNetSpec.RestSpeed"/> for
-/// <see cref="FixedNetSpec.SleepTicks"/> sleeps, and a sleeping net's <see cref="Step"/> returns after one reach test
-/// per pusher; only a load, a pusher that reaches a node (or <see cref="Wake"/>) wakes it.
+/// free node). A net whose touch (the loads and pushers it is handed) stays the same while every node stays under
+/// <see cref="FixedNetSpec.RestSpeed"/> for <see cref="FixedNetSpec.SleepTicks"/> sleeps, a held one as well as an
+/// untouched one, and a sleeping net's <see cref="Step"/> handed that same touch returns after comparing one
+/// fingerprint. A net asleep under a touch wakes when that touch changes; one asleep untouched wakes only for a load or
+/// a pusher that reaches a node (or <see cref="Wake"/>).</para>
 /// <para>Invariant: every node stays within <see cref="FixedNetSpec.Reach"/> of its rest position after any step or
-/// restore, so a reader may bound the drawn and colliding net by the rest layout grown by the reach. The last pass of
-/// <see cref="Step"/> and the range check of <see cref="Restore"/> are the two writers of <see cref="Offsets"/>, and
-/// both enforce it.</para></remarks>
+/// restore, so a reader may bound the drawn and colliding net by the rest layout grown by the reach. Each slice's last
+/// pass in <see cref="Step"/> and the range check of <see cref="Restore"/> are the only writers of the fine offsets, and
+/// both enforce it; <see cref="Offsets"/> is derived from them by rounding toward zero, which never lengthens one.</para></remarks>
 public sealed class FixedNet {
+    /// <summary>The net units a metre holds: the scale the kernel solves its nodes at.</summary>
+    public const int UnitsPerMetre = (1 << UnitShift);
+
+    private const int UnitShift = 8;
+    private static readonly FixedQ4816 Units = FixedQ4816.FromInteger(value: UnitsPerMetre);
+    private static readonly ulong EmptyTouch = Fingerprint(loads: [], pushers: []);
     private static readonly WorkKind Steps = new("physics.nets.steps", "count", WorkClass.Deterministic);
     private static readonly WorkKind NodesSolved = new("physics.nets.nodes-solved", "count", WorkClass.Deterministic);
     private static readonly WorkKind StrandsSolved = new("physics.nets.strands-solved", "count", WorkClass.Deterministic);
-    private static readonly WorkKind Iterations = new("physics.nets.iterations", "count", WorkClass.Deterministic);
+    private static readonly WorkKind Substeps = new("physics.nets.substeps", "count", WorkClass.Deterministic);
     private static readonly WorkKind Sleeps = new("physics.nets.sleeps", "count", WorkClass.Deterministic);
     private static readonly WorkKind Wakes = new("physics.nets.wakes", "count", WorkClass.Deterministic);
 
-    /// <summary>Gets the steps every net in the process has taken awake, the nodes and strands they solved, the solver
-    /// iterations they ran and how often a net fell asleep and woke, outside simulation state and checkpoints. Readers
-    /// take differences for a window; a sleeping net's step counts nothing.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new("physics.nets", [Steps, NodesSolved, StrandsSolved, Iterations, Sleeps, Wakes]);
+    /// <summary>Gets the steps every net in the process has taken awake, the slices they ran, the node integrations
+    /// and strand solves those slices made (one of each per node and per strand a slice), and how often a net fell
+    /// asleep and woke, outside simulation state and checkpoints. Readers take differences for a window; a sleeping net's
+    /// step counts nothing.</summary>
+    public static WorkCounterSet ProcessWork { get; } = new("physics.nets", [Steps, NodesSolved, StrandsSolved, Substeps, Sleeps, Wakes]);
 
+    // State: each node's offset in net units, its world offset derived from it, its step's whole movement as a world
+    // velocity, and its slice velocity in net units a second.
+    private readonly FixedVector3[] m_fine;
     private readonly FixedVector3[] m_offsets;
     private readonly FixedVector3[] m_velocities;
+    private readonly FixedVector3[] m_sliceVelocity;
+    // Layout: each node's rest position in metres and in net units about the origin, and its inverse mass.
     private readonly FixedVector3[] m_rest;
+    private readonly FixedVector3[] m_local;
     private readonly FixedQ4816[] m_inverseMass;
     private readonly bool[] m_dirty;
-    // A step's scratch: positions, the positions it started from, and each strand's multiplier.
+    // A step's scratch, in net units: positions, the positions the step and the slice started from, each node's inverse
+    // mass with the loads' mass on it, the speed the loads give it each slice, and the pushers.
     private readonly FixedVector3[] m_positions;
     private readonly FixedVector3[] m_start;
-    private readonly FixedQ4816[] m_lambda;
+    private readonly FixedVector3[] m_sliceStart;
+    private readonly FixedQ4816[] m_loadedInverseMass;
+    private readonly FixedVector3[] m_loadPull;
+    private FixedNetPusher[] m_pushers = [];
     private readonly FixedQ4816 m_acrossCap;
     private readonly FixedQ4816 m_upCap;
     private readonly FixedTetherConstraint m_reach;
@@ -126,22 +161,25 @@ public sealed class FixedNet {
     private readonly FixedQuaternion m_restRotation;
     private readonly FixedAabb m_restBox;
     private ulong m_stillTicks;
+    private ulong m_touch;
     private bool m_anyDirty;
 
     /// <summary>Initializes a new instance of the <see cref="FixedNet"/> class at rest, asleep.</summary>
     /// <param name="spec">The net's layout and material.</param>
     /// <exception cref="ArgumentOutOfRangeException">A count is under its least, a mass, stiffness or reach is not
-    /// positive, a damping, sag or rest speed is negative, or the two edges are parallel or zero.</exception>
+    /// positive, a damping or rest speed is negative, the sag is −1 or under, or the two edges are parallel or
+    /// zero.</exception>
     public FixedNet(in FixedNetSpec spec) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: spec.Columns, other: 2);
         ArgumentOutOfRangeException.ThrowIfLessThan(value: spec.Rows, other: 2);
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: spec.Iterations, other: 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: spec.Substeps, other: 1);
         if (spec.NodeMass <= FixedQ4816.Zero) { throw new ArgumentOutOfRangeException(paramName: nameof(spec), message: "A net's node mass must be positive."); }
         if (spec.Stiffness <= FixedQ4816.Zero) { throw new ArgumentOutOfRangeException(paramName: nameof(spec), message: "A net's stiffness must be positive."); }
         if (spec.Reach <= FixedQ4816.Zero) { throw new ArgumentOutOfRangeException(paramName: nameof(spec), message: "A net's reach must be positive."); }
-        if ((spec.Damping < FixedQ4816.Zero) || (spec.Sag < FixedQ4816.Zero) || (spec.RestSpeed < FixedQ4816.Zero)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(spec), message: "A net's damping, sag and rest speed must not be negative.");
+        if ((spec.Damping < FixedQ4816.Zero) || (spec.RestSpeed < FixedQ4816.Zero)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(spec), message: "A net's damping and rest speed must not be negative.");
         }
+        if (spec.Sag <= -FixedQ4816.One) { throw new ArgumentOutOfRangeException(paramName: nameof(spec), message: "A net's sag must lie above -1, so its strands keep a length."); }
 
         var normal = FixedVector3.Cross(left: spec.Across, right: spec.Up).Normalize();
 
@@ -156,21 +194,27 @@ public sealed class FixedNet {
 
         m_restRotation = (FixedQuaternion.FromTo(from: turnAcross.Rotate(vector: FixedVector3.UnitY), to: upSquare) * turnAcross);
         NodeCount = checked(spec.Columns * spec.Rows);
+        m_fine = new FixedVector3[NodeCount];
         m_offsets = new FixedVector3[NodeCount];
         m_velocities = new FixedVector3[NodeCount];
+        m_sliceVelocity = new FixedVector3[NodeCount];
         m_rest = new FixedVector3[NodeCount];
+        m_local = new FixedVector3[NodeCount];
         m_inverseMass = new FixedQ4816[NodeCount];
         m_dirty = new bool[NodeCount];
         m_positions = new FixedVector3[NodeCount];
         m_start = new FixedVector3[NodeCount];
-        m_lambda = new FixedQ4816[StrandCount];
+        m_sliceStart = new FixedVector3[NodeCount];
+        m_loadedInverseMass = new FixedQ4816[NodeCount];
+        m_loadPull = new FixedVector3[NodeCount];
+        m_touch = EmptyTouch;
         var acrossStep = (spec.Across / FixedQ4816.FromInteger(value: (spec.Columns - 1)));
         var upStep = (spec.Up / FixedQ4816.FromInteger(value: (spec.Rows - 1)));
         var slack = (FixedQ4816.One + spec.Sag);
 
-        m_acrossCap = (acrossStep.Length * slack);
-        m_upCap = (upStep.Length * slack);
-        m_reach = new FixedTetherConstraint(length: spec.Reach, minLength: FixedQ4816.Zero);
+        m_acrossCap = ((acrossStep.Length * slack) * Units);
+        m_upCap = ((upStep.Length * slack) * Units);
+        m_reach = new FixedTetherConstraint(length: (spec.Reach * Units), minLength: FixedQ4816.Zero);
 
         var inverse = (FixedQ4816.One / spec.NodeMass);
         var low = spec.Origin;
@@ -179,7 +223,8 @@ public sealed class FixedNet {
         for (var row = 0; (row < spec.Rows); row++) {
             for (var column = 0; (column < spec.Columns); column++) {
                 var node = ((row * spec.Columns) + column);
-                var rest = ((spec.Origin + (acrossStep * FixedQ4816.FromInteger(value: column))) + (upStep * FixedQ4816.FromInteger(value: row)));
+                var along = ((acrossStep * FixedQ4816.FromInteger(value: column)) + (upStep * FixedQ4816.FromInteger(value: row)));
+                var rest = (spec.Origin + along);
                 var pinned = (
                     (((spec.Pins & FixedNetPins.Left) != 0) && (column == 0)) ||
                     (((spec.Pins & FixedNetPins.Right) != 0) && (column == (spec.Columns - 1))) ||
@@ -188,6 +233,7 @@ public sealed class FixedNet {
                 );
 
                 m_rest[node] = rest;
+                m_local[node] = (along * Units);
                 m_inverseMass[node] = (pinned ? FixedQ4816.Zero : inverse);
                 low = FixedVector3.Min(left: low, right: rest);
                 high = FixedVector3.Max(left: high, right: rest);
@@ -205,7 +251,7 @@ public sealed class FixedNet {
     /// <summary>Gets each node's offset from its rest position, in metres, row by row; every one within
     /// <see cref="FixedNetSpec.Reach"/>.</summary>
     public ReadOnlySpan<FixedVector3> Offsets => m_offsets;
-    /// <summary>Gets each node's velocity, in metres a second, row by row.</summary>
+    /// <summary>Gets each node's latest step's whole movement over the step, in metres a second, row by row.</summary>
     public ReadOnlySpan<FixedVector3> Velocities => m_velocities;
     /// <summary>Gets each node's rest position, in metres, row by row.</summary>
     public ReadOnlySpan<FixedVector3> RestPositions => m_rest;
@@ -278,8 +324,8 @@ public sealed class FixedNet {
     /// <returns>The offset, in metres.</returns>
     public FixedVector3 OffsetAt(FixedQ4816 column, FixedQ4816 row) => Blend(values: m_offsets, column: column, row: row);
     /// <summary>Returns how far the net at a point of its grid moved over its latest step: the bilinear blend of the four
-    /// nodes' velocities about it times the step, the point clamped onto the grid; zero for a sleeping net. A body the net
-    /// carries (one holding it, one standing on it) rides this displacement.</summary>
+    /// nodes' step movements about it, the point clamped onto the grid; zero for a sleeping net. A body the net carries
+    /// (one holding it, one standing on it) rides this displacement.</summary>
     /// <param name="column">The grid column, in node units.</param>
     /// <param name="row">The grid row, in node units.</param>
     /// <param name="stepTicks">The step's length, in engine ticks.</param>
@@ -288,122 +334,78 @@ public sealed class FixedNet {
         ? (Blend(values: m_velocities, column: column, row: row) * FixedTickConversion.SecondsOf(ratePerSecond: FixedTickConversion.TicksPerSecond, ticks: stepTicks))
         : FixedVector3.Zero);
 
-    /// <summary>Steps the net once: a sleeping net that nothing touches returns at once; otherwise it wakes, integrates,
-    /// solves and settles as <see cref="FixedNet"/> describes, and may fall asleep at the end. The net is touched by a
-    /// load, or by a pusher that reaches a free node (closer to its segment than its radius); a pusher that reaches none
-    /// (a body standing near the net, not leaning on it) neither wakes it nor keeps it awake.</summary>
+    /// <summary>Steps the net once: a sleeping net handed the touch it fell asleep under, or one that nothing touches,
+    /// returns at once; otherwise it wakes, integrates, solves and settles as <see cref="FixedNet"/> describes, and may
+    /// fall asleep at the end. The net is touched by a load, or by a pusher that reaches a free node (closer to its
+    /// segment than its radius); a pusher that reaches none (a body standing near the net, not leaning on it) neither
+    /// wakes it nor keeps it awake.</summary>
     /// <param name="gravity">The acceleration every free node feels, in metres a second squared.</param>
     /// <param name="stepTicks">The step's length, in engine ticks; positive.</param>
-    /// <param name="loads">The forces bodies apply this step.</param>
+    /// <param name="loads">The masses bodies hang on the net this step, with their forces.</param>
     /// <param name="pushers">The capsules that may push nodes out this step.</param>
     /// <returns>Whether any node moved.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
     public bool Step(in FixedVector3 gravity, ulong stepTicks, ReadOnlySpan<FixedNetLoad> loads, ReadOnlySpan<FixedNetPusher> pushers) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
 
+        var touch = Fingerprint(loads: loads, pushers: pushers);
+        var changed = (touch != m_touch);
+
         if (!Awake) {
-            if (loads.IsEmpty) {
+            if (!changed) { return false; }
+            // A net that fell asleep under a touch rests on it, so any change to that touch wakes it; one that fell
+            // asleep untouched wakes only for a load or a pusher that reaches a node.
+            if (loads.IsEmpty && (m_touch == EmptyTouch)) {
                 Pressers = 0;
                 if (pushers.IsEmpty) { return false; }
-                for (var node = 0; (node < NodeCount); node++) { m_positions[node] = Position(node: node); }
-                Pressers = Pressing(pushers: pushers);
+                StartPositions();
+                Pressers = Pressing(pushers: LocalPushers(pushers: pushers));
                 if (Pressers == 0) { return false; }
             }
             Wake();
         }
+        m_touch = touch;
 
+        var substeps = Spec.Substeps;
         var rate = (FixedQ4816.FromInteger(value: (long)FixedTickConversion.TicksPerSecond) / FixedQ4816.FromInteger(value: checked((long)stepTicks)));
-        var rateSquared = (rate * rate);
-        var compliance = (rateSquared / Spec.Stiffness);
-        var columns = Spec.Columns;
-        var rows = Spec.Rows;
-
-        var keep = (FixedQ4816.One - (Spec.Damping / rate));
+        var sliceRate = (rate * FixedQ4816.FromInteger(value: substeps));
+        var compliance = ((sliceRate * sliceRate) / Spec.Stiffness);
+        var fall = ((gravity * Units) / sliceRate);
+        var keep = (FixedQ4816.One - (Spec.Damping / sliceRate));
+        var local = LocalPushers(pushers: pushers);
 
         if (keep < FixedQ4816.Zero) { keep = FixedQ4816.Zero; }
         ProcessWork.Add(kind: Steps, amount: 1L);
-        for (var node = 0; (node < NodeCount); node++) {
-            var position = Position(node: node);
-
-            m_start[node] = position;
-            if (m_inverseMass[node] != FixedQ4816.Zero) {
-                var velocity = ((m_velocities[node] * keep) + (gravity / rate));
-
-                position += (velocity / rate);
-            }
-            m_positions[node] = position;
+        PrepareLoads(loads: loads, sliceRate: sliceRate);
+        StartPositions();
+        Pressers = Pressing(pushers: local);
+        for (var slice = 0; (slice < substeps); slice++) {
+            Slice(compliance: compliance, fall: fall, keep: keep, pushers: local, sliceRate: sliceRate);
         }
-        // A force moves a node of mass m by F·h²/m over a step, spread over the four nodes about its point.
-        foreach (ref readonly var load in loads) {
-            ApplyLoad(load: in load, rateSquared: rateSquared);
-        }
-        Pressers = Pressing(pushers: pushers);
-
-        var touched = (!loads.IsEmpty || (Pressers != 0));
-
-        Array.Clear(array: m_lambda);
-        for (var pass = 0; (pass < Spec.Iterations); pass++) {
-            var strand = 0;
-
-            for (var row = 0; (row < rows); row++) {
-                for (var column = 0; (column < columns); column++) {
-                    var node = ((row * columns) + column);
-
-                    if (column < (columns - 1)) {
-                        _ = FixedTetherConstraint.SolvePair(
-                            compliance: compliance,
-                            first: ref m_positions[node],
-                            firstInverseMass: m_inverseMass[node],
-                            lambda: ref m_lambda[strand++],
-                            length: m_acrossCap,
-                            second: ref m_positions[(node + 1)],
-                            secondInverseMass: m_inverseMass[(node + 1)]
-                        );
-                    }
-                    if (row < (rows - 1)) {
-                        _ = FixedTetherConstraint.SolvePair(
-                            compliance: compliance,
-                            first: ref m_positions[node],
-                            firstInverseMass: m_inverseMass[node],
-                            lambda: ref m_lambda[strand++],
-                            length: m_upCap,
-                            second: ref m_positions[(node + columns)],
-                            secondInverseMass: m_inverseMass[(node + columns)]
-                        );
-                    }
-                }
-            }
-            foreach (ref readonly var pusher in pushers) {
-                _ = Push(move: true, pusher: in pusher);
-            }
-        }
-        ProcessWork.Add(kind: Iterations, amount: Spec.Iterations);
-        ProcessWork.Add(kind: StrandsSolved, amount: ((long)StrandCount * Spec.Iterations));
-        ProcessWork.Add(kind: NodesSolved, amount: NodeCount);
+        ProcessWork.Add(kind: Substeps, amount: substeps);
+        ProcessWork.Add(kind: StrandsSolved, amount: ((long)StrandCount * substeps));
+        ProcessWork.Add(kind: NodesSolved, amount: ((long)NodeCount * substeps));
 
         var moved = false;
         var still = true;
         var farthest = FixedVector3.Zero;
+        var restSpeed = (Spec.RestSpeed * Units);
 
         for (var node = 0; (node < NodeCount); node++) {
             if (m_inverseMass[node] == FixedQ4816.Zero) { continue; }
-            var position = m_positions[node];
-            var unused = FixedVector3.Zero;
+            var fine = (m_positions[node] - m_local[node]);
+            // The step's whole movement, so a reader of DisplacementAt rides exactly what the step moved.
+            var travel = ((m_positions[node] - m_start[node]) * rate);
+            var offset = ToMetres(fine: fine);
 
-            _ = m_reach.Solve(anchor: in m_rest[node], position: ref position, velocity: ref unused);
-
-            // The velocity is the step's whole movement, so a reader of DisplacementAt rides exactly what the step moved;
-            // the damping takes its share as the next step integrates.
-            var velocity = ((position - m_start[node]) * rate);
-            var offset = (position - m_rest[node]);
-
-            m_velocities[node] = velocity;
+            m_fine[node] = fine;
+            m_velocities[node] = ToMetres(fine: travel);
             if (offset != m_offsets[node]) {
                 m_offsets[node] = offset;
                 m_dirty[node] = true;
                 moved = true;
             }
-            still &= velocity.IsWithin(radius: Spec.RestSpeed);
+            still &= travel.IsWithin(radius: restSpeed);
             if (offset.CompareLengthTo(other: farthest) > 0) { farthest = offset; }
         }
         MaxDeflection = farthest.Length;
@@ -411,18 +413,102 @@ public sealed class FixedNet {
             Revision++;
             m_anyDirty = true;
         }
-        if (touched || !still) {
+        if (changed || !still) {
             m_stillTicks = 0UL;
         } else {
             m_stillTicks += stepTicks;
             if (m_stillTicks >= Spec.SleepTicks) {
                 Awake = false;
                 Array.Clear(array: m_velocities);
+                Array.Clear(array: m_sliceVelocity);
                 ProcessWork.Add(kind: Sleeps, amount: 1L);
             }
         }
         return moved;
     }
+    // Every node's position in net units at the step's start.
+    private void StartPositions() {
+        for (var node = 0; (node < NodeCount); node++) {
+            var position = (m_local[node] + m_fine[node]);
+
+            m_start[node] = position;
+            m_positions[node] = position;
+        }
+    }
+    // The pushers in net units about the origin.
+    private ReadOnlySpan<FixedNetPusher> LocalPushers(ReadOnlySpan<FixedNetPusher> pushers) {
+        if (m_pushers.Length < pushers.Length) { m_pushers = new FixedNetPusher[pushers.Length]; }
+        for (var index = 0; (index < pushers.Length); index++) {
+            ref readonly var pusher = ref pushers[index];
+
+            m_pushers[index] = new FixedNetPusher(
+                End: ((pusher.End - Spec.Origin) * Units),
+                Radius: (pusher.Radius * Units),
+                Start: ((pusher.Start - Spec.Origin) * Units)
+            );
+        }
+        return m_pushers.AsSpan(start: 0, length: pushers.Length);
+    }
+    // One slice: integrate every free node under gravity and the loads, solve every strand once (one pass, so each
+    // strand's multiplier starts at zero), push the nodes out of the pushers, hold them within their reach, and take each
+    // node's velocity from the slice's movement. The reach pass comes last, so every slice leaves the nodes in bounds.
+    private void Slice(FixedQ4816 compliance, in FixedVector3 fall, FixedQ4816 keep, ReadOnlySpan<FixedNetPusher> pushers, FixedQ4816 sliceRate) {
+        var columns = Spec.Columns;
+        var rows = Spec.Rows;
+
+        for (var node = 0; (node < NodeCount); node++) {
+            m_sliceStart[node] = m_positions[node];
+            if (m_inverseMass[node] == FixedQ4816.Zero) { continue; }
+            var velocity = (((m_sliceVelocity[node] * keep) + fall) + m_loadPull[node]);
+
+            m_positions[node] += (velocity / sliceRate);
+        }
+        for (var row = 0; (row < rows); row++) {
+            for (var column = 0; (column < columns); column++) {
+                var node = ((row * columns) + column);
+
+                if (column < (columns - 1)) {
+                    var lambda = FixedQ4816.Zero;
+
+                    _ = FixedTetherConstraint.SolvePair(
+                        compliance: compliance,
+                        first: ref m_positions[node],
+                        firstInverseMass: m_loadedInverseMass[node],
+                        lambda: ref lambda,
+                        length: m_acrossCap,
+                        second: ref m_positions[(node + 1)],
+                        secondInverseMass: m_loadedInverseMass[(node + 1)]
+                    );
+                }
+                if (row < (rows - 1)) {
+                    var lambda = FixedQ4816.Zero;
+
+                    _ = FixedTetherConstraint.SolvePair(
+                        compliance: compliance,
+                        first: ref m_positions[node],
+                        firstInverseMass: m_loadedInverseMass[node],
+                        lambda: ref lambda,
+                        length: m_upCap,
+                        second: ref m_positions[(node + columns)],
+                        secondInverseMass: m_loadedInverseMass[(node + columns)]
+                    );
+                }
+            }
+        }
+        foreach (ref readonly var pusher in pushers) {
+            _ = Push(move: true, pusher: in pusher);
+        }
+        for (var node = 0; (node < NodeCount); node++) {
+            if (m_inverseMass[node] == FixedQ4816.Zero) { continue; }
+            var unused = FixedVector3.Zero;
+
+            _ = m_reach.Solve(anchor: in m_local[node], position: ref m_positions[node], velocity: ref unused);
+            m_sliceVelocity[node] = ((m_positions[node] - m_sliceStart[node]) * sliceRate);
+        }
+    }
+    // A vector in net units in metres, each component rounded toward zero, so a length never grows.
+    private static FixedVector3 ToMetres(in FixedVector3 fine) => new(X: Shrink(value: fine.X), Y: Shrink(value: fine.Y), Z: Shrink(value: fine.Z));
+    private static FixedQ4816 Shrink(FixedQ4816 value) => FixedQ4816.FromRawBits(value: (value.Value / UnitsPerMetre));
 
     /// <summary>Gets the cell count, one fewer than the nodes along each edge multiplied.</summary>
     public int CellCount => ((Spec.Columns - 1) * (Spec.Rows - 1));
@@ -490,76 +576,115 @@ public sealed class FixedNet {
     }
     /// <summary>Captures the net's complete deterministic state.</summary>
     /// <returns>The state, which shares no storage with the net.</returns>
-    public FixedNetState Capture() => new(Offsets: [.. m_offsets], Velocities: [.. m_velocities], Awake: Awake, StillTicks: m_stillTicks);
-    /// <summary>Restores a captured state: every node's offset and velocity, whether it is awake and how long it stood
-    /// still. Every node is marked moved, so the next take hands every node on.</summary>
+    public FixedNetState Capture() => new(Offsets: [.. m_fine], Velocities: [.. m_velocities], SliceVelocities: [.. m_sliceVelocity],
+        Awake: Awake, StillTicks: m_stillTicks, Touch: m_touch);
+    /// <summary>Restores a captured state: every node's offset and velocities, whether it is awake, how long it stood
+    /// still and the touch it last stepped under. Every node is marked moved, so the next take hands every node on.</summary>
     /// <param name="state">The state.</param>
     /// <exception cref="ArgumentException"><paramref name="state"/> holds another node count, or an offset past the
     /// reach.</exception>
     public void Restore(FixedNetState state) {
         ArgumentNullException.ThrowIfNull(argument: state);
-        if ((state.Offsets.Length != NodeCount) || (state.Velocities.Length != NodeCount)) {
+        if ((state.Offsets.Length != NodeCount) || (state.Velocities.Length != NodeCount) || (state.SliceVelocities.Length != NodeCount)) {
             throw new ArgumentException(message: $"A {Spec.Columns}x{Spec.Rows} net holds {NodeCount} nodes, not {state.Offsets.Length}.", paramName: nameof(state));
         }
 
         var farthest = FixedVector3.Zero;
+        var reach = (Spec.Reach * Units);
 
         for (var node = 0; (node < NodeCount); node++) {
-            if (!state.Offsets[node].IsWithin(radius: Spec.Reach)) {
+            if (!state.Offsets[node].IsWithin(radius: reach)) {
                 throw new ArgumentException(message: $"Node {node}'s offset lies past the net's reach.", paramName: nameof(state));
             }
-            if (state.Offsets[node].CompareLengthTo(other: farthest) > 0) { farthest = state.Offsets[node]; }
         }
-        state.Offsets.CopyTo(array: m_offsets, index: 0);
+        state.Offsets.CopyTo(array: m_fine, index: 0);
         state.Velocities.CopyTo(array: m_velocities, index: 0);
+        state.SliceVelocities.CopyTo(array: m_sliceVelocity, index: 0);
+        for (var node = 0; (node < NodeCount); node++) {
+            m_offsets[node] = ToMetres(fine: m_fine[node]);
+            if (m_offsets[node].CompareLengthTo(other: farthest) > 0) { farthest = m_offsets[node]; }
+        }
         Awake = state.Awake;
         m_stillTicks = state.StillTicks;
+        m_touch = state.Touch;
         MaxDeflection = farthest.Length;
         Array.Fill(array: m_dirty, value: true);
         m_anyDirty = true;
         Revision++;
     }
-    /// <summary>Folds the net's deterministic state into a hash: its awake flag, still time and every node's offset and
-    /// velocity in node order.</summary>
+    /// <summary>Folds the net's deterministic state into a hash: its awake flag, still time, touch and every node's
+    /// offset and velocities in node order.</summary>
     /// <param name="hash">The hash.</param>
     public void AppendStateHash(ref Fnv1aHash hash) {
         hash.Add(value: (byte)(Awake ? 1 : 0));
         hash.Add(value: m_stillTicks);
+        hash.Add(value: m_touch);
         for (var node = 0; (node < NodeCount); node++) {
-            var offset = m_offsets[node];
-            var velocity = m_velocities[node];
-
-            hash.Add(value: offset.X.Value);
-            hash.Add(value: offset.Y.Value);
-            hash.Add(value: offset.Z.Value);
-            hash.Add(value: velocity.X.Value);
-            hash.Add(value: velocity.Y.Value);
-            hash.Add(value: velocity.Z.Value);
+            m_fine[node].AppendHash(hash: ref hash);
+            m_velocities[node].AppendHash(hash: ref hash);
+            m_sliceVelocity[node].AppendHash(hash: ref hash);
         }
     }
 
-    // Spreads a load's displacement over the free nodes about its point by their bilinear shares.
-    private void ApplyLoad(in FixedNetLoad load, FixedQ4816 rateSquared) {
-        Corners(column: load.Column, row: load.Row, first: out var first, fraction: out var fraction);
+    // The loads' mass on the free nodes under them, and the speed their forces give each free node a slice, in net
+    // units: a node of mass m carrying shares s of loads of mass M and force F feels ΣF·s / (m + ΣM·s), so a body's weight
+    // on the nodes under its hands accelerates them at about gravity's rate and the strands hold the body, not a node
+    // flung by it.
+    private void PrepareLoads(ReadOnlySpan<FixedNetLoad> loads, FixedQ4816 sliceRate) {
+        Array.Clear(array: m_loadPull);
+        if (loads.IsEmpty) {
+            m_inverseMass.CopyTo(array: m_loadedInverseMass, index: 0);
+            return;
+        }
+        // m_loadedInverseMass holds each free node's mass and m_loadPull its force until the last pass inverts them.
+        for (var node = 0; (node < NodeCount); node++) {
+            m_loadedInverseMass[node] = ((m_inverseMass[node] == FixedQ4816.Zero) ? FixedQ4816.Zero : Spec.NodeMass);
+        }
+        foreach (ref readonly var load in loads) {
+            Corners(column: load.Column, row: load.Row, first: out var first, fraction: out var fraction);
 
-        var fx = fraction.X;
-        var fy = fraction.Y;
-        var share00 = ((FixedQ4816.One - fx) * (FixedQ4816.One - fy));
-        var share10 = (fx * (FixedQ4816.One - fy));
-        var share01 = ((FixedQ4816.One - fx) * fy);
-        var share11 = (fx * fy);
-        var step = (load.Force / rateSquared);
+            var fx = fraction.X;
+            var fy = fraction.Y;
 
-        Displace(node: first, displacement: (step * share00));
-        Displace(node: (first + 1), displacement: (step * share10));
-        Displace(node: (first + Spec.Columns), displacement: (step * share01));
-        Displace(node: ((first + Spec.Columns) + 1), displacement: (step * share11));
+            Carry(node: first, share: ((FixedQ4816.One - fx) * (FixedQ4816.One - fy)), load: in load);
+            Carry(node: (first + 1), share: (fx * (FixedQ4816.One - fy)), load: in load);
+            Carry(node: (first + Spec.Columns), share: ((FixedQ4816.One - fx) * fy), load: in load);
+            Carry(node: ((first + Spec.Columns) + 1), share: (fx * fy), load: in load);
+        }
+        for (var node = 0; (node < NodeCount); node++) {
+            if (m_inverseMass[node] == FixedQ4816.Zero) { continue; }
+            var inverse = (FixedQ4816.One / m_loadedInverseMass[node]);
+
+            m_loadedInverseMass[node] = inverse;
+            m_loadPull[node] = (((m_loadPull[node] * inverse) * Units) / sliceRate);
+        }
     }
-    private void Displace(int node, in FixedVector3 displacement) {
+    private void Carry(int node, FixedQ4816 share, in FixedNetLoad load) {
         if (m_inverseMass[node] == FixedQ4816.Zero) { return; }
-        m_positions[node] += (displacement * m_inverseMass[node]);
+        m_loadedInverseMass[node] += (load.Mass * share);
+        m_loadPull[node] += (load.Force * share);
     }
-    // How many pushers reach a free node of the step's positions.
+    // The fingerprint of a step's touch: every load and pusher it is handed, in order. A net that fell asleep under one
+    // touch sleeps on while handed the same.
+    private static ulong Fingerprint(ReadOnlySpan<FixedNetLoad> loads, ReadOnlySpan<FixedNetPusher> pushers) {
+        var hash = Fnv1aHash.Create();
+
+        hash.Add(value: loads.Length);
+        foreach (ref readonly var load in loads) {
+            hash.Add(value: load.Column.Value);
+            hash.Add(value: load.Row.Value);
+            load.Force.AppendHash(hash: ref hash);
+            hash.Add(value: load.Mass.Value);
+        }
+        hash.Add(value: pushers.Length);
+        foreach (ref readonly var pusher in pushers) {
+            pusher.Start.AppendHash(hash: ref hash);
+            pusher.End.AppendHash(hash: ref hash);
+            hash.Add(value: pusher.Radius.Value);
+        }
+        return hash.Value;
+    }
+    // How many pushers, in net units, reach a free node of the step's positions.
     private int Pressing(ReadOnlySpan<FixedNetPusher> pushers) {
         var pressing = 0;
 
@@ -593,7 +718,7 @@ public sealed class FixedNet {
             var direction = away.Normalize();
 
             if (direction == FixedVector3.Zero) {
-                direction = ((FixedVector3.Dot(left: (m_rest[node] - nearest), right: m_normal) >= FixedQ4816.Zero) ? m_normal : -m_normal);
+                direction = ((FixedVector3.Dot(left: (m_local[node] - nearest), right: m_normal) >= FixedQ4816.Zero) ? m_normal : -m_normal);
             }
             m_positions[node] = (nearest + (direction * pusher.Radius));
         }

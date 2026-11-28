@@ -44,13 +44,28 @@ let lookLevels = [lookLevelHall, lookLevelToybox, lookLevelHall, lookLevelHall]
 // along the arcade from the west wall and repeating, the same at each north and south pair so the nave stays balanced:
 // mint, lilac, peach, butter, sky, rose.
 let lookToyPiers = ["#9FE3C6", "#C6B3EA", "#FFC9A8", "#FFE98F", "#9ED4F5", "#FFA9C8"]
-// The toybox's lattice (shell.puck), by the pastel `n` of the panel's place: its frame wears the pastel of the pier at
-// its west end, its uprights the pastel three steps on, and its crossbars the toybox's sunflower, so the panels step
-// along each edge with the piers. The members are glossy toy plastic, brushed as the structure is.
-function lookToyLattice(n) = {
-  frame: lookToyPiers[(n % 6)]
-  bar: lookToyPiers[((n + 3) % 6)]
-  rail: lookLevelToybox.tileTone
+// The toybox's rope nets (shell.puck's lattice panels, the standard's rope net and its `latticeNetPalette`), bold where
+// the piers are soft. Every frame wears one cobalt, a step deeper than the floor's cobalt tiles, which grounds the nets
+// against the sky walls and lets the rope carry the colour; every knot the grout's warm white, a toy rope's whipped
+// knot. Each panel strings its two strand sets in a complementary pair, a warm primary or secondary against the cool
+// colour opposite it, the cool one a step lighter so the two sets hold equal weight under light and the diamonds read
+// crisp from across the void: tomato and teal, sunflower and violet, tangerine and azure, raspberry and leaf. Each is a
+// saturated middle value, never neon or pastel, the same family as the toybox's tomato fascia, sunflower tiles and
+// candy coffers. The pairs step by bay along each edge and the bridge, the same pair at each north and south pair so
+// the nave stays balanced, as the piers' pastels do.
+let lookToyNetFrame = "#2F62C8"
+let lookToyNetKnot = "#F7F3E8"
+let lookToyNetPairs = [
+  ["#E2453C", "#22B8A6"]
+  ["#F5BF34", "#8A6BE0"]
+  ["#F2823A", "#3FA4EC"]
+  ["#E05298", "#5CC250"]
+]
+function lookToyNet(n) = {
+  frame: lookToyNetFrame
+  bar: lookToyNetPairs[(n % length(lookToyNetPairs))][0]
+  rail: lookToyNetPairs[(n % length(lookToyNetPairs))][1]
+  knot: lookToyNetKnot
 }
 // The toybox's arcade cabinets (toybox.puck), by colourway (layout.puck's toyboxPlan `look`; a cabinet and its twin
 // across the nave wear one): glossy toy plastic, its body, its cheeks and marquee housing, its control panels and the

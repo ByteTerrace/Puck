@@ -144,12 +144,8 @@ public readonly record struct PlayerIntent(ChannelValues Channels, SourceRay? So
         hash.Add(value: m_channels.Buttons);
         hash.Add(value: ((byte)(SourceRay.HasValue ? 1 : 0)));
         if (SourceRay is { } ray) {
-            hash.Add(value: ray.Origin.X.Value);
-            hash.Add(value: ray.Origin.Y.Value);
-            hash.Add(value: ray.Origin.Z.Value);
-            hash.Add(value: ray.Direction.X.Value);
-            hash.Add(value: ray.Direction.Y.Value);
-            hash.Add(value: ray.Direction.Z.Value);
+            ray.Origin.AppendHash(hash: ref hash);
+            ray.Direction.AppendHash(hash: ref hash);
         }
     }
     /// <summary>Returns this image with one Q32.32 displacement replaced.</summary>

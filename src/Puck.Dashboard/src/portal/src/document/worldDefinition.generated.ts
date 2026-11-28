@@ -11553,7 +11553,7 @@ export type WorldPlacementNet = {
    */
   damping?: number;
   /**
-   * The slack each strand carries past its rest spacing, as a share of it, in [0, 1].
+   * The slack each strand carries past its rest spacing, as a share of it, in [−0.5, 1]: positive hangs the net loose, so it gives freely until its strands draw taut; negative strings it taut, each strand that share shorter than the spacing, so a load bellies it in proportion to its weight.
    */
   sag?: number;
   /**
@@ -11561,9 +11561,9 @@ export type WorldPlacementNet = {
    */
   reach?: number;
   /**
-   * The projection passes a step makes over every strand, 1 to MaxIterations.
+   * The slices a step is cut into, each solving every strand once, 1 to MaxSubsteps: more converge a stiffer net, at a strand solve each per strand.
    */
-  iterations?: number;
+  substeps?: number;
   /**
    * The thickness the net collides at, in metres before the row's scale: each node cell is a box this thick about the nodes' surface, and a body leaning on the net pushes its nodes until they stand this far beyond the box's face; positive.
    */

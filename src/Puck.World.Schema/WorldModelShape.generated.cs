@@ -5320,7 +5320,7 @@ public static partial class WorldModelShape {
                 M("damping", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacementNet), "Damping", Read | Write, static value => ((global::Puck.World.WorldPlacementNet)value).Damping),
                 M("sag", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacementNet), "Sag", Read | Write, static value => ((global::Puck.World.WorldPlacementNet)value).Sag),
                 M("reach", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacementNet), "Reach", Read | Write, static value => ((global::Puck.World.WorldPlacementNet)value).Reach),
-                M("iterations", typeof(global::System.Int32), typeof(global::Puck.World.WorldPlacementNet), "Iterations", Read | Write, static value => ((global::Puck.World.WorldPlacementNet)value).Iterations),
+                M("substeps", typeof(global::System.Int32), typeof(global::Puck.World.WorldPlacementNet), "Substeps", Read | Write, static value => ((global::Puck.World.WorldPlacementNet)value).Substeps),
                 M("strand", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacementNet), "Strand", Read | Write, static value => ((global::Puck.World.WorldPlacementNet)value).Strand),
                 M("bodyMass", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacementNet), "BodyMass", Read | Write, static value => ((global::Puck.World.WorldPlacementNet)value).BodyMass),
                 M("restSpeed", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacementNet), "RestSpeed", Read | Write, static value => ((global::Puck.World.WorldPlacementNet)value).RestSpeed),
