@@ -72,9 +72,9 @@ rule template questSetAsideNow(questId) {
 // recipient: who, the part, and accepted, completed or did not qualify. When a recipient later finishes the part they
 // joined at while the sharer is still a member present in the same world, the record turns to completed.
 template questChain(id, parts, group, requires = []) {
-  let count = length(parts)
-  let questIds = map(parts, p => p.quest)
-  let indexed = map(range(0, count), k => {
+  let partCount = length(parts)
+  let chainQuestIds = map(parts, p => p.quest)
+  let chainParts = map(range(0, partCount), k => {
     quest: parts[k].quest
     steps: parts[k].steps
     index: k
@@ -101,27 +101,27 @@ template questChain(id, parts, group, requires = []) {
     // part the sharer follows, the farthest part this recipient qualifies for up to it (the first part needs `requires`
     // done, every other the part before it), and what it already holds of that part.
     local entryOk = all(requires, q => questStatus(q) == questDone)
-    for (partQuest, k) in questIds {
+    for (partQuest, k) in chainQuestIds {
       local $"mine{k}" = questStatus(partQuest)
       local $"done{k}" = ($"mine{k}" == questDone) ? 1 : 0
       local $"follows{k}" = (
         ((recordFind(cell, $"{id}Share", from, quests, quest, partQuest, status) ?? 0) == questActive) ? k : -1
       )
     }
-    local sharerPart = maximum(map(range(0, count), k => $"follows{k}"), name => name)
-    for (opens, k) in map(range(0, count), k => (k == 0) ? "entryOk" : $"done{k - 1}") {
+    local sharerPart = maximum(map(range(0, partCount), k => $"follows{k}"), name => name)
+    for (opens, k) in map(range(0, partCount), k => (k == 0) ? "entryOk" : $"done{k - 1}") {
       local $"joins{k}" = ((k <= sharerPart) and ($"{opens}" == 1)) ? k : -1
     }
-    local joinPart = maximum(map(range(0, count), k => $"joins{k}"), name => name)
-    for k in range(0, count) {
+    local joinPart = maximum(map(range(0, partCount), k => $"joins{k}"), name => name)
+    for k in range(0, partCount) {
       local $"holds{k}" = (joinPart == k) ? $"mine{k}" : 0
     }
-    local held = maximum(map(range(0, count), k => $"holds{k}"), name => name)
+    local held = maximum(map(range(0, partCount), k => $"holds{k}"), name => name)
     local shareSlot = recordFree(cell, $"{id}Share", from, questShares)
     // The gate reads only what moves with a share, so the store reads above run when a share fires, not every tick.
     when $"{id}Share".from >= 0 and bodyIndex(each) != $"{id}Share".from and inGroup(each, group) == 1
     mode: Level
-    for (partQuest, k) in questIds {
+    for (partQuest, k) in chainQuestIds {
       if joinPart == k and held == 0 {
         claimIdentityRecord(key: $each, pool: "quests", fields: [
           { field: "quest", text: partQuest }
@@ -163,7 +163,7 @@ template questChain(id, parts, group, requires = []) {
   // turns to completed.
   rule $"{id}-share-completed" {
     forEach: $players
-    local finished = any(indexed, p => ($"{id}SharedPart"[$each] == p.index) and (questStatus(p.quest) == questDone))
+    local finished = any(chainParts, p => ($"{id}SharedPart"[$each] == p.index) and (questStatus(p.quest) == questDone))
     local shareSlot = $"{id}ShareSlot"[$each]
     // The gate reads rows and this body's own quests, which rest; the sharer is checked, and the record written, only
     // when it opens, so a sharer that left or a body index another player took is never written.

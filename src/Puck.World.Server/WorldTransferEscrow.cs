@@ -1589,6 +1589,15 @@ public sealed partial class WorldTransferEscrow {
             (arrival.Request.Members[index].Companion is null) &&
             (m_server.Account.FindById(id: projection.Id) is { Document: not null } owned)
         ) {
+            // A re-drive lands the identity as the commit carried it, in the re-drive's one detached identity for its
+            // id: the account may have moved since (another world wrote it after this arrival), and what this world
+            // reads of the traveller is what the recording read, never what the account holds now.
+            if (m_relandOutcome is not null) {
+                return (TryBindDetached(detached: out var detached, reason: out var reason, taped: in projection)
+                    ? detached
+                    : throw ReplayRefusal.ArrivalRefused.Raise(message: $"identity '{projection.Id}' could not reproduce the arrival it carried — {reason}"));
+            }
+
             return owned;
         }
 

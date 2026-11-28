@@ -149,6 +149,14 @@ public sealed record WorldTestForeign(string Document, int Line, string Gate, IR
             rows: rows,
             state: state
         );
+        // The verdict's copies were added as authored text after the rule itself was lowered (a record read's copy
+        // is an expression over its channel), so they are lowered the same way here, before the rule joins the staged
+        // copy; lowering what is already lowered changes nothing.
+        var holder = new JsonObject { ["rules"] = new JsonArray(rule) };
+
+        WorldExpressionJson.Lower(node: holder);
+        WorldChannelNodes.Lower(document: holder, type: typeof(WorldDefinition));
+        holder["rules"]!.AsArray().Clear();
         rules.AppendNode(item: rule);
         reason = null;
 
@@ -1456,6 +1464,30 @@ public static partial class WorldDocumentEmitter {
                 continue;
             }
 
+            // A read of an identity's record store (`record`, `recordFind`, `recordCount`, `recordFree`) answers one
+            // number, recorded in the Fixed witness under the channel's own spelling with its separators as dashes. A
+            // field read is absent when the store holds nothing there, so the copy reads it as -1 rather than refusing
+            // the firing that records the verdict.
+            if ((readKey is null) && IsRecordRead(channel: readState)) {
+                var recordKey = readState[1..].Replace(oldChar: ':', newChar: '-');
+
+                if (CellName.TryParse(candidate: recordKey, name: out _, reason: out _) && folded.Add(item: (CellKind.Fixed, recordKey))) {
+                    if (!witnesses.TryGetValue(key: CellKind.Fixed, value: out var recordCells)) {
+                        recordCells = [];
+                        witnesses[CellKind.Fixed] = recordCells;
+                    }
+                    recordCells.AppendNode(item: new JsonObject { ["key"] = recordKey, ["value"] = UnseenValue(kind: CellKind.Fixed) });
+                    effects.AppendNode(item: new JsonObject {
+                        ["$type"] = "setState",
+                        ["expression"] = $"({readState}) ?? -1",
+                        ["key"] = recordKey,
+                        ["state"] = WitnessRow(kind: CellKind.Fixed, verdict: row),
+                    });
+                }
+
+                continue;
+            }
+
             // A row holds one kind, so what the gate read of an Int row is a cell of the verdict row and what it
             // read of a Fixed, Bool or Text row is a cell of that kind's witness.
             if (
@@ -1535,6 +1567,14 @@ public static partial class WorldDocumentEmitter {
             });
         }
     }
+
+    // Whether a gate read is one of an identity's record store, which a verdict records by its spelling.
+    private static bool IsRecordRead(string channel) => (
+        channel.StartsWith(value: WorldRuleFacts.RecordPrefix, comparisonType: StringComparison.Ordinal) ||
+        channel.StartsWith(value: WorldRuleFacts.RecordFindPrefix, comparisonType: StringComparison.Ordinal) ||
+        channel.StartsWith(value: WorldRuleFacts.RecordCountPrefix, comparisonType: StringComparison.Ordinal) ||
+        channel.StartsWith(value: WorldRuleFacts.RecordFreePrefix, comparisonType: StringComparison.Ordinal)
+    );
 
     // The verdict trait's gate ceiling, applied here so a long expectation reports as a verdict rather than as a
     // boot refusal.
