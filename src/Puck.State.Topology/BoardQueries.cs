@@ -464,35 +464,19 @@ public static class BoardQueries {
     /// <param name="mask">Bit c set for cell ordinal c.</param>
     /// <returns>The image mask.</returns>
     public static long ImageOfMask(CompiledTopology topology, int element, long mask) {
+        ArgumentNullException.ThrowIfNull(topology);
         if (mask == 0L) {
             return 0L;
         }
-        if (topology.TryImageMask(
-            element: element,
-            image: out var image,
-            mask: ((ulong)mask)
-        )) {
-            return ((long)image);
-        }
-        var remaining = ((ulong)mask);
-        var fallback = 0UL;
 
-        while (remaining != 0UL) {
-            var cell = System.Numerics.BitOperations.TrailingZeroCount(value: remaining);
+        // The mask is the first word of a cell set over the topology; a carried bit past the first 64 cells drops.
+        Span<ulong> source = stackalloc ulong[topology.CellWords];
+        Span<ulong> image = stackalloc ulong[topology.CellWords];
 
-            remaining &= (remaining - 1UL);
-            if (cell < topology.CellCount) {
-                var carried = topology.Image(
-                    cell: cell,
-                    element: element
-                );
+        source[0] = (ulong)mask;
+        topology.ImageCells(destination: image, element: element, source: source);
 
-                if (carried < BoardMask.MaxCells) {
-                    fallback |= (1UL << carried);
-                }
-            }
-        }
-        return ((long)fallback);
+        return (long)image[0];
     }
     /// <summary>Reads a board into scratch storage. Missing cells have the authored empty value.</summary>
     /// <param name="row">The validated board row.</param>
@@ -522,40 +506,18 @@ public static class BoardQueries {
     /// <param name="mask">Bit c set for cell ordinal c.</param>
     /// <returns>The shifted mask.</returns>
     public static long ShiftMask(BoardNeighbourQuery query, long mask) {
+        ArgumentNullException.ThrowIfNull(query);
         if (mask == 0L) {
             return 0L;
         }
+
         var topology = query.Topology;
+        Span<ulong> source = stackalloc ulong[topology.CellWords];
+        Span<ulong> shifted = stackalloc ulong[topology.CellWords];
 
-        if (topology.TryShiftMask(
-            direction: query.Direction,
-            mask: ((ulong)mask),
-            shifted: out var shifted
-        )) {
-            return ((long)shifted);
-        }
-        var remaining = ((ulong)mask);
-        var fallback = 0UL;
+        source[0] = (ulong)mask;
+        topology.ShiftCells(destination: shifted, direction: query.Direction, source: source);
 
-        while (remaining != 0UL) {
-            var cell = System.Numerics.BitOperations.TrailingZeroCount(value: remaining);
-
-            remaining &= (remaining - 1UL);
-            if (cell >= topology.CellCount) {
-                continue;
-            }
-            var neighbour = topology.Neighbour(
-                cell: cell,
-                direction: query.Direction
-            );
-
-            if (
-                (neighbour >= 0) &&
-                (neighbour < BoardMask.MaxCells)
-            ) {
-                fallback |= (1UL << neighbour);
-            }
-        }
-        return ((long)fallback);
+        return (long)shifted[0];
     }
 }

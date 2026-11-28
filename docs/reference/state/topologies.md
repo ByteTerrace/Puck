@@ -140,7 +140,7 @@ A `CompiledTopology` provides:
 | Position to cell | `TryCellOf(position, out cell)` | Grid and box use their rectangular frame, a hex rounds to the nearest lattice point, and a graph or tiling takes the nearest centre within half a `cellSize`. A ring has no position mapping. |
 | Translations | `HasTranslations`, `TryTranslation`, `TryOffset` | Grid, ring, hex, and box. A wrapped axis folds the step back. Graphs and tilings have adjacency only. |
 | Keys | `Key(cell)`, `TryCell(key, out cell)` | Canonical decimal cell keys. |
-| Bit masks | `TryShiftMask(direction, mask, out shifted)`, `TryImageMask(element, mask, out image)` | Carry a whole cell mask through one precomputed table lookup per set bit. The tables exist only for topologies of at most 64 cells. |
+| Cell sets | `CellWords`, `ShiftCells(direction, source, destination)`, `ImageCells(element, source, destination)`, `Reach(seeds, passable, reach, scratch)` | Carry a cell set, a bit per cell in `CellWords` 64-bit words, one step along a direction (a word shift masked by the landing cells when every neighbour lies at one bit distance, `TryUniformStepWords`, else one neighbour read per member), through a point-group element, or flood it through passable cells. The 64-bit expression masks (`boardShift`, `boardImage`) are a cell set's first word through the same kernels. |
 
 Every point-group element is a signed permutation of the topology's axes,
 spelled with a sign and a letter per axis, such as `"+x-y+z"`. A grid uses the

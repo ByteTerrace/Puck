@@ -33,7 +33,6 @@ public sealed partial class CompiledTopology {
     // for the lattice kinds alone: what makes a translation between two cells carriable to a third.
     private readonly (int X, int Y, int Z)[]? m_coordinates;
     private readonly Dictionary<(int, int, int), int>? m_coordinateIndex;
-    private readonly ulong[]? m_directionShiftMasks;
     // Per direction, the one signed bit distance every cell's neighbour lies at, and the cells a step lands on; zero
     // where the neighbours lie at different distances (a wrapped edge, a graph).
     private readonly int[]? m_directionSteps;
@@ -82,12 +81,10 @@ public sealed partial class CompiledTopology {
         }
         CellWords = BitWords.WordsFor(members: count);
         if (directions > 0) {
-            var shiftMasks = ((count <= BoardMask.MaxCells) ? new ulong[(directions * BoardMask.MaxCells)] : null);
             var steps = new int[directions];
             var landings = new ulong[(directions * CellWords)];
 
             for (var d = 0; (d < directions); d++) {
-                var offset = (d * BoardMask.MaxCells);
                 var landing = landings.AsSpan(start: (d * CellWords), length: CellWords);
                 var step = 0;
                 var uniform = true;
@@ -96,9 +93,6 @@ public sealed partial class CompiledTopology {
                     var neighbour = neighbours[((cell * directions) + d)];
 
                     if (neighbour >= 0) {
-                        if (shiftMasks is not null) {
-                            shiftMasks[(offset + cell)] = (1UL << neighbour);
-                        }
                         BitWords.Add(index: neighbour, words: landing);
                         uniform &= ((neighbour != cell) && ((step == 0) || (step == (neighbour - cell))));
                         step = (neighbour - cell);
@@ -106,32 +100,8 @@ public sealed partial class CompiledTopology {
                 }
                 steps[d] = (uniform ? step : 0);
             }
-            m_directionShiftMasks = shiftMasks;
             m_directionSteps = steps;
             m_directionLandings = landings;
-        }
-        if (
-            (count <= BoardMask.MaxCells) &&
-            (images is { Length: > 0 })
-        ) {
-            var imageMasks = new ulong[(images.Length * BoardMask.MaxCells)];
-
-            for (var elem = 0; (elem < images.Length); elem++) {
-                var offset = (elem * BoardMask.MaxCells);
-                var elemImages = images[elem];
-
-                for (var cell = 0; ((cell < count) && (cell < elemImages.Length)); cell++) {
-                    var carried = elemImages[cell];
-
-                    if (
-                        (carried >= 0) &&
-                        (carried < BoardMask.MaxCells)
-                    ) {
-                        imageMasks[(offset + cell)] = (1UL << carried);
-                    }
-                }
-            }
-            m_elementImageMasks = imageMasks;
         }
     }
 
@@ -557,21 +527,6 @@ public sealed partial class CompiledTopology {
         ? m_directionNames[direction]
         : null
     );
-    /// <summary>Moves every set bit of a cell mask to its neighbour in a direction through the precomputed shift
-    /// table, dropping a bit whose cell has no neighbour that way. The table exists only for a topology of at most
-    /// 64 cells.</summary>
-    /// <param name="direction">The direction ordinal.</param>
-    /// <param name="mask">The mask, bit c set for cell ordinal c.</param>
-    /// <param name="shifted">The shifted mask, or zero when no table answers.</param>
-    /// <returns><see langword="true"/> when the precomputed table answered; otherwise <see langword="false"/>.</returns>
-    public bool TryShiftMask(int direction, ulong mask, out ulong shifted) => TryGather(
-        mask: mask,
-        ordinal: direction,
-        ordinalCount: DirectionCount,
-        result: out shifted,
-        table: m_directionShiftMasks
-    );
-
     /// <summary>Reads whether every cell's neighbour in a direction lies at one signed bit distance, so a shift of a cell
     /// mask in that direction is a word shift masked by the cells a step lands on.</summary>
     /// <param name="direction">The direction ordinal.</param>
@@ -742,48 +697,20 @@ public sealed partial class CompiledTopology {
     /// <param name="source">The cell set, <see cref="CellWords"/> words.</param>
     /// <param name="destination">The carried set, <see cref="CellWords"/> words; must not overlap
     /// <paramref name="source"/>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="element"/> is not an element of the
+    /// topology's point group.</exception>
     public void ImageCells(int element, ReadOnlySpan<ulong> source, Span<ulong> destination) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: (uint)element, other: (uint)ElementCount, paramName: nameof(element));
+
         var words = destination[..CellWords];
-
-        if ((CellCount <= BoardMask.MaxCells) && TryImageMask(element: element, image: out var image, mask: source[0])) {
-            words[0] = image;
-
-            return;
-        }
+        var images = m_images[element];
 
         words.Clear();
         foreach (var cell in BitWords.Members(words: source[..CellWords])) {
-            var carried = Image(cell: cell, element: element);
-
-            if (carried >= 0) {
-                BitWords.Add(index: carried, words: words);
+            if ((cell < images.Length) && (images[cell] >= 0)) {
+                BitWords.Add(index: images[cell], words: words);
             }
         }
-    }
-
-    // One row of a precomputed per-cell mask table: 64 destination masks per ordinal, indexed by source cell. The
-    // image of a mask is the union of the rows its set bits select.
-    private static bool TryGather(ulong[]? table, int ordinal, int ordinalCount, ulong mask, out ulong result) {
-        result = 0UL;
-
-        if (
-            (table is null) ||
-            (((uint)ordinal) >= ((uint)ordinalCount))
-        ) {
-            return false;
-        }
-
-        var row = table.AsSpan(
-            length: BoardMask.MaxCells,
-            start: (ordinal * BoardMask.MaxCells)
-        );
-
-        while (mask != 0UL) {
-            result |= row[System.Numerics.BitOperations.TrailingZeroCount(value: mask)];
-            mask &= (mask - 1UL);
-        }
-
-        return true;
     }
     /// <summary>Returns whether two topologies are one lattice wherever each stands: the same kind, cells, directions
     /// and adjacency, so a query that reads cells and their neighbours (a mask, a ray, a neighbour) answers alike over
@@ -809,22 +736,6 @@ public sealed partial class CompiledTopology {
     private readonly int[][] m_images = [];
     private readonly string[] m_elementNames = [];
     private readonly Dictionary<string, int> m_elementAliases = new(comparer: StringComparer.Ordinal);
-
-    private readonly ulong[]? m_elementImageMasks;
-
-    /// <summary>Carries every set bit of a cell mask through a point-group element by the precomputed image table.
-    /// The table exists only for a topology of at most 64 cells.</summary>
-    /// <param name="element">The element ordinal.</param>
-    /// <param name="mask">The mask, bit c set for cell ordinal c.</param>
-    /// <param name="image">The image mask, or zero when no table answers.</param>
-    /// <returns><see langword="true"/> when the precomputed table answered; otherwise <see langword="false"/>.</returns>
-    public bool TryImageMask(int element, ulong mask, out ulong image) => TryGather(
-        mask: mask,
-        ordinal: element,
-        ordinalCount: ElementCount,
-        result: out image,
-        table: m_elementImageMasks
-    );
 
     /// <summary>Gets the number of elements in the topology's point group, the identity included: 8 for a square
     /// grid, 4 for a rectangle, 12 for a hex board, 1 for a ring.</summary>
