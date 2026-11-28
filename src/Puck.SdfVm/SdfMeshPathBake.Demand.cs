@@ -240,12 +240,13 @@ public sealed partial class SdfMeshPathBake {
     // Invariant: while a measure is posted, nothing but the measure reads or writes the demand watch's state (the groups'
     // DemandPixel, Watch, FrustumWatch and demand marks, the attention list, the queues and frustum watches, and the
     // priority share's sweep and hole counts, Prioritize) or changes what it reads (the group list, the copy index, the
-    // frame inputs copied above, the demand points). Enforced by the
-    // joins at the doors that change them: PrepareFrame, the demand points' own doors (SdfMeshDemand.BeforeChange), the
-    // reports that read the watch, and Retire; the group list throws on a change while frozen (GroupList.Frozen), and
-    // DemandPixel throws when read or written off the measure while one is posted (ThrowIfMeasuring). The measure takes
-    // no gate, so the frame's later entries (Pending, the take, ServeAhead, the dress) never wait on it. Workers write
-    // none of the watch's state; the one group flag they move that the measure reads, Retired, only ever turns on, and a
+    // frame inputs copied above, the demand points). Enforced by the doors that change them: PrepareFrame joins the
+    // measure or stands without changing anything (StandsWhileMeasuring), the demand points' own doors join it or hold
+    // their observation until it is collected (SdfMeshDemand.BeforeChange, MayChange), and the reports that read the
+    // watch and Retire join it; the group list throws on a change while frozen (GroupList.Frozen), and DemandPixel throws
+    // when read or written off the measure while one is posted (ThrowIfMeasuring). The measure takes no gate, so the
+    // frame's later entries (Pending, the take, ServeAhead, the dress) never wait on it, and neither does a frame prepared
+    // or observed while it runs. Workers write none of the watch's state; the one group flag they move that the measure reads, Retired, only ever turns on, and a
     // measure that reads it late measures a retired group, which the next decision drops.
     private readonly Lock m_measureGate = new();
     private JobLane? m_measureLane;
@@ -275,6 +276,7 @@ public sealed partial class SdfMeshPathBake {
             if (m_measurePosted) { throw new InvalidOperationException(message: "A demand measure is posted already; PrepareFrame joins it before posting the next."); }
             if (Demand.BeforeChange is null) {
                 Demand.BeforeChange = JoinMeasure;
+                Demand.MayChange = MeasureCollected;
             } else if (!ReferenceEquals(objA: Demand.BeforeChange.Target, objB: this)) {
                 throw new InvalidOperationException(message: "Another bake measures by these demand points.");
             }
@@ -315,6 +317,16 @@ public sealed partial class SdfMeshPathBake {
             }
             if (outcome == WaitOutcome.DeadlinePassed) { HostWaits.ThrowIfPending(pending: MeasureWait); }
         }
+    }
+    // Whether no measure is posted, collecting a posted one that has finished; false, waiting for nothing, while one still
+    // runs. Any thread.
+    private bool MeasureCollected() {
+        lock (m_measureGate) {
+            if (!m_measurePosted) { return true; }
+            if (!m_measureLane!.Ready) { return false; }
+        }
+        JoinMeasure();
+        return true;
     }
     // Joins the measure and stops its lane for a bake retired: a frame prepared after measures on its own thread, under
     // the measure gate (PostMeasure), so the watch's native storage is freed under that gate too and a later measure

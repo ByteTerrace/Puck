@@ -200,7 +200,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 install.Scene.Dispose();
                 install.Done.TrySetResult();
             }
-            jobs = new[] { m_build, m_refill, m_worker, m_drawnBuild }.OfType<Task>().ToArray();
+            jobs = new[] { m_build, m_refill, m_cacheUpkeep, m_worker, m_drawnBuild }.OfType<Task>().ToArray();
         }
         m_cacheOwner.Dispose();
         if (jobs.Length == 0) { ReleaseScene(); return; }
@@ -224,6 +224,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             // the reader epochs, which free them once no reader's hold can reach them.
             foreach (var level in m_levels) {
                 level.Cache.Clear();
+                level.Cache.Settle();
                 level.Cache.Close();
             }
             RetireVolume(next: VolumeWords.None);
@@ -358,17 +359,20 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <summary>Counts the entries of a frame's staging into the volume's gate that found it held by the volume's
     /// background work or another reader, so the staging thread waited.</summary>
     public static readonly WorkKind GateWaits = Registry.Declare(name: "sdf.mesh-gi.gate-waits", unit: "entries", workClass: WorkClass.Pacing);
-    /// <summary>Counts the cells the windows' refills read for whether their slots hold them.</summary>
+    /// <summary>Counts the cells the windows' refills read for whether their slots hold them, outside the gate.</summary>
     public static readonly WorkKind RefillCells = Registry.Declare(name: "sdf.mesh-gi.refill-cells", unit: "cells", workClass: WorkClass.Pacing);
-    /// <summary>Counts the holds of the gate the refills' commits took.</summary>
+    /// <summary>Counts the holds of the gate the refills' commits took, each writing a bounded run of slots.</summary>
     public static readonly WorkKind RefillSteps = Registry.Declare(name: "sdf.mesh-gi.refill-steps", unit: "holds", workClass: WorkClass.Pacing);
-    /// <summary>Counts the table slots the probe caches' retention, growth and release visited.</summary>
+    /// <summary>Counts the table slots the probe caches' upkeep visited (moving a retained or grown table's entries into
+    /// its successor, or releasing an unlinked table's), outside the frame.</summary>
     public static readonly WorkKind CacheSlots = Registry.Declare(name: "sdf.mesh-gi.cache-slots", unit: "slots", workClass: WorkClass.Pacing);
-    /// <summary>Counts the holds of the gate the probe caches' retention, growth and release took.</summary>
+    /// <summary>Counts the holds of the gate the probe caches' upkeep took, each visiting a bounded run of slots.</summary>
     public static readonly WorkKind CacheSteps = Registry.Declare(name: "sdf.mesh-gi.cache-steps", unit: "holds", workClass: WorkClass.Pacing);
-    /// <summary>Counts the probe cache tables a write allocated under the gate.</summary>
+    /// <summary>Counts the probe cache tables a write had to allocate under the gate because none was reserved ahead of
+    /// it: zero while the upkeep reserves each growth before a landing needs it.</summary>
     public static readonly WorkKind CacheTablesUnreserved = Registry.Declare(name: "sdf.mesh-gi.cache-tables-unreserved", unit: "tables", workClass: WorkClass.Pacing);
-    /// <summary>Counts the volume snapshots a relight sent the device whole.</summary>
+    /// <summary>Counts the volume snapshots a relight sent the device whole (a new probe service, a relaid volume, or a
+    /// cancelled whole snapshot), each copied a bounded run of slots a hold of the gate.</summary>
     public static readonly WorkKind WholeSnapshots = Registry.Declare(name: "sdf.mesh-gi.whole-snapshots", unit: "snapshots", workClass: WorkClass.Pacing);
     /// <summary>Gets the most top-level entries one scene build made since the peaks were last cleared.</summary>
     public static readonly WorkKind PeakEntries = Registry.DeclarePeak(name: "sdf.mesh-gi.peak.entries", unit: "entries", workClass: WorkClass.Pacing);
@@ -677,9 +681,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private int m_geometry;
 
     private readonly List<(int Geometry, ChangeTree? Tree)> m_changes = [];
+    // The snapshots' copies of m_changes and of the views' cameras, each made again only once its source changed.
+    private (int Geometry, ChangeTree? Tree)[]? m_changesSnapshot;
+    private CameraSnapshot[] m_viewCamerasSnapshot = [];
     // When each recent lighting version was captured, from the version m_versionBase on: a probe's lighting has been
     // stale since the version after its own was captured.
-    private readonly List<long> m_versionTimes = [];
+    // A window of append-only storage (AppendOnlyWindows), so a worker's snapshot holds it as published without a copy.
+    private ReadOnlyMemory<long> m_versionTimes;
+    private long[]? m_versionStorage;
+    private int m_versionEnd;
     private int m_versionBase = 1;
 
     private Layout m_layout;
@@ -695,12 +705,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private long m_cycleStart;
     private long m_cycleRelit;
     private float m_cycleRate;
-    // The windows' refill (Refill): the windows' version, which a move of any level advances, whether its refill is
-    // owed, the refill in flight on the thread pool and whether it still runs, and the cells it lists and the slot words
-    // it composes for them.
+    // The windows' refill and the probe caches' upkeep (Refill, Upkeep): the windows' version, which a move of any level
+    // advances, whether a refill is owed, the refill in flight on the thread pool, whether it and the caches' upkeep
+    // still run, and the cells a refill lists.
     private int m_windowVersion;
     private bool m_refillOwed;
     private bool m_refillRunning;
+    private bool m_upkeepRunning;
     private Task? m_refill;
 
     private readonly List<(int Level, (int X, int Y, int Z) Cell)> m_refillCells = [];
@@ -899,7 +910,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // A frame staging's entry into the gate: at once when it is free; otherwise the wait is counted (GateWaits) and timed
     // as the frame thread's lighting wait, so host.frames names a frame the volume's background work or another reader
-    // held.
+    // held. Every hold the upkeep and the worker take is bounded (Upkeep), so the wait is too.
     private GateScope EnterStaging() {
         if (!m_gate.TryEnter()) {
             Counters.Count(kind: GateWaits);
@@ -1028,7 +1039,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
                     var (residentLow, residentHigh) = Resident(dims: layout.DimsOf(level: level.Index), low: low);
 
-                    level.Cache.Retain(high: residentHigh, low: residentLow);
+                    // The window publishes at once; the cache forgets the probes outside the box on its upkeep (OweUpkeep
+                    // below starts it), a bounded run of slots a hold, never in this staging.
+                    level.Cache.AskRetain(high: residentHigh, low: residentLow);
                 }
             }
             if (moved) {
@@ -1037,6 +1050,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_traceOwed = true;
                 OweRefill();
             }
+            // A retention asked or a cache cleared above runs on the caches' upkeep.
+            OweUpkeep();
             drain = (converging && (m_scene is not null) && (m_lighting is not null) && (m_owed || (m_drained != DrainKey())));
         }
 
@@ -1296,6 +1311,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_geometry++;
         m_changes.Add(item: (m_geometry, changed));
         if (m_changes.Count > MaxChanges) { m_changes.RemoveAt(index: 0); }
+        m_changesSnapshot = null;
         Owe();
         m_traceOwed = true;
     }
@@ -1765,8 +1781,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     for (var x = low.X; (x < (low.X + dims.X)); x++) {
                         if (!m_levels[level].Cache.TryGetValue(key: (x, y, z), value: out var probe, hold: in hold)) { continue; }
                         var center = (new Vector3(x: (x + .5f), y: (y + .5f), z: (z + .5f)) * m_layout.SpacingOf(level: level));
-                        var next = Math.Clamp(((probe.Lighting + 1) - m_versionBase), 0, (m_versionTimes.Count - 1));
-                        var age = (ChangeOf(in probe, m_lighting, m_layout.SpacingOf(level), center, m_scene, comparisons) == InputChange.None ? 0 : (float)Time.GetElapsedTime(m_versionTimes[next], now).TotalSeconds);
+                        var next = Math.Clamp(((probe.Lighting + 1) - m_versionBase), 0, (m_versionTimes.Length - 1));
+                        var age = (ChangeOf(in probe, m_lighting, m_layout.SpacingOf(level), center, m_scene, comparisons) == InputChange.None ? 0 : (float)Time.GetElapsedTime(m_versionTimes.Span[next], now).TotalSeconds);
 
                         ages.Add(item: age);
 
@@ -2254,9 +2270,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if (skyOnly && captured.SkyMatches(other: m_lighting!, exact: (frame.ConvergesLighting || grid.Enabled))) { return; }
         Volatile.Write(location: ref m_lightingVersion, value: (m_lightingVersion + 1));
         m_lighting = captured;
-        m_versionTimes.Add(item: captured.CapturedAt);
-        if (m_versionTimes.Count > MaxVersionTimes) {
-            m_versionTimes.RemoveRange(count: (MaxVersionTimes / 2), index: 0);
+        m_versionTimes = AppendOnlyWindows.Append(end: ref m_versionEnd, item: captured.CapturedAt, least: MaxVersionTimes, storage: ref m_versionStorage, window: m_versionTimes);
+        if (m_versionTimes.Length > MaxVersionTimes) {
+            m_versionTimes = m_versionTimes[(MaxVersionTimes / 2)..];
             m_versionBase += (MaxVersionTimes / 2);
         }
         Owe();
@@ -2353,86 +2369,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         return (m_lows = lows);
     }
     private (int X, int Y, int Z)[] m_lows = [];
-    // Owes the refill of the windows the volume just moved. It runs on the thread
-    // pool (Refill), since a window that jumps far re-stores every slot; a lighting-converged frame waits for it.
-    private void OweRefill() {
-        m_windowVersion++;
-        m_refillOwed = true;
-        foreach (var level in m_levels) { level.Unwritten = (m_layout.Measures(level: level.Index) ? m_layout.CountOf(level: level.Index) : 0); }
-        if (!m_refillRunning) {
-            m_refillRunning = true;
-            m_refill = Task.Run(action: Refill);
-        }
-    }
-    // Writes every cached probe of each window whose slot holds another cell's: the cells are listed under the gate, their
-    // slots composed outside it, and written under it again unless a window moved meanwhile, when the next round lists
-    // the new windows. A probe that lands in between stores itself and is left as it stands.
-    private void Refill() {
-        while (true) {
-            int version;
-
-            lock (m_gate) {
-                if (!m_refillOwed) {
-                    m_refillRunning = false;
-                    return;
-                }
-
-                version = m_windowVersion;
-                m_refillCells.Clear();
-                foreach (var level in m_levels) {
-                    if (!m_layout.Measures(level: level.Index)) {
-                        level.Unwritten = 0;
-                        continue;
-                    }
-
-                    var low = level.Low;
-                    var dims = m_layout.DimsOf(level: level.Index);
-                    var unwritten = m_layout.CountOf(level: level.Index);
-
-                    for (var z = low.Z; (z < (low.Z + dims.Z)); z++) {
-                        for (var y = low.Y; (y < (low.Y + dims.Y)); y++) {
-                            for (var x = low.X; (x < (low.X + dims.X)); x++) {
-                                if (Holds(cell: (x, y, z), level: level.Index)) {
-                                    unwritten--;
-                                    continue;
-                                }
-                                // GPU records are restored by a selected relight and its guarded device commit.
-                                if ((GpuTrace is null) && level.Cache.ContainsKey(key: (x, y, z))) { m_refillCells.Add(item: (level.Index, (x, y, z))); }
-                            }
-                        }
-                    }
-
-                    level.Unwritten = unwritten;
-                    Counters.Add(amount: (((long)dims.X) * dims.Y * dims.Z), kind: RefillCells);
-                }
-            }
-
-            var cells = m_refillCells.Count;
-            // Native, for this round alone: a window that jumps far composes every slot, and the words are written before
-            // the round ends, so none of a volume's size stays held between refills.
-            using var words = OwnedBuffer<uint>.OfLength(allocator: m_allocator, clear: false, length: (cells * SdfMeshIrradianceProbe.ProbeWords));
-            var composed = ComposeCells(cells: m_refillCells, words: words);
-
-            lock (m_gate) {
-                if (version != m_windowVersion) { continue; }
-
-                for (var index = 0; (index < composed); index++) {
-                    var (level, cell) = m_refillCells[index];
-
-                    if (Holds(cell: cell, level: level)) { continue; }
-                    words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (index * SdfMeshIrradianceProbe.ProbeWords))
-                        .CopyTo(destination: SlotWords(cell: cell, level: level));
-                    m_levels[level].Unwritten--;
-                }
-
-                Counters.Count(kind: RefillSteps);
-                m_refillOwed = false;
-                m_refillRunning = false;
-
-                return;
-            }
-        }
-    }
     // Composes each listed cell's slot words from the cache, outside the gate, into consecutive rows of the words, and
     // keeps the cells that composed at the front of the list in the same order: the count of them. A refill and a landed
     // batch's store both write those rows under the gate once a window has not moved meanwhile.
@@ -2519,13 +2455,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     // The state a worker reads under the gate before it lists or processes probes.
     private readonly record struct Snapshot(SdfMeshIrradianceScene Scene, Lighting Lighting, Layout Layout, (int X, int Y, int Z)[] Lows, Vector3 Camera, int Geometry, int WindowVersion,
-        (int Geometry, ChangeTree? Tree)[] Changes, long[] VersionTimes, int VersionBase, int Sweep, float AgeTarget, CameraSnapshot[] ViewCameras);
+        (int Geometry, ChangeTree? Tree)[] Changes, ReadOnlyMemory<long> VersionTimes, int VersionBase, int Sweep, float AgeTarget, CameraSnapshot[] ViewCameras);
 
     private Snapshot? TakeSnapshot() {
         lock (m_gate) {
             if (m_disposed || (m_scene is null) || (m_lighting is null)) { return null; }
-            return new Snapshot(Camera: m_camera, Changes: [.. m_changes], Geometry: m_geometry, Layout: m_layout, Lighting: m_lighting, Lows: Lows(), Scene: m_scene.Acquire(),
-                Sweep: m_sweep, VersionBase: m_versionBase, VersionTimes: [.. m_versionTimes], WindowVersion: m_windowVersion, AgeTarget: m_budget.Age, ViewCameras: [.. m_viewCameras]);
+            // Each array a snapshot holds is immutable and shared until its source changes, so a snapshot of unchanged
+            // inputs allocates nothing.
+            if (!m_viewCameras.AsSpan().SequenceEqual(other: m_viewCamerasSnapshot)) { m_viewCamerasSnapshot = [.. m_viewCameras]; }
+            return new Snapshot(Camera: m_camera, Changes: (m_changesSnapshot ??= [.. m_changes]), Geometry: m_geometry, Layout: m_layout, Lighting: m_lighting, Lows: Lows(), Scene: m_scene.Acquire(),
+                Sweep: m_sweep, VersionBase: m_versionBase, VersionTimes: m_versionTimes, WindowVersion: m_windowVersion, AgeTarget: m_budget.Age, ViewCameras: m_viewCamerasSnapshot);
         }
     }
     // Whether the windows, the layout and the geometry a worker listed its probes for still stand.
@@ -2889,7 +2828,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private long StaleSince(int lighting, in Snapshot snapshot) {
         var index = ((lighting + 1) - snapshot.VersionBase);
 
-        return ((snapshot.VersionTimes.Length == 0) ? Time.GetTimestamp() : snapshot.VersionTimes[Math.Clamp(value: index, min: 0, max: (snapshot.VersionTimes.Length - 1))]);
+        return ((snapshot.VersionTimes.Length == 0) ? Time.GetTimestamp() : snapshot.VersionTimes.Span[Math.Clamp(value: index, min: 0, max: (snapshot.VersionTimes.Length - 1))]);
     }
     // Records the lighting age a listing found and the relight rate of the cycle it closes, and reports a cycle whose
     // oldest lighting is past the budget's age target; under the gate.
@@ -2962,7 +2901,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var results = m_results;
 
         if (results.Length < count) {
-            results = new ProbeData[Math.Max(val1: BatchProbes, val2: count)];
+            results = new ProbeData[Math.Max(val1: DrainBatchProbes, val2: count)];
             m_results = results;
         }
 
@@ -3031,7 +2970,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_landed.Clear();
         lock (m_gate) {
             if (!Stands(snapshot: in snapshot)) {
-                m_gpuVolume = null;
+                // The device committed this batch's records, which the volume drops: their slots are sent again from the
+                // volume's words.
+                if (GpuTrace is not null) { ResendDestinations(count: count); }
                 Array.Clear(array: results, index: 0, length: count);
                 return;
             }
@@ -3062,6 +3003,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_rays += (((long)traced) * SdfMeshProbeDepth.HitCount);
             Counters.Add(amount: traced, kind: Traced);
             Counters.Add(amount: relit, kind: Relit);
+            // A landing that grew a cache, or filled one past its reserve, leaves the upkeep work.
+            OweUpkeep();
         }
         Array.Clear(array: results, index: 0, length: count);
         StoreLanded();
@@ -3998,262 +3941,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public Span<Vector3> Local(int index) => MemoryMarshal.Cast<float, Vector3>(span: Floats(length: 18, start: ((index * FloatsPerProbe) + 18)));
         public Span<uint> Lights(int index) => MemoryMarshal.Cast<float, uint>(span: Floats(length: SdfMeshIrradianceProbe.LightWords, start: ((index * FloatsPerProbe) + 36)));
         public Span<Vector3> SkyLight(int index) => MemoryMarshal.Cast<float, Vector3>(span: Floats(length: 18, start: (((index * FloatsPerProbe) + 36) + SdfMeshIrradianceProbe.LightWords)));
-    }
-    // Table-owned publication arenas: no objects per key. The volume gate serializes writes. Grow/Retain copy
-    // stable snapshots into independent arenas; a reader of an old table retains its complete earlier membership.
-    // Every entry the current table publishes names its blocks once (ProbeStorage): a write names the new value's blocks
-    // before it releases the old value's, Grow moves every entry, and Retain and Clear release each entry they drop once
-    // the table without it is published. A read takes an open hold of the volume's reader epochs, so a block a dropped
-    // entry named returns to the pool only after every reader that could have taken that entry has finished with it.
-    // A table the cache stops publishing (Clear, Retain, Grow) is retired to the same epochs once its entries are released
-    // or moved, and comes back as the cache's spare once no hold that could still read it is open, so the next table of
-    // its size reuses its arrays instead of allocating them.
-    private sealed class ProbeCache(ReaderEpochs<Reclaimable> blocks, IAllocator allocator, WorkCounterSet counters) {
-        private const int InitialCapacity = (1 << 16);
-
-        private Table? m_table;
-        private Table? m_spare;
-        private int m_capacity = InitialCapacity;
-        // Set once the volume is released: a table the epochs hand back is freed rather than kept as the spare.
-        private volatile bool m_closed;
-
-        // A table of the size asked for: the spare, emptied, when it has that size; a spare of another size is freed.
-        private Table NewTable(int capacity, int entries = 0) {
-            var spare = Interlocked.Exchange(location1: ref m_spare, value: null);
-            var arena = ((entries == 0) ? (capacity / 2) : entries);
-
-            if ((spare is not null) && (spare.Capacity == capacity) && (spare.Values.Capacity == arena)) {
-                spare.Reset();
-                return spare;
-            }
-            spare?.Dispose();
-            return new Table(allocator: allocator, capacity: capacity, owner: this, entries: entries);
-        }
-        // Keeps a table the epochs handed back (no hold can read it) as the spare, freeing the spare it replaces, or frees it
-        // once the volume is released.
-        private void Recycle(Table table) {
-            if (m_closed) {
-                table.Dispose();
-                return;
-            }
-            Interlocked.Exchange(location1: ref m_spare, value: table)?.Dispose();
-        }
-        // Frees the spare, and every table the epochs hand back from now on; the volume's release calls it after Clear.
-        public void Close() {
-            m_closed = true;
-            Interlocked.Exchange(location1: ref m_spare, value: null)?.Dispose();
-        }
-
-        // The probes cached.
-        public int Count => (Volatile.Read(location: ref m_table)?.Count ?? 0);
-
-        // The current table's bytes: its arena machinery, keys and inline storage. The blocks its entries name are the
-        // volume's running figure (ProbeStorage.Charge). The volume gate is held.
-        public (long Table, int Capacity) Bytes() {
-            if (m_table is not { } table) { return (32, 0); }
-            // x64: cache 32, table 56, three buffer owners 72, plus each key, used flag and dense-entry index.
-            var hashStride = (System.Runtime.CompilerServices.Unsafe.SizeOf<(int, int, int)>() + (2 * sizeof(int)));
-
-            return (((((32L + 56L) + 72L) + (((long)table.Capacity) * hashStride)) + table.Values.InlineStorageBytes), table.Capacity);
-        }
-        // Forgets every probe; the next write starts a table of the capacity the cache last reached.
-        public void Clear() {
-            if (m_table is not { } table) { return; }
-            m_capacity = table.Capacity;
-            Volatile.Write(location: ref m_table, value: null);
-            ReleaseEntries(source: table, keep: null, low: default, high: default);
-            blocks.Retire(item: table);
-        }
-        // Releases the blocks of every entry of a table no longer published, except those a kept box still holds.
-        private void ReleaseEntries(Table source, Table? keep, (int X, int Y, int Z) low, (int X, int Y, int Z) high) {
-            var keys = source.Keys;
-            var used = source.Used;
-            var entries = source.Entries;
-
-            for (var slot = 0; (slot < keys.Length); slot++) {
-                if ((used[slot] == 0) || ((keep is not null) && Inside(high: high, key: keys[slot], low: low))) { continue; }
-                if (source.Values.TrySnapshot(entry: entries[slot], value: out var value)) { ProbeStorage.Release(epochs: blocks, probe: in value); }
-            }
-        }
-        // Forgets the probes outside a box of cells, from low inclusive to high exclusive, once the cache holds more probes
-        // than the box has cells; the volume's gate is held. The kept probes are published as a new table, as Grow publishes
-        // one. An old table keeps its earlier key membership and values; retained keys get independent publications.
-        // A batch block no kept probe names is released with the forgotten entries once old readers finish.
-        public void Retain((int X, int Y, int Z) low, (int X, int Y, int Z) high) {
-            if (m_table is not { } table) { return; }
-
-            var cells = ((((long)(high.X - low.X)) * (high.Y - low.Y)) * (high.Z - low.Z));
-
-            if (table.Count <= cells) { return; }
-
-            var kept = 0;
-            var keys = table.Keys;
-            var used = table.Used;
-
-            for (var slot = 0; (slot < keys.Length); slot++) {
-                if ((used[slot] != 0) && Inside(high: high, key: keys[slot], low: low)) { kept++; }
-            }
-            // Three passes over the old table (count, copy, release), in one hold.
-            counters.Add(amount: (3L * keys.Length), kind: CacheSlots);
-            counters.Count(kind: CacheSteps);
-
-            var capacity = InitialCapacity;
-
-            // Reserve the incoming window's cells even after a teleport keeps few or no old probes. Sizing the dense
-            // arena from only kept cells would copy the whole hash table at each tiny arena growth while it refills.
-            var entries = Math.Max(val1: (kept + 1), val2: ((int)cells));
-
-            capacity = Math.Max(val1: capacity, val2: checked((int)(((ulong)entries) * 2UL).NextPowerOfTwo()));
-
-            var compact = NewTable(capacity: capacity, entries: entries);
-
-            CopyEntries(high: high, low: low, retain: true, source: table, target: compact);
-            m_capacity = capacity;
-            Volatile.Write(location: ref m_table, value: compact);
-            ReleaseEntries(source: table, keep: compact, low: low, high: high);
-            blocks.Retire(item: table);
-            // A moving window retires a table a move; one no hold can read any more becomes the spare at once.
-            _ = blocks.Reclaim(release: static item => item.Reclaim());
-        }
-
-        private static bool Inside((int X, int Y, int Z) key, (int X, int Y, int Z) low, (int X, int Y, int Z) high) =>
-            ((key.X >= low.X) && (key.X < high.X) && (key.Y >= low.Y) && (key.Y < high.Y) && (key.Z >= low.Z) && (key.Z < high.Z));
-
-        public bool ContainsKey((int X, int Y, int Z) key) => ((Volatile.Read(location: ref m_table) is { } table) && (Find(key: key, table: table) >= 0));
-        // A read of a probe's blocks is good for as long as the hold it was taken under stays open.
-        public bool TryGetValue((int X, int Y, int Z) key, out ProbeData value, in ReaderEpochs<Reclaimable>.Hold hold) {
-            if (!hold.IsOpen) { throw new InvalidOperationException(message: "A probe cache read needs an open hold of the volume's reader epochs."); }
-            var table = Volatile.Read(location: ref m_table);
-            var slot = ((table is null) ? -1 : Find(key: key, table: table));
-
-            if ((table is null) || (slot < 0)) {
-                value = default;
-
-                return false;
-            }
-
-            return table.Values.TrySnapshot(entry: table.Entries[slot], value: out value);
-        }
-
-        // Writes a cell's entry, naming its blocks first; false, writing nothing, when a block it names was already
-        // retired, which a landing whose window stood never meets. The volume's gate is held.
-        public bool TrySet((int X, int Y, int Z) key, in ProbeData value) {
-            if (!ProbeStorage.TryAddReferences(epochs: blocks, probe: in value)) { return false; }
-            var table = m_table;
-
-            if (table is null) {
-                table = NewTable(capacity: m_capacity);
-                Volatile.Write(location: ref m_table, value: table);
-            }
-
-            var slot = Find(key: key, table: table);
-
-            if (slot >= 0) {
-                var held = table.Values.TrySnapshot(entry: table.Entries[slot], value: out var previous);
-
-                table.Values.Publish(entry: table.Entries[slot], value: value);
-                if (held) { ProbeStorage.Release(epochs: blocks, probe: in previous); }
-
-                return true;
-            }
-            if ((table.Count + 1) > table.Values.Capacity) {
-                table = Grow(table: table);
-                slot = Find(key: key, table: table);
-            }
-
-            Insert(key: key, slot: ~slot, table: table, value: value);
-            return true;
-        }
-
-        // Grows dense storage, and the hash table too once half full, before the write that needed it.
-        private Table Grow(Table table) {
-            var capacity = ((((table.Count + 1) * 2) > table.Capacity) ? (table.Capacity * 2) : table.Capacity);
-
-            counters.Count(kind: CacheTablesUnreserved);
-            counters.Add(amount: table.Capacity, kind: CacheSlots);
-            counters.Count(kind: CacheSteps);
-            var grown = NewTable(capacity: capacity, entries: Math.Min(val1: (capacity / 2), val2: (table.Values.Capacity * 2)));
-
-            CopyEntries(high: default, low: default, retain: false, source: table, target: grown);
-            Volatile.Write(location: ref m_table, value: grown);
-            blocks.Retire(item: table);
-
-            return grown;
-        }
-        private static void CopyEntries(Table source, Table target, bool retain, (int X, int Y, int Z) low, (int X, int Y, int Z) high) {
-            var keys = source.Keys;
-            var used = source.Used;
-            var entries = source.Entries;
-
-            for (var slot = 0; (slot < keys.Length); slot++) {
-                var key = keys[slot];
-
-                if ((used[slot] == 0) || (retain && !Inside(high: high, key: key, low: low))) { continue; }
-                _ = source.Values.TrySnapshot(entry: entries[slot], value: out var value);
-                Insert(table: target, slot: ~Find(key: key, table: target), key: key, value: value);
-            }
-        }
-        private static void Insert(Table table, int slot, (int X, int Y, int Z) key, in ProbeData value) {
-            table.Values.Publish(entry: table.Count, value: value);
-            table.Entries[slot] = table.Count;
-            table.Keys[slot] = key;
-            Volatile.Write(location: ref table.Used[slot], value: 1);
-            table.Count++;
-        }
-        // The slot holding a key, or the complement of the free slot it would take: linear probing from the key's hash,
-        // over a table never more than half full.
-        private static int Find((int X, int Y, int Z) key, Table table) {
-            var used = table.Used;
-            var keys = table.Keys;
-            var mask = (keys.Length - 1);
-
-            for (var slot = Hash(key: key) & mask; ; slot = (slot + 1) & mask) {
-                if (Volatile.Read(location: ref used[slot]) == 0) { return ~slot; }
-                if (keys[slot] == key) { return slot; }
-            }
-        }
-        private static int Hash((int X, int Y, int Z) key) => unchecked(((key.X * 73856093) ^ (key.Y * 19349663)) ^ (key.Z * 83492791));
-
-        // A table's keys, used flags, dense-entry indices and entry arena, all native: read under a hold while the cache
-        // publishes the table or a reader that entered before its retirement may still read it, and freed (Dispose) only
-        // once the epochs handed it back (Reclaim) and the cache keeps it no longer as its spare.
-        private sealed class Table : Reclaimable, IDisposable {
-            private readonly ProbeCache m_owner;
-            private readonly OwnedBuffer<(int X, int Y, int Z)> m_keys;
-            private readonly OwnedBuffer<int> m_used;
-            private readonly OwnedBuffer<int> m_entries;
-
-            public Table(IAllocator allocator, int capacity, ProbeCache owner, int entries = 0) {
-                m_owner = owner;
-                m_keys = OwnedBuffer<(int X, int Y, int Z)>.OfLength(allocator: allocator, clear: true, length: capacity);
-                m_used = OwnedBuffer<int>.OfLength(allocator: allocator, clear: true, length: capacity);
-                m_entries = OwnedBuffer<int>.OfLength(allocator: allocator, clear: true, length: capacity);
-                Values = new PublishArena<ProbeData>(allocator: allocator, capacity: ((entries == 0) ? (capacity / 2) : entries));
-                Capacity = capacity;
-            }
-
-            public int Capacity { get; }
-            public Span<(int X, int Y, int Z)> Keys => m_keys.GetSpan();
-            public Span<int> Used => m_used.GetSpan();
-            public Span<int> Entries => m_entries.GetSpan();
-            public PublishArena<ProbeData> Values { get; }
-
-            public int Count;
-
-            // Empties the table for its cache to publish again; no reader can reach it (it came back reclaimed).
-            public void Reset() {
-                Used.Clear();
-                Values.Reset();
-                Count = 0;
-            }
-            public override void Reclaim() => m_owner.Recycle(table: this);
-            public void Dispose() {
-                Values.Dispose();
-                m_keys.Dispose();
-                m_used.Dispose();
-                m_entries.Dispose();
-            }
-        }
     }
     // One level of the volume: its probes by cell, its window's first cell, the slots of its window still lacking a
     // measurement of their own cell, the slots composed since its last publication, and the window views read. Its

@@ -469,6 +469,16 @@ public sealed partial class SdfWorldTables {
         PrepareMeshTransformCuts(frame: frame);
         // The rows the draw region holds records for: the list, or its first rows when a growth was refused.
         var count = EnsureMeshDrawCapacity(count: draws.Count);
+
+        // The staged rows hold as many rows as the draw region, grown with it and outside the store's gate, so a staging
+        // whose draws grew copies none of them while every residency on the store waits.
+        if (m_stagedDraws.Length < Math.Max(val1: count, val2: m_meshDrawCapacity)) {
+            var capacity = Math.Max(val1: count, val2: m_meshDrawCapacity);
+
+            Array.Resize(array: ref m_stagedDraws, newSize: capacity);
+            Array.Resize(array: ref m_stagedOccupancies, newSize: capacity);
+            Array.Resize(array: ref m_stagedCasterState, newSize: capacity);
+        }
         lock (m_meshStore.Gate) {
             m_currentDrawRows = draws;
             var whole = m_drawCursor.Collect(draws.Changes, draws.Serial, draws.Roster, draws.Count,
@@ -478,12 +488,6 @@ public sealed partial class SdfWorldTables {
             m_owedDraws.Append(source: m_reseatedDraws);
             if (count > m_stagedCount) { m_owedDraws.Add(m_stagedCount, (count - m_stagedCount)); }
             m_meshClaims ??= new SdfMeshClaims();
-            if (m_stagedDraws.Length < count) {
-                var capacity = ArrayCapacity.Grown(m_stagedDraws.Length, count);
-
-                Array.Resize(array: ref m_stagedDraws, newSize: capacity); Array.Resize(array: ref m_stagedOccupancies, newSize: capacity);
-                Array.Resize(array: ref m_stagedCasterState, newSize: capacity);
-            }
             for (var row = count; (row < m_stagedCount); row++) { NoteUnnamedRow(row: row); Unname(row: row); }
             for (var run = 0; (run < m_owedDraws.Count); run++) {
                 var end = Math.Min(val1: count, val2: (m_owedDraws.Start(index: run) + m_owedDraws.Length(index: run)));

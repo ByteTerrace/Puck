@@ -2348,6 +2348,17 @@ counts in `sdf.transforms`, never in `records.posed`.
   caller that needs a residency's packed frame before the fork calls `SdfWorldResidency.Prepare`, which packs it
   there and then. `host.frames`' `pack` part is the frame thread's wall time across the pack fork, its own partition
   and the join included; the workers' share is not in any part.
+- **A camera cut costs an ordinary frame.** The irradiance volume's gate is never held across a scan of a window or a
+  table (`SdfMeshIrradiance.Upkeep.cs`, `SdfMeshIrradiance.ProbeCache`): a window move publishes at once, and the
+  refill, the probe caches' retention, growth and releases, and a whole snapshot for the probe service each take a
+  bounded run of slots a hold. A new writer of the volume's words keeps the feedback mirror's invariant (the header of
+  `SdfMeshIrradiance.SnapshotWhole`) by marking what it wrote dirty, never by forgetting the mirror to resend the
+  volume whole. A frame whose bake's demand measure still runs dresses what the groups hold instead of joining it
+  (`SdfMeshPathBake.StandsWhileMeasuring`), and the demand points hold that frame's observation until the measure is
+  collected (`SdfMeshDemand.MayChange`, `ApplyStaged`); a tick-locked frame, another program or a changed copy layout
+  joins. `host.frames` names what is left as `lightingwait` and `demandwait` among the produce-work parts (measured
+  on the frame thread only), beside `sdf.mesh-gi.gate-waits`, `refill-*`, `cache-*` and `whole-snapshots` and
+  `sdf.residency.demand.join-waits` and `frames-stood` in `world.counters`.
 - **A dress walks only what moved.** `SdfMeshDresser.Dress` skips its group walk while the bake's product revision and
   copy layout revision stand; `SdfMeshPathBake.Replace` (the group list's one writer), Restart's clear, the
   `Group.Mesh` setter, `ShowOwn` and `FinishReplacements` move the product revision, so a new change to what

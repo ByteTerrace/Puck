@@ -1982,8 +1982,11 @@ slots are measured. Its centre encloses the residency's view cameras when
 they fit within the window's middle, otherwise it follows the first camera.
 The CPU probe cache is a cache of its window: each level keeps the probes of its
 window grown by the band that holds the window still (an eighth of it a side),
-and forgets the rest when the window moves, so the cache is bounded by
-residency, not by where the camera has been. Full demand-point windowing and
+and forgets the rest once the window has moved, so the cache is bounded by
+residency, not by where the camera has been. A move publishes the window at
+once; the forgetting and the refill of the moved slots run on the volume's
+upkeep, a bounded run of slots for each hold of the volume's gate, so a camera
+cut costs the frame no scan of a window or a table. Full demand-point windowing and
 scene scope are open work in
 [the streaming and memory plan](../plans/streaming-and-memory.md#decision-9-lighting-reads-the-same-demand-and-pays-on-demand).
 A still cell reuses its measurement until the lighting or geometry changes.

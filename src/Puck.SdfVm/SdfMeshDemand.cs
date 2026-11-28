@@ -175,10 +175,20 @@ public sealed class SdfMeshDemand {
     }
 
     private readonly List<Change> m_taken = [];
-    // What every change of the points waits for first: the one bake that measures by them, whose measure reads them off
-    // the frame's thread until it is joined (SdfMeshPathBake.JoinMeasure). Observe and Place are the only doors that
-    // change the points, so a measure never reads them mid-change.
+    // The one bake that measures by these points reads them off the frame's thread from posting its measure until it
+    // joins it (SdfMeshPathBake.JoinMeasure). Invariant: the points change only while no measure is posted. Enforced by
+    // the two doors that change them, which ask that bake first: Place joins the measure (BeforeChange); Observe asks
+    // whether one runs without waiting (MayChange) and, while one does, keeps its views staged (m_staged) for the bake
+    // to apply once it has collected the measure and before it posts the next (ApplyStaged).
     internal Action? BeforeChange { get; set; }
+    internal Func<bool>? MayChange { get; set; }
+    // The latest observation's views not yet applied to the points: each view's point, the object whose view it shows and
+    // its cut. A frame's views are borrowed until its source's next capture, so the observation keeps its own copy.
+    private Viewpoint[] m_staged = new Viewpoint[4];
+    private object?[] m_stagedSources = new object?[4];
+    private long[] m_stagedCuts = new long[4];
+    private int m_stagedCount;
+    private bool m_stagedOwed;
     // The points in lanes (Lanes), and one more each time they change, which a kept read (BoxRead) is keyed by.
     private PointLanes m_lanes = new(capacity: 0);
     private long m_version;
@@ -193,27 +203,37 @@ public sealed class SdfMeshDemand {
     /// primary seat's while that seat is presented here. Each view is matched to the point it held before by its source
     /// and cut, or by its place among the views with none: a matched point's moves add to the odometers
     /// (<see cref="Travel"/>, <see cref="Scale"/>, and its frustum lane's shift and turn when it is bounded to its view),
-    /// and any other change is listed (<see cref="Changes"/>).</summary>
+    /// and any other change is listed (<see cref="Changes"/>). While the bake that measures by these points still runs a
+    /// measure, the points stand as they were and the observation takes effect once that measure completes, the latest
+    /// observation replacing any held before it; this never waits for the measure.</summary>
     /// <param name="frame">The frame.</param>
     /// <param name="height">The output's height in display pixels.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     public void Observe(SdfFrame frame, uint height) {
         ArgumentNullException.ThrowIfNull(argument: frame);
-        BeforeChange?.Invoke();
-
+        Stage(frame: frame, height: height);
+        if (MayChange?.Invoke() ?? true) {
+            ApplyStaged();
+        } else {
+            SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.DemandObservationsHeld);
+        }
+    }
+    // Reads a frame's views into the staged observation, replacing one not yet applied: the views another residency
+    // renders, hidden views and views with no finite camera or field of view stage nothing.
+    private void Stage(SdfFrame frame, uint height) {
         var views = frame.Views;
         var others = frame.Content.DemandViews;
+        var total = (views.Count + others.Count);
         var count = 0;
-        var travel = 0f;
-        var scale = 0f;
-        var unsourced = 0;
 
-        Hold();
-        EnsureCapacity(views.Count + others.Count);
-        Span<bool> matched = stackalloc bool[m_heldCount];
+        if (m_staged.Length < total) {
+            var capacity = ArrayCapacity.Grown(m_staged.Length, total);
 
-        matched.Clear();
-        for (var index = 0; (index < (views.Count + others.Count)); index++) {
+            Array.Resize(array: ref m_staged, newSize: capacity);
+            Array.Resize(array: ref m_stagedSources, newSize: capacity);
+            Array.Resize(array: ref m_stagedCuts, newSize: capacity);
+        }
+        for (var index = 0; (index < total); index++) {
             var view = ((index < views.Count) ? views[index] : others[index - views.Count]);
             var camera = view.Camera;
             var tan = camera.TanHalfFieldOfView;
@@ -223,8 +243,42 @@ public sealed class SdfMeshDemand {
             var focal = ((((view.DemandHeight > 0f) ? view.DemandHeight : MathF.Max(x: 1f, y: (view.Region.Height * height))) * 0.5f) / tan);
             var within = view.DemandWithinView;
             var held = (within ? (camera with { Near = (camera.Near * SdfMeshCull.NearKeeps) }) : camera);
-            var point = new Viewpoint(Camera: held, Eye: camera.Position, Focal: focal, Framed: true, Within: within);
-            var before = Match(source: view.Source, cut: view.CutRevision, unsourced: ((view.Source is null) ? unsourced++ : -1), matched: matched);
+
+            m_staged[count] = new Viewpoint(Camera: held, Eye: camera.Position, Focal: focal, Framed: true, Within: within);
+            m_stagedSources[count] = view.Source;
+            m_stagedCuts[count] = view.CutRevision;
+            count++;
+        }
+        for (var index = count; (index < m_stagedCount); index++) { m_stagedSources[index] = null; }
+        m_stagedCount = count;
+        m_stagedOwed = true;
+    }
+    // Applies the staged observation to the points, when one is staged: each staged view is matched to the point it held
+    // before, its moves adding to the odometers, and every other change is listed. Called only while no measure is
+    // posted (the invariant above): by Observe when the bake answers that none runs, and by the bake once it collects
+    // one.
+    internal void ApplyStaged() {
+        if (!m_stagedOwed) { return; }
+        m_stagedOwed = false;
+
+        var count = 0;
+        var travel = 0f;
+        var scale = 0f;
+        var unsourced = 0;
+
+        Hold();
+        EnsureCapacity(m_stagedCount);
+        Span<bool> matched = stackalloc bool[m_heldCount];
+
+        matched.Clear();
+        for (var index = 0; (index < m_stagedCount); index++) {
+            var point = m_staged[index];
+            var source = m_stagedSources[index];
+            var cut = m_stagedCuts[index];
+            var within = point.Within;
+            var held = point.Camera;
+            var focal = point.Focal;
+            var before = Match(source: source, cut: cut, unsourced: ((source is null) ? unsourced++ : -1), matched: matched);
 
             m_continues[count] = -1;
 
@@ -249,8 +303,8 @@ public sealed class SdfMeshDemand {
             m_within[count] = within;
             m_framed[count] = true;
             m_cameras[count] = held;
-            m_sources[count] = view.Source;
-            m_cuts[count] = view.CutRevision;
+            m_sources[count] = source;
+            m_cuts[count] = cut;
             count++;
         }
         for (var before = 0; (before < m_heldCount); before++) {
