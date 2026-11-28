@@ -11432,6 +11432,10 @@ export type WorldPlacement = {
    * The placement's net facet (see WorldPlacementNet): the row's creation is a net of rope strands the authority steps, that gives under the bodies leaning on it and carries the bodies holding it, or null for a rigid row. Omitted from the wire when null.
    */
   net?: WorldPlacementNet | null;
+  /**
+   * The placement's shift facet (see WorldPlacementShift): the row's root moves by an offset read from state, or null for a row that stays where it is placed. Omitted from the wire when null.
+   */
+  shift?: WorldPlacementShift | null;
 };
 
 /**
@@ -11990,6 +11994,24 @@ export type WorldPlacementResponseConditionStateConditionNullable = {
 };
 
 export type WorldPlacementResponseList = (WorldPlacementResponse | null)[];
+
+/**
+ * A placement's shift facet: the row's root moves by an offset read from state, in world axes, added to wherever the row stands (its resolved frame, or the body it rides): a thing a rule places (a field cast where its caster stood) or moves (a floor button sinking under a foot and rising back). Each member is a literal or a numeric state binding, never keys, so the authority reads the offset exactly from the arena at a tick and a presentation reads the cells its mirror presents, interpolated between ticks. Absent (null) members are zero.
+ */
+export type WorldPlacementShift = {
+  /**
+   * The offset along world X, in metres.
+   */
+  x?: BindableScalar;
+  /**
+   * The offset along world Y, in metres.
+   */
+  y?: BindableScalar;
+  /**
+   * The offset along world Z, in metres.
+   */
+  z?: BindableScalar;
+};
 
 /**
  * The contract a named placement-local spatial volume contributes to queries.

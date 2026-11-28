@@ -1253,6 +1253,10 @@ public sealed partial class WorldColliderSet : IContactField {
             if (moving.Placement.Turn is { } turn) {
                 rotation = (rotation * FixedQuaternion.FromAxisAngle(angle: turn.YawRadiansAt(arena: arena, definition: definition, engineTick: engineTick, tick: tick), axis: FixedVector3.UnitY));
             }
+            // A shifting row moves by its offset, in world axes, from wherever it stands.
+            if (moving.Placement.Shift is { } shift) {
+                origin += shift.OffsetAt(arena: arena, definition: definition, engineTick: engineTick, tick: tick);
+            }
             var scale = FixedQ4816.One;
 
             if (moving.SizeBinding is { } binding) {

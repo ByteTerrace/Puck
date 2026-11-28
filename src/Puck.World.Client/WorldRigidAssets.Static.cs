@@ -446,6 +446,7 @@ public sealed partial class WorldRigidAssets {
                 : (occurrence.Position, occurrence.Orientation));
 
             orientation = WorldTurnedPose.Turned(mirror: source.StateMirror, orientation: orientation, turn: occurrence.Placement.Turn);
+            position = WorldTurnedPose.Shifted(mirror: source.StateMirror, position: position, shift: occurrence.Placement.Shift);
 
             if (previous.Update(-1, occurrence.Target, occurrence.MotionKey, new DynamicTransform(Position: position, Orientation: orientation), previous.Scale, true, null, null, 0, [], usesRootMaterialFrame: false, templateRange: occurrence.Asset.Range)) {
                 m_changedCopies.Add(item: copyIndex);

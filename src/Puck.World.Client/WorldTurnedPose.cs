@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The presented orientation of a placement row that turns (<see cref="WorldPlacement.Turn"/>): the row's own
+/// The presented pose of a placement row that turns (<see cref="WorldPlacement.Turn"/>) or shifts (<see cref="WorldPlacement.Shift"/>): the row's own
 /// orientation with the turn's yaw about its local up axis applied first. The one place every presentation reader of a
 /// turning row (the stamp pool, the rigid copies) composes it.
 /// <para>Presentation float over the values the state mirror presents, interpolated between ticks, so a turntable moves
@@ -27,6 +27,20 @@ public static class WorldTurnedPose {
         var yaw = turn.PresentedYawRadians(read: (scalar, fallback) => Presented(fallback: fallback, mirror: mirror, scalar: scalar));
 
         return Quaternion.Normalize(value: (orientation * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: ((float)yaw))));
+    }
+
+    /// <summary>Returns a row's position moved by its shift facet (<see cref="WorldPlacement.Shift"/>), each member's
+    /// presented value read from the state mirror; the authoritative answer is <see cref="WorldPlacementShift.OffsetAt"/>,
+    /// which a solid row's colliders take.</summary>
+    /// <param name="shift">The row's shift facet, or <see langword="null"/> for a row that does not shift.</param>
+    /// <param name="position">The row's position before the shift.</param>
+    /// <param name="mirror">The state mirror whose presented values the shift's bindings read.</param>
+    /// <returns>The shifted position; <paramref name="position"/> itself for a row that does not shift.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
+    public static Vector3 Shifted(WorldPlacementShift? shift, Vector3 position, WorldStateMirror mirror) {
+        ArgumentNullException.ThrowIfNull(argument: mirror);
+
+        return ((shift is null) ? position : (position + shift.PresentedOffset(read: scalar => mirror.Scalar(fallback: 0f, scalar: in scalar))));
     }
 
     // A member's presented value at full precision: a binding's presented number, which a long-running clock needs in
