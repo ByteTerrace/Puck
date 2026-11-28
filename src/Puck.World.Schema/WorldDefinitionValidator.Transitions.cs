@@ -1,6 +1,22 @@
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    // A look's form transition: each effect, and each switch naming a look the document declares by a literal name.
+    private static void ValidateFormTransition(WorldFormTransition? transition, IReadOnlyList<WorldLook> looks, string path, List<string> errors) {
+        if (transition is null) { return; }
+        ValidateFormEffect(effect: transition.Arrive, path: $"{path}.arrive", errors: errors);
+        ValidateFormEffect(effect: transition.Leave, path: $"{path}.leave", errors: errors);
+        for (var index = 0; (index < (transition.Switches?.Count ?? 0)); index++) {
+            var change = transition.Switches![index];
+            var at = $"{path}.switches[{index}]";
+
+            if (!looks.Any(predicate: look => string.Equals(a: look.Name.Value, b: change.Look, comparisonType: StringComparison.Ordinal))) {
+                errors.Add(item: $"{at}.look '{change.Look}' names no look row.");
+            }
+            ValidateFormEffect(effect: change.Arrive, path: $"{at}.arrive", errors: errors);
+            ValidateFormEffect(effect: change.Leave, path: $"{at}.leave", errors: errors);
+        }
+    }
     // A look's form effect (WorldFormEffect): positive sweep and noise wavelength, no negative time, length, light or
     // count, shares in [0, 1] and hex colours.
     private static void ValidateFormEffect(WorldFormEffect? effect, string path, List<string> errors) {

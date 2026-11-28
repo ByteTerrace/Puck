@@ -1,0 +1,135 @@
+// Form transitions: how a body changes form on screen, on any creation an author drops them on. A module library: it hands
+// its importers effects and emits no document. A look carries a `transition` (WorldFormTransition) whose `arrive` plays as
+// a body starts wearing the look (switching to it from another form, or a body arriving in it) and whose `leave` plays as
+// it stops (switching away, or leaving); while a leave plays, the outgoing form is drawn beside the incoming one. The
+// engine plays every effect (Puck.World.Client's WorldFormEffects); this module chooses its values, and an author
+// overrides any of them by argument, or writes an effect record of their own.
+//
+//   import "../standard/form-transition"
+//   looks [
+//     {
+//       name: "hero"
+//       source: creation(prototypeId: "hero")
+//       motion { cues [], gaitAmplitude: 1, replayFrames: false, secondsPerFrame: 0 }
+//       scale: 1
+//       transition: formMotes()                       // dissolves into motes and rebuilds behind a sweeping band
+//     }
+//   ]
+//
+// Two families:
+//
+//   motes    the form under one band over its real surface: the outgoing form dissolves from the top down behind a
+//            bright edge, its surface rising off as motes where the edge crosses it, and the incoming form builds from
+//            the feet up behind an edge moving the other way, motes settling onto it just as the edge reaches them
+//            (formDissolve, formMaterialize; formMotes pairs them)
+//   pieces   the form part by part: each moving part of the outgoing form is launched off with a seeded impulse, tumbles,
+//            bounces off the world's real floors and walls and dissolves where it lies; each part of the incoming form
+//            materializes a reach out from its place, flies in along an arc and overshoots as it locks on (formShed,
+//            formAssemble; formPieces pairs them)
+//
+// The values: an edge the colour of a cold arc light at about the luminance of a lit sign, so it reads under the noon sun
+// and blooms at night; motes a centimetre across, a little brighter, living about half a second; a front roughened by a
+// few centimetres of lattice noise, so the cut wanders over the surface rather than slicing it flat.
+
+// The standard's edge and mote colour.
+let formTransitionColor = "#A8ECFF"
+
+// The outgoing form dissolving from the top down behind a bright edge, its surface rising off as motes.
+function formDissolve(seconds = 0.8, delay = 0, color = formTransitionColor, motes = 1400, size = 0.012, direction = [0, -1, 0]) = {
+  seconds: seconds
+  delay: delay
+  direction: direction
+  edgeColor: color
+  edgeLuminance: 5000
+  edgeWidth: 0.06
+  roughness: 0.04
+  roughnessScale: 0.07
+  motes: motes
+  moteLuminance: 9000
+  moteSize: size
+  moteSeconds: 0.7
+  moteSpeed: 0.35
+  moteRise: 0.6
+  moteSwirl: 2.5
+}
+
+// The incoming form building from the feet up behind an edge, motes settling onto it as the edge reaches them.
+function formMaterialize(seconds = 0.9, delay = 0.15, color = formTransitionColor, motes = 1400, size = 0.012, direction = [0, 1, 0]) = {
+  seconds: seconds
+  delay: delay
+  direction: direction
+  edgeColor: color
+  edgeLuminance: 5000
+  edgeWidth: 0.06
+  roughness: 0.04
+  roughnessScale: 0.07
+  motes: motes
+  moteLuminance: 9000
+  moteSize: size
+  moteSeconds: 0.6
+  moteSpeed: 0.45
+  moteRise: -0.4
+  moteSwirl: 3
+}
+
+// The outgoing form's moving parts blown off: each launched out and up from the body, tumbling, bouncing off what it
+// strikes, and dissolving into motes once it has flown.
+function formShed(color = formTransitionColor, speed = 2.6, spin = 7, motes = 220) = {
+  pieces: true
+  seconds: 0.35
+  direction: [0, -1, 0]
+  edgeColor: color
+  edgeLuminance: 4000
+  edgeWidth: 0.04
+  roughness: 0.02
+  roughnessScale: 0.05
+  motes: motes
+  moteLuminance: 8000
+  moteSize: 0.01
+  moteSeconds: 0.5
+  moteSpeed: 0.3
+  moteRise: 0.5
+  moteSwirl: 1.5
+  pieceSpeed: speed
+  pieceLift: 0.55
+  pieceSpin: spin
+  pieceGravity: 9.81
+  pieceBounce: 0.35
+  pieceSeconds: 0.7
+  pieceStagger: 0.12
+}
+
+// The incoming form's moving parts flown on: each materializing a reach out from its place and locking into it.
+function formAssemble(color = formTransitionColor, reach = 0.6, motes = 160) = {
+  pieces: true
+  seconds: 0.25
+  delay: 0.1
+  direction: [0, 1, 0]
+  edgeColor: color
+  edgeLuminance: 4000
+  edgeWidth: 0.04
+  roughness: 0.02
+  roughnessScale: 0.05
+  motes: motes
+  moteLuminance: 8000
+  moteSize: 0.01
+  moteSeconds: 0.4
+  moteSpeed: 0.4
+  moteRise: -0.3
+  moteSwirl: 2
+  pieceReach: reach
+  pieceSeconds: 0.45
+  pieceStagger: 0.3
+}
+
+// A look's transition in the motes family: dissolve out, materialize in.
+function formMotes(color = formTransitionColor) = {
+  arrive: formMaterialize(color: color)
+  leave: formDissolve(color: color)
+}
+
+// A look's transition in the pieces family: shed out, assemble in.
+function formPieces(color = formTransitionColor) = {
+  arrive: formAssemble(color: color)
+  leave: formShed(color: color)
+}

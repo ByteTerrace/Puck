@@ -117,6 +117,7 @@ template patienceDeck() {
       name: name
       scale: patienceCardScale
       source: creation(prototypeId: name)
+      transition: holodeckTransition
     }),
     map(["patienceCursor", "patienceHeld"], name => {
       motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }

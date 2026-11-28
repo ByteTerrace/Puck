@@ -84,8 +84,8 @@ public sealed partial class WorldCreationInstances {
             }
             if (drawn is null) { continue; }
             if (m_formDrawn.TryGetValue(key: body, value: out var before) && !ReferenceEquals(objA: before, objB: drawn)) {
-                if (drawn.Look?.Transition?.Arrive is { } arrive) { BeginPlay(live: drawn, index: drawnIndex, effect: arrive, arriving: true, transforms: transforms, rootSlot: (slotBase + RootSlotOffset(index: drawnIndex))); }
-                if (before.FormLingers && (before.Look?.Transition?.Leave is { } leave) && (IndexOf(live: before) is var beforeIndex and >= 0)) {
+                if (drawn.Look?.Transition?.ArriveFrom(look: before.Look?.Name.Value) is { } arrive) { BeginPlay(live: drawn, index: drawnIndex, effect: arrive, arriving: true, transforms: transforms, rootSlot: (slotBase + RootSlotOffset(index: drawnIndex))); }
+                if (before.FormLingers && (before.Look?.Transition?.LeaveTo(look: drawn.Look?.Name.Value) is { } leave) && (IndexOf(live: before) is var beforeIndex and >= 0)) {
                     BeginPlay(live: before, index: beforeIndex, effect: leave, arriving: false, transforms: transforms, rootSlot: (slotBase + RootSlotOffset(index: beforeIndex)));
                 }
             }

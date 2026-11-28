@@ -3456,6 +3456,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `looks.rows[].transition.arrive.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
 | `looks.rows[].transition.leave.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
+| `looks.rows[].transition.switches[].arrive.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
+| `looks.rows[].transition.switches[].leave.direction` | State | Binding | Binding | `WorldFormEffect.Direction` |
 | `looks.assignment.rows` | State | Binding | Binding | `WorldRowAssignment.Rows` |
 | `dynamics[].name` | Dynamics | Declares |  | `DynamicsRow.Name` |
 | `hud.defaults.cursor.visible[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -8105,6 +8107,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `looks.rows[].transition.arrive.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
 | `looks.rows[].transition.leave.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
 | `looks.rows[].transition.leave.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
+| `looks.rows[].transition.switches[].look` | `WorldFormSwitch.Look` | a look name |
+| `looks.rows[].transition.switches[].arrive.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `looks.rows[].transition.switches[].arrive.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
+| `looks.rows[].transition.switches[].leave.edgeColor` | `WorldFormEffect.EdgeColor` | a color literal |
+| `looks.rows[].transition.switches[].leave.moteColor` | `WorldFormEffect.MoteColor` | a color literal |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `looks.assignment.select[].name` | `WorldRowSelector.Name` | a row selector's name |
 | `looks.assignment.select[].bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |

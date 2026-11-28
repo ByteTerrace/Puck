@@ -8840,6 +8840,21 @@ export type WorldFormEffect = {
   totalSeconds?: number;
 };
 
+export type WorldFormSwitch = {
+  /**
+   * The other look's name, as its row spells it.
+   */
+  look: string;
+  /**
+   * What plays as this look starts to be worn after Look, or null for the transition's own.
+   */
+  arrive?: WorldFormEffect | null;
+  /**
+   * What plays as this look stops being worn for Look, or null for the transition's own.
+   */
+  leave?: WorldFormEffect | null;
+};
+
 export type WorldFormTransition = {
   /**
    * What plays as the look starts to be worn, or null for an instant start.
@@ -8849,6 +8864,10 @@ export type WorldFormTransition = {
    * What plays as the look stops being worn, or null for an instant end. While it plays, the outgoing form is drawn beside the incoming one.
    */
   leave?: WorldFormEffect | null;
+  /**
+   * The effects that replace Arrive and Leave for a switch with one particular look (a suit shed piece by piece when the next form is another suit, dissolved when it is the bare body), or null for none.
+   */
+  switches?: (WorldFormSwitch | null)[] | null;
 };
 
 export type WorldFrameBar = {

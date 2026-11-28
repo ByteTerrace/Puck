@@ -314,7 +314,17 @@ shows and releases when the game changes or ends: each body an inhabited placeme
 (`holodeckShown`, written through `holodeckShow`, so a game switch is one write) and counted by its own (`holodeckLive`,
 written through `holodeckSet`), and posed once it exists (`holodeckStands`, `holodeckMark`),
 with looks a game can change while a body stands (`holodeckLooks`). It knows no game; a station's chess pieces and cards
-are its worked pools. The debug world's station (`../debug/game-station.md`) is the worked example.
+are its worked pools. The debug world's station (`../debug/game-station.md`) is the worked example. A pool's bodies
+materialize and dissolve as the board shows and releases them (`holodeckTransition`, which a game's looks carry).
+
+`form-transition.puck` is how a body changes form on screen, for any look: an effect record a look's `transition` carries
+(`arrive` as the look starts being worn, `leave` as it stops, and `switches` for a switch with one particular look). Two
+families: a band that sweeps the form's real surface behind a bright edge, dissolving it into motes or building it with
+motes settling on (`formDissolve`, `formMaterialize`, paired by `formMotes`), and a form that comes apart or goes
+together part by part, each moving part launched off to tumble and bounce off the world's real surfaces or flown in from
+a scattered start to lock into place (`formShed`, `formAssemble`, paired by `formPieces`). Every value is an argument or
+a member an author overrides; the engine plays them (`WorldFormEffects`). The Moth's suits and body
+(`../debug/avatars/moth/moth.puck`) and the holodeck are the worked examples.
 
 `place.puck` is the carrier a named place rides on: a creation that draws nothing, which a world places with a `region`
 so `body.place` names where a body stands and a rule sweeps whoever stands there. `reach.puck` is a library over it:

@@ -59,6 +59,18 @@
 // body the population has not admitted (a pose waits on `holodeckStands`, which reads both deadlines) and no released
 // body keeps a mark the next materialization would trust.
 
+import "form-transition"
+
+// How a body of a pool shows and goes (form-transition.puck): it builds from its foot up behind a bright edge as the
+// board materializes it, motes settling onto it, and dissolves from the top down into motes as the board releases it, so
+// a game set out or cleared away is seen to happen rather than popping. Sized to tabletop pieces: a few centimetres
+// tall, so short sweeps, fine motes and few of them. A game's own looks carry it (`transition: holodeckTransition`), and
+// `holodeckLooks` does for the looks it makes; the rigid copies play it as a body arrives and leaves.
+let holodeckTransition = {
+  arrive: formMaterialize(seconds: 0.45, delay: 0, motes: 90, size: 0.004)
+  leave: formDissolve(seconds: 0.4, motes: 90, size: 0.004)
+}
+
 // The ticks from asking for a body to posing it: the population admits a body at the end of the tick its count rose, so
 // a pose two ticks on addresses a body that exists.
 let holodeckArrival = 2
@@ -154,6 +166,7 @@ function holodeckLooks(looks, scale = 1) = map(looks, look => {
   name: look.name
   scale: scale
   source: creation(prototypeId: $"state.holodeckLook.{look.name}")
+  transition: holodeckTransition
 })
 template holodeckLookState(looks) {
   row {

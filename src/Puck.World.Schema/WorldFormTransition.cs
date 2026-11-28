@@ -11,8 +11,44 @@ namespace Puck.World;
 /// <param name="Arrive">What plays as the look starts to be worn, or <see langword="null"/> for an instant start.</param>
 /// <param name="Leave">What plays as the look stops being worn, or <see langword="null"/> for an instant end. While it
 /// plays, the outgoing form is drawn beside the incoming one.</param>
+/// <param name="Switches">The effects that replace <paramref name="Arrive"/> and <paramref name="Leave"/> for a switch
+/// with one particular look (a suit shed piece by piece when the next form is another suit, dissolved when it is the bare
+/// body), or <see langword="null"/> for none.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFormTransition(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFormEffect? Arrive = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFormEffect? Leave = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldFormSwitch>? Switches = null
+) {
+    /// <summary>Returns what plays as the look starts to be worn after another: the switch's arrive effect for that look
+    /// where one names it, else <see cref="Arrive"/>.</summary>
+    /// <param name="look">The look worn before, or <see langword="null"/> where there was none.</param>
+    /// <returns>The effect, or <see langword="null"/> for an instant start.</returns>
+    public WorldFormEffect? ArriveFrom(string? look) => (SwitchWith(look: look)?.Arrive ?? Arrive);
+    /// <summary>Returns what plays as the look stops being worn for another: the switch's leave effect for that look where
+    /// one names it, else <see cref="Leave"/>.</summary>
+    /// <param name="look">The look worn next, or <see langword="null"/> where there is none.</param>
+    /// <returns>The effect, or <see langword="null"/> for an instant end.</returns>
+    public WorldFormEffect? LeaveTo(string? look) => (SwitchWith(look: look)?.Leave ?? Leave);
+    // The first switch naming a look, or null.
+    private WorldFormSwitch? SwitchWith(string? look) {
+        if ((look is null) || (Switches is null)) { return null; }
+        foreach (var candidate in Switches) {
+            if (string.Equals(a: candidate.Look, b: look, comparisonType: StringComparison.Ordinal)) { return candidate; }
+        }
+        return null;
+    }
+}
+
+/// <summary>The effects a look's form transition plays for a switch with one other look, in place of its own.</summary>
+/// <param name="Look">The other look's name, as its row spells it.</param>
+/// <param name="Arrive">What plays as this look starts to be worn after <paramref name="Look"/>, or <see langword="null"/>
+/// for the transition's own.</param>
+/// <param name="Leave">What plays as this look stops being worn for <paramref name="Look"/>, or <see langword="null"/>
+/// for the transition's own.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldFormSwitch(
+    [property: DocumentText("a look name")] string Look,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFormEffect? Arrive = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFormEffect? Leave = null
 );

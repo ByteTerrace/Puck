@@ -163,7 +163,7 @@ public sealed partial class WorldCreationInstances {
 
                 // A form that loses the name while drawn lingers if its look plays a leave effect, so the bake keeps it
                 // drawn past the hand-over (SdfMeshFormRange.Lingers) until the effect has played.
-                if (form.FormNamed && (form.Form?.Drawn == true) && (form.Look?.Transition?.Leave is not null)) { form.FormLingers = true; }
+                if (form.FormNamed && (form.Form?.Drawn == true) && (form.Look?.Transition?.LeaveTo(look: wearing.Look?.Name.Value) is not null)) { form.FormLingers = true; }
                 form.FormNamed = false;
                 if (choices.Remove(key: form.Creation.Hash, value: out var choice)) {
                     Wear(dynamics: dynamics, live: form, stamp: choice);

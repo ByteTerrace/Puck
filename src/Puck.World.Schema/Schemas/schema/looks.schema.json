@@ -201,6 +201,42 @@
                 "$ref": "./common.schema.json#/$defs/WorldFormEffect",
                 "description": "What plays as the look stops being worn, or null for an instant end. While it plays, the outgoing form is drawn beside the incoming one.",
                 "default": null
+              },
+              "switches": {
+                "description": "The effects that replace Arrive and Leave for a switch with one particular look (a suit shed piece by piece when the next form is another suit, dissolved when it is the bare body), or null for none.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "description": "The effects a look\u0027s form transition plays for a switch with one other look, in place of its own.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "look": {
+                      "description": "The other look\u0027s name, as its row spells it.",
+                      "type": "string"
+                    },
+                    "arrive": {
+                      "$ref": "./common.schema.json#/$defs/WorldFormEffect",
+                      "description": "What plays as this look starts to be worn after Look, or null for the transition\u0027s own.",
+                      "default": null
+                    },
+                    "leave": {
+                      "$ref": "./common.schema.json#/$defs/WorldFormEffect",
+                      "description": "What plays as this look stops being worn for Look, or null for the transition\u0027s own.",
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "look"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldFormSwitch"
+                },
+                "default": null
               }
             },
             "additionalProperties": false,

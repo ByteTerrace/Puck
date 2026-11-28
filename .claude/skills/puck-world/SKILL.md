@@ -161,6 +161,18 @@ renumbers a fixed-count inhabitant; a world that numbers bodies below a deck
 from it keeps that deck at a fixed count (`patienceStationCards(holodeck:
 false)`). A game station's chess pieces and cards are the worked pools
 ([game-station.md](../../../worlds/debug/game-station.md)).
+
+**A look's `transition` plays a form change on screen.** `WorldFormTransition`
+(`arrive`, `leave`, `switches`) holds `WorldFormEffect`s; the standard's
+`form-transition.puck` chooses their values. The client plays them in one place,
+`WorldFormEffects` and `WorldFormPieces`: the stamp pool across a form switch
+(`WorldCreationInstances.Transitions.cs`; the outgoing form lingers, drawn
+beside the new one, until its leave has played) and the rigid copies across a
+body arriving or leaving (`WorldRigidAssets.Transitions.cs`; a departed body
+leaves a remnant copy that names no body). Presentation only: seeds come from
+the body, nothing reaches state, and a shed piece's bounces read the static
+query field (`IWorldStampSource.StaticField`). The renderer side is the
+rendering skill's form bands and motes.
 See [replay](references/replay.md#scoped-live-replays) for the control cells.
 
 A debug-based table fixture keeps `documentId: "debug"` when it expects the

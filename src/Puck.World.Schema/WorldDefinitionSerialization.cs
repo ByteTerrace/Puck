@@ -185,6 +185,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldLookCue))]
 [JsonSerializable(typeof(WorldFormTransition))]
 [JsonSerializable(typeof(WorldFormEffect))]
+[JsonSerializable(typeof(WorldFormSwitch))]
 [JsonSerializable(typeof(WorldHudFrameCandidate))]
 [JsonSerializable(typeof(WorldSpeaker.Fixed), TypeInfoPropertyName = "WorldSpeakerFixed")]
 [JsonSerializable(typeof(WorldSpeaker.Anchored), TypeInfoPropertyName = "WorldSpeakerAnchored")]
