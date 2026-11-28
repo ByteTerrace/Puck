@@ -14,6 +14,7 @@ namespace Puck.World;
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraSubject.Reference), typeDiscriminator: "reference")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraSubject.Placement), typeDiscriminator: "placement")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraSubject.WorldPoint), typeDiscriminator: "worldPoint")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraSubject.BoundPoint), typeDiscriminator: "boundPoint")]
 [System.Text.Json.Serialization.JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldCameraSubject {
     private WorldCameraSubject() {
@@ -33,6 +34,14 @@ public abstract record WorldCameraSubject {
     /// <summary>A fixed world-space point.</summary>
     /// <param name="Point">The world-space position.</param>
     public sealed record WorldPoint(DocumentVector3 Point) : WorldCameraSubject;
+    /// <summary>A world-space point whose axes are each a literal or a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding,
+    /// read from the state mirror every frame as presented (eased between ticks), so a program aims at something the
+    /// rules place: a locked target, a point between two bodies. A <c>$body</c> key reads the body the program
+    /// frames.</summary>
+    /// <param name="X">The x axis, in metres.</param>
+    /// <param name="Y">The y axis, in metres.</param>
+    /// <param name="Z">The z axis, in metres.</param>
+    public sealed record BoundPoint(BindableScalar X, BindableScalar Y, BindableScalar Z) : WorldCameraSubject;
 }
 /// <summary>
 /// One instruction in an authored camera program's ordered op list — the presentation-side pose algebra
@@ -171,7 +180,11 @@ public abstract record WorldCameraProgramOp {
     /// turn along the shorter arc.</param>
     /// <param name="Pitch">The orbit tilt in radians, as a literal, a numeric state binding, or keys on a clock.</param>
     /// <param name="PivotOffset">The world-axis offset from the current subject's origin to the pivot.</param>
-    public sealed record Orbit(float Distance, BindableAngle Yaw, BindableAngle Pitch, DocumentVector3? PivotOffset = null) : WorldCameraProgramOp;
+    /// <param name="Look">Whether a seat's live look turns this orbit, adding to its yaw and pitch. False holds the
+    /// orbit at its authored angles while the seat looks around, for a framing the rules aim (a lock-on that keeps the
+    /// eye behind the body, facing its target).</param>
+    public sealed record Orbit(float Distance, BindableAngle Yaw, BindableAngle Pitch, DocumentVector3? PivotOffset = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] bool? Look = null) : WorldCameraProgramOp;
     /// <summary>Establishes the CURRENT subject at a point sampled from a named <c>curves</c> row by arc-length
     /// fraction, and re-seeds the eye there — the same subject-seeding role <see cref="Anchor"/> plays, so at most one
     /// of the two may appear in a program, and when present this must be the first operation. The sampled subject's

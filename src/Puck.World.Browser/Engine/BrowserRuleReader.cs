@@ -226,6 +226,10 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
         operand: nameof(ContactOperand),
         fact: Fact.Absent(kind: operand.ValueKind)
     );
+    Fact IWorldFacts.Read(IdentityRecordOperand operand) => Record(
+        operand: nameof(IdentityRecordOperand),
+        fact: Fact.Absent(kind: operand.ValueKind)
+    );
     Fact IWorldFacts.Read(NearestOperand operand) => Record(
         operand: nameof(NearestOperand),
         fact: Fact.Finite(

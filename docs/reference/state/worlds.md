@@ -408,8 +408,14 @@ journal rewinds and its commit installs through the account's one door,
 `WorldOwnedWorlds.TryCommit`, under the writer the executing world's package
 names (`WorldIdentityWriter`): a package writes a shared pool or one it
 qualifies with its own name (`<package>$<pool>`), never another package's or a
-name the template lists in `identity.homeScoped`. `WorldIdentity.TryReadRecord`
-and `CountRecords` read the store as it stands.
+name the template lists in `identity.homeScoped`. A field's expression is read
+in fixed point, so a Fixed field keeps its fraction and an Int field refuses a
+value with one. `WorldIdentity.TryReadRecord` and `CountRecords` read the store
+as it stands, and a rule reads one field with
+`record(<body>, <pool>, <slot>, <field>[, <text>])` (`WorldRuleFacts.RecordPrefix`):
+the slot a literal or `$each`, a text field compared with the trailing text, and
+an empty slot or a body under no identity absent. The standard's marks
+(`worlds/standard/marks.puck`) read a character's marks this way.
 
 None of a world's other rows travel, so unselected state stays private to the
 world that owns it. A world's image never holds an owned identity: the account

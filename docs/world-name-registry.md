@@ -881,9 +881,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].name` | Camera | Declares |  | `WorldCamera.Name` |
 | `cameras[].rig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `cameras[].rig.operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `cameras[].rig.operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `cameras[].rig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `cameras[].rig.operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `cameras[].rig.operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `cameras[].rig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `cameras[].rig.operations[][orbit].yaw.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -3121,9 +3139,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `host.backendRow` | State | Names | Read | `WorldHostDefaults.BackendRow` |
 | `views.seatRig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.seatRig.operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.seatRig.operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `views.seatRig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.seatRig.operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.seatRig.operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `views.seatRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.seatRig.operations[][orbit].yaw.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -3186,11 +3222,32 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.seatRig.operations[][clearance].obstructedTargetSkin.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.seatRig.operations[][clearance].obstructedTargetSkin{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.seatRig.operations[][clearance].closeTargetOffset` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetOffset` |
+| `views.seatControl.headingFrame` | State | Binding | Binding | `WorldSeatViewControl.HeadingFrame` |
+| `views.seatControl.headingFrame.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatControl.headingFrame{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.cameraRig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.cameraRig.operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.cameraRig.operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `views.cameraRig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.cameraRig.operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.cameraRig.operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `views.cameraRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.cameraRig.operations[][orbit].yaw.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -3258,9 +3315,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.graphs[].parameters{*}{*}{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.programs[].operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.programs[].operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.programs[].operations[][anchor].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.programs[].operations[][anchor].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][anchor].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][anchor].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.programs[].operations[][anchor].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][anchor].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][anchor].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.programs[].operations[][anchor].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][anchor].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.programs[].operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `views.programs[].operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.programs[].operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.programs[].operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `views.programs[].operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.programs[].operations[][orbit].yaw.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -6244,6 +6319,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bodyMotionPrograms[].target[navigated].domain` | `BodyTargetSource.Navigated.Domain` | a navigation domain |
 | `bodyMotionPrograms[].target[navigated].register` | `BodyTargetSource.Navigated.Register` | a target register name |
 | `bodyMotionPrograms[].target[navigated].profile` | `BodyTargetSource.Navigated.Profile` | a navigation profile name |
+| `bodyMotionPrograms[].face.active` | `BodyFaceSlots.Active` | a per-body slot name |
+| `bodyMotionPrograms[].face.x` | `BodyFaceSlots.X` | a per-body slot name |
+| `bodyMotionPrograms[].face.z` | `BodyFaceSlots.Z` | a per-body slot name |
 | `kits.rows[].name` | `WorldKit.Name` | a kit name |
 | `kits.rows[].bodyMotionProgram` | `WorldKit.BodyMotionProgram` | a body motion program name |
 | `kits.rows[].motion.speed.held.channel` | `WorldSpeedHeld.Channel` | logical input channels |

@@ -3984,6 +3984,33 @@
       "additionalProperties": false,
       "title": "WorldCameraSubjectWorldPoint"
     },
+    "WorldCameraSubjectBoundPoint": {
+      "description": "A world-space point whose axes are each a literal or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding, read from the state mirror every frame as presented (eased between ticks), so a program aims at something the rules place: a locked target, a point between two bodies. A $body key reads the body the program frames.",
+      "properties": {
+        "$type": {
+          "const": "boundPoint"
+        },
+        "x": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The x axis, in metres."
+        },
+        "y": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The y axis, in metres."
+        },
+        "z": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The z axis, in metres."
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "additionalProperties": false,
+      "title": "WorldCameraSubjectBoundPoint"
+    },
     "WorldCameraSubject": {
       "description": "The subject an Anchor/LookAt op resolves against \u2014 the closed \u0022what a camera program can key off\u0022 vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table \u2014 a placement\u0027s pose is its rest pose (Puck.World.Client.WorldAnchorPoses.TryRestPlacement), the document-only branch of the resolver a placeable camera\u0027s own anchor and a speaker read live.",
       "type": "object",
@@ -3999,6 +4026,9 @@
         },
         {
           "$ref": "#/$defs/WorldCameraSubjectWorldPoint"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraSubjectBoundPoint"
         }
       ],
       "title": "WorldCameraSubject"
@@ -4079,6 +4109,9 @@
         },
         {
           "$ref": "#/$defs/WorldCameraSubjectWorldPoint"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraSubjectBoundPoint"
         }
       ],
       "title": "WorldCameraSubject"
@@ -4143,6 +4176,14 @@
         "pivotOffset": {
           "$ref": "#/$defs/DocumentVector3",
           "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
+          "default": null
+        },
+        "look": {
+          "description": "Whether a seat\u0027s live look turns this orbit, adding to its yaw and pitch. False holds the orbit at its authored angles while the seat looks around, for a framing the rules aim (a lock-on that keeps the eye behind the body, facing its target).",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "opcode": {
@@ -10301,7 +10342,7 @@
       "title": "WorldEffectSetIdentityFact"
     },
     "WorldIdentityRecordValue": {
-      "description": "One field an identity record effect writes: exactly one of a numeric literal (stored as the field\u0027s own kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires, or a text literal.",
+      "description": "One field an identity record effect writes: exactly one of a numeric literal (stored as the field\u0027s own kind: an integer, a fixed-point value, or a flag of 0 or 1), a numeric expression evaluated in fixed point when the effect fires (a Fixed field keeps its fraction, an Int field refuses a value with one, a flag reads nonzero as 1), or a text literal.",
       "type": [
         "object",
         "null"
@@ -10321,7 +10362,7 @@
         },
         "expression": {
           "$ref": "#/$defs/ExpressionProgramNonNullable2",
-          "description": "The integer expression.",
+          "description": "The numeric expression.",
           "default": null
         },
         "text": {

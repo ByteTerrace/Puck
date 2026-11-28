@@ -165,18 +165,24 @@ public sealed class BodyKinematicsOperand : WorldOperandFact {
     /// <summary>Gets the witness read.</summary>
     public WorldKinematicsWitness Witness { get; }
 }
-/// <summary>One world axis of a body's live position, in metres (<see cref="WorldRuleFacts.BodyPositionPrefix"/>); a
-/// reference resolving to no live body reads <c>0</c>.</summary>
+/// <summary>One world axis of a body's live pose (<see cref="WorldRuleFacts.BodyPositionPrefix"/>,
+/// <see cref="WorldRuleFacts.BodyForwardPrefix"/>): its position in metres, or its forward axis (local -Z under its
+/// orientation) as a unit vector. A reference resolving to no live body reads <c>0</c>.</summary>
 public sealed class BodyPositionOperand : WorldOperandFact {
+    /// <summary>The first <see cref="Axis"/> value that reads the forward axis rather than the position.</summary>
+    public const int ForwardAxis = 3;
+
     /// <summary>Initializes a new instance of the <see cref="BodyPositionOperand"/> class.</summary>
     /// <param name="body">The compiled body reference.</param>
-    /// <param name="axis">The world axis read: <c>0</c> for x, <c>1</c> for y, <c>2</c> for z.</param>
+    /// <param name="axis">The world axis read: <c>0</c> to <c>2</c> for the position's x, y and z, and
+    /// <see cref="ForwardAxis"/> plus <c>0</c> to <c>2</c> for the forward axis's.</param>
     public BodyPositionOperand(CompiledBodyRef body, int axis) : base(CellKind.Fixed) {
         Axis = axis;
         Body = body;
     }
 
-    /// <summary>Gets the world axis read: <c>0</c> for x, <c>1</c> for y, <c>2</c> for z.</summary>
+    /// <summary>Gets the world axis read: <c>0</c> to <c>2</c> for the position, <see cref="ForwardAxis"/> plus
+    /// <c>0</c> to <c>2</c> for the forward axis.</summary>
     public int Axis { get; }
     /// <summary>Gets the compiled body reference.</summary>
     public CompiledBodyRef Body { get; }
@@ -341,19 +347,74 @@ public sealed class PointerOperand : WorldOperandFact {
         };
     }
 }
-/// <summary>The nearest body carrying a tag-row cell (<see cref="WorldRuleFacts.NearestPrefix"/>); walks the tag row's
-/// held cells.</summary>
+/// <summary>The body a tag-row walk chooses (<see cref="WorldRuleFacts.NearestPrefix"/>,
+/// <see cref="WorldRuleFacts.TargetPrefix"/>): the nearest tagged body, or, under a <see cref="WorldTargetEnvelope"/>,
+/// the tagged body a target query picks inside the origin's range and forward cone. Walks the tag row's held
+/// cells.</summary>
 public sealed class NearestOperand : WorldOperandFact {
-    public NearestOperand(CompiledBodyRef bodyA, string row, StateHandle stateHandle) : base(CellKind.Int) {
+    /// <summary>Initializes a new instance of the <see cref="NearestOperand"/> class.</summary>
+    /// <param name="bodyA">The origin body.</param>
+    /// <param name="row">The keyed tag row whose nonzero cells name the candidates.</param>
+    /// <param name="stateHandle">The tag row's compiled handle.</param>
+    /// <param name="envelope">The target query's range, cone and current target, or <see langword="null"/> for the
+    /// plain nearest body.</param>
+    public NearestOperand(CompiledBodyRef bodyA, string row, StateHandle stateHandle, WorldTargetEnvelope? envelope = null) : base(CellKind.Int) {
         BodyA = bodyA;
         Row = row;
         StateHandle = stateHandle;
+        Envelope = envelope;
     }
 
+    /// <summary>Gets the origin body.</summary>
     public CompiledBodyRef BodyA { get; }
+    /// <summary>Gets the target query's envelope, or <see langword="null"/> for the plain nearest body.</summary>
+    public WorldTargetEnvelope? Envelope { get; }
+    /// <summary>Gets the keyed tag row's name.</summary>
     public string Row { get; }
+    /// <summary>Gets the tag row's compiled handle.</summary>
     public StateHandle StateHandle { get; }
 }
+/// <summary>One field of a record on the identity a body drives under (<see cref="WorldRuleFacts.RecordPrefix"/>), read
+/// as a fixed-point number.</summary>
+public sealed class IdentityRecordOperand : WorldOperandFact {
+    /// <summary>The <see cref="Slot"/> value naming the swept key, read as a slot index.</summary>
+    public const int EachSlot = -1;
+
+    /// <summary>Initializes a new instance of the <see cref="IdentityRecordOperand"/> class.</summary>
+    /// <param name="body">The body whose identity holds the record.</param>
+    /// <param name="pool">The record pool on the identity's document.</param>
+    /// <param name="slot">The non-negative slot, or <see cref="EachSlot"/> for the swept key.</param>
+    /// <param name="field">The record field.</param>
+    /// <param name="text">The text a text field is compared with, reading 1 when equal and 0 otherwise, or
+    /// <see langword="null"/> to read the field as a number.</param>
+    public IdentityRecordOperand(CompiledBodyRef body, CellName pool, int slot, CellName field, string? text = null) : base(CellKind.Fixed) {
+        Body = body;
+        Pool = pool;
+        Slot = slot;
+        Field = field;
+        Text = text;
+    }
+
+    /// <summary>Gets the body whose identity holds the record.</summary>
+    public CompiledBodyRef Body { get; }
+    /// <summary>Gets the text a text field is compared with, or <see langword="null"/> to read a number.</summary>
+    public string? Text { get; }
+    /// <summary>Gets the record field.</summary>
+    public CellName Field { get; }
+    /// <summary>Gets the record pool on the identity's document.</summary>
+    public CellName Pool { get; }
+    /// <summary>Gets the slot, or <see cref="EachSlot"/> for the swept key.</summary>
+    public int Slot { get; }
+}
+/// <summary>What a target query admits and how it orders: a candidate stands within <paramref name="Range"/> metres of
+/// the origin and within <paramref name="HalfAngle"/> of its planar forward axis. With no current target the query picks
+/// the candidate whose distance, weighted by one plus its bearing off forward in radians, is least; with one it cycles,
+/// picking the next candidate to the origin's right by bearing after the current target and wrapping to the leftmost.
+/// Ties resolve to the lowest body index.</summary>
+/// <param name="Range">The greatest distance, in metres.</param>
+/// <param name="HalfAngle">The widest bearing off the origin's planar forward axis, in radians.</param>
+/// <param name="Current">The body the query cycles from, or <see langword="null"/> to pick afresh.</param>
+public sealed record WorldTargetEnvelope(FixedQ4816 Range, FixedQ4816 HalfAngle, CompiledBodyRef? Current);
 /// <summary>Why a body's producer stands down. A body whose producer stands down for any reason runs none of its
 /// producer program: it stages the inert intent, as a body naming no producer does, and its producer runtime (the
 /// route, the curve station, the flock seed) is cleared. When every reason has gone the producer starts again from

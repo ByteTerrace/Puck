@@ -201,8 +201,9 @@ public static class WorldCameraRigCompiler {
     // operand the document binds or keys names its field (WorldValueFields) and site, and is mapped into the field's
     // domain as it is read, so no value a row strays to or a key blends to reaches the evaluator outside it.
     private readonly record struct ScalarSource(BindableScalar? Value, float Fallback, float SpreadPullback, bool IsAngle = false, WorldValueField? Field = null, WorldValueSite Site = default);
-    // One per-frame subject slot's source — an authored subject other than the program's own reference pose.
-    private readonly record struct SubjectSource(WorldCameraSubject Subject);
+    // One per-frame subject slot's source — an authored subject other than the program's own reference pose. A bound
+    // point names the scalar slots its three axes read, which Refresh fills before it places the subject.
+    private readonly record struct SubjectSource(WorldCameraSubject Subject, int X = -1, int Y = -1, int Z = -1);
     // The authored-to-IR walk. Programs are keyed by authored name so a blend that reaches the same program twice
     // (and a cycle the validator would have refused) compiles to one entry rather than recursing forever.
     private sealed class Translation(WorldDefinition definition, bool interactive) {
@@ -290,7 +291,31 @@ public static class WorldCameraRigCompiler {
 
             var slot = SubjectSources.Count;
 
+            if (subject is WorldCameraSubject.BoundPoint bound) {
+                SubjectSources.Add(item: new SubjectSource(
+                    Subject: subject,
+                    X: AxisSlot(scalar: bound.X),
+                    Y: AxisSlot(scalar: bound.Y),
+                    Z: AxisSlot(scalar: bound.Z)
+                ));
+
+                return slot;
+            }
+
             SubjectSources.Add(item: new SubjectSource(Subject: subject));
+
+            return slot;
+        }
+        // A bound point's axis always takes a scalar slot, a literal one included (the mirror answers a literal as
+        // itself), so Refresh reads every axis alike.
+        private int AxisSlot(BindableScalar scalar) {
+            var slot = ScalarSources.Count;
+
+            ScalarSources.Add(item: new ScalarSource(
+                Fallback: 0f,
+                SpreadPullback: 0f,
+                Value: scalar
+            ));
 
             return slot;
         }
@@ -368,7 +393,7 @@ public static class WorldCameraRigCompiler {
                         break;
                     case WorldCameraProgramOp.Orbit orbit:
                         operations.Add(item: new SdfCameraOp.Orbit(
-                            AppliesLook: interactive,
+                            AppliesLook: (interactive && (orbit.Look ?? true)),
                             Distance: SdfCameraScalar.FromLiteral(value: orbit.Distance),
                             Pitch: Angle(
                                 angle: orbit.Pitch,
@@ -638,6 +663,14 @@ public static class WorldCameraRigCompiler {
                     WorldCameraSubject.WorldPoint worldPoint => new SdfAnchor(
                     Orientation: Quaternion.Identity,
                     Position: worldPoint.Point.Value
+                ),
+                    WorldCameraSubject.BoundPoint => new SdfAnchor(
+                    Orientation: Quaternion.Identity,
+                    Position: new Vector3(
+                        x: scalars[m_subjectSources[index].X],
+                        y: scalars[m_subjectSources[index].Y],
+                        z: scalars[m_subjectSources[index].Z]
+                    )
                 ),
                     _ => default,
                 });
