@@ -89,6 +89,9 @@ groupshared uint sdfViewsLightTile[8];
 // see.
 groupshared uint sdfViewsLightTraced[SDF_MESH_IRRADIANCE_LIGHT_WORDS];
 groupshared uint sdfViewsLightSeen[SDF_MESH_IRRADIANCE_LIGHT_WORDS];
+// The least indirect luminance any lit pixel of the tile receives, a bound below it (sdfViewsCellLeastReceived over the
+// cells the tile's pixels blend, sdfViewsPixelLeastReceived for a pixel beyond them), as the bits of a non-negative float.
+groupshared uint sdfViewsLightReceived;
 
 #if defined(SDF_VIEWS_FILTER_PASS)
 // Stores the tile's traced-light shares into the shade bins (SDF_SHADE_TILE_SHARE_WORDS words at sdfShadeTileSharesWord),
@@ -193,6 +196,9 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
     if (lane < 2u) {
         sdfViewsLightDepths[lane] = ((lane == 0u) ? 0xFFFFFFFFu : 0u);
     }
+    if (lane == 0u) {
+        sdfViewsLightReceived = asuint(3.0e38);
+    }
     GroupMemoryBarrierWithGroupSync();
 
     if (lit) {
@@ -213,11 +219,42 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
             InterlockedMax(sdfViewsLightBoxes[(box + 3u) + axis], ordered);
         }
     }
+    // The least indirect light a lit pixel of the tile receives, which bounds every pixel's floor (sdfLightReceivedFloor)
+    // from below: a pixel blends only the answering cells of the ring about the tile, a cell a lane, or its own extra.
+    // The view's indirect intensity is uniform over the group; with it off every floor is zero and nothing is read. A
+    // build that compiles the probe reads out (SDF_VIEWS_OMIT_PROBES) reads every pixel's indirect light from the camera
+    // sample, which no cell bounds, so its tiles keep the view's cutoff alone.
+#if !defined(SDF_VIEWS_OMIT_PROBES)
+    if (passGroup.indirectApply.w > 0.0) {
+        uint ringEdge = ((SDF_VISIBILITY_GROUP_EDGE / SDF_VIEWS_PROBE_RATE) + 2u);
+        float least = 3.0e38;
+
+        if (lane < (ringEdge * ringEdge)) {
+            least = sdfViewsCellLeastReceived(((int2(p.pixel / SDF_VISIBILITY_GROUP_EDGE) * int(SDF_VISIBILITY_GROUP_EDGE / SDF_VIEWS_PROBE_RATE)) + (int2((lane % ringEdge), (lane / ringEdge)) - 1)), p.viewIndex);
+        }
+        if (lit) {
+            least = min(least, sdfViewsPixelLeastReceived(p));
+        }
+        if (least < 3.0e38) {
+            InterlockedMin(sdfViewsLightReceived, asuint(least));
+        }
+    }
+#else
+    if (lane == 0u) {
+        sdfViewsLightReceived = 0u;
+    }
+#endif
     GroupMemoryBarrierWithGroupSync();
 
     // A box no hit joined keeps its low corner above its high one.
     bool nearHeld = (sdfViewsLightBoxes[0] <= sdfViewsLightBoxes[3]);
     bool farHeld = (sdfViewsLightBoxes[6] <= sdfViewsLightBoxes[9]);
+    // The tile's floor: no greater than any lit pixel's (sdfLightReceivedFloor reads the received light under the indirect
+    // gains, whose luminance is at least their least channel's share of the received light's), so a light the tile leaves
+    // out against it fades out at every pixel of the tile.
+    float received = asfloat(sdfViewsLightReceived);
+    float3 gains = passGroup.indirectApply.rgb;
+    float floorNits = (((passGroup.indirectApply.w > 0.0) && (received < 3.0e38)) ? sdfLightFloorOf(received * max(min(gains.x, min(gains.y, gains.z)), 0.0)) : 0.0);
 
     if (nearHeld || farHeld) {
         float3 nearLow = float3(puckFloatFromOrdered(sdfViewsLightBoxes[0]), puckFloatFromOrdered(sdfViewsLightBoxes[1]), puckFloatFromOrdered(sdfViewsLightBoxes[2]));
@@ -242,8 +279,8 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
             if (sdfLightRanged(light.Kind)) {
                 float3 position = sdfLightPlace(light);
 
-                keep = ((nearHeld && sdfLightReachesBox(light, position, nearLow, nearHigh))
-                    || (farHeld && sdfLightReachesBox(light, position, farLow, farHigh)));
+                keep = ((nearHeld && sdfLightReachesBox(light, position, nearLow, nearHigh, floorNits))
+                    || (farHeld && sdfLightReachesBox(light, position, farLow, farHigh, floorNits)));
             }
             if (keep) {
                 InterlockedOr(sdfViewsLightTile[word], bit);

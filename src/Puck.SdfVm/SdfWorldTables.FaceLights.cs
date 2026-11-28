@@ -39,6 +39,21 @@ public sealed partial class SdfWorldTables {
     /// record past <see cref="SdfLights.MaxLights"/>: each shows its picture but lights nothing.</summary>
     public int DroppedFaceLights { get; private set; }
 
+    /// <summary>Returns the mask of the lights a view's glass shades: the view's (<see cref="LightMaskOf"/>) less every
+    /// face light. A screen's or an emitter face's glow lights the opaque surfaces before it and reaches a pane through
+    /// the lit image behind it, and a pane over a screen (a display's cover) stands inside the face's whole range, so
+    /// walking faces there would cost every pane pixel a visit per screen. The faces lie after the frame's own lights, so
+    /// the glass walk's loop ends at them (<c>sdfWaveLightMasks</c>).</summary>
+    /// <param name="frame">The frame the tables hold.</param>
+    /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>, clamped to the frame's views.</param>
+    /// <returns>The view's glass light mask.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    public UInt128 GlassLightMaskOf(SdfFrame frame, int view) {
+        var below = ((m_faceLightBase >= BitWords.MaskBits) ? ~UInt128.Zero : ((UInt128.One << m_faceLightBase) - UInt128.One));
+
+        return (LightMaskOf(frame: frame, view: view) & below);
+    }
+
     // Writes the lights the residency shades from the frame's lights and the resident screens' faces, after the screens'
     // slots, surfaces and ranges settle (PackScreenReaches).
     private void PackFaceLights(SdfFrame frame) {

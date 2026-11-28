@@ -562,7 +562,14 @@ narrows the mask once more for each 8×8 tile (`sdfViewsTileLights` in
 the hits nearer than the middle of the tile's depth range and the rest, and keeps
 a light whose sphere of range meets a box and, for a spot, whose cone meets the
 sphere about it. A face is kept where a box reaches in front of it within its
-range and its reduced luminance there reaches the view's cutoff. Of the lights
+range and its reduced luminance, times its own cosine toward the box, reaches
+the cutoff there. The cutoff is the greater of the view's (a share of display
+white) and a floor of the light the surface already receives: a ranged light
+fades out under `SdfPhotometry.ReceivedShare` of the indirect light at the pixel
+(`sdfLightCutoffNits`, `sdfLightReceivedFloor`), so in a lit room a panel or a
+marquee lights the wall beside it and not the far side of the room, and a tile
+holds every light to a floor no greater than any of its pixels'
+([the decision](../../../decisions/rendering.md#a-pixel-walks-the-lights-that-reach-it-and-that-its-probes-see)). Of the lights
 the irradiance volume traces (a static point, spot, line or face light; a face
 is traced for its visibility alone and bounces nothing), a tile keeps only those
 the probes about one of its shaded pixels see, read from the probe lookup's

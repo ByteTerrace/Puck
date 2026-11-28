@@ -151,6 +151,8 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
 
     surface.occluders = masks.occluders;
     surface.frameSlot = SDF_TRANSFORM_SLOT_NONE;
+    // Glass weighs its lights by the view's cutoff alone, as its wave's masks keep them (sdfWaveLightMasks).
+    surface.lightFloor = 0.0;
 
     bool indirectSky = ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u);
     radiance = (indirectSky ? float3(0.0, 0.0, 0.0) : (worldSkyIrradiance(normal) * analyticOcclusion));

@@ -1114,14 +1114,26 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   never add one. Views and glass visit lights through one walk
   (`sdfLightWalkStart`, `sdfLightNext`) over the set bits of the light mask
   (`SdfLightMasks`), so a light a mask leaves out costs no iteration. Glass
-  walks its wave's lights but no face light (`sdfWaveLightMasks`: a pane over a
-  screen stands inside the face's whole range); views walks each 8×8 tile's
+  walks its wave's lights but no face light: its pass block's mask leaves faces
+  out (`SdfWorldTables.GlassLightMaskOf`; a pane over a screen stands inside the
+  face's whole range), and its wave loop ends at the mask's highest light
+  (`sdfWaveLightMasks`, `sdfLightMaskEnd`); views walks each 8×8 tile's
   (`sdfViewsTileLights`, `passes/sdf-views-lights.hlsli`): the view's lights
   whose range sphere (and spot cone, or a face's half space in front of it)
   meets the boxes about the tile's hit points and whose bound there reaches the
-  view's cutoff (`sdfLightReachesBox`, `frame/sdf-lights.hlsli`, which the probe
-  lookup's slots also judge their lights by; a face's bound reads its reduced
-  luminance through `sdfFaceLight`), and of the lights the volume traces
+  cutoff (`sdfLightReachesBox`, `frame/sdf-lights.hlsli`, which the probe
+  lookup's slots also judge their lights by, with a floor of zero; a face's
+  bound reads its reduced luminance through `sdfFaceLight` and its own cosine
+  toward the box). The cutoff is `sdfLightCutoffNits`: the view's share of
+  display white or a floor of `SdfPhotometry.ReceivedShare` of the indirect light
+  the surface receives, whichever is greater. A pixel fades by its own floor
+  (`sdfLightReceivedFloor`, `SdfShadeSurface.lightFloor`, from the indirect light
+  it reads before the walk); a tile tests by a floor no greater than any of its
+  pixels' (the least received cube luminance of the cells they blend,
+  `sdfViewsCellLeastReceived`, `sdfViewsPixelLeastReceived`), so a new reader
+  that changes what a pixel's indirect reads, or a floor term a tile cannot bound
+  (an occlusion, a material's receive), breaks the tile's guarantee; glass and
+  the probe lookup take a floor of zero. Of the lights the volume traces
   (`sdfLightTraces`: a static point, spot, line or face light) only those the
   probes about some shaded pixel of the tile see (`sdfViewsLightsSeen`). A mask
   may leave out only a light that adds nothing at the points its lanes shade,
@@ -1141,8 +1153,10 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   from a ranged light's visibility (a face's included) in
   `sdfLightInputs`, never from a directional's, and never from a body's own
   surfaces (`SdfOccluder.OwnSlot` against the surface's frame slot); a light
-  whose segment passes an occluder's bounding sphere by the widest penumbra or
-  more skips its gap search (`sdfOccludersShadow`). A binned
+  whose segment passes a box occluder's bounding sphere by the widest penumbra or
+  more skips its golden-section gap search (`sdfOccludersShadow`). The probe
+  lookup resolves every listed disagreed light's share in one walk over the
+  corners (`sdfViewsProbesStoreSlot`), not a corner walk a light. A binned
   view's tile words hold the two masks (`SdfWorldPackage.ShadeTileLightWords`,
   eight). The probes' half rests on one rule the light
   phase's door enforces: a traced light whose probe share is zero adds nothing,

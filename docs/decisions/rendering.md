@@ -898,6 +898,31 @@ can lift what it removed in the darkest pixels by at most its own gain. Hall,
 noon, Direct3D 12: the walk's visits fell from 7.3 to 3.9 a pixel
 (`gpu.lights.visited` on `sdf.world$views`).
 
+**The floor of what a surface already receives.** The view's cutoff is a share
+of display white, so in a lit room every face that reaches the cutoff is
+walked, though its light is a tiny share of what the surface already receives.
+On the 2060 at gallery-root, once screens and emitter faces joined the one list,
+the walk made about 16 visits a pixel in the hall and toybox, 14 to 16 of them
+faces: the gallery's panels (`worlds/standard/panel.puck`: 1.0 by 0.6 m of glass
+at 3,000 nits emissive under dark paint) and marquees reach several metres under
+the view's cutoff while giving a wall there under a percent of its light. So a
+ranged light also fades under `SdfPhotometry.ReceivedShare` of the indirect
+light the surface receives (`sdfLightReceivedFloor`, the volume's light under
+the view's indirect gains and intensity, before occlusion, which scales the
+light's visibility alike), and its cutoff is the greater of the two
+(`sdfLightCutoffNits`). A faded light gives a pixel at most that share of its
+indirect light, and the fade is continuous in both terms, so no tile edge
+shows. A tile bounds every lit pixel's floor from below with the least
+luminance of the received cubes of the cells its pixels blend, or of a pixel's
+extra (`sdfViewsCellLeastReceived`, `sdfViewsPixelLeastReceived`): a pixel's
+cube read weighs the faces by its normal's squared components, which sum to one,
+and its slots by shares that sum to one, so it reads no less than that least.
+A cell no probe answers, or a pixel that reads no slot, bounds it at zero, and
+the view's cutoff alone holds there. The options weighed were sizing a face's
+range at the brighter exposure only (it still keeps every panel across a room
+under a dark exposure), and a per-tile floor the pixel reads too (exact but a
+step at every tile edge wherever a light lies in its fade band).
+
 **Where a tile is decided.** One workgroup decides a tile's masks: the unsplit
 views kernels in their own group and, for a binned view, the filter pass, which
 writes them into the tile's words of the shade bins. The binned views kernels

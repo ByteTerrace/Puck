@@ -223,9 +223,14 @@ void sdfViewsProbesStoreSlot(SdfViewsProbeSlot slot, SdfMeshProbes probes, uint 
 
     uint4 partial = (someCorner & ~everyCorner);
     uint4 listed = uint4(0u, 0u, 0u, 0u);
+    uint4 overflow = uint4(0u, 0u, 0u, 0u);
+    // The listed lights in list order, eight bits each, the first four in x and the rest in y.
+    uint2 order = uint2(0u, 0u);
     uint count = 0u;
     uint rounded = 0u;
 
+    // The disagreed lights that can reach the slot's pixels: the first SdfViewsProbePartialLights are listed, the rest
+    // overflow and are rounded to all or none. A light that cannot reach them leaves the slot as one no corner sees.
     [loop] while (any(partial != 0u)) {
         uint light = sdfViewsProbeLowestLight(partial);
         uint4 bit = sdfViewsProbeLightBit(light);
@@ -237,29 +242,71 @@ void sdfViewsProbesStoreSlot(SdfViewsProbeSlot slot, SdfMeshProbes probes, uint 
         if (reaches) {
             SdfLight record = sdfLights[light];
 
-            reaches = (!sdfLightRanged(record.Kind) || sdfLightReachesBox(record, sdfLightPlace(record), low, high));
+            reaches = (!sdfLightRanged(record.Kind) || sdfLightReachesBox(record, sdfLightPlace(record), low, high, 0.0));
         }
         if (!reaches) {
             someCorner &= ~bit;
-            continue;
-        }
-
-        float share = sdfMeshLightVisibility(probes, light);
-
-        if (count < SdfViewsProbePartialLights) {
-            uint entry = ((SdfViewsProbePartialValid | (light << 8u)) | (uint)round(saturate(share) * 255.0));
-            uint shifted = (entry << (16u * (count & 1u)));
-            uint word = (count >> 1u);
-
-            listed |= uint4(((word == 0u) ? shifted : 0u), ((word == 1u) ? shifted : 0u), ((word == 2u) ? shifted : 0u), ((word == 3u) ? shifted : 0u));
+        } else if (count < SdfViewsProbePartialLights) {
+            order = ((count < 4u) ? uint2((order.x | (light << (8u * count))), order.y) : uint2(order.x, (order.y | (light << (8u * (count - 4u))))));
             count++;
         } else {
-            rounded++;
-            if ((2.0 * share) >= weight) {
-                everyCorner |= bit;
-            } else {
-                someCorner &= ~bit;
+            overflow |= bit;
+        }
+    }
+
+    // The listed lights' shares in one pass over the corners (sdfMeshLightVisibility's sum for each, to the bit): a light
+    // a pass, as many corner walks as lights, was the probe lookup's cost wherever many traced lights disagree.
+    float4 sharesLow = float4(0.0, 0.0, 0.0, 0.0);
+    float4 sharesHigh = float4(0.0, 0.0, 0.0, 0.0);
+
+    if (count != 0u) {
+        SdfMeshProbeStages stages = sdfMeshProbeStagesOf(probes);
+
+        [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
+            uint address;
+
+            if (!sdfMeshProbeAt(probes, stages, corner, address) || !((corner < 8u) ? probes.measured : probes.remainderMeasured)) {
+                continue;
             }
+
+            uint4 bits = uint4(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD], sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD + 1u],
+                sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD + 2u], sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD + 3u]);
+            float cornerWeight = probes.weight[corner];
+
+            [unroll] for (uint rank = 0u; (rank < SdfViewsProbePartialLights); rank++) {
+                uint light = ((((rank < 4u) ? order.x : order.y) >> (8u * (rank & 3u))) & 0xFFu);
+                float add = (((rank < count) && ((sdfComponent(bits, (light >> 5u)) & (1u << (light & 31u))) != 0u)) ? cornerWeight : 0.0);
+
+                if (rank < 4u) {
+                    sharesLow[rank] += add;
+                } else {
+                    sharesHigh[rank - 4u] += add;
+                }
+            }
+        }
+    }
+    [unroll] for (uint rank = 0u; (rank < SdfViewsProbePartialLights); rank++) {
+        if (rank < count) {
+            uint light = ((((rank < 4u) ? order.x : order.y) >> (8u * (rank & 3u))) & 0xFFu);
+            float share = ((rank < 4u) ? sharesLow[rank] : sharesHigh[rank - 4u]);
+            uint entry = ((SdfViewsProbePartialValid | (light << 8u)) | (uint)round(saturate(share) * 255.0));
+            uint shifted = (entry << (16u * (rank & 1u)));
+            uint word = (rank >> 1u);
+
+            listed |= uint4(((word == 0u) ? shifted : 0u), ((word == 1u) ? shifted : 0u), ((word == 2u) ? shifted : 0u), ((word == 3u) ? shifted : 0u));
+        }
+    }
+    [loop] while (any(overflow != 0u)) {
+        uint light = sdfViewsProbeLowestLight(overflow);
+        uint4 bit = sdfViewsProbeLightBit(light);
+        float share = sdfMeshLightVisibility(probes, light);
+
+        overflow &= ~bit;
+        rounded++;
+        if ((2.0 * share) >= weight) {
+            everyCorner |= bit;
+        } else {
+            someCorner &= ~bit;
         }
     }
     if (rounded != 0u) {
@@ -486,6 +533,52 @@ uint4 sdfViewsPixelLightsSeen(SdfPixel p) {
         return uint4(0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
     }
     return sdfViewsSlotLightsSeen((probes.slots.x - 1u), probes.slotStride);
+}
+
+// The least luminance of a slot's received cube over its six faces (SdfViewsProbeReceivedWord): no direction a pixel reads
+// the cube along (sdfViewsCubeAt, the faces weighted by the direction's squared components, which sum to one) reads less.
+float sdfViewsSlotLeastReceived(uint first, uint stride) {
+    float least = 3.0e38;
+
+    [unroll] for (uint face = 0u; (face < 6u); face++) {
+        least = min(least, dot(puckUnpackSharedExponent(sdfViewsProbeRecordBuffer[first + ((SdfViewsProbeReceivedWord + face) * stride)]), PuckRec709Luminance));
+    }
+    return max(least, 0.0);
+}
+// The bound below the indirect light every pixel that blends a cell receives through it (sdfViewsIndirectSeen), on the
+// cells' rule (sdfViewsCellLightsSeen): no bound (the largest float) for a cell outside the view or without a
+// representative, which no pixel blends; zero for one whose representative no probe answers, since a pixel left with no
+// answering slot reads the camera sample's light; and its slot's least received luminance otherwise. A pixel's slots'
+// shares sum to one, so it receives no less than the least of the cells it blends.
+float sdfViewsCellLeastReceived(int2 cell, uint viewIndex) {
+    if (any(cell < 0) || any(cell >= int2(sdfViewsProbeCells()))) {
+        return 3.0e38;
+    }
+
+    uint record = sdfViewsProbeRecord(uint2(cell), viewIndex);
+    uint state = sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, SdfViewsProbeStateWord)];
+
+    if ((state & SdfViewsProbePresent) == 0u) {
+        return 3.0e38;
+    }
+    return (((state & 0xFFFFu) == 0u) ? 0.0 : sdfViewsSlotLeastReceived(record, sdfViewsProbePlane()));
+}
+// The bound below a views pixel's indirect light beyond the cells about it (sdfViewsCellLeastReceived), on the pixels'
+// rule (sdfViewsPixelLightsSeen): zero for a pixel that reads no slot, its extra's least for one that reads an extra, and
+// no bound for one that blends cells.
+float sdfViewsPixelLeastReceived(SdfPixel p) {
+    uint mix = sdfViewsProbeRecordBuffer[sdfViewsProbeMixWord(p.pixel, p.viewIndex)];
+
+    if ((mix & SdfViewsProbeMixServed) == 0u) {
+        return 0.0;
+    }
+    if ((mix & SdfViewsProbeMixExtra) == 0u) {
+        return 3.0e38;
+    }
+
+    SdfMeshProbes probes = sdfViewsProbesAt(p);
+
+    return (sdfMeshAnswers(probes) ? sdfViewsSlotLeastReceived((probes.slots.x - 1u), probes.slotStride) : 0.0);
 }
 
 // One of a pixel's slots' two six-face colour cubes, whose first word is `word`, about a direction: each axis's face

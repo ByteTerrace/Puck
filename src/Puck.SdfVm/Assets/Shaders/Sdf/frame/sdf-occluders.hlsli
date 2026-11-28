@@ -302,15 +302,18 @@ float sdfOccludersShadow(uint4 mask, float3 position, float3 target, float light
                 continue;
             }
 
-            // The segment's least distance to the occluder's bounding sphere bounds its distance to the solid from below,
-            // and the half width is at most `widest`, so a segment that passes the sphere by that much or more sees the
-            // whole light past this occluder (its share is one) whatever the solid's own gap: the search is skipped.
-            float along = clamp(dot((occluder.Center - position), direction), 0.0, far);
-            float sphereGap = (length((position + (direction * along)) - occluder.Center) - sdfOccluderBound(occluder));
-            float widest = max(max(slopeWidth, (far * occluder.Softness)), 1.0e-4);
+            // A box's gap is a golden-section search. The segment's least distance to its bounding sphere bounds its
+            // distance to the box from below, and the half width is at most `widest`, so a segment that passes the sphere
+            // by that much or more sees the whole light past this box (its share is one): the search is skipped. A
+            // sphere's or a capsule's gap is a closed form no cheaper than this test, so it takes none.
+            if (occluder.Shape == SDF_OCCLUDER_BOX) {
+                float along = clamp(dot((occluder.Center - position), direction), 0.0, far);
+                float sphereGap = (length((position + (direction * along)) - occluder.Center) - sdfOccluderBound(occluder));
+                float widest = max(max(slopeWidth, (far * occluder.Softness)), 1.0e-4);
 
-            if (sphereGap >= widest) {
-                continue;
+                if (sphereGap >= widest) {
+                    continue;
+                }
             }
 
             float2 gap = sdfOccluderRayGap(occluder, position, direction, far);

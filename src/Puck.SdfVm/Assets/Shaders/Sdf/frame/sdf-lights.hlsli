@@ -184,6 +184,27 @@ float sdfLineReach(SdfLight light, float3 midpoint, float3 surfacePosition, out 
 // response's own: a light is left out only where its response is zero by a margin.
 static const float SdfLightReachMargin = 1.0e-3;
 
+// The luminance, in nits on a white surface facing the light, under which a ranged light's contribution leaves the walk:
+// the view's cutoff (SDF_LIGHT_RANGE_THRESHOLD of display white at the view's exposure) or `floorNits`, whichever is
+// greater. `floorNits` is SDF_LIGHT_RECEIVED_SHARE of the indirect light the surface receives (a pixel's own,
+// sdfLightReceivedFloor), or a bound below every such surface of a tile (sdfViewsTileLights), or zero for the view's
+// cutoff alone. sdfLightCutoffFade fades a light by it and sdfLightReachesBox bounds a box by it: the two read one rule.
+float sdfLightCutoffNits(float floorNits) {
+    return max((SDF_LIGHT_RANGE_THRESHOLD / max(passGroup.exposure, 1.0e-30)), floorNits);
+}
+// The floor a surface's light walk fades its lights under (sdfLightCutoffNits): SDF_LIGHT_RECEIVED_SHARE of the luminance
+// of the indirect light it receives, `indirect` as the volume answers it, under the view's indirect gains and intensity,
+// before any occlusion, which scales a ranged light's visibility alike, and before a material's own receive, which a
+// shade program may change. Zero where the indirect light is off. A views tile bounds it from below with the least of
+// its pixels' cells (sdfViewsTileLights): the floor reads nothing a tile cannot bound. sdfLightFloorOf takes an indirect
+// luminance already under the gains, which a tile bounds with their least channel.
+float sdfLightFloorOf(float received) {
+    return (SDF_LIGHT_RECEIVED_SHARE * max((received * passGroup.indirectApply.w), 0.0));
+}
+float sdfLightReceivedFloor(float3 indirect) {
+    return sdfLightFloorOf(dot((indirect * passGroup.indirectApply.rgb), PuckRec709Luminance));
+}
+
 // The squared distance from `center` to the box `low`..`high`; zero inside it.
 float sdfBoxDistanceSquared(float3 center, float3 low, float3 high) {
     float3 outside = max(max((low - center), (center - high)), 0.0);
@@ -195,7 +216,7 @@ float sdfBoxDistanceSquared(float3 center, float3 low, float3 high) {
 // whether a point or spot light's bound over the box reaches the view's cutoff. A point or spot light gives a point at
 // most its weight times its window at the box's nearest point over that point's squared distance, times the largest
 // cone factor over the sphere about the box, and fades to nothing under the cutoff (sdfLightCutoffFade,
-// shade/sdf-light.hlsli: luminance times the view's exposure against SDF_LIGHT_RANGE_THRESHOLD; the two read one rule).
+// shade/sdf-light.hlsli, against sdfLightCutoffNits; the two read one rule).
 // The cone is where saturate(dot(-l, SpotAxis) + SpotOffset) is above zero (sdfPointReach): the directions from the
 // light within the angle whose cosine is -SpotOffset / |SpotAxis| of the axis. A sphere lies wholly outside a cone of
 // half-angle a when cos(a) * across - sin(a) * along exceeds its radius, `along` and `across` its centre's offset from
@@ -207,22 +228,29 @@ float sdfBoxDistanceSquared(float3 center, float3 low, float3 high) {
 // (sdfLineReach), and it has no cone.
 //
 // A face light lights only what lies in front of its face's plane, and nothing while its luminance is zero
-// (sdfLightInputs): a face of luminance L and weight w (its area over pi) gives a point at most L * w / (d^2 + w), its
-// facing and window at most one. So it reaches the box where the box has a point in front of the plane (the box's
-// farthest reach along the facing, its centre's offset plus its half extent projected on the facing's magnitudes) within
-// its range, and that bound at the box's nearest point reaches the view's cutoff.
-bool sdfLightReachesBox(SdfLight light, float3 position, float3 low, float3 high) {
+// (sdfLightInputs): a face of luminance L and weight w (its area over pi) gives a point at most
+// L * w * cos / (d^2 + w), its window at most one and cos the face's own cosine toward the point. Over the box the
+// distance is at least the nearest point's and the cosine at most the box's farthest reach along the facing (its
+// centre's offset plus its half extent projected on the facing's magnitudes) over that distance, so a face lighting a
+// wall it stands on, at a grazing angle, is bounded by what it really sends there.
+//
+// Every bound is held to sdfLightCutoffNits(floorNits): the view's cutoff, or `floorNits` where the caller bounds the light the
+// box's surfaces receive (a views tile), zero otherwise.
+bool sdfLightReachesBox(SdfLight light, float3 position, float3 low, float3 high, float floorNits) {
     float reach = (light.Param * (1.0 + SdfLightReachMargin));
     float nearest = sdfBoxDistanceSquared(position, low, high);
+    float cutoff = sdfLightCutoffNits(floorNits);
 
     if (light.Kind == SDF_LIGHT_FACE) {
         float luminance = dot(sdfFaceLight(light), PuckRec709Luminance);
         float3 offset = (((low + high) * 0.5) - position);
         float3 extent = ((high - low) * 0.5);
+        float ahead = (dot(light.SpotAxis, offset) + dot(abs(light.SpotAxis), extent));
+        float cosine = ((nearest > 1.0e-12) ? saturate(ahead * rsqrt(nearest)) : 1.0);
 
         return ((nearest <= (reach * reach))
-            && (((luminance * light.Weight * passGroup.exposure) * (1.0 + SdfLightReachMargin)) > (SDF_LIGHT_RANGE_THRESHOLD * (nearest + light.Weight)))
-            && ((dot(light.SpotAxis, offset) + dot(abs(light.SpotAxis), extent)) > (-SdfLightReachMargin * (length(offset) + length(extent)))));
+            && (ahead > (-SdfLightReachMargin * (length(offset) + length(extent))))
+            && ((((luminance * light.Weight) * (cosine + SdfLightReachMargin)) * (1.0 + SdfLightReachMargin)) > (cutoff * (nearest + light.Weight))));
     }
 
     if (light.Kind == SDF_LIGHT_LINE) {
@@ -237,7 +265,7 @@ bool sdfLightReachesBox(SdfLight light, float3 position, float3 low, float3 high
         float floorDistance = sdfLineNearest(light);
         float lineBound = (((light.Weight * (2.0 * length(light.SpotAxis))) * sdfLightWindow(nearest, light.Param)) / max(nearest, (floorDistance * floorDistance)));
 
-        return (((lineBound * passGroup.exposure) * (1.0 + SdfLightReachMargin)) > SDF_LIGHT_RANGE_THRESHOLD);
+        return ((lineBound * (1.0 + SdfLightReachMargin)) > cutoff);
     }
     if (light.Kind != SDF_LIGHT_POINT) {
         return true;
@@ -268,6 +296,6 @@ bool sdfLightReachesBox(SdfLight light, float3 position, float3 low, float3 high
         bound *= (cone * cone);
     }
 
-    return (((bound * passGroup.exposure) * (1.0 + SdfLightReachMargin)) > SDF_LIGHT_RANGE_THRESHOLD);
+    return ((bound * (1.0 + SdfLightReachMargin)) > cutoff);
 }
 #endif

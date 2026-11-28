@@ -76,6 +76,7 @@
 #define SDF_SCREEN_EMISSION_EDGE         4u
 #define SDF_LIGHT_MINIMUM_DISTANCE       0.05
 #define SDF_LIGHT_RANGE_THRESHOLD        0.00390625
+#define SDF_LIGHT_RECEIVED_SHARE         0.0078125
 #define SDF_MAX_OCCLUDERS                128u
 #define SDF_LUMINANCE_CEILING            65000.0
 #define SDF_WINDOW_ADAPTATION            0.75

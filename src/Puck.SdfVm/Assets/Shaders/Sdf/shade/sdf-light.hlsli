@@ -164,6 +164,10 @@ struct SdfShadeSurface {
     SdfMeshProbes probes;
     uint4 occluders;
     int frameSlot;
+    // The floor a ranged light's contribution fades under beside the view's cutoff, in nits on a white surface facing the
+    // light (sdfLightCutoffNits): a share of the indirect light the surface receives (sdfLightReceivedFloor), zero where a
+    // pass weighs the view's cutoff alone. A views tile leaves a light out against a floor no greater (sdfViewsTileLights).
+    float lightFloor;
 };
 
 // The probes' answer for a light at a surface: the share of the probes about it that see the light (sdfMeshLightVisibility)
@@ -296,6 +300,13 @@ struct SdfLightMasks {
     uint4 lights;
     uint4 occluders;
 };
+// One past the highest light a light mask holds, or zero for an empty mask.
+uint sdfLightMaskEnd(uint4 mask) {
+    if (mask.w != 0u) { return (97u + firstbithigh(mask.w)); }
+    if (mask.z != 0u) { return (65u + firstbithigh(mask.z)); }
+    if (mask.y != 0u) { return (33u + firstbithigh(mask.y)); }
+    return ((mask.x != 0u) ? (1u + firstbithigh(mask.x)) : 0u);
+}
 // The view's masks: every light and occluder the view shades.
 SdfLightMasks sdfViewLightMasks() {
     SdfLightMasks masks;
@@ -359,16 +370,19 @@ bool sdfOccluderReachesWalk(SdfOccluder occluder, uint4 lights, float3 low, floa
 // point its walk shades, and walk the masks it answers; the occluders narrow to those whose ambient or shadow toward a
 // kept light can reach the box (sdfOccluderReachesWalk). A light it leaves out adds nothing at any of those points, on
 // the rule a views tile leaves one out by (sdfViewsTileLights). Views' tiles bound their walks as tightly already, so
-// glass alone reads it. Glass takes no face light (SDF_LIGHT_FACE): a screen's or an emitter face's glow lights the
-// opaque surfaces before it and reaches a pane through the lit image behind it, and a pane over a screen, a display's
-// cover, stands inside the face's whole range, so walking faces there would cost every pane pixel a visit per screen.
+// glass alone reads it. Glass takes no face light (SDF_LIGHT_FACE): its pass block's mask leaves faces out
+// (SdfWorldTables.GlassLightMaskOf), since a screen's or an emitter face's glow lights the opaque surfaces before it and
+// reaches a pane through the lit image behind it, and a pane over a screen, a display's cover, stands inside the face's
+// whole range, so walking faces there would cost every pane pixel a visit per screen.
 SdfLightMasks sdfWaveLightMasks(float3 position) {
     SdfLightMasks masks = sdfViewLightMasks();
     float3 low = WaveActiveMin(position);
     float3 high = WaveActiveMax(position);
     uint rank = WavePrefixCountBits(true);
     uint active = WaveActiveCountBits(true);
-    uint count = worldLightCount();
+    // The walk past the view mask's highest light reads nothing: glass's mask holds no face light (SdfWorldTables'
+    // GlassLightMaskOf), which the table lays after the frame's own, so the loop stops at the frame's lights.
+    uint count = min(worldLightCount(), sdfLightMaskEnd(masks.lights));
     uint4 kept = uint4(0u, 0u, 0u, 0u);
 
     [loop]
@@ -383,7 +397,7 @@ SdfLightMasks sdfWaveLightMasks(float3 position) {
             if ((sdfComponent(masks.lights, word) & flag) != 0u) {
                 SdfLight light = sdfLights[index];
 
-                if ((light.Kind != SDF_LIGHT_FACE) && (!sdfLightRanged(light.Kind) || sdfLightReachesBox(light, sdfLightPlace(light), low, high))) {
+                if (!sdfLightRanged(light.Kind) || sdfLightReachesBox(light, sdfLightPlace(light), low, high, 0.0)) {
                     bit = uint4(((word == 0u) ? flag : 0u), ((word == 1u) ? flag : 0u), ((word == 2u) ? flag : 0u), ((word == 3u) ? flag : 0u));
                 }
             }
@@ -516,15 +530,18 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 // `transmitted` is the colour the light takes on its way through coloured glass, which the light phase's door multiplies
 // the light's colour by before either response reads it (sdfLightTransmission; white for every kind but a directional).
 struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; bool none; float3 specularDirection; float specularScale; float3 transmitted; };
-// The share of display white under which a positional light's contribution leaves the shading walk: the share that sizes
-// every light's range at the world's darkest exposure (SdfPhotometry.RangeThreshold, SdfPhotometry.RangeOf), taken at
-// the view's own exposure. A light keeps its whole response where it gives a white surface facing it twice that share of
-// the view's white, and fades linearly to nothing at the share, so a views tile that leaves out a light whose bound over
-// its points stays under the share (sdfViewsTileLights) cuts nothing a pixel shows. `luminance` is the light's luminance
-// on a white surface facing it, in nits. The local adaptation (sdfLocalAdaptationGain) can lift what the fade removed in
-// the darkest pixels by at most its gain.
-float sdfLightCutoffFade(float luminance) {
-    return saturate(((luminance * passGroup.exposure) / SDF_LIGHT_RANGE_THRESHOLD) - 1.0);
+// The fade under which a ranged light's contribution leaves the shading walk: the cutoff is the greater of the share of
+// display white that sizes every light's range at the world's darkest exposure (SdfPhotometry.RangeThreshold), taken at
+// the view's own exposure, and the surface's floor, a share of the indirect light it already receives
+// (SdfPhotometry.ReceivedShare, sdfLightReceivedFloor), so a light that adds no visible share of what a lit surface
+// receives leaves its walk (sdfLightCutoffNits). A light keeps its whole response where it gives a white surface facing it
+// twice the cutoff, and fades linearly to nothing at it, so a views tile that leaves out a light whose bound over its
+// points stays under a cutoff no greater than any of its pixels' (sdfViewsTileLights) cuts nothing a pixel shows, and a
+// light faded out gives a pixel at most the cutoff. `luminance` is the light's luminance on a white surface facing it,
+// in nits; `floorNits` is the surface's, zero for the view's cutoff alone. The local adaptation (sdfLocalAdaptationGain) can
+// lift what the fade removed in the darkest pixels by at most its gain.
+float sdfLightCutoffFade(float luminance, float floorNits) {
+    return saturate((luminance / sdfLightCutoffNits(floorNits)) - 1.0);
 }
 // Whether the irradiance volume traces a light of the lights table at `index` for its occlusion (SdfLight.IsTraced): a
 // ranged light (a point, spot, line or face light) whose record asks for shadows, among the lights a probe's light bits
@@ -575,14 +592,14 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
     bool positional = sdfLightRanged(light.kind);
     if (light.kind == SDF_LIGHT_POINT) {
         inputs.reach = sdfPointReach(light.record, light.position, surface.position, inputs.direction);
-        inputs.reach *= sdfLightCutoffFade(light.weight * inputs.reach);
+        inputs.reach *= sdfLightCutoffFade((light.weight * inputs.reach), surface.lightFloor);
     } else if (light.kind == SDF_LIGHT_LINE) {
         float3 toNearest = sdfLineNearestOffset(light.record, light.position, surface.position);
         float window = sdfLightWindow(dot(toNearest, toNearest), light.param);
         float fade = 0.0;
 
         inputs.reach = sdfLineReach(light.record, light.position, surface.position, inputs.direction);
-        fade = sdfLightCutoffFade(light.weight * inputs.reach);
+        fade = sdfLightCutoffFade((light.weight * inputs.reach), surface.lightFloor);
         inputs.reach *= fade;
         if (inputs.reach > 0.0) {
             inputs.specularScale = (sdfLineSpecular(light.record, light.position, surface, (window * fade), inputs.specularDirection));
@@ -593,7 +610,7 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
         inputs.direction = delta * rsqrt(max(distanceSquared, 1.0e-8));
         if (light.kind == SDF_LIGHT_FACE) {
             inputs.reach = (saturate(dot(light.facing, -inputs.direction)) * sdfLightWindow(distanceSquared, light.param)) / (distanceSquared + light.weight);
-            inputs.reach *= sdfLightCutoffFade(dot(light.color, PuckRec709Luminance) * light.weight * inputs.reach);
+            inputs.reach *= sdfLightCutoffFade((dot(light.color, PuckRec709Luminance) * light.weight * inputs.reach), surface.lightFloor);
         }
     }
     bool traced = surface.probed && light.record.Shadows != 0u && light.index >= 0;
