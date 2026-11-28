@@ -9406,7 +9406,7 @@
       }
     },
     "WorldPlacementRegion": {
-      "description": "A placement\u0027s region facet \u2014 a named volume row, not a trigger system: any placement may carry one, turning its stamp into a sensing volume the world-events feed watches for body enter/exit edges (see Server.WorldEventFeed and the observe region:\u003Cname\u003E grant subject). The region\u0027s name is the carrying placement\u0027s Id \u2014 one identity, never a second string kept in sync by hand. The volume is a sphere of Radius or an oriented box of HalfExtents (exactly one is authored), so a room or a corridor is one region. Its center is Center in the placement\u0027s resolved frame and a box turns with the placement\u0027s resolved yaw plus its own YawDegrees; the placement\u0027s Scale never sizes it, since a region\u0027s size is its own authored extent, never derived from the creation\u0027s visual bounds. Presentation-only in itself (drawing no geometry); sensing reads the fixed-point shape ShapeAt compiles from the placement\u0027s resolved frame \u2014 unless the row also carries Attach, in which case the frame is the resolved live body pose instead (Server.WorldEventFeed.CollectRegions, the same resolve world.attachments answers): the sensing volume follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point. A body is inside when its foot point lies within the closed volume, the test Contains owns.",
+      "description": "A placement\u0027s region facet \u2014 a named volume row, not a trigger system: any placement may carry one, turning its stamp into a sensing volume the world-events feed watches for body enter/exit edges (see Server.WorldEventFeed and the observe region:\u003Cname\u003E grant subject). The region\u0027s name is the carrying placement\u0027s Id \u2014 one identity, never a second string kept in sync by hand. The volume is a sphere of Radius or an oriented box of HalfExtents (exactly one is authored), so a room or a corridor is one region. Its center is Center in the placement\u0027s resolved frame and a box turns with the placement\u0027s resolved yaw plus its own YawDegrees; the placement\u0027s own Scale never sizes it, since a region\u0027s size is its own authored extent, never derived from the creation\u0027s visual bounds, but the scale of the frame the row stands in does (GroupScale), so a region under a scaled group shrinks and grows with everything else in it. Presentation-only in itself (drawing no geometry); sensing reads the fixed-point shape ShapeAt compiles from the placement\u0027s resolved frame \u2014 unless the row also carries Attach, in which case the frame is the resolved live body pose instead (Server.WorldEventFeed.CollectRegions, the same resolve world.attachments answers): the sensing volume follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point. A body is inside when its foot point lies within the closed volume, the test Contains owns.",
       "type": [
         "object",
         "null"
@@ -9428,7 +9428,7 @@
           "maxItems": 3
         },
         "center": {
-          "description": "The volume\u0027s center in the placement\u0027s frame, world units (yawed with it, never scaled).",
+          "description": "The volume\u0027s center in the placement\u0027s frame, in the frame\u0027s units (yawed with it, and scaled by its group\u0027s scale, GroupScale).",
           "default": [
             0,
             0,
@@ -10509,7 +10509,7 @@
           "type": "number"
         },
         "scale": {
-          "description": "The uniform stamp scale (clamped to the placement policy envelope by validation).",
+          "description": "The uniform stamp scale in Parent\u0027s frame (clamped to the placement policy envelope by validation). A parent\u0027s scale multiplies it as it multiplies the row\u0027s offset, as an SVG group\u0027s does (LocalFrame), so the row\u0027s size in the world is its composed frame\u0027s FixedScale (its stamp\u0027s Frame): every consumer that sizes the row\u0027s drawn form, colliders, faces, net, region, board or anchored light reads that, never this local value. An attached or inhabited row has no static frame, so its own scale is its whole one.",
           "type": "number"
         },
         "distribution": {

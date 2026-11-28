@@ -11345,7 +11345,7 @@ export type WorldPlacement = {
    */
   yawDegrees: number;
   /**
-   * The uniform stamp scale (clamped to the placement policy envelope by validation).
+   * The uniform stamp scale in Parent's frame (clamped to the placement policy envelope by validation). A parent's scale multiplies it as it multiplies the row's offset, as an SVG group's does (LocalFrame), so the row's size in the world is its composed frame's FixedScale (its stamp's Frame): every consumer that sizes the row's drawn form, colliders, faces, net, region, board or anchored light reads that, never this local value. An attached or inhabited row has no static frame, so its own scale is its whole one.
    */
   scale: number;
   /**
@@ -11864,7 +11864,7 @@ export type WorldPlacementReflow = {
 };
 
 /**
- * A placement's region facet — a named volume row, not a trigger system: any placement may carry one, turning its stamp into a sensing volume the world-events feed watches for body enter/exit edges (see Server.WorldEventFeed and the observe region:<name> grant subject). The region's name is the carrying placement's Id — one identity, never a second string kept in sync by hand. The volume is a sphere of Radius or an oriented box of HalfExtents (exactly one is authored), so a room or a corridor is one region. Its center is Center in the placement's resolved frame and a box turns with the placement's resolved yaw plus its own YawDegrees; the placement's Scale never sizes it, since a region's size is its own authored extent, never derived from the creation's visual bounds. Presentation-only in itself (drawing no geometry); sensing reads the fixed-point shape ShapeAt compiles from the placement's resolved frame — unless the row also carries Attach, in which case the frame is the resolved live body pose instead (Server.WorldEventFeed.CollectRegions, the same resolve world.attachments answers): the sensing volume follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point. A body is inside when its foot point lies within the closed volume, the test Contains owns.
+ * A placement's region facet — a named volume row, not a trigger system: any placement may carry one, turning its stamp into a sensing volume the world-events feed watches for body enter/exit edges (see Server.WorldEventFeed and the observe region:<name> grant subject). The region's name is the carrying placement's Id — one identity, never a second string kept in sync by hand. The volume is a sphere of Radius or an oriented box of HalfExtents (exactly one is authored), so a room or a corridor is one region. Its center is Center in the placement's resolved frame and a box turns with the placement's resolved yaw plus its own YawDegrees; the placement's own Scale never sizes it, since a region's size is its own authored extent, never derived from the creation's visual bounds, but the scale of the frame the row stands in does (GroupScale), so a region under a scaled group shrinks and grows with everything else in it. Presentation-only in itself (drawing no geometry); sensing reads the fixed-point shape ShapeAt compiles from the placement's resolved frame — unless the row also carries Attach, in which case the frame is the resolved live body pose instead (Server.WorldEventFeed.CollectRegions, the same resolve world.attachments answers): the sensing volume follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point. A body is inside when its foot point lies within the closed volume, the test Contains owns.
  */
 export type WorldPlacementRegion = {
   /**
@@ -11876,7 +11876,7 @@ export type WorldPlacementRegion = {
    */
   halfExtents?: [number, number, number];
   /**
-   * The volume's center in the placement's frame, world units (yawed with it, never scaled).
+   * The volume's center in the placement's frame, in the frame's units (yawed with it, and scaled by its group's scale, GroupScale).
    */
   center?: [number, number, number];
   /**
