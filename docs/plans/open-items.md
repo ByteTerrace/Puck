@@ -771,7 +771,7 @@ Open calls, each with its sides:
   plan, which comes before its slices are dispatched.
 - **Which of the Moth's halves is right** where they do not mirror: the right
   back pod's 40 parts (ids 1200 to 1240) are rotated differently from the left
-  pod's (1100 to 1140), and `sideLock`'s position, `blinkCrease`'s position and
+  pod's (1100 to 1140), and `sideLock`'s position and
   `kneeGuard`'s profile differ. Either construct above then mirrors the chosen
   half.
 - **The chase camera with its back to the stair wall**: swing the boom, rise
@@ -2223,9 +2223,9 @@ Next: fill the engine gaps first
   flipped triangles under a square millimetre along its edges. The Moth's shin
   blades (her ivory arch bands and side panels as dilated shells) carried seven
   tenths of her flipped triangles until they became paints; the measurements
-  below were read in them. `blinkCrease-*` and `nozzleGlow-*` still show it on
+  below were read in them. `nozzleGlow-*` still shows it on
   her, and the Humble Brick's face is the worst of a wider sample; none of
-  those three is examined. The contour needs a rule for a face it cannot
+  the two is examined. The contour needs a rule for a face it cannot
   resolve (close it to one crease, as `SdfSampledLattice.CloseSheets` closes a
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
