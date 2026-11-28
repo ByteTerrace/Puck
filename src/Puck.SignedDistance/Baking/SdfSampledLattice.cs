@@ -538,7 +538,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         // A lowest quad only narrows the search: overlapping normal neighborhoods can share that quad without sharing
         // their other members, so reuse a split only when its complete neighborhood agrees. Each (vertex, lowest quad)
         // names the first of its splits, each split its members' run in `splitMembers` and the next split of its key.
-        var splits = new Dictionary<(int Vertex, int Group), int>();
+        using var splits = new OwnedLongMap<int>(allocator: allocator, observer: workspace);
         using var splitList = new OwnedBuffer<(int Start, int Count, int Vertex, int Next)>(allocator: allocator, observer: workspace);
         using var splitMembers = new OwnedBuffer<int>(allocator: allocator, observer: workspace);
         using var members = new OwnedBuffer<int>(allocator: allocator, observer: workspace);
@@ -582,7 +582,8 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                     members.Add(item: other);
                 }
 
-                var head = (splits.TryGetValue(key: (vertex, group), value: out var first) ? first : -1);
+                var splitKey = PackedIntPair.Pack(high: vertex, low: group);
+                var head = (splits.TryGetValue(key: splitKey, value: out var first) ? first : -1);
                 var split = -1;
                 var last = -1;
 
@@ -600,7 +601,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
                     split = (vertexCount + (addedPositions.Length / 3));
                     // Appended at the end of its key's chain, so candidates are tried in the order they were made.
-                    if (last < 0) { splits.Add(key: (vertex, group), value: splitList.Length); } else { splitList[last].Next = splitList.Length; }
+                    if (last < 0) { splits.Add(key: splitKey, value: splitList.Length); } else { splitList[last].Next = splitList.Length; }
                     splitList.Add(item: (splitMembers.Length, members.Length, split, -1));
                     splitMembers.AddRange(items: members.GetSpan());
                     addedPositions.Add(item: positions[(3 * vertex)]);

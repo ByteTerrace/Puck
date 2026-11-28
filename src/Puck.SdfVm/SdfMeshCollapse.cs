@@ -200,13 +200,18 @@ public static class SdfMeshCollapse {
         held.Normals.Span.CopyTo(destination: normals);
         collapser.WriteMade(positions: positions.AsSpan(start: mesh.VertexCount), normals: normals.AsSpan(start: mesh.VertexCount));
 
-        return new SdfMesh(positions: positions, indices: held.Indices.ToArray(), normals: normals, triangleMaterials: held.TriangleMaterials.ToArray()) {
+        return new SdfMesh(positions: positions, indices: Carried(mesh: mesh, plane: held.Indices), normals: normals, triangleMaterials: Carried(mesh: mesh, plane: held.TriangleMaterials)) {
             BakeCell = mesh.BakeCell,
             Clusters = clusters,
             Encloses = mesh.Encloses,
             Levels = levels,
         };
     }
+
+    // A plane of the mesh the levelled mesh carries unchanged: the mesh's own array, shared, when nothing lets it go (an
+    // array the collector owns, of a mesh that never restores its planes); else a copy that outlives the hold.
+    private static ReadOnlyMemory<uint> Carried(SdfMesh mesh, ReadOnlyMemory<uint> plane) =>
+        ((!mesh.LetsGoPlanes && MemoryMarshal.TryGetArray(memory: plane, segment: out _)) ? plane : plane.ToArray());
 
     /// <summary>The collapse runs whose levels a clustered mesh draws cluster by cluster, from the finest (a quarter and
     /// half a cell, <see cref="CellShares"/>): the levels a draw near enough to hold some of its triangles near and some

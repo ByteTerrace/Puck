@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 
 namespace Puck.Abstractions.Memory;
 
@@ -7,6 +8,12 @@ public static class ArrayCapacity {
     /// <summary>Doubles the current capacity on growth within the array limit and any smaller caller ceiling.</summary>
     public static int Grown(int current, int required, int minimum = 16, int ceiling = int.MaxValue) =>
         (int)GpuCapacity.Grown(current, required, Math.Min(ceiling, Array.MaxLength), divisor: 1, minimum: Math.Min(minimum, ceiling));
+
+    /// <summary>Returns the slot count of an open-addressed table that holds <paramref name="count"/> entries at most half
+    /// full: a power of two, at least sixteen, so a probe wraps by a mask.</summary>
+    /// <param name="count">The entries the table holds before it grows; at least one is assumed.</param>
+    /// <returns>The slot count.</returns>
+    public static int TableSlots(int count) => (int)Math.Max(val1: 16UL, val2: (((ulong)Math.Max(val1: 1, val2: count)) * 2UL).NextPowerOfTwo());
 
     /// <summary>Ensures room for the active elements, retaining the previous contents.</summary>
     public static void EnsureLength<T>(ref T[] array, int required) {

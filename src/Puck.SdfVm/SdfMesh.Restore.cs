@@ -35,6 +35,9 @@ public sealed partial record SdfMesh {
     /// <summary>Gets whether the store could not restore the mesh's planes, so the mesh can never be read again and its
     /// group bakes again (<see cref="SdfMeshLibrary.LostRevision"/>).</summary>
     internal bool Lost => (m_restorable?.Lost ?? false);
+    /// <summary>Gets whether the mesh's planes can be let go and restored, which a plane read through a hold must not
+    /// outlive; a mesh that cannot keeps its planes for as long as anything references them.</summary>
+    internal bool LetsGoPlanes => (m_restorable is not null);
 
     /// <summary>Holds a need for the mesh's planes: they stay in memory, or come back from the store off the caller's
     /// thread, until the matching <see cref="Unneed"/>. A need reads nothing; a reader takes a hold.</summary>

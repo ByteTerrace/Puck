@@ -22,7 +22,7 @@ internal sealed class SdfMeshWeld : IDisposable {
     public SdfMeshWeld(int capacity, IAllocator? allocator = null, IAllocationObserver? owner = null) {
         m_allocator = allocator;
         m_observer = owner;
-        m_entries = Table(slots: SlotsFor(count: capacity));
+        m_entries = Table(slots: ArrayCapacity.TableSlots(count: capacity));
         m_mask = (m_entries.Length - 1);
     }
 
@@ -79,8 +79,6 @@ internal sealed class SdfMeshWeld : IDisposable {
     private static uint Bits(float value) => (float.IsNaN(value) ? 0x7FC00000u : BitConverter.SingleToUInt32Bits(value: (value + 0f)));
     private int Home(Vector3 position) =>
         (int)(InvertibleBitMix.Mix64(value: (InvertibleBitMix.Mix64(value: ((((ulong)Bits(value: position.X)) << 32) | Bits(value: position.Y))) ^ Bits(value: position.Z))) & ((ulong)m_mask));
-    // A power of two at least sixteen that keeps `count` entries at most half the table.
-    private static int SlotsFor(int count) => (int)Math.Max(val1: 16UL, val2: (((ulong)Math.Max(val1: 1, val2: count)) * 2UL).NextPowerOfTwo());
     private OwnedBuffer<Entry> Table(int slots) {
         var table = OwnedBuffer<Entry>.OfLength(allocator: m_allocator, clear: false, length: slots, observer: m_observer);
 
