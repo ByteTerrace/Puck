@@ -1,0 +1,1572 @@
+# The Moth’s companion
+
+## Lighting character
+
+Mintstitch shows its feelings in running stitches and washes of light through
+felt. Tangerine acts like a little lantern whose dome changes colour, while
+its inner bezel, keel and spoon edges mark the beat. Each has a different use
+for darkness. Mintstitch tucks light into the ruff, while Tangerine draws it
+down into the base of the bell. Both speak in pulses of their current mood
+colour. [Paint, light, poses and blending](build-spec.md#light-and-state)
+
+| Sheet | Mintstitch | Tangerine |
+| --- | --- | --- |
+| Fifteen emotions and a speech study, with 5 m colour and greyscale insets | [Emotion and light](r11-mintstitch-emotions.png) | [Emotion and light](r11-tangerine-emotions.png) |
+| The same phrase over a content and a worried baseline | [Talking with light](r11-mintstitch-talking.png) | [Talking with light](r11-tangerine-talking.png) |
+| Discovery, fear and contentment in the moonlit canyon | [Three night moments](r11-mintstitch-night.png) | [Three night moments](r11-tangerine-night.png) |
+
+[Side-by-side comparison](r11-emotion-comparison.png) aligns all fifteen
+expressions, pairs two moods in speech and samples light envelopes in greyscale.
+At 5 m, bright whole silhouettes carry delight, a high inner flash carries
+alarm, and a low ember or soft pool carries fatigue. Curiosity singles out
+one side, while focus holds a symmetric bracket. These reads also show up
+in the pose. The insets use a 1080 px image and a 60° vertical field of view.
+
+### How the lighting sheets were made
+
+The emotion, speech and comparison sheets pose the same measured models
+as the turnarounds. The night triptychs are illustrations made with the
+built-in image generator using the companion turnarounds and the suited Moth
+as references. The prompts call for three palm-scale moments against teal
+moonlight and ochre sandstone. Chartreuse delight lights a crystal seam,
+icy-violet fear catches the rim of a chasm, and seafoam contentment touches
+the Moth’s glove. Mintstitch's prompts put light in the stitches, quilt faces
+and ruff. Tangerine's prompts put it inside the dome and along the inner
+bezel, keel and spoon edges. A correction carried the chartreuse down the
+delighted bell and restored the continuous brass bezel in the fear shot.
+[Moth turnaround](../moth-concept-pack/01-suited-turnaround.png)
+
+### Lighting panel audit
+
+The artist reviewed the following panels for attachment and continuity,
+joint travel, pose, agreement with the turnaround, camera, compositing and
+fixed character details. The checking partner’s independent pass is pending.
+[Concept art review](../README.md#concept-art-review)
+
+| Panels | Artist’s check |
+| --- | --- |
+| Mintstitch emotions and insets | All four wing roots ride their own hinge, the ruff and antennae stay on the body, and the single lid and iris stay in the housing. In the same camera the lifted delight, aimed curiosity, drawn-in fear, lowered sadness and small tired tips hold apart by pose and footprint. Greyscale and colour use the same projection. |
+| Tangerine emotions and insets | The two spoons remain on their seated pins and the eye stays in the continuous eight-rivet bezel. The crown, skirt and spoon tips retain their finishes. Upper flash, belt, lower pool and quiet keel read as different footprints on the same bell in the close and distant views. |
+| Mintstitch talking, both rows | Every frame keeps four joined wings, the single eye, the same pose and camera within its row. The syllable moves through the root stitching and ruff and dies inside those surfaces. |
+| Tangerine talking, both rows | Both spoons and the opaque bezel keep their shape across each row. The bright syllable stays inside the keel and inner bezel and diffuses into the lower dome. The underlying lid and bank carry the mood at each phase. |
+| Mintstitch night, discovery | Four connected wings open around the one eye and the two antenna tips. The nearby crystal and rock take the strongest coloured light, with the far canyon in moonlight. |
+| Mintstitch night, fear | The four attached lobes overlap as the body pulls back, with the near two in front. The ruff and violet stitching throw a compact patch across the ledge. |
+| Mintstitch night, contentment | The four wings and half-lid settle at glove scale. Mild ruff and root light carries through the Moth’s palm and cuff. Her single front braid, suit and glove hold the close view. |
+| Tangerine night, discovery | Two spoons rise on their lower pivots. The continuous dome glows around the opaque porthole ring and crown, and the crystal and ledge share the glow. |
+| Tangerine night, fear | Two spoons scull from the hinge pins, one wide eye reads through the continuous bezel, and the cold top flash colours the near ledge edge. |
+| Tangerine night, contentment | The flippers hang from the pins at palm scale, below the lidded eye. The dome fades to orange at the crown, and the near glove and bracer pick up the lower bell’s light. |
+| Side-by-side comparison | Each pair reuses the authored silhouette, rig and camera of the emotion sheet. The small phase samples preserve scale, pose and attachment as the light shifts. |
+
+## Build reference
+
+The owner chose **Mintstitch** (Patchlace C) and **Tangerine** (Bellbuoy A).
+Both are palm-sized, one-eyed flying guides. The Moth swaps the active
+companion from the Menagerie page of her wrist journal. The
+[build specification](build-spec.md) gives the dimensions, SDF groups,
+materials, paint paths, hinges, gaze, motion keys and light cues.
+
+| Sheet | Mintstitch | Tangerine |
+| --- | --- | --- |
+| Turnaround | [Front, right, back, top](ref-mintstitch-turnaround.png) | [Front, right, back, top](ref-tangerine-turnaround.png) |
+| Construction | [Felt body and four wing groups](ref-mintstitch-construction.png) | [Bell, bezel, keel and spoons](ref-tangerine-construction.png) |
+| Materials | [Quilting, thread, brass and seam light](ref-mintstitch-materials.png) | [Enamel, brass and keel light](ref-tangerine-materials.png) |
+| Eye | [Globe, gaze and green lid](ref-mintstitch-eye.png) | [Porthole, gaze and brown lid](ref-tangerine-eye.png) |
+| Motion | [Hover, dart, glide and startle](ref-mintstitch-motion.png) | [Hover, dart, glide and startle](ref-tangerine-motion.png) |
+
+The original [Mintstitch seam cues](ref-mintstitch-states.png) and
+[Tangerine keel cues](ref-tangerine-states.png) record the earlier light study.
+Use the [lighting character sheets](#lighting-character) for the current build.
+
+| Moth’s left wrist journal | Sheet |
+| --- | --- |
+| Closed | [Flush flap and forearm scale](ref-wristpanel-closed.png) |
+| Open | [Folded flap and seated display](ref-wristpanel-open.png) |
+| Reveal | [Closed, unlatch, fold and ready](ref-wristpanel-reveal.png) |
+| Screen | [Menagerie with Mintstitch active](ref-wristpanel-screen.png) |
+| Construction | [Armour cut, hinge, glass and finishes](ref-wristpanel-construction.png) |
+
+### How the build sheets were made
+
+Each set of measured views, expressions and motion keys projects the same
+part geometry. The rendered material studies show how the authored colours
+and surface details should read at close range. The built-in image generator
+made the three finish insets from these prompts and images:
+
+- **Mintstitch.** Using Patchlace C, make an unlabelled landscape macro of
+  one teal quilted felt wing. Show curved warm cream embroidery, plush
+  compressed wool, a dark teal backing, and a thin uninterrupted mint
+  seam integrated into the cloth at the root. Fill the frame with the
+  detail. Omit the face, additional colours, collage and lettering.
+  [Patchlace source](r9-patchlace.png)
+- **Tangerine.** Using Bellbuoy A, make an unlabelled landscape macro of
+  the orange enamel dome at its wide satin brass bezel. Show two seated
+  brass rivets, a few tiny chips to dark primer, warm cream reflections,
+  and soft stylized highlights. Crop before the eye aperture.
+  [Bellbuoy source](r9-bellbuoy.png)
+- **Wrist.** Using the Moth construction sheet’s gauntlet close-up, make
+  an unlabelled landscape macro of muted lavender and ivory armour over
+  a charcoal flexible cuff. Keep the layered plate edge, subtle wear and
+  restrained highlights. Fill the frame with the material detail.
+  [Moth gauntlet source](../moth-concept-pack/02-construction-details.png)
+
+### Build sheet audit
+
+The artist checked the saved sheets for attachments, joint travel, pose,
+agreement with the turnaround, camera projection, compositing seams and
+fixed character details. The checking partner’s independent pass is pending.
+[Concept art review](../README.md#concept-art-review)
+
+| Sheet | Artist’s check |
+| --- | --- |
+| Mintstitch turnaround | Front, right, back and top agree on the central eye, two antennae and four seated wings. The rear welt stays dark. All views use the same centimetre grid. |
+| Mintstitch construction | The rest assembly and right stack show the collar connecting face and body and each root entering its knuckle. The exploded view offsets only the parts it calls out. |
+| Mintstitch materials | Three cream curves and the dashed hem stay on the felt. The macro ends at the wing surface and the swatches distinguish dark welt, thread, brass and light. |
+| Mintstitch eye | The lid passes in front of the pupil and catchlight at full blink. Both look limits stay in the same housing and the side pins remain opaque. |
+| Mintstitch states | Four hinges remain seated through the lean, flare and bank. The front seam regions change by cue and the eye retains the same surface finish. |
+| Mintstitch motion | The wings sweep around their own roots as the body tips into the dart and recoils on the startle. The fixed camera shows the bob and holds the same scale throughout. |
+| Tangerine turnaround | The crown, two opaque side covers, single brass-rimmed eye, two spoon flippers and keel agree across all four views. The top view shows the bezel and flipper depth. |
+| Tangerine construction | The side stack shows the globe seated under its gasket, the bell resting in the skirt, and the flipper origins at the lower pins. The exploded flippers are visibly set away from the assembly. |
+| Tangerine materials | The enamel seam and wear stay on the shell and the brass rivets sit on the bezel. The bounded macro shows this interface and the whole model identifies the keel. |
+| Tangerine eye | The same eight rivets frame each expression. The dark lid closes across the full aperture, and the pupil and catchlight travel together with gaze. |
+| Tangerine states | Both spoons remain seated through the bank and brake. The three combat segments and the single low-energy ember stay in the keel below the eye. |
+| Tangerine motion | The two spoons share mirrored travel around separate pins. The bell tips forward for the dart and up for recoil while both mounts remain under the same skirt line. |
+| Wrist closed | The lavender boundary crosses the flap at the same line as the bracer. The pocket and dark glass sit below its curved skin. The measured view shows flap size against the 26 cm bracer. |
+| Wrist open | The flap clears the glass while the two knuckles remain at one axis. The orthographic view retains the closed sheet’s scale and the display stays seated. |
+| Wrist reveal | All four frames share one camera, shell, cuff and hinge. The free edge lifts and passes to the vent side. The screen stays in its pocket until it lights at ready. |
+| Wrist screen | Both cards match the companion turnarounds. Only Mintstitch has a check, cyan keyline and Active label. The same card stack appears on the opened forearm. |
+| Wrist construction | The flap, hinge pair, module and well align along the bracer frame. The separated view shows their layer order, and the finish crop follows the suit’s ivory and lavender plates over charcoal. |
+
+## Round nine
+
+The owner narrowed round eight to Patchlace and Bellbuoy. They asked for four
+moderately different versions of each, keeping each character’s silhouette and
+giving every take a few differences that read together at a glance. [Round eight](#round-eight)
+
+Both are palm-sized flying guides who steer the Moth’s attention toward paths
+and points of interest. Each has one expressive eye. The wing seams or keel
+pulse with speech and carry the light states, with emission kept off the pupil.
+[The lantern’s light language](#the-lanterns-light-language)
+
+### Patchlace
+
+![Four Patchlace variants with matched three-quarter flight and face views.](r9-patchlace.png)
+
+| Variation | What changes | One-sentence difference |
+| --- | --- | --- |
+| A · Mossflower | Scalloped moss lobes, large ivory flower appliqués, and a deep olive lid over the jade eye. | Ivory flowers fill the scalloped moss wings, and a deep olive lid shades the jade eye. |
+| B · Clayquilt | Clay-red wool, broader lower wings, and cream diamond quilting. | Broad clay-red lower wings carry cream diamond quilting and glow along their roots. |
+| C · Mintstitch | Taller teal upper wings, curved oatmeal stitching, and longer mint-lit seams. | Tall teal wings carry curved cream stitching and longer mint-green seams. |
+| D · Goldpetal | Dusty lavender felt, ochre petal appliqués, and a violet eye above a thick oatmeal ruff. | Ochre petals fan across lavender wings around a wide violet eye and a thick cream ruff. |
+
+### Bellbuoy
+
+![Four Bellbuoy variants with matched three-quarter flight and face views.](r9-bellbuoy.png)
+
+| Variation | What changes | One-sentence difference |
+| --- | --- | --- |
+| A · Tangerine | Taller tangerine dome, wide riveted brass bezel, and long cream flippers angled down. | A tall orange dome carries a wide brass bezel and two cream flippers pitched down like spoons. |
+| B · Breakwater | Squat teal dome, smaller amber eye, and square-ended flippers. | A squat teal bell with square paddles peers through a small amber porthole. |
+| C · Watchcap | Worn ivory enamel with aged brass, overhanging dark lid, and three separate keel panes. | A dark lid shades the ivory bell’s eye above a row of three cyan keel lights. |
+| D · Wraplight | Ochre enamel, round stubby paddles, and a wide cyan strip that wraps around the skirt. | An ochre bell with stubby round paddles carries a cyan strip that wraps around its skirt. |
+
+### Palm-scale comparison
+
+![All eight three-quarter flight poses at palm scale beside the suited Moth’s head.](r9-overview.png)
+
+The overview reuses the eight flight drawings. Each pose spans 16 cm along
+its longest projected dimension, scaled against the 2.06 m suited Moth’s
+front view. [Suited turnaround](../moth-concept-pack/01-suited-turnaround.png)
+
+### Building the shapes
+
+Build Patchlace’s four wing lobes as thick, rounded SDF solids joined behind
+the ruff. Put the quilting and plain stitches in paint and use shallow felt
+shapes for the large appliqués. The upper and lower wing roots can pivot
+separately through short strokes. Bellbuoy’s flippers pivot on short pins
+below a rounded dome. Use a rounded skirt with a recessed strip or panes.
+Emissive paint carries the speech and state cues on the seam or keel surfaces.
+[SDF authoring](../../../../.claude/skills/sdf-authoring/SKILL.md)
+
+### Round-nine panel audit
+
+The artist checked the saved panels and compared the eight flight poses at
+thumbnail size. Each take reads through a combination of profile, palette,
+face framing, or light placement. The checking partner’s independent audit
+is pending. [Concept art review](../README.md#concept-art-review)
+
+| Panel | What the artist checked |
+| --- | --- |
+| [Patchlace](r9-patchlace.png) | Four thick lobes join behind the ruff in each view. The roots have room for short strokes, and the wing tips clear the body in hover. The far lobes shorten in the flight view. Wing patterns, antennae and seam lights agree across each pair. Each pupil stays clear of the glow. |
+| [Bellbuoy](r9-bellbuoy.png) | Both flippers join at low pivots and clear the skirt at the pictured angles. The keel stays seated under the dome in hover. The round bezel and hinge hardware foreshorten in flight. The face views retain each variant’s flipper shape and keel pattern. Opaque side fittings leave the porthole as the only eye. |
+| [Overview](r9-overview.png) | The flight drawings preserve their attachments and camera angles at palm scale. All eight eyes and lights remain legible. The head crop retains the Moth’s hood, face and braid root. The figures and the head share a scale, with clean edges and space between them. |
+
+## Round eight
+
+The owner’s verdict on round seven was “I'm not sure the variants were different
+enough for me to choose. We need actual variants of each, not tiny deviations.”
+They saw four versions of the same drawing because each set kept the same
+body, wing plan and major masses. Changes to the brow, fin tips, helmet or
+lamp barely moved the outline. This round gives each take its own body plan,
+lead colour or material, and way to carry light. [Round seven](#round-seven)
+
+All twelve are palm-sized flying guides who draw the Moth’s attention to a
+route or nearby point of interest. One large eye leads the glance. The lamp
+pulses with speech and carries the companion’s light states. Its brightest
+pulse leaves the pupil legible. [The lantern’s light language](#the-lanterns-light-language)
+
+### Rivet’s rescue toys
+
+![Four enamel Rivet designs in three-quarter flight and face views.](r8-rivet.png)
+
+| Take | Concept | Silhouette | Lead colour and material | Personality |
+| --- | --- | --- | --- | --- |
+| A · Bellbuoy | A diving-bell toy with a low pair of flippers and a glowing keel. | Round dome over a short, flat skirt | Tangerine enamel | Reassuring. Its lid droops into a slow, confident blink. |
+| B · Slipstream | A delta-wing scout with a nose eye and a lit strip across its tail. | Wide arrowhead with a split trailing edge | Cobalt enamel | Eager. It darts forward, then peeks back from a bank. |
+| C · Treadplate | A square salvage tug with four blunt paddles and a rooftop beacon. | Broad box with four short, squared projections | Olive enamel | Stubbornly helpful. It squints before leaning into a lift. |
+| D · Hoist | An upright rescue frame with tall twin vanes and a hanging work lamp. | Tall open fork with a lamp below the eye | Butter-yellow enamel | Earnest. It rises on tiptoe and opens its eye wide. |
+
+### Tick’s clockwork flyers
+
+![Four clockwork Tick designs in three-quarter flight and face views.](r8-tick.png)
+
+| Take | Concept | Silhouette | Lead colour and material | Personality |
+| --- | --- | --- | --- | --- |
+| A · Winder | A pocket watch whose lid blinks over the eye above a lit dial segment. | Round coin with a crown and two tiny tabs | Honey brass | Punctual. A crisp lid snap punctuates its glances. |
+| B · Chimebox | A walnut music box with a blinking eye at one end and a glowing comb. | Long low case with two rounded wing blades | Oxblood lacquered walnut | Playful. It cocks the case like a musician waiting for the next beat. |
+| C · Weightdrop | A clock tower with a high eye and a swinging pendulum lantern. | Pointed roof, narrow waist and long drop | Prussian-blue steel | Patient. It takes one pendulum beat before turning to speak. |
+| D · Astral | A clockwork orrery that cradles its eye in rings around a lit moon. | Wide, crossed hoops with open gaps | Satin silver nickel | Absorbed. Its pupil wanders, then snaps to the Moth. |
+
+### Fleecewick’s glowing fuzz
+
+![Four fuzzy Fleecewick designs in three-quarter flight and face views.](r8-fleecewick.png)
+
+| Take | Concept | Silhouette | Lead colour and material | Personality |
+| --- | --- | --- | --- | --- |
+| A · Thimblepuff | A round shearling puff with tiny wings and warm light under its chin. | Nearly circular puff with two nub wings | Coral shearling | Bubbly. It bounces once before a wide-eyed hello. |
+| B · Longhush | A shaggy comet with a low eye, swept locks and a glowing tail tip. | Long taper with an uneven mane and raked fins | Indigo mohair | Shy. It peeks beneath its fringe and trails behind. |
+| C · Patchlace | A felt moth with four quilted wings and light along the inner seams. | Broad, scalloped butterfly with four lobes | Moss-green wool felt | Steady. It holds a soft gaze while flaring all four wings. |
+| D · Seedwick | A fuzzy seed umbrella with one eye and a luminous hanging seed. | High domed canopy over a narrow stalk and drop | Ivory floss | Dreamy. It drifts, then tilts its canopy to look down. |
+
+### Silhouette and scale
+
+![The twelve three-quarter flight poses in solid black, grouped by character.](r8-silhouettes.png)
+
+![The twelve flight poses at palm scale beside the suited Moth’s head.](r8-overview.png)
+
+Both comparisons reuse the three-quarter flight drawings. The silhouette
+sheet keeps the true openings in the outlines and removes surface shading,
+including eye highlights. In the scale sheet, the longest dimension of each
+projected flight pose represents 16 cm. The head crop uses the scale of the
+2.06 m suited figure in the front turnaround. [Suited turnaround](../moth-concept-pack/01-suited-turnaround.png)
+
+### Building the shapes
+
+Rivet’s housings and vanes can use rounded solids and tapered prisms. Set the
+eye in a separate face recess and put the light on the keel, tail edge, roof or
+hanging diffuser. For Tick, use rounded cases and shallow cuts for the watch
+and music box, a thick sweep for the pendulum stem, and thick rings on pinned
+axes for Astral. The dial, comb, pendulum bob and moon each provide one broad
+emissive patch. For Fleecewick, build the fleece from blended ellipsoids and
+the long locks from tapered sweeps. Give Patchlace’s four felt wings solid
+thickness and paint the stitches. Group Seedwick’s floss into thick clumps
+and reserve individual filaments for the paint. Emissive paint on the chin
+tufts, tail tip, wing-root seams or seed reads as light through or beside the
+coat. All four light placements keep the eye on a separate surface.
+[SDF authoring](../../../../.claude/skills/sdf-authoring/SKILL.md)
+
+### Round-eight panel audit
+
+The artist checked the saved panels for continuity, plausible joint range,
+flight posture, agreement between views, perspective, compositing and the
+fixed character facts. The three colour sheets each show four distinct lead
+finishes and one eye per pose. The checks cover the poses pictured. The
+checking partner’s independent pass is pending. [Concept art review](../README.md#concept-art-review)
+
+| Panel | What the artist checked |
+| --- | --- |
+| [Rivet](r8-rivet.png) | Bellbuoy’s flippers seat below its porthole. Slipstream’s solid wing joins the nose and both lit tips carry across views. Treadplate’s four paddles have separate roots and the roof bar stays over the chassis. Hoist’s vanes join the eye bridge and its cage hangs from the central mount. The flight angles show the near joints and the face views account for the far ones. Each eye and lamp has its own readable shape. |
+| [Tick](r8-tick.png) | Winder’s lid clears the bezel and the crown seats inside its loop. Chimebox’s blades pivot below the exposed cylinder. Weightdrop’s weight swings under the body from the same short hinge in both views. Astral’s rings turn on their trunnions and the moon rides on a strut. Foreshortening hides or reduces the far parts without changing the attachments. |
+| [Fleecewick](r8-fleecewick.png) | Thimblepuff and Longhush’s paired wings join their bodies beside the eye, with their fur swept away from the wing roots in flight. Patchlace’s four lobes meet behind the ruff. Seedwick’s canopy bundles meet at the brow and the seed hangs below the collar. The wing counts and lit areas carry across views, and the pale floss stays visible against the page. |
+| [Silhouettes](r8-silhouettes.png) | Rivet has a dome, a split dart, a low four-paddle box and an upright fork. Tick has a crowned coin, a horizontal case, a pointed tower with a drop and open hoops. Fleecewick has an orb, a hooked taper, four scalloped wings and a canopy with a hanging seed. The four outlines in each row read separately at the same maximum dimension. |
+| [Palm-scale overview](r8-overview.png) | All twelve flight poses retain their shape, eye and light at 16 cm projected size. The Moth crop and the figures share a scale and occupy separate areas. The rows preserve the order of the colour and silhouette sheets. |
+
+The one-sentence concepts preceded the image prompts. The prompts drew on the
+round-six character sheets for the shared character traits and painted finish.
+[Rivet](r6-rivet.png), [Tick](r6-tick.png), [Fleecewick](r6-fleecewick.png)
+
+## Round seven
+
+The owner liked Rivet and asked for four slightly different versions of him,
+plus four each of Tick and Fleecewick. They want a single expressive eye on
+every variation. The choice is theirs. [Round six](#round-six)
+
+Each is a palm-sized flying guide beside the Moth. The camera iris leads
+the glance, the hinged lid blinks, and the lens aims the flashlight and
+camera. The separate lantern pulses with speech and carries the eight light
+states. Use rounded SDF solids for the housing and wing pivots, broad
+ellipsoid lobes with a shallow noise fringe for the fleece, and emissive
+paint for each lantern. Keep the camera iris clear at peak lantern
+brightness. [The lantern’s light language](#the-lanterns-light-language)
+
+### Rivet
+
+![Rivet in four banked flight views above their matching front views.](r7-rivet.png)
+
+| Variation | Axis | What changes | Charm and readability |
+| --- | --- | --- | --- |
+| A · Cradle | Proportion | The cream helmet grows taller and rounder over a shorter navy chassis. | The big helmet gives the rescue toy a younger look and keeps its head distinct in silhouette. |
+| B · Wink | Eye | The iris has a wider opening under a curved, hinged brow. | A lifted brow reads as curiosity. More of the cyan iris stays visible through a bank. |
+| C · Spade | Wings | Short, broad enamel canards end in rounded-off square tips. | The stubby wings feel like toy parts and give a braking bank a broad, blunt outline. |
+| D · Apron | Lantern | One cyan bar wraps across the lower front edge and up around the corners. | The lit edge gives the squat hull a friendly lift and keeps a speech pulse visible head-on. |
+
+### Tick
+
+![Tick in four banked flight views above their matching front views.](r7-tick.png)
+
+| Variation | Axis | What changes | Charm and readability |
+| --- | --- | --- | --- |
+| A · Bobbin | Proportion | A rounder copper face housing sits over a compact clockwork barrel. | The big round face makes its precise little pivots feel playful and gives the eye a stronger outline. |
+| B · Detent | Eye | A raised sprung lid exposes more of the amber iris. | Tick looks alert and nosy. The extra opening makes the direction of its pupil easier to read. |
+| C · Reed | Wings | Slender brass paddles taper to soft points at the original pivots. | The finer paddles suggest quick strokes and leave the gear case and lantern as the dominant masses. |
+| D · Shutter | Lantern | A continuous amber belt replaces the three slots between the brass rims. | The tail glows like a small workshop lamp. A speech pulse reads across the whole belt in either view. |
+
+### Fleecewick
+
+![Fleecewick in four banked flight views above their matching front views.](r7-fleecewick.png)
+
+| Variation | Axis | What changes | Charm and readability |
+| --- | --- | --- | --- |
+| A · Tuft | Proportion | The charcoal-and-ochre ruff grows rounder and the teal tail shortens. | The plush ball feels buoyant and reads as fleece even when its finer edges disappear. |
+| B · Peep | Eye | The cyan iris opens wider beneath a lifted teal lid. | The eager look reads through the heavy collar. The eye remains the first thing to catch attention. |
+| C · Thistle | Finish | Cream shearling replaces the charcoal pile and keeps the ochre stripe. | The pale coat feels like fleece straight off the sheep and separates the ruff from the dark tail. |
+| D · Hem | Lantern | The mint belt moves directly beneath the ruff and lights the tips of the lower tufts. | The fleece catches each pulse. The lit hem makes the ruff edge readable against the teal shell. |
+
+### At palm scale
+
+![The suited Moth’s head beside all twelve labeled flight views at palm scale.](r7-overview.png)
+
+The overview reuses the flight drawings at a common maximum projected width
+of 0.16 m. The head crop keeps the scale of the 2.06 m suited Moth in her
+front turnaround. [Suited turnaround](../moth-concept-pack/01-suited-turnaround.png)
+
+### Round-seven panel audit
+
+The artist inspected the four saved panels against the concept-art review.
+The flight rows show banked poses and the front rows show level poses.
+Joint clearance is assessed from the pictured pivots and poses. The
+checking partner’s independent pass is pending.
+[Concept art review](../README.md#concept-art-review)
+
+| Panel | Attachment and range | Pose, view agreement, and composition |
+| --- | --- | --- |
+| [Rivet](r7-rivet.png) | Canards seat on brass pins outboard of the brow hinges. The pinned brow has room to close over the single lens. | The canards tilt with the chassis in flight. Each brow, paddle shape, and keel light agrees across its pair of views. The corrected flight cheeks are continuous cream enamel around one eye. All eight views clear their neighbors and the sheet edges. |
+| [Tick](r7-tick.png) | Brass paddles seat at round pivots alongside the shallow gear window. The spring and lid sit on the copper face frame, clear of the wings. | The eye leads the bank and the amber lantern trails. The sprung lid, single antenna, wing outline, and tail slots or belt carry across both views. The side gearing shows in perspective. All eight drawings have clear margins. |
+| [Fleecewick](r7-fleecewick.png) | The wings seat in brass mounts above the fleece, with space past the ruff in the drawn poses. The upper lid moves inside the hard face rim. | The head leads and the tail hangs behind the ruff in the bank. Each pair retains a single cyan iris, two feelers, the same coat, and one mint band. The lit tufts on Hem stay attached to the ruff. The tips and fringe fit inside all eight drawings. |
+| [Overview](r7-overview.png) | The twelve scaled crops carry over the eyes, pivots, wings, and lanterns from the flight rows. | The wing and body angles match the larger drawings. Each crop and the source turnaround crop have separate margins. All twelve names follow the order of their comparison sheets. |
+
+The built-in image generator used each round-six character sheet as an anatomy
+and material reference. The prompts asked for four matched banked and front
+views under even light on warm ivory, with one central iris and the four
+changes listed above. An edit pass on Rivet replaced the extra far-side
+lenses in its first flight row with continuous enamel. The overview was
+laid out from the final flight crops and the existing Moth turnaround.
+
+## Round six
+
+The owner called Sparkbill the first baseline. They want it to feel more
+endearing and asked for eight distinct directions, including two fuzzy
+ones. They will choose which designs to refine. [Round five](#round-five)
+
+![The suited Moth's head next to Velvet, Fleecewick, Tick, Vellum, Samara, Pinlight, Rivet and Echo at the same scale.](r6-overview.png)
+
+| Variant | Main idea | How it endears | How its light speaks | What reads small | SDF buildability risks |
+| --- | --- | --- | --- | --- | --- |
+| [Velvet](r6-velvet.png) | A rosy maple techno moth with short, plush pile across the face, wing edges and lantern belly. | Two large violet irises track first. Fuzzy upper lids blink slowly and the wide wings catch a little upward bob. | Honey light wells up through the belly pile on each syllable. | At 5 m the pink wings frame a gold tip. At 15 m their breadth carries the outline. | Smooth-union a handful of ellipsoid tufts into a soft shell. Confine fine noise to the fringe and use emissive paint along the belly's tuft ridges so it looks lit through the pile. Keep the lids smooth and clear of the hinges. |
+| [Fleecewick](r6-fleecewick.png) | A bumble-firefly with a thick shearling collar and a hard, banded lantern behind it. | One big cyan iris peeks out above the ruff. A soft upper lid opens wide before it bobs up to look. | A mint belt pulses cleanly under the ruff. The hard diffuser gives syllables crisp edges. | At 5 m the stripe separates the fuzzy collar from the long tail. At 15 m look for the squat middle and narrow wing. | Build a scalloped SDF ruff over the smooth thorax with a shallow noise fringe. Test collar clearance at both ends of the wing stroke and keep the stripe visible in a bank. |
+| [Tick](r6-tick.png) | A clockwork firefly with an exposed gear window and a three-slot brass lantern. | A large amber iris leads a precise head pivot. One sprung brow lifts, then its lid clicks shut. | Brightness walks across the slots in speech. An urgent cue illuminates all three together. | At 5 m the slots start to join into a single warm patch. At 15 m the spike and narrow paddles do most of the work. | Keep the gear recess shallow. Use broad teeth for the close view and emissive slot masks on one lantern so the combined patch survives a smaller bake. |
+| [Vellum](r6-vellum.png) | A folded paper-lantern moth with kite-like wings and a lilac paper diffuser. | Large mauve irises look sideways from a little folded face. Paper creases lower as lids while it dips into a gliding bow. | The lilac lantern breathes and its spill lightly colors the inner paper folds with each phrase. | At 5 m the light separates from the high ivory wing. At 15 m the rising V keeps some height. | Give the folds thickness with bevelled solids or wedges. Use emissive paint to suggest light through paper. Check crease and root thickness at the lower mesh tiers. |
+| [Samara](r6-samara.png) | An asymmetric seed firefly with one big spoon petal and a short counter-petal. | A curled brow can lift over the open olive iris. It rolls like a falling seed, then squares back up to see what caught its eye. | The amber kernel swells inside the hull slit. | At 5 m the single big petal and bright seed slit read together. At 15 m the spoon remains the stronger of the two wing shapes. | Blend the hull and subtract one broad opening. Rig both petals to the same yoke and keep the kernel exposed through the roll. |
+| [Pinlight](r6-pinlight.png) | A blown-glass firefly with short vanes and a long tapered filament bulb. | A broad blue iris looks ahead of a skipping dart. A cream shutter lid closes over the eye in a quick blink. | The filament brightens on speech peaks. The frosted tip carries the cue across a larger area. | At 5 m the filament and tip form a stroke. At 15 m the long diagonal tail remains. | Sweep a thick filament through an elongated shell. Check glass, filament and gasket at oblique angles. The frosted tip must carry the signal even when the filament is subpixel. |
+| [Rivet](r6-rivet.png) | A squat enamel rescue mech moth with thick canards and a light strip in its keel. | Two big cyan eyes glance under one hinged visor. It throws the canards wide to brake, then blinks before settling. | The cyan keel bar rises and falls across its full width on syllables. | At 5 m the visor and strip sit on opposite sides of a square mass. At 15 m the thick wing tips and squat chassis retain weight. | Use rounded boxes, thick wing roots and a single visor pivot with clearance above the lenses. Check the underbody strip's visibility in front and in the braking bank. |
+| [Echo](r6-echo.png) | A larger mint firefly and a smaller honey firefly in a staggered formation. | Each blinks and looks independently. The smaller one checks the leader and catches up with a tiny overshoot. | The leader voices the phrase and the follower answers on the release. Both lanterns beat together for a held cue. | At 5 m the two differently sized lamps separate. At 15 m their gap can shrink to one pixel or close. | Use two poses on one companion rig with a bounded offset. Keep one lead optic for lighting, camera, recording and marking. Check clearance as the follower catches up. |
+
+### Expression and light cues
+
+The main optic leads each turn. A moving iris sells the glance, a lid
+or visor supplies the blink, and the whole eye mount aims the lamp,
+camera and mark. The recorder takes the same view. On Echo the larger
+firefly carries those tools. Its follower can look away while the
+leader holds the target. Tilt into a move, let the tail follow and show
+a counter-bank on arrival. Give a hover room for one or two small
+corrections so the wings and body stay alive between excursions.
+
+All eight carry Sparkbill's [eight light states](#the-lanterns-light-language).
+Speech modulates the active state above a held brightness floor. Give
+danger three short whole-lantern beats about 0.4 seconds apart, with a
+clear pause after the third. Give objective one smooth whole-lantern
+swell about every 2.4 seconds, with the objective mark still visible on
+the destination. Keep those rhythms readable by limiting the speech
+modulation while they play. The lantern patterns in the table are
+proposals to check in motion at 5 m and 15 m.
+
+![Eight unlit silhouettes at native 15 m size and at 13 times magnification.](r6-15m-silhouettes.png)
+
+The overview sets each flight pose to a maximum projected span of 0.16 m,
+including both bodies for Echo. The Moth crop keeps the scale of the 2.06 m
+suited figure in the [front turnaround](../moth-concept-pack/01-suited-turnaround.png).
+Each 5 m color inset is drawn at about 30 px at 1080p and 60° vertical field
+of view. The 15 m sheet uses the same pose at about 10 px, with light and
+color reduced to an outline. The enlarged row repeats those same pixels.
+At 15 m several broad-wing shapes converge. Pinlight's tail and Echo's
+stagger change the outline most, and danger and objective need the rhythms
+above to carry their meanings at that size.
+
+### Round-six panel audit
+
+The artist checked these sheets against the
+[concept art review](../README.md#concept-art-review). Each variant uses a
+front drawing as its anatomy reference, a perspective drawing for its
+flight pose and the same flight drawing for both distance samples. This is
+the artist's written pass. The checking partner's independent pass is pending.
+
+| Panel | Attachment and range | Pose, view agreement and composition |
+| --- | --- | --- |
+| [Velvet](r6-velvet.png) | Both wing pins meet the teal yoke, with the nearer wing raised clear of the face. The antennae seat in the pile. | The head leads the roll and the fuzzy emitter trails. Eyes, wing spots and belly agree with the front view. Pile edges and wing tips are intact in both crops. |
+| [Fleecewick](r6-fleecewick.png) | The narrow wings seat above the ruff, where their stroke clears the collar and hard tail. | The tail leans back from the rising eye. Both views show the same ruff, lens and wide band. The wing tips and bright belt stay inside their crops. |
+| [Tick](r6-tick.png) | Paddle pivots seat against the housing, outside the gear window. The lid sits over the optic on its own hinge. | The eye leads the bank and the light cage trails the housing. The side gear is visible only in perspective. The single brow spike and three slots agree in both views. |
+| [Vellum](r6-vellum.png) | Both folded wing roots seat on the binding. The high and low poses leave room at the head and diffuser. | The low wing foreshortens as it bows and the single lantern trails below. Both views retain the same folded wings, two eyes and visible paper seams. |
+| [Samara](r6-samara.png) | Both petals stay on the yoke. The short one clears the pointed tail as the long one sweeps back. | The big petal and its counter-petal remain asymmetric in front and in the roll. The eye heads left and the light trails inside the split hull. |
+| [Pinlight](r6-pinlight.png) | A thick gasket seats the whole bulb. The vanes can sweep without touching the bulb or shutter. | The large eye leads the canted flight pose. The U stays inside the glass and lengthens in the front view, with the frosted tip visible in both. |
+| [Rivet](r6-rivet.png) | Each canard meets a brass pin. The visor's two end mounts stay seated over the helmet. | The chassis rolls into the canards with the light trailing under it. The two eyes, inward wing roots and single keel light agree in front and in perspective. The regenerated sheet leaves both wing tips clear of the gutter. |
+| [Echo](r6-echo.png) | Each body has two seated wings and its own attached lamp. The formation leaves wing clearance in both views. | The follower looks toward the leader in flight, with both tails tucked beneath their bodies. The relative size and colors carry across both views. The gap is intact at panel scale. |
+| [Overview](r6-overview.png) | Uses the eight audited flight views at a common projected scale. | The head is a labeled crop of the suited turnaround, with the lavender hood, warm brown skin and front-rooted braid. The crop and all eight variants have clear margins. |
+| [15 m silhouettes](r6-15m-silhouettes.png) | Uses the same wings, roots, tails and poses as the flight views. | All eight masks fit their native and enlarged cells. The enlarged row preserves the native pixels and adds no details. |
+
+## Round five
+
+**Sparkbill** is a palm-sized flying flashlight and camera. It hangs beside
+the Moth's shoulder, looks first with its lens, then darts ahead to light or
+point out what it saw. The owner thought Spur might be the best attempt yet,
+but still far from the mark. They want the companion itself to be the floating
+device and asked for the quick, hovering presence of a fairy, with a techno
+moth or firefly as the animal direction. Sparkbill's shell, optics and lantern
+stay together throughout play. [Round four](#round-four)
+
+### Four flying devices
+
+![Four flying workshop insects and their unlit silhouettes. From left, Wick, Ruffle, Sparkbill and Pleat.](r5-01-exploration.png)
+
+| Variant | Shape and movement | What decided it |
+| --- | --- | --- |
+| Wick · firefly | Long oval lantern, casing over two narrow flight plates. The plates trail as it darts. | The clearest flying light. From the front, the narrow wings and simple oval give it little expression at a distance. |
+| Ruffle · moth | Short body under broad eyespot plates with two fine comb antennae. It flutters and rocks on its hinges. | The strongest family resemblance to the Moth. The wings dominate the short lantern and its combs disappear first as it recedes. |
+| **Sparkbill · firefly and moth** | A long firefly lantern beneath an ivory optical brow, forked antennae, and a pair of scalloped moth wings. It turns its eye, then banks around the heavy end. | The eye points, the tail signals, and the wings act. The forks, wing arc and tapered tail hold three distinct masses with the lamps off. |
+| Pleat · firefly and moth | A compact round lantern under two tall pleated paddles. It swivels under them. | Wide contrast between the wing tips and belly. Head-on, the bright round belly overwhelms the device silhouette. |
+
+### Anatomy and flight
+
+![Sparkbill in front, left profile, rear and front three-quarter views.](r5-02-turnaround.png)
+
+The ivory brow is shaped like a broad petal and holds a recessed camera
+glass in a brass rim. Two rear-swept forked antennae grow from socketed
+bases. A captive brass collar lets the head tilt before the body follows.
+The deep teal thorax carries one brass root pin per wing. Each ivory wing
+is a thin enamel plate with scallops on its trailing edge and one painted
+teal eyespot. An ochre spine frames one frosted lantern that wraps the
+abdomen across its underside and two flanks. It reads as a long drop even
+when dim. Wear the wing tips and the edges of the collar. Put a fleck of
+moss in the sheltered aft seam, clear of the optics and pivots.
+[Canyon workshop palette](../valley-and-gallery.md#selected-art-treatment)
+
+![Full-height scale and a detail of Sparkbill hovering outside the Moth's hood and over the shoulder line.](r5-03-scale.png)
+
+Start at **0.16 m** from fork tips to tail in a neutral hover and about
+**0.16 m** across the open wings. That's 8% of the suited Moth's **2.06 m**
+height. Set the follow point around eye height, about **0.45 m** to the
+side of the helmet centre and **0.15 m** ahead. Pick the side with room
+to fly and keep the working envelope outside the braid, hood, pauldron
+and chase sightline. A dart ends in a small counter-bank and a held hover.
+It can bob a few centimetres while it waits, or orbit a point while keeping
+its lens on it. The abdomen and wings stay in the air, including at rest.
+[The suited Moth](../moth-concept-pack/README.md#preserve-the-character)
+
+![Six airborne poses showing a dart, inward bank, curious pitch, recoil, proud lift and tired hover.](r5-04-flight.png)
+
+| Beat | Key pose and movement |
+| --- | --- |
+| Darting | The brow leads, the body pitches into the move and the wing plates sweep behind their brass pins. |
+| Orbiting | Bank inward and look along the arc. Keep the tail trailing the turn. |
+| Curious | Yaw the brow toward the point of interest, cant one wing, then creep in with two short bobs. |
+| Startled | Tip back before a short retreat. Spread both wings to check the motion. |
+| Proud | Rise once, lift the lens and show a high V at the top of the beat. |
+| Tired | Let the brow dip and the wings droop through shallow strokes. Shorten excursions and hover closer. |
+
+### Five uses for one body
+
+![The lens lights a stair tread, shows its recording view, and puts a flat ring on a stone plinth.](r5-06-modes.png)
+
+| Use | What the player sees and does |
+| --- | --- |
+| Flashlight | Toggle a warm-neutral cone around the recessed lens. Sparkbill flies forward of the shoulder and lights the next step. Aim by looking or by pointing at an admitted target. When it turns to speak, keep the lamp on the path or ease it off until it can aim there again. |
+| Camera | Open a view from the optical eye. The Moth holds position while the player guides Sparkbill through short, clear routes. Close the view to return to the Moth. Recall returns Sparkbill to the shoulder. |
+| Recorder | Start and stop a clip from the same view. A steady red dot belongs to the viewfinder, leaving the abdomen free for world cues. Close the clip on recall, loss of permission or departure and save what has already been captured. |
+| Marker | Confirm a visible surface or actor. Sparkbill darts to a reachable near-side offset and hovers. A brief lens-to-hit ray shows where it is pointing. A ring holds on the surface normal after the ray fades. On a moving lock Sparkbill stays off the visible flank. |
+| Speech | The abdomen swells on syllables, softens on releases and rests through punctuation. Idle can use the full lower band. Other states retain their masks while the open area changes brightness a little. Use the same timing for audio and light, including on mute or cancellation. |
+
+One local authority owns the whole body's movement and resolves mark targets.
+The camera, lamp and ray use the same eye transform. The displayed view has
+to belong to the admitted observer and the current body generation. Clear a
+mark on occlusion, target loss or departure. Release the old view and finish
+its clip when custody changes. The arriving companion reacquires targets and
+view permission in the destination. A portal view carries the portal's own
+visibility rules. Flight through the seam needs the destination's admission.
+Create the optical view on demand and share its rendered frames between the
+viewfinder and recorder. A crowd of idle companions needs only the bodies
+and their authored lights.
+The pack specifies this invariant. The build must enforce it at the view and
+target bindings. [Companion custody](../../../decisions/companions.md) ·
+[Worlds and authority](../../../architecture/worlds.md#the-idea-in-plain-terms)
+
+### The lantern's light language
+
+![Eight states as large colour and greyscale drawings and matched pairs at 5 m and 15 m.](r5-05-states.png)
+
+| State | Hue | Pattern | Motion | Pose |
+| --- | --- | --- | --- | --- |
+| Idle | Warm honey | Wide, low abdomen bar | Slow swell above a held floor | Upright, softly bobbing, wings relaxed |
+| Interest | Glacial cyan | One upper flank and the checking wing's edge | Two gentle swells, then hold | Head canted, near wing high, lean toward the sight |
+| Discovery | Mint green | Whole lantern with lit edges on both wings | One lift and broad swell, then hold | Upright body and high V |
+| Objective | Lavender | Long, solid stripe down the abdomen | One sweep toward the tip, then hold | Nose into the route, tail trailing diagonally, wings swept back |
+| Danger | Signal orange | Two full-height flanks framing a dark spine | Quick rise on braking, then steady | Face the Moth with the wings spread low and wide |
+| Combat | Raspberry red | Hot centre and two bright outer wing edges | One swell on the first evasive cut, then held floor | Hard bank and visible sidestep, clear of the player's aim |
+| Locked target | Ice white | Broad belt high under the thorax | Steady while the lens tracks | Upright, wings drawn down symmetrically |
+| Low energy | Dim ochre | Small tip ember, dark upper lantern | Slow fall to a dim steady light | Dipped head, drooped wing plates, small slow strokes |
+
+Danger preempts combat. Combat preempts a lock. An energy reserve that
+forces a return ends the excursion, with danger still free to show. After
+those, prefer lock, objective, discovery, ordinary low energy, interest,
+then idle. Resume a preempted guide only after checking its target again.
+Use a held phase with an emissive floor during the cue, including while
+speaking. Reduced motion holds the patterns and eases the banks and swells.
+
+Open the sheet at 100% for the actual distance samples. A 1080p view at
+60° vertical field of view puts a neutral 0.16 m Sparkbill at about **30 px
+at 5 m** and **10 px at 15 m**. The 2.06 m suited Moth would span about
+385 px and 128 px at those distances. The same state drawing is reduced
+for each sample without rescaling individual poses to fill their boxes.
+At 5 m the lantern masks and pose separate the cues. At 15 m the
+greyscale pair for danger and lock depends on the depth of the bright area
+and the wing angle. Interest and combat rely on one-sided versus paired
+wing accents and banks in opposite directions. The silhouette and cue
+samples are legible on the study's dark flat background. The 15 m
+differences are small enough that actual exposure, edge-on angles and
+motion can decide them. Near the limit, Sparkbill can turn broadside for
+an urgent cue and return toward the Moth. An objective's surface mark
+gives the player a second place to look.
+
+![At night in the Gallery, Sparkbill lights the next step as the Moth follows.](r5-07-gallery-night.png)
+
+![On the near side of a valley rockfall, Sparkbill brakes and shows its orange lantern to the Moth.](r5-08-valley-danger.png)
+
+### SDF build plan
+
+1. **Build the silhouette as one creation.** Use a low-exponent
+   `Superellipsoid` for the teal thorax and a flattened one for the ivory
+   brow. Recess the glass behind an annular cylinder cut and shallow
+   curved lens. Build the tail from a tapered `Sweep` with a broad
+   separate palette slot for the continuous ventral diffuser. Keep
+   a narrow ochre spine across the mask. Create one wing plate profile
+   from an elongated flattened ellipsoid with rounded subtractions
+   along the trailing edge. Mirror it to the opposite side. Blend its
+   root into the moving hinge sleeve and keep the sleeve concentric
+   with the thorax pin. Use paint for eyespots, veins, wear and moss.
+   Start the wing strokes at 30° below and 45° above neutral, with about
+   20° of play in the collar. Check the two wing extrema and both head
+   limits for clearance, seated pivots, and a visible lens and lantern.
+   Compile the prototype and read its creation stats before the first
+   lab pass. [SDF shapes](../../../../.claude/skills/sdf-authoring/SKILL.md#choosing-geometry) ·
+   [Shape rigs](../../../../.claude/skills/sdf-authoring/references/rig.md#attaching-a-shape)
+2. **Use the standard companion's flight and cue rules.** Replace the debug
+   companion's seed shell with this creation and reuse the driver for
+   follow, evasion, arrival and hover. Put head lead, bank, wingbeat and
+   bob in authored presentation poses. Leave collision and targeting
+   on the authoritative body. Key cue, held envelope and speech envelope
+   to the selected companion. Paint the abdomen masks in object space
+   through authored shading. Light only the wing edges that carry a
+   secondary cue. Bind discrete cue selection separately from eased
+   brightness. In the lab, seat two companions, change cues independently
+   and switch straight from discovery to danger during a spoken phrase.
+   Check there is no intervening mask, fresh bake or stray mouth light on
+   cancellation. Reuse the existing text speech schedule for the envelope.
+   [Debug companion](../../../../worlds/debug/companion.puck) ·
+   [Standard companion](../../../../worlds/standard/companion.puck) ·
+   [Driver](../../../../worlds/standard/addons/companion.wat) ·
+   [Render lanes](../../../../.claude/skills/sdf-authoring/references/surface.md#render-lanes) ·
+   [Text speech](../../../reference/audio.md#text-speech)
+3. **Bind the eye once.** Mount the view ray and spotlight to the eye
+   pose. Use the standard guide and point designation for the mark and
+   its arrival offset. Use a short, eye-mounted volume for the pickup of
+   the beam in dust and a small ring on the resolved surface. Reuse the
+   engine's published view mapping for camera input and its capture graph
+   for recording. Prove the proposed connection from the companion view's
+   frames to the recorder. The current capture documentation describes
+   native capture in windowed presentation. Direct recording from a
+   secondary source still needs proof. If the connection is
+   missing, add source selection to the capture graph before offering
+   the mode. In the lab, record a clip, move the marked target behind
+   cover, release and reacquire the view, and cross the Gallery lab
+   portal mid-clip. Inspect the saved clip and confirm that old control
+   and mark references go stale. [Point designation](../../../../worlds/debug/point-designation-tests.puck) ·
+   [Shape-mounted volumes](../../../../.claude/skills/sdf-authoring/references/surface.md#volumes) ·
+   [View mapping](../../../reference/commands.md) ·
+   [Capture and recording](../../../reference/recording.md)
+4. **Prove it in the companion lab and on the route.** The lead should
+   link the focused lab from the Gallery wing, run its hazard and target
+   loop at 5 m and 15 m, and verify a local and federated crossing with an
+   active guide. Then take presented passes through the Gallery at night
+   and along the valley trail, after bake, residency and lighting settle.
+   Check the moving lamp's aim, and name each held cue in colour and
+   greyscale on both bright and dark backgrounds. Fail the distance pass
+   if a warning needs colour or if danger and lock cannot be told apart.
+
+### Panel audit
+
+The following is the artist's review. The checking partner's independent
+written audit is pending. [Review criteria](../README.md#concept-art-review) ·
+[Panel prompts and distance method](r5-prompts.md)
+
+| Panel | Artist's audit |
+| --- | --- |
+| [Exploration](r5-01-exploration.png) | Four closed silhouettes with readable negative space and consistent hover. The hinges and lanterns attach to each thorax. Each outline keeps its own eye and abdomen proportions. |
+| [Turnaround](r5-02-turnaround.png) | The brass collar, two wing pins, rear lantern and ivory cap repeat at one scale. The nearer wing goes edge-on in profile. The lens appears only where you can see its front rim. |
+| [Scale and placement](r5-03-scale.png) | The full figure pair reads near 8% and has air between its silhouettes. Her boots share a plane. The right-cheek braid, open ivory hood and dusty lavender plate stack carry into the detail. |
+| [Flight and personality](r5-04-flight.png) | The visible pins stay seated on the bank, sweep and flare. Tired retains air below the tail. The six poses keep one brow and two wings with the same eyespots and the same aft shell. |
+| [States](r5-05-states.png) | One rig schematic and the same wing root per side in every swatch. Every small pair comes from its own large pose with the same camera scale. Light stays within the lantern or on the wing edge. |
+| [Device modes](r5-06-modes.png) | The cone starts at the eye and hits the tread. The viewfinder looks at the same stair and door. The marked ring lies on the plinth and the shaft ends at its centre. |
+| [Gallery at night](r5-07-gallery-night.png) | The loaded boot and stepping boot share perspective with the stone course. The rim and braid carry through. The little guide has clear air around its hinge and tail and the cone lights the tread ahead. |
+| [Valley danger](r5-08-valley-danger.png) | The Moth braces on the trail with her braid through the front of the hood. The folded joints and boots support the stop. Sparkbill brakes near her, clear of the dust and rocks, with orange flanks divided by the ochre spine. |
+
+### Open questions
+
+- The checking partner owns the independent art verdict. Use the turnaround
+  and scale sheet for the proportions and the scenes for light and placement.
+- The lead owns the live cue verdict. Test danger against lock and interest
+  against combat at 15 m in greyscale while turning. If those pairs blur
+  together, widen their contrast on the lantern and wing surfaces and
+  repeat before adjusting the follow distance or body scale.
+- The camera builder needs to prove which published view the recorder can
+  consume in the lab, including when a portal is visible and when the source
+  world goes away. Record the one admitted optical view and retain only the
+  frames received while it was valid.
+- Start low energy as a short close hover. After the flight pass, they can
+  decide whether recharge should become an action for the player.
+
+## Round four
+
+**Spur** is a knee-high workshop bird with an eye that flies away. It watches
+with its head first, follows with its chest, and puts a wing between the Moth
+and anything it thinks she should leave alone. Its tall left tail blade and
+the air under its beak give it a profile you can pick out with the lamps off.
+
+The owner called Rivet “better” and saw a remote camera and a family of tools
+in the detachable optic. They agreed with the lead that the frame looked like a
+magnet or a toy forklift, that it had lost its whimsy, and that the poses did
+more work than the tiny lights. Spur keeps the load-bearing joints, heavy
+plates, and removable lens. Its body tells you where it is looking and how
+it feels. Large lit surfaces tell you what it is trying to say.
+[Round three](#round-three)
+
+### Four creatures with interchangeable heads
+
+![Four workshop creatures and their silhouettes. From left, Skep, Spur, Shuttle, and Skein.](r4-01-exploration.png)
+
+| Variant | What moves and how the head fits | Why choose it |
+| --- | --- | --- |
+| Skep | A low beetle braces on four claws. Its two unequal shell covers roll up to expose a chest-wide light. A lens cassette slides from the neck ring under the taller cover. | The tall shell reads clearly from behind. From eye level the low head loses its gaze behind the shell and feels more like an inspection vehicle. |
+| **Spur** | A kingfisher perches on two claws under a heavy chest. The beak is the docking fork and the lens sits at eye height. One swept tail blade counters the wings and drops nearly flat when it sulks. | The head can lead, back away, or go dark while the bird stays recognizable. The wing faces offer the largest useful warning surfaces without crowding the head. Selected. |
+| Shuttle | A mechanical moth crouches below two scalloped wing-plates with eyespots. A gimballed collar takes the lens between two wire feelers. | The strongest link to the Moth's motif, with room for broad lights. From the side the wings swallow the face, and at this scale the long feelers add a fragile detail that the other shapes carry with armor. |
+| Skein | A dragonfly banks on four offset paddle fins and curls a segmented tail under its snap-in lens. | The long tail makes direction obvious in flight. The four spread paddles suggest a conventional drone and the narrow breast has little room for a signal when perched. |
+
+Spur's silhouette is directional. The beak steps out ahead of the chest, the
+legs meet the ground under the weight, and the single left tail blade makes a
+high rising stroke behind a short right stub. The bird's off-center fin,
+visible load-bearing collar, and talons carry that identity on a black cutout.
+[Canyon workshop palette](../valley-and-gallery.md#selected-art-treatment)
+
+### Anatomy, scale and acting
+
+![Spur from the front, left, rear and three-quarter. The long tail blade is on the bird's left.](r4-02-turnaround.png)
+
+The dark throat sits above a cream breast. The brass collar takes the neck's
+load. The brow and fork belong to the bird. The flat-front orange lens block
+slides between the jaws. Each broad wing plate hinges on a brass shoulder pin
+and hides a small gimballed thruster under its root. On a perch the feet
+carry the load and their toes wrap the edge. In flight the feet fold toward
+the center of mass. The nozzles turn down to lift and down and back to
+accelerate. Banking changes the thrust direction with the body. The tail
+pivots at the rump as a counterweight and folds low when the legs crouch.
+
+Plan for **0.48 m** from talons to the tall tail in the neutral perch, beside
+the Moth's **2.06 m** suited height. The breast and head make up about three
+quarters of that height. The ochre cassette is palm-sized, about **0.11 m**
+across, with room for a chamfer, one circular iris, and two folded landing
+tabs. Use deep teal enamel, warm ivory, and ochre over charcoal with worn
+brass at moving joints. Paint two broad teal teardrops on each wing as a
+workshop take on moth-wing patterning. A fleck of moss can sit in the shielded
+tail root. Keep the rail, lens, and exhaust clear.
+[Moth turnaround and scale](../moth-concept-pack/README.md#read-the-images-in-this-order)
+
+![The suited Moth and Spur at the same floor line.](r4-03-scale.png)
+
+![Six performances by Spur, from preening to fussing over the Moth.](r4-04-personality.png)
+
+Read across each row. Spur preens by looking back and drawing its near wing
+under the lens like a mechanic checking a panel edge. Curious, it plants its
+feet and reaches the collar forward with a cocked head. Startled, it recoils,
+sinks, and spreads the two plates. Proud, it hops vertically and holds its
+plates in a high V. Sulking, it folds its knees, lowers the brow, and lets the
+tail drop. Fussing, it reaches a single wing toward the Moth's gauntlet and
+checks her face for a reaction. Those beats work before the emitters light.
+
+### The beak and its tools
+
+![The dark socket during release, the camera on a ledge, the lantern and scanner, and the manipulator.](r4-06-tools.png)
+
+The fork cradles a shallow pair of tapered rails under the brow. One keyed
+rail seats first, then two cheek catches lock into the cassette's shoulders.
+Spring contacts at the heel carry power and data. At a bench Spur pitches its
+head level, opens its catches, and slides the old cassette straight forward
+onto the rack. It reaches into the replacement until the key and contacts
+seat, then the catches close. The new head wakes and a small throat wink
+finishes the exchange. All three heads share the same rail envelope and centerline,
+so the player's sense of where the bird is paying attention survives a swap.
+
+| Tool | On the fork | Away from the fork |
+| --- | --- | --- |
+| Remote camera | A single round iris in a chamfered ochre cassette. It looks, marks, and charges through the heel contacts. | Two recessed thrust slots fly the palm-sized body. Two fold-down tabs straddle a lip or become feet on a flat ledge. It can pan from the perch, then tuck its feet to lift off. |
+| Lantern and scanner | An ivory diffuser lights a work surface. A crescent window below it sweeps across the spot the bird is studying and returns a short finding through the throat. | A bench rack holds it during a swap. The lantern draws from the bird's power supply. |
+| Manipulator | Two brass fingers open from an ochre front around one paired jaw pivot mechanism. A short actuator closes them on an exhibit handle, debris, or a small object the Moth asks it to fetch. | It seats safely in the rack with fingers shut. The bird braces on two feet or a ledge before operating a resistant control. |
+
+The launch has three beats. Spur braces, the catches open, and the cassette
+slides far enough forward to clear both jaws before its jets push off. The
+head socket is then a dark hole. A small steady secondary sensor under the
+brow lets the bird keep its balance and watch the Moth while the main lens
+looks elsewhere. On recall the cassette brakes, retracts the feet, matches
+the fork's yaw and slides home. The eye lights again only after both catches
+seat. A refused launch leaves the catches shut.
+
+Aim at an opening or a ledge and tap **Send**. The camera flies a short local
+route the authority can check for clearance. While it is out, its picture
+appears on the Moth's inspection instrument. Hold **View** to frame the
+instrument and steer with look and move, including rise and fall on the
+flight controls. Release to restore the chase view and leave the optic
+holding position. Press **Perch** on a reachable edge to land and look
+around from there. **Recall** returns the camera from either view. Keep the
+Moth in place while she is using the instrument. Loss of control blanks the
+feed with a clear link status and asks the optic to return along the verified
+route. If that route closes, it perches in the nearest safe reachable spot
+and the instrument keeps a last-known location for pickup.
+
+The optic acts as its own body in the current authority even while mounted.
+The authority owns one cassette identity and one mount occupant. A successful
+launch changes that body's control and collision together, after the rail
+sweep clears. Check the owner seat, module identity, active control, body
+generation and custody before accepting steering or a mark. A late command
+after recall, swap, or loss of authority has no effect. In the first build
+the detached camera is local to its admitted world. Crossing closes its
+feed and requests a return to the fork. If the bird must cross first, the
+source keeps the undocked camera retrievable under its own authority. A
+destination learns only the equipment that crossed. Seeing through an
+admitted portal and sending a body through it remain separate grants.
+[Companion custody](../../../decisions/companions.md) ·
+[Worlds and authority](../../../architecture/worlds.md#the-idea-in-plain-terms)
+
+### Body lights and motion
+
+![Eight states with large artwork and true-size colour and greyscale thumbnails.](r4-05-states.png)
+
+| State | Large-area colour | Pattern | Motion | Pose |
+| --- | --- | --- | --- | --- |
+| Idle | Soft warm ivory | One broad chest bar. Dark wings and tail. | Slow breathing swell with a held floor. | Upright, centered, folded plates. |
+| Interest | Pale cream-blue | One full wing face on the side it checks. Dark breast. | A double swell after the eye turns, then hold. | Neck canted and projected forward, one wing open. |
+| Discovery | Warm white | Both wing faces high in a lit V around a dark chest. | One buoyant lift and long hold before folding. | Tall chest, feet curled under a small hop. |
+| Objective | Turquoise | One broad stripe joins the back and most of the tail blade. Dark wings. | Sweep along the body toward the tail, with the underlying stripe held. | Level forward reach, swept plates and trailing feet. |
+| Danger | Gold-white | Wide horizontal bar across both dark wing faces and the lit chest. | Snap to full on braking, then hold steady until clear. | Head withdrawn, wings level and feet spread low. |
+| Combat | Vermilion with pale peach | Two bright nozzle surrounds bracket the dark chest. | The paired jets pulse with each change of direction. | Diagonal bank, feet tucked, exhaust back and down. |
+| Locked target | Cold white | Two round shoulder pads with a dark gap. Iris tight and wing faces dark. | Pads hold steady while the eye tracks. | Square and still with hanging plates. |
+| Low energy | Dim amber | One short tail-root block behind an otherwise dark body. | Light falls once at landing, then holds dim between intermittent pulses. | Belly down, head dropped, long blade nearly flat. |
+
+Immediate danger takes precedence, followed by forced landing, lock, combat,
+objective, discovery, ordinary low energy, interest, and idle. Hold the
+warning through a brief flicker in the trigger. Reduced motion keeps the
+location and shape of the lit area and the held posture, with smaller
+swells and shallower hops. The stills show one held phase. Their small
+copies test value and silhouette without motion. Open the PNG at its native
+size for the distance proof. A neutral 0.48 m Spur spans about 30 pixels at
+15 m in a 1080p image with a 60° vertical field of view. The same drawing
+goes into the colour and greyscale samples, with the shorter crouch left
+shorter. The solid profile at the foot of the sheet has a roughly 15-pixel
+height for the 30 m silhouette check.
+
+### Speech and marking
+
+Spur speaks in short chirps and ticks. Light the broad horizontal throat
+grille a fraction ahead of a chirp, bring its center up on onset, then widen
+to the outer teeth for an accented syllable. Leave it dark on rests and
+interruptions. The iris stays on its target while the neck nods at stress.
+The grille still speaks if the player mutes audio. Schedule both tracks on
+one timeline. The audio source already provides character intervals and
+rests. The prototype needs the presentation binding and an authored accent
+choice. Compare the grille with the audible chirps in the lab.
+[TextSpeechSource.Schedule](../../../../src/Puck.Audio/Mixing/TextSpeechSource.cs)
+
+Give a mark a brief lens-to-hit shaft and a held ring aligned to the struck
+surface. The shaft helps the player connect the ring to the bird. The ring
+is what they follow once the shaft fades. A moving lock uses the visible flank
+of the target and drops if the target goes behind cover. Aim, hit and drawing
+share one admitted target. The view that requested the mark sees it, and all
+views see the physical cue. Clear the mark on invalidation, danger, loss of
+view permission, or crossing. [Companion guide](../../../../worlds/standard/companion.puck) ·
+[Point designation](../../../../worlds/debug/point-designation-tests.puck)
+
+### In the gallery and valley
+
+![The Moth sends the detached optic into a narrow workshop opening while Spur waits with its socket dark.](r4-07-gallery-gap.png)
+
+A maintenance shutter is open a hand's breadth. The Moth stops beside it and
+sends the optic through. Spur stands beside her, throat sensor active. The
+camera settles on the far ledge aimed at the underside of the exhibit. The
+player sees what the lens can physically see and can mark a visible mechanism
+from there. Recall brings it back through the same gap.
+
+![Spur spreads its lit wings between the Moth and a falling ledge of rock.](r4-08-valley-danger.png)
+
+On the canyon path the bird spreads its wings low and wide on safe ground.
+The Moth brakes before the dust crosses the path. The warning reads from
+the front through the body-scale bar and stays up while the rock is falling.
+
+### SDF build plan
+
+1. **Establish the perch and the silhouette.** Use a rounded
+   `Superellipsoid` for the teal thorax, a close-fitting cream breast shell,
+   and chamfered profile `Prism` slabs for the brow and layered plates. Use
+   cylindrical pins, tapered bars, and short `Sweep` arcs for the toes and
+   brass forks. Use a long tapered profile prism with slight shear for the
+   rising tail and a short solid prism for its counterpiece. Keep small
+   smooth unions inside fixed groups. Paint the wing crescents, enamel wear
+   and moss. Check front, rear, side, top and underneath in the CPU mesh
+   preview, including the 30 m silhouette target of roughly 15 px at 1080p.
+   [SDF geometry and composition](../../../../.claude/skills/sdf-authoring/SKILL.md#choosing-geometry)
+2. **Rig the loads and mount the cassette.** Parent brow, cheek jaws and
+   fork to the neck. Drive pitch and roll at the brass collar with swings
+   and a short neck slide. Give both wing pins independent swing and nozzle
+   aim. Articulate legs for planted squat and closed flight toes. Start
+   around 25° of head tilt, 120° of neck yaw for preening, 75° at each wing
+   and 60° at the long tail joint. Check sweeps at all extremes against the
+   head, chest, tail and rest plane. Build the camera as a separate
+   chamfered prism body with a cut lens well, recessed circular glass, and
+   two hinged tabs. Put a lens frame
+   at the aperture in the camera's own rig. Verify that the docking frame
+   seats without intersections and the released collider clears both the
+   fork and the gallery opening. [Rigging and frames](../../../../.claude/skills/sdf-authoring/references/rig.md)
+3. **Animate light at body scale with the same meshes.** Give the chest,
+   wing faces, shoulder pads, tail and grille their own bounded paint masks.
+   Author cue and pose state using the standard companion's senses and guide.
+   Use a palette shade program for the lit inserts. It can read the four body
+   lanes, object position and paint coverage. Start with cue, phase, chirp
+   envelope, and thrust. Give left and right inserts separate material
+   parameters so a cue can choose one side. Vary albedo and emission inside
+   a mask to fill a wing, move along the tail, or widen the grille pulse.
+   Check that lane easing never flashes a third cue as two states change.
+   Two companions should hold different states while reusing the same baked
+   geometry. Check the detached lens and its jets on the cassette's own lanes.
+   [Render lanes](../../../../.claude/skills/sdf-authoring/references/surface.md#render-lanes) ·
+   [Shade inputs](../../../../src/Puck.SignedDistance/Shading/SdfShadeOps.cs)
+4. **Connect the instrument and the mounted actions.** Reuse the existing
+   body targeting and flight conventions, the anchored World camera and its
+   screen source for the instrument, and the authored seat context for
+   redirecting input. The standard free camera proves a seat can drive a
+   camera body while its own body idles. Spur needs per-owner access to the
+   selected module instance. Prototype an entity-part anchor at its actual
+   lens frame and check whether the view can resolve that anchor by identity
+   for the requesting seat. Render the view only while the feed is visible.
+   Check that a second seat cannot obtain a feed or send a command, that
+   closing the feed releases the secondary view, and that a blocked launch
+   or repeated command never spawns a duplicate. Reuse the guide for
+   approach and directed light placement for the lens origin. Prototype a
+   clipped, seat-visible mark on a real hit. [Free camera](../../../../worlds/standard/free-camera.puck) ·
+   [View screen mapping](../../../reference/commands.md#pointing-at-a-displayed-source) ·
+   [WorldCamera](../../../../src/Puck.World.Schema/WorldRenderDefaults.cs) ·
+   [WorldAnchor](../../../../src/Puck.World.Schema/WorldAnchor.cs) ·
+   [Directed light](../../../../worlds/standard/flashlight.puck)
+5. **Prove it in a focused gallery-wing lab.** Compile the authored lab and
+   fit a walk-up shutter exhibit with an actual ledge, a local camera
+   control, and the standard companion. In a settled World, send the camera
+   through, perch, view, mark, recall, and swap. Replay with the gap blocked
+   and a second seat present. Cycle eight cues from 15 m in motion with
+   colour, with hue removed, with sound muted, then in bright and shaded
+   parts of the room. Try moving the view to 30 m in daylight and dusk and
+   check the tail and stepped head still identify Spur. Repeat the marked
+   path and the warning on the composed debug-world route. Check two seats
+   and a crossing on the hosted build before allowing detached optics to
+   travel between authorities. [SDF verification](../../../../.claude/skills/sdf-authoring/SKILL.md#verifying)
+
+### Round-four panel audit
+
+The artist checked the eight panels below against the turnaround and at the
+size they are meant to be read. The checking partner's independent audit is
+pending. The turnaround sets the build dimensions and construction. The
+scenes show the same cues in perspective. [Review criteria](../README.md#concept-art-review) ·
+[ImageGen prompts and assembly](r4-prompts.md)
+
+| Panel | Artist's audit |
+| --- | --- |
+| [Exploration](r4-01-exploration.png) | Four distinct hips, rear shapes and routes into the neck fitting. The claws carry the three standing designs and Skein hangs in level flight. The ground marks and miniature silhouettes agree with the views above them. |
+| [Turnaround](r4-02-turnaround.png) | Feet share a rest plane and sit under the chest. In all four views the lens sits in the jaws, the plates meet shoulder pins and the tail has one tall blade and one short stub. The long blade changes screen sides between front and rear. |
+| [Scale with the Moth](r4-03-scale.png) | Common floor rule under boot soles and both sets of claws. The two figure crops keep their own contact shadows and share one calibrated scale. The Moth keeps her right-cheek braid, open ivory hood and lavender suit. |
+| [Personality](r4-04-personality.png) | The collar carries the reach and backward preen. The wing remains on its pin as it meets the gauntlet. Feet plant under the lean, recoil and slump. The proud pose has curled claws separated from its shadow. The gauntlet, toes and wings meet their targets without a cutout seam. |
+| [States](r4-05-states.png) | Each pose stays on its collar, wing hinges and tail pivot. Danger and low energy keep their weight on two feet. The combat jets oppose the bank and the feet tuck. In the 15 m samples, chest bar, one wing, high V, tail trace, horizontal stop bar, diagonal nozzle pair, shoulder points and low tail hold each have a distinct place and outline. At 30 m the little black profile keeps the break between the beak and chest and the rising tail. |
+| [Tools](r4-06-tools.png) | The released body shows the two rails and dark socket above the fork. The optic sits on two tabs at the ledge. The three enlarged cassettes agree at the shared interface. The manipulator's fingers and actuator meet their pins. Contact shadows and isolated views make the change in drawing scale clear. |
+| [Gallery gap](r4-07-gallery-gap.png) | The empty socket and little throat lamp agree with the tooling view. The camera's rear overlaps the opening, with the front hidden past the sill. Thrust leaves the base away from travel. Both characters share the floor and cast shadows in the same light. The Moth's gloved hand holds the instrument. |
+| [Valley danger](r4-08-valley-danger.png) | Spur's spread plates stay attached at their pivots and the raised blade is visible. The Moth and Spur have boot and claw contact on the clear side. Three broad warning surfaces show on the bird, with the rockfall and dust behind it in the canyon. |
+
+The first lit wing faces merged with pale armor and paper at distance.
+Interest, discovery and danger now have dark casings around their light.
+Combat's thin flames nearly vanished in greyscale. The bank now shows two
+large lit nozzle surrounds. Low energy needed both the flattened profile
+and a readable tail-root amber block. The lab still needs to verify these
+signals against scenery, bloom, camera motion, and shifting vantage points.
+
+### Questions for the prototype
+
+- The animation and rendering pass checks at which angles the one-wing
+  interest cue disappears behind the bird, and whether its neck tilt still
+  reads at that point. The same pass checks the eight transitions for
+  spurious intermediate lights.
+- The gallery lab checks whether holding the instrument makes it easy to
+  thread the gap and return to walking. Compare a moving handoff with a
+  perched feed, and check whether two joined seats can independently
+  control and see only their own module.
+- The hosted lab checks which dock and recall actions succeed at a crossing
+  and how the player recovers a camera left behind. Give the source and
+  destination separate authority and interrupt one recall during transfer.
+
+## Round three
+
+**Rivet** is a hovering inspection gantry from the canyon workshops. A
+little camera on a brass gimbal hangs in the open bay between two heavy
+lift shoes. The camera looks first, the frame follows, and the two cheek
+plates swing wide when Rivet wants the Moth to stop. It has the manner of
+a surveyor who wants you to see what it just found.
+
+The owner found Pip too close to EVE and asked for something more
+original than a generic happy robot. Knotwhistle went too far toward a
+nature object, and the owner rejected its indicators. Rivet takes the
+heavy plates, visible joints, and readable poses of the brief’s Firefall,
+Mega Man, and MechWarrior touchstones. Canyon orange enamel, scuffed
+edges, a cream stripe, and brass pins put it in the same workshop as the
+gallery’s pivoting sunshades. The machine is recognizable even when
+every lamp is off. [Canyon workshop direction](../valley-and-gallery.md#selected-art-treatment)
+
+### Four robot concepts
+
+![The suited Moth with four hovering workshop robots at the same scale.](r3-01-exploration.png)
+
+The four machines share a roughly 0.48 m height beside the 2.06 m suited
+Moth. Read the silhouettes first, then look for the part that tracks a
+target and the part that could signal a change of mind.
+[Moth concept pack](../moth-concept-pack/README.md)
+
+| Concept | Silhouette and character | Originality and tradeoff |
+| --- | --- | --- |
+| **A · Rivet** | Wide squared arch, two lift shoes, and one hanging camera in a clear opening. It peers around corners and physically widens to warn. | Its load-bearing arch gives it an outline distinct from EVE’s pod, BB-8’s stacked balls, the Ghost’s radiating shell, Navi’s orb, and a quadcopter’s four rotor arms. The camera and cheeks can convey independent intent. **Selected.** |
+| **B · Stile** | Upright offset survey cassette, a hinged horizontal visor, and one gimballed bell. It cranes its head like a meticulous inspector. | The stepped elbow and exposed hinge interrupt EVE’s smooth contour. The flat visor and offset deck give it edges absent from BB-8 and Navi, a clear up and down unlike the Ghost’s radial shell, and a single thrust axis instead of rotor arms. Its narrow view from behind gives the state lamps little room. |
+| **C · Spindle** | Short tiered cylinder next to an exposed flywheel, with one lens and a flat skid. It steadies itself before it takes a reading. | The off-centre vertical reel gives it an asymmetric outline unlike EVE or the Ghost. The rigid stepped drum and flat skid separate it from BB-8’s rolling body and Navi’s orb. The enclosed lift system leaves the flywheel as a side mechanism distinct from a quadcopter rotor array. The reel competes with the eye for attention. |
+| **D · Wedge** | Low trapezoidal path tender with two folding plow cheeks, a visor slit, and a short exhaust stack. It shoulders into the wind. | Faceted plow armor and a squared exhaust give it a different mass from EVE, BB-8, and Navi. Its forward sweep gives it one clear direction unlike the Ghost’s radial shell. The two cheeks fold around a single hull, giving it a continuous perimeter unlike a four-arm drone. It reads as protective immediately, but has a narrower emotional range at rest. |
+
+Rivet’s open bay gives the eye a readable silhouette against the
+background. It also lets a builder give the eye an eager look while the
+body stays still. The shoes and flat roof keep the side view identifiable
+when the bay foreshortens.
+
+### Character and scale
+
+Start at about 0.48 m tall including the antenna, 0.63 m across with both
+cheeks tucked, and 0.19 m deep. The two charcoal shoes give it stable
+contact when parked. In flight, leave clear space beside the Moth and
+bring the optic to around elbow height for a conversation. The bridge
+carries a small front grille and the antenna opposite its cream stripe.
+The camera has one circular iris and a rear heatsink. Brass pins show
+where the gimbal pitches and where the outer cheek plates swing. Each
+plate closes over a fixed bearing housing above the shoe. The shoes
+have side vents and downward-facing nozzles.
+
+The optic usually gets to a point before the hull has finished turning.
+When curious, Rivet eases into a shallow roll and holds the head cocked
+for a beat. When it finds something, it bobs up and swings both cheeks
+out. When it really means stop, it brakes low, holds the bridge square,
+and spreads those plates across the path. Its expression comes from
+these changes in weight, timing, and aperture. [Turnaround](r3-02-turnaround.png) ·
+[Scale with the Moth](r3-03-scale.png)
+
+### Integrated light language
+
+![Eight poses of Rivet with its iris and cheek lamps changing with the action.](r3-04-states.png)
+
+Read left to right across the top, then the bottom. The words below name
+the implementation states. In play, the glance, hop, lead, brace, bank,
+hold, and sag carry their meaning. The inset bars reinforce those moves
+with the number of lit sides, lit area, and timing. The iris signals
+where Rivet is looking and how hard it is concentrating.
+
+| State | Colour | Light pattern | Motion | Mechanical pose |
+| --- | --- | --- | --- | --- |
+| Idle | Dim warm ivory | Soft iris only. Both bars dark. | Barely perceptible hover drift. | Level bridge, neutral gimbal, cheeks tucked. |
+| Interest | Pale blue-white | One short lit segment on the side it checks, with a soft double swell. | Glance first, then slow roll and hold. | Asymmetric tilt, gimbal cocked a little farther than the bridge. |
+| Discovery | Bright warm white | Wide iris and both full bars swell together once, then hold briefly. | One buoyant hop and a soft settle. | Both cheeks flare in a high, open stance. |
+| Objective | Turquoise | One full-length strip on the destination side, held steadily on approach. | Turn, lead a little way, then check back. | Tucked travel stance, with the camera pointed down the route. |
+| Danger | Gold-white | Both bars fill once on entry and hold. Iris contracts. | Quick brake and a low lateral block on the safe side. | Bridge square, both cheeks spread into a wide brace, shoes low. |
+| Combat | Ember red-orange | Both bars lit with one short accent on the change of direction. Lift vents brighten under load. | Fast lateral bank with thrust directed back and down. | Cheeks swept with the lift, lens pitched into the turn. |
+| Locked target | Cold white | Small, hard iris point and two full steady bars. | Tracks the target without bob or scanning. | Square and level at a clear flank, cheeks vertical and camera aligned. |
+| Low energy | Dim amber | One short ember, separated by long pauses. Iris darkens. | Gutter once, descend, then stay down. | Both shoes planted and the camera hanging nose-down. |
+
+The authored cue picks one state from live conditions. Immediate danger
+takes precedence, followed by a forced landing, lock, combat, objective,
+discovery, ordinary low energy, interest, and idle. Hold a danger cue
+through consecutive ticks. For reduced motion, shorten the hop and bank
+while retaining the stance, light placement, and held warning. Interest
+uses a crooked inquisitive hold. The objective cue keeps a full light on
+the direction of travel. That distinction survives even when the two
+colors look alike.
+
+### Speech and marking
+
+The small dark grille on the bridge is the speaker. An amber segment
+wakes on onset, the full grille lights on a stressed syllable, and the
+cavity goes dark at a rest. A tiny nod at the gimbal can underline the
+stress. The iris keeps its aim and the cheeks can keep a warning through
+the line. Feed the grille from the scheduled speech intervals so it still
+reads with muted audio. Clear it on interruption or crossing. The mixer
+already exposes the schedule as `TextSpeechSource.Schedule`. The hookup
+from a companion utterance to this grille belongs in the prototype.
+[Speech sequence](r3-05-speech.png) · [Speech source](../../../../src/Puck.Audio/Mixing/TextSpeechSource.cs)
+
+For a gallery exhibit, Rivet stops short on the reachable side, holds
+the near strip steady, and puts a narrow beam from the iris onto the
+control. It traces a small pool on the surface so the hit reads from the
+player’s angle. In the open valley it can hover over a ground point and
+dip its head toward it. For a moving lock it holds a visible flank away
+from the Moth’s aim. Danger cancels the beam and brings Rivet back onto
+safe ground to block the approach. [Gallery marking](r3-06-gallery-mark.png) ·
+[Valley danger](r3-07-valley-danger.png)
+
+The destination’s authored cue must resolve a single live, visible local
+target for the requesting player. The approach, aim, and surface hit use
+that result together. Clear the hit on occlusion, invalidation, or a
+crossing. Let the world’s existing companion custody carry identity and
+durable permissions. Each host decides what its instance can mark. Keep
+each companion’s lights on its own body lanes and keep the projected
+guidance visible to its requesting player. A second player’s beam and a
+mark cached on another server would both give the Moth a false direction.
+[Companion custody](../../../decisions/companions.md) ·
+[Companion guidance](../../../../worlds/standard/companion.puck) ·
+[Diegetic marking](../../../decisions/play.md#in-world-consoles)
+
+### SDF build plan
+
+1. **Block out the bay and landing shoes.** Use a chamfered `Prism` with
+   a through-cut for the fixed bridge. Preserve enough thickness over
+   the opening for real depth in side view. Put a rounded prism on each
+   cheek and a dark chamfered box beneath each. Blend around fixed seams
+   within a group. Build the gimbal stem, bearings, and lens rim from
+   cylinders. Use a recessed circular inset for the optic. Paint the
+   stripe and small seams on the frame, with broad enamel wear
+   concentrated along corners. Check the CPU mesh preview from each side
+   against the turnaround and both shoes against a common rest plane.
+2. **Rig the hinges and aim.** Keep the bridge, camera gimbal, cheek
+   plates and any counter-tilting shoes in their own bake groups wherever
+   their motion separates. Use parented swings for the gimbal and armor.
+   Start with about 25° of gimbal pitch, 30° of yaw, and 35° of cheek
+   travel outward. Judge clearance at both extremes and resize the
+   existing companion flight collider for the flared pose. Check that
+   banking and braking agree with the actual direction of thrust.
+   [Rig authoring](../../../../.claude/skills/sdf-authoring/references/rig.md)
+3. **Put the cues in the materials.** Use a per-look emission lane for
+   the iris, one for each recessed cheek strip, and one for the grille.
+   Give each light a recessed emissive material slot. Use bounded paint
+   masks to shape the emitting areas. Check per-body tint and mask
+   control on two independent companions before relying on them. Use
+   short mechanical shutters for discrete iris and strip widths if
+   needed. Author the cues on the simulation tick and verify that cue
+   changes reuse the mesh and affect only the matching companion.
+   [Paint and emission](../../../../.claude/skills/sdf-authoring/references/surface.md#render-lanes)
+4. **Reuse the standard companion.** Extend the authored look and the
+   existing `companion{owner}-guide` path for the approach. Check
+   `point-designation-tests.puck` for target registration and
+   `flashlight.puck` for directed light. Give the mark a lens origin and
+   a surface hit from one visibility check. Confirm in the lab that the
+   beam disappears behind a wall and stays absent until the new instance
+   resolves a local hit. Compare two viewers before enabling marks in a
+   shared gallery. If the mark renderer lacks a per-view or clipped
+   projection path, resolve that in its owning system before wiring it
+   into multiplayer. [Point designation](../../../../worlds/debug/point-designation-tests.puck) ·
+   [Directed light](../../../../worlds/standard/flashlight.puck)
+5. **Prove it from the player’s camera.** Give the companion a focused
+   debug lab reached from the gallery and reuse the Moth and the
+   standard companion there. Compile the authored document with
+   `puck compile --validate`. In the settled lab, cycle all eight cues
+   once bakes have finished, `world.residency` reads `all-landed`, and
+   the lighting has settled. Play a moving chase in daylight and at
+   dusk. Repeat with hue removed, speech muted, and reduced motion. A
+   first-time viewer should be able to describe the action without
+   labels. Walk the gallery mark
+   and valley warning in the debug world and cross with a mark active.
+   Check that a second local or remote viewer gets their own guidance and
+   that the companion takes up its destination’s cue after landing.
+   [SDF authoring checks](../../../../.claude/skills/sdf-authoring/SKILL.md#verifying)
+
+### Round-three panel audit
+
+The table records the artist’s pass. The checking partner’s independent
+pass is pending. [Review criteria](../README.md#concept-art-review) ·
+[Built-in ImageGen prompts](r3-prompts.md)
+
+| Panel | Artist’s verdict |
+| --- | --- |
+| [Exploration](r3-01-exploration.png) | Pass. Four outlines read at matched scale. Their exposed mounts look seated and the neutral hover poses agree with the common plane. Moth keeps her open hood, side braid, and heavy boots. The pale guide runs behind the figures. |
+| [Turnaround](r3-02-turnaround.png) | Pass. The pin supports the teal box in each view and the cheek pivots line up with both lift shoes. The back shows the grille and the reversed antenna and stripe. The side and three-quarter views preserve the shallow depth and solid bay walls. |
+| [Scale](r3-03-scale.png) | Pass. The two placements show a supported rest and clear hover space. The Moth’s boots share the baseline and there is daylight between her plates and Rivet’s. Its hanging gimbal, antenna and shoe pair read in both poses. |
+| [States](r3-04-states.png) | Pass. The open bay and attached eye persist through the eight poses. Shadow separation shows the hop and grounded rest. The wide brace and banking thrust distinguish danger from combat. A small point in a rigid hold reads differently from the open bright iris at the top of a hop. |
+| [Speech](r3-05-speech.png) | Pass. The matched framing fixes the bridge and shoe contacts while the gimbal nods on its stem. Amber appears inside the same grille in each voiced frame. The light stays quiet elsewhere, and the rest leaves the grille dark. |
+| [Gallery marking](r3-06-gallery-mark.png) | Pass. The ray joins the hanging iris to the real control and terminates on its surface. Rivet’s stance and scale leave space beside the Moth, whose open hood and grounded boots agree with the perspective. The light and shadows sit in the same room. |
+| [Valley danger](r3-07-valley-danger.png) | Pass. The cheeks flare on their pins with the soles below them. Rivet holds on the safe side of the rockfall and its shadow is separated from the shoes. The Moth braces on both boots. The falling dirt and rocks give the warning an immediate cause. |
+
+### Round-three open questions
+
+- The lead’s checking partner should audit the seven images before they
+  become modeller references. The artist’s pass covers stills. The lab
+  pass settles recognition in motion, especially interest versus
+  objective and discovery versus lock in glare and from behind.
+- The prototype builder should check the four body lanes, per-body tint,
+  grille timing from a world cue, and the lens-to-hit presentation with
+  two viewers. These determine the smallest reusable change to the
+  authored look or the renderer.
+- The lead should try the warning and camera clearance in play before
+  settling the width of the flare and the escort height. Keep the first
+  low-energy behavior a short rest. An interactive recharge can wait for
+  that play decision.
+
+## Round two
+
+The owner's verdict on Pip was “a decent start, but I'd like it to be more
+inspired! It looks too similar to EVE from WALL-E in my opinion, generic happy
+bot vs original new idea; I want the latter.”
+
+**Knotwhistle** is a living fork of Gallery wood fitted with a brass hinge
+and a sail of waxed paper. The Moth carries a little piece of the Gallery
+with her. When Knotwhistle has something to show her, it flies there on a
+short arc and turns its sail towards her. When it speaks, light opens and
+closes along a reed in the cleft of the wood.
+
+The Gallery tree gives it its branching shape and warm timber. Its opening
+sail borrows the broad fold and visible pivot of the Gallery's sunshades.
+The valley's pollinators supply the dart, hover and settle. Bioluminescence
+gives the reed and paper distinct ways to light up. Firefall, Mega Man and
+MechWarrior inform the large parts, visible hardware and pose that make an
+object readable at a distance. The fork and folded paper make this one
+specific to Puck.
+[Valley and gallery](../valley-and-gallery.md#selected-art-treatment) ·
+[Gallery tree](../gallery-tree-pack/README.md) ·
+[Gallery inspiration](../gallery-inspiration-pack/README.md)
+
+### Four directions
+
+![Four companion explorations. Knotwhistle at top left, Spore Choir at top right, Lichen Kite at bottom left, Foldbell at bottom right.](r2-01-exploration.png)
+
+Read the sheet at thumbnail size with the lights mentally removed. The
+test is whether the outline and its first motion could be mistaken for EVE
+or a stock drone.
+
+| Concept | What it is and how it reads at a glance | What decided it |
+| --- | --- | --- |
+| **Knotwhistle**, upper left | A living instrument with a wooden fork for a resonator. The long lower prong, open gap and single paper sail read as a branch carrying a flag. Even edge-on, the cap and heel carry a handmade wood-and-brass profile. In broadside the EVE or stock-drone read falls away immediately. | The cleft gives speech a clear source and the sail works as a signal flag. A few solid parts and one hinge carry both functions. **Selected.** |
+| **Spore Choir**, upper right | Six independent spores make a flying chorus. The staggered stack reads as windborne flakes at thumbnail size. A tight formation could merge into one luminous blob at chase range, which is where the stock-orb reading returns. | Formation can draw a superb marker, but a line of speech has no natural mouth and a crowd of companions would multiply moving points. |
+| **Lichen Kite**, lower left | A grown lichen frond that sails root-first, then unfurls its fan of light-bearing veins. The flattened scallops, trailing roots and crooked stem give it the immediate read of a leaf or ray, well away from EVE. | Strong organic shape in broadside. Edge-on it loses both silhouette and cues, and its many glowing veins leave the mouth and selected point hard to locate. |
+| **Foldbell**, lower right | A clockwork trail stamp that hoists an accordion pennant. Open, it reads as a mechanical flag and hanging clapper. Folded, it looks like a small hovering parcel and could briefly read as a utility drone. | Excellent for marking a place. In transit its folded state loses the shape that makes it recognizable, and the clapper competes with the speech light. |
+
+Knotwhistle keeps its identity with the light off and can show a warning
+while it speaks. The sail's thin edge is the weak angle. Address it with
+the way the companion banks and presents itself, and judge the result at
+the player's camera before thickening the sail.
+
+### Character, silhouette and scale
+
+The silhouette has three large masses. The low chestnut fork splits from
+one thick heel into a long, brass-shod tine and a shorter bare tine. The
+upper tine sits a little farther back in depth so a three-quarter view
+still catches the gap and the reed. A single dark teal paper sail rises
+from the heel, its two facets meeting at one deep fold. One transverse
+brass pin and a broad saddle make the attachment visible. Paint the tan
+cross-wrap over the heel and keep a small raised knot for the close view.
+Use satin brass, varied chestnut planes and matte paper with a stronger
+value break at the fold. [Turnaround](r2-02-turnaround.png)
+
+Start at 31 cm from heel to toe and about 25 cm high with the sail raised,
+roughly a gauntlet in length beside the 2.06 m suited Moth. Float outside
+her shoulder and leave a gap between the sail and her silhouette. Give it
+the manner of an attentive pollinator. It darts in a shallow arc, feints
+once when curious and then settles, holding the sail broadside when it has
+something to show. The fork holds its shape as the body pitches. The sail
+lags a little on takeoff and opens against the motion as the body brakes.
+When worried, it draws closer and holds still.
+[Scale sheet](r2-03-scale.png) · [Moth reference](../moth-concept-pack/README.md)
+
+### Light language
+
+Ink the cue into the same broad face on either side of the teal sail. One
+shape stays recognizable throughout its pulse. Give each cue a visible
+brightness floor and a broad stroke, and keep the interior of open symbols
+dark. The reduced-motion option holds the pose and shapes steady. Test the
+symbols from a moving chase camera in daylight and at night, then repeat in
+grayscale and under common colour-vision simulations. A player should be
+able to tell a ring from a diamond and a triangle from two chevrons in a
+single still, before rhythm can help. The sheet shows the peak shapes in
+this order, left to right across each row. Rhythms are starting values.
+[Light-language sheet](r2-04-light-language.png)
+
+| State | Colour and shape | Rhythm and body cue |
+| --- | --- | --- |
+| Idle | Warm ivory short horizontal dash | Gentle three-second breath at the Moth's shoulder. |
+| Interest | Cyan pair of upright strokes | Two soft swells, then hold. Tip toward what drew its attention. |
+| Discovery | Mint open circle | One smooth rise, then hold. Stop over the exhibit's approach. |
+| Selected objective | Gold open diamond | Slow two-second swell. Lead to a reachable approach and wait. |
+| Locked target | Ice-blue four square corners | Steady while valid. Track the target's visible flank. |
+| Combat | Violet double chevron | Two rounded accents on entry, then hold. Take a watch position off the Moth's shoulder. |
+| Immediate danger | Coral upright outline triangle | One quick rise and a steady hold. Brake on the safe side and turn broadside. |
+| Low energy | Amber solid square | Slow three-second swell at lower intensity. Shorten excursions and settle closer to the Moth. |
+
+The authored cue rule picks one sail cue per companion. Immediate danger
+wins, then a forced rest, then player lock, combat, objective, discovery,
+ordinary low energy, interest and idle. A higher-priority cue can suspend a
+mark. Validate the target again before resuming it. Keep the shape readable
+through each transition and avoid repeated brightness spikes if danger or
+combat is asserted on consecutive ticks.
+
+### The speaking reed
+
+Set a shallow, dark groove into the inner ledge of the lower tine. Speech
+opens an ivory oval in the groove. Onset has a short narrow oval, vowels
+widen it, release draws it into a thin line, and spaces and punctuation let
+the groove rest. Its placement inside the open fork lets the light read as a
+mouth even though the wood is still. Turn slightly to show the inner ledge
+while speaking. The sail can hold a warning throughout a line.
+
+Drive the reed from the voice's scheduled boundaries so it follows the
+same line when audio is muted, and clear it immediately on cancellation or
+world crossing. Give reduced-motion mode a compact steady oval for each
+voiced interval. Reuse the timing from `TextSpeechSource`. The existing
+HUD speech feed supplies scheduled speech. A per-companion hookup has
+to deliver that schedule to the presenting body and its emitter.
+[Speech sequence](r2-05-speech.png) · [Text speech](../../../reference/audio.md#text-speech)
+
+### Marking a place or body
+
+For an exhibit, take a short arc to the reachable side of the plinth. Hold
+the brass toe over its lip and put a mint ring on the surface. One short
+mint thread joins toe and ring on arrival. The Moth sees the route, the
+object and the mark together. For an objective, use the same approach with
+a diamond on the sail and a diamond on the landing surface. A moving lock
+uses the four corners on the sail and the companion's position at the
+target's visible flank. Keep that hover clear of the target and the
+player's aim. Danger interrupts the excursion, clears its surface mark,
+and brings Knotwhistle back across the player's path on the safe side of
+the hazard with its triangle held upright.
+[Gallery mark](r2-06-gallery-mark.png) · [Valley danger](r2-07-valley-danger.png)
+
+Every displayed mark must resolve to the current owner's live, local
+target. The destination's authored cue rule owns target validity and the
+placement check owns the clear path to the hit. Position, glyph and thread
+use that same validated result. Clear the mark when a target despawns,
+becomes occluded or changes generation. An unreachable approach can show
+interest near the Moth. With many players in a hall, drive the sail from
+its own body and show the projected mark only to the requesting player.
+This keeps another player's objective from reading as yours.
+[Point designation example](../../../../worlds/debug/point-designation-tests.puck)
+
+The Moth's companion travels under the existing custody rules. A world
+can accept its pinned driver or author its own. An authored world can
+award an enduring behaviour, such as reading a moon's survey cairns.
+Persist the declared unlock with Knotwhistle's identity and let each host
+decide how to use it. A surface hit, target generation and line in progress
+belong to the current instance. After crossing, the destination can resolve
+a new local mark. At MMO scale this gives each host one clear decision and
+keeps a stale target or an arriving driver from claiming another world or
+player's points of interest.
+[Companion custody](../../../decisions/companions.md) ·
+[Standard companion role](../../../../worlds/standard/companions.puck)
+
+### Build and prove the design
+
+1. **Block out the fork and sail.** Shape the heel with a `Superellipsoid`
+   and blend two tapered, rounded `Prism` tines into it. Soften the inside
+   of the fork with a rounded cutter where the tines meet. Cut a shallow
+   rounded groove into the lower tine and seat a contrasting reed within
+   it. Fit the brass toe over the long tine. Make the pin with a
+   `Cylinder` and the saddle with a rounded box. Join two thin extruded
+   `Prism` profiles along the sail fold and attach the sail to the pin as
+   one rig part. Start with about 15 degrees of travel either side of the
+   rest pose. Check both limits against the upper tine and the Moth's
+   shoulder. Validate the prototype offline, then compare its broadside,
+   top, heel and three-quarter views to the turnaround after it settles.
+   [SDF authoring](../../../../.claude/skills/sdf-authoring/SKILL.md) ·
+   [Rigging](../../../../.claude/skills/sdf-authoring/references/rig.md)
+2. **Paint state and speech on fixed geometry.** Give the sail and reed
+   separate palette slots. Author local-coordinate distance masks for
+   the sail strokes and an expanding oval for the reed. Bind the cue
+   index, cue envelope, reed width and speech envelope per body. Select
+   the index discretely and ease the other lanes. Replace the existing
+   `companion-glow` fixed-body sample with each companion's own cue
+   binding. In the lab, place two guides beside each other, change their
+   cues independently, and look for any intervening glyph or fresh bake.
+   Hold a danger triangle through a short spoken line, then mute, cancel
+   and cross mid-line. The reed should follow the schedule and clear
+   without disturbing the triangle.
+   [Render lanes](../../../../.claude/skills/sdf-authoring/references/surface.md#render-lanes) ·
+   [Current glow rule](../../../../worlds/standard/companion.puck)
+3. **Extend the existing free-flight driver and point designation.** Keep
+   bank and sail poses visual. Reuse the driver for arrival, avoidance
+   and follow, and prove an actual plinth target, a reachable objective
+   and a moving lock. Put an emissive ring or diamond on the resolved
+   surface and try a short volume from the toe during arrival. Hide it
+   when the hit fails. In the lab, change or despawn a lock, occlude a
+   plinth and trigger `companion.threat` during an excursion. Check that
+   the mark clears and the triangle appears on the safe side. Then pass
+   through the lab's Gallery portal and through a federated crossing
+   with an authored unlock. The unlock should survive. Each mark should
+   follow its own host's target and clear on departure.
+   [Current driver](../../../../worlds/standard/addons/companion.wat) ·
+   [Shape-mounted volumes](../../../../.claude/skills/sdf-authoring/references/surface.md#volumes)
+
+### Panel audit
+
+Seven panels passed the artist's written audit below. The checking
+partner's independent verdict is pending. Use the turnaround and scale
+sheet for proportions and the scene panels for placement and light.
+[Review criteria](../README.md#concept-art-review) ·
+[Built-in ImageGen prompts](r2-prompts.md)
+
+| Panel | Artist's verdict |
+| --- | --- |
+| [Exploration](r2-01-exploration.png) | Pass. Four silhouettes stay legible at the same viewing size. Knotwhistle and Foldbell show seated hinges and continuous contact between the parts. The grown frond leads into one connected root and the six independent spores hold coherent stagger and depth. There is no Moth or moving joint at an extreme to check. |
+| [Turnaround](r2-02-turnaround.png) | Pass. The wood, cross-wrap, long shod tine and short bare tine stay recognizable. The heel view shows the two ends of the single axle mounted to the saddle. The thin top view follows the sail fold and passes over the laterally offset tines. The neutral pose clears the wood and the air gap stays open. |
+| [Scale](r2-03-scale.png) | Pass. The boot soles agree with the ground plane and her relaxed arms leave the joints in range. Her right-cheek braid, brown skin, ivory hood rim and lavender plates match the Moth reference. The small fork, pin and fold remain continuous off her shoulder, with clear air between the two silhouettes. |
+| [Light language](r2-04-light-language.png) | Pass. All eight views share the same neutral pose, wood, pin and sail. Each mark stays on the same facet. The filled area, gaps and stroke count distinguish the shapes with hue removed. |
+| [Speech sequence](r2-05-speech.png) | Pass. Four matched poses keep the joint, shoe and fork gap fixed. The oval and line stay on the inner ledge and change width without spilling into the gap. The rest shows the naturally pale inset with its light off. |
+| [Gallery marking](r2-06-gallery-mark.png) | Pass. The fork and pin read at the little guide's intended scale. The toe connects to a foreshortened ring on the plinth and the soft shadow leaves an air gap. The Moth's planted stance, braid, open hood and layered plates carry through under the same warm tree light. |
+| [Valley danger](r2-07-valley-danger.png) | Pass. The small fork hovers on the Moth's side of the rockfall with visible air below it. Its attached sail holds a hollow triangle broadside. Her bent knees track over planted boots and her near cheek carries the braid out of the open hood. Rock, path, shadows and figures agree with the same view and sun. |
+
+### Open questions
+
+- The checking partner should inspect all seven sheets against the art
+  audit before the builder takes them as references.
+- The lead's settled companion lab pass should establish how large the
+  sail and reed need to appear at chase range. Use moving daylight and
+  dusk passes, especially edge-on at a turn and during speech and danger
+  together. Repeat with reduced motion and colour removed.
+- The design can use a short rest in the first build. The owner can decide
+  after play whether helping Knotwhistle recharge should become an action.
+
+## Earlier round
+
+### The Moth’s seed lantern
+
+Pip is the working name for a palm-sized guide that looks as if the Gallery’s
+sunshades and seedpods shared a workshop. An ivory ceramic hood peaks over a
+smoked teal lens and a tapered teal keel. Two ochre fins sit on round pivots,
+like seeds split from the same pod. The lip around the lens is thick enough to
+read even with the light off. Use broad satin surfaces, colored shadows and
+slight edge wear. Keep the dark joints clean and the light inside the lens.
+
+Start at 24 cm from hood to nozzle, about 12% of the suited Moth’s 2.06 m
+height. Pip travels beside her outer shoulder, clear of her face, hands and
+view of the path. The fins fold a little with acceleration and open when
+braking. The body leans into a dart, eases into a stop and hangs almost still
+when listening. Pip has the manner of a curious workshop assistant. It cocks
+its hood at a sound, makes a buoyant hop on discovery, and goes still and
+square to the Moth when worried. The Moth decides where they go.
+[Moth concept pack](../moth-concept-pack/README.md) ·
+[Canyon workshop direction](../valley-and-gallery.md#selected-art-treatment) ·
+[Gallery tree pack](../gallery-tree-pack/README.md)
+
+### Panels and review
+
+The retained panels passed the artist’s written audit for attachment, joint
+range, pose, turnaround agreement, perspective, seams and character facts.
+A checking partner’s review is pending. The two first scene drafts made Pip
+read as a larger machine, so both were regenerated. [Generation prompts](prompts.md) ·
+[Concept art review](../README.md#concept-art-review)
+
+| Panel | Artist’s verdict |
+| --- | --- |
+| [Turnaround](01-turnaround.png) | Pass. Four views hold the hood, matching hinge heights, attached fins and keel on one body. The vents stay in back and the lens stays in front. The aligned views show the neutral hinge pose with room for a small swing. |
+| [With the Moth](02-with-the-moth.png) | Pass. Pip is about one eighth of the suited figure and clears the open glove. Both boot soles share a plane and her hips support the pose. The hood, single braid, gauntlets and suit colours carry her identity. The companion matches the turnaround at hand range. |
+| [Light language](03-light-language.png) | Pass. All eight front views keep both fins and their pivots fixed. The marks stay within the recessed lens and have distinct outlines at the same angle and scale. |
+| [Speech aperture](04-speech-aperture.png) | Pass. The hinge pose, contours and front camera stay fixed. The light opens and closes inside the lower lens with no added jaw or moving seam. |
+| [Gallery discovery](05-gallery-discovery.png) | Pass. Both fins read as attached in three-quarter. The vertical beam joins the nozzle to a ring that lies on the plinth plane. The gap, scale against the plinth and shared daylight make the hover believable. |
+| [Valley danger](06-valley-danger.png) | Pass. The small seed silhouette and triangle stand clear of the path. The fins stay on their hinges, the body is near upright at the stop, and its shadow places it on the near side of the rockfall. |
+
+### Options
+
+| Direction | What it offered and what decided it |
+| --- | --- |
+| Seed lantern | The hood, keel and two fins make a readable outline in silhouette. A shaded lens keeps cues legible and gives it a face that can speak through light. It fits the planted Gallery and echoes the Moth’s thick shell over dark joints. |
+| Wind-up survey crab | Twin feelers and a pair of folding landing claws give it a comic gait and a convincing perch. The legs and tool heads crowd a 24 cm outline and start to read as a small utility vehicle. |
+| Floating spore | A luminous bud with a trailing leaf could tilt and unfurl expressively. Backlight and bloom erase too much of the form, and a bright body offers poor separation between an expression and a warning. |
+
+### Light language
+
+Every cue has a stable shape. Brightness shifts gently above a visible floor,
+so one frame can convey the state and a second glance can confirm the rhythm.
+The art shows peak shapes. The timings below are starting values for play.
+
+| State | Colour | Pattern and rhythm | What Pip does |
+| --- | --- | --- | --- |
+| Idle | Warm ivory | Low smile, soft three-second breath | Hovers beside the Moth, fins relaxed |
+| Interest | Cyan | Horizontal dash, one gentle swell then hold | Turns toward something it has noticed |
+| Curiosity | Lilac | Vertical dash, two soft swells then hold | Cocks the hood and leans closer |
+| Point of interest found | Mint | Open-centred circle, one outward swell then hold | Short arc to the active exhibit and a surface ping |
+| Selected quest objective | Gold | Open-centred diamond, slow two-second rise and fall | Leads to a reachable approach, then hovers or perches |
+| Combat or danger | Orange | Upright outline triangle, quick rise then hold | Brakes on the safe side and turns back to the player |
+| Locked target | Ice blue | Four square corners, steady until lock changes | Takes a position off the visible target’s shoulder |
+| Low energy | Amber | Small low dot, slow three-second fade with a visible floor | Shortens excursions and heads for a rest socket |
+
+Resolve one main cue per body in this order. Danger, energy low enough to
+force a return, player lock, selected objective or active player mark,
+discovery, curiosity, interest, idle. An existing target stays selected while
+an urgent cue takes the lens. Resume it only after validating it again. A
+player mark keeps whatever lifetime the world assigned it.
+[Play decisions](../../../decisions/play.md#in-world-consoles)
+
+**Speech.** Open a small ivory aperture low on the lens in time with the
+utterance. Take the same scheduled events as the voice. The aperture narrows
+at onset, opens at the vowel, contracts on release and rests through spaces
+and punctuation. Reserve the lower lens for the mouth while speaking and move
+the low-energy dot above it. Idle yields to the mouth. Replace or cancel the
+utterance and its light together, including on handoff. A muted mix still
+follows the schedule. The guide already speaks
+authored text, and its synthesizer schedules text units. An emitter that
+shares those event boundaries with a body’s mouth is a required connection.
+Longer recorded lines can supply authored syllable events on the same
+presentation timeline. [Text speech](../../../reference/audio.md#text-speech)
+
+Use aperture size and the fins for expression. An excited line gets a fuller
+opening and a lift, a confidential line a small opening and a slight lean, and
+a worried line a still body with shorter openings. Keep the mouth local and
+low contrast, especially during fast speech. Offer a reduced-motion setting
+that holds cue shapes steady and retains a compact speaking aperture. Shape,
+placement and pose carry meaning when hue is unavailable. Test actual frames
+for contrast, bloom and repeated flashes. No accessibility claim has been
+verified in play. [W3C guidance on use of color](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html) ·
+[W3C guidance on flashes](https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html)
+
+### Marking the world
+
+At the Gallery, Pip makes a short arc toward the near edge of an exhibit and
+waits there. A brief, close-range beam from the keel connects it to a ring on
+the plinth. A quest objective can use the same approach and settle into a
+tapered pedestal socket with its fins tucked. A player ping briefly marks the
+surface the player chose. For a moving lock, Pip traverses a shallow arc at
+the target’s flank so the Moth keeps a clear view of what she’s following.
+Danger breaks the excursion and puts Pip on the player’s side of the hazard.
+
+The marker’s invariant is that Pip points to a live, locally resolved target
+or clears the mark. The world’s cue rule validates the target and reachability
+before it names the destination. The marker placement stops emitting when
+that resolution or the beam’s clear path fails. Pip can turn toward a last
+known direction with the interest dash. The body’s cue belongs to its owner’s
+intent and binds per companion, so a crowd can have different cues in the same
+hall. Private journal details stay with the player. On a crossing, the
+destination resolves the cue from its own data. Keep lasting facts such as
+name and affinity in the declared identity. Targets, beam hits and speech
+phase belong to the current instance.
+[Companion custody decision](../../../decisions/companions.md#state-that-persists-is-declared)
+
+At hand range, the rim, fin pivots, mouth and cue geometry should all read.
+At chase-camera range, favor the dark lens and thick strokes. Farther out,
+use the body’s position and the surface mark first. Return closer to signal an
+urgent warning if the small lens no longer reads. By day, keep the inset
+shaded so the glyph survives bright ochre and sky behind it. At night, lower
+emitted light and spill enough to keep the dark centre of a ring visible and
+the ivory body legible. Judge those transitions in motion.
+
+### Build and check in the debug world
+
+Prototype the cues and movement in a focused companion lab linked from the
+Gallery. Use the full debug world for the lead’s composition pass through the
+Gallery and valley. Judge motion and light once the scene has settled.
+
+1. Sculpt the hood as one flared `Superellipsoid` and relieve it with a round
+   opening. Set a shallow, dark lens inside the lip. Shape the keel with a
+   tapered `Prism`, cut the rear vent slots and put a short cylinder under
+   it for the nozzle. Reuse the same rounded fin profile under two mirrored
+   cylinder hinges. Give the fins a small rig range so they clear the shell
+   at both extremes. Validate the prototype and inspect each view in the
+   turnaround and the open and closed fins in motion. [SDF authoring](../../../../.claude/skills/sdf-authoring/SKILL.md)
+2. Give the lens its own palette slot. Use a curved `Sweep` footprint for
+   the idle smile, rounded profiles for the bars and mouth, and bold strokes
+   for the ring, diamond, triangle and lock brackets. Paint those masks on
+   the lens in an authored `shade` using its object coordinates. Let body
+   lanes carry the world’s selected cue, cue envelope and speech aperture.
+   Use a discrete body-state read for the cue and ease the envelope. Check
+   each glyph against the sheet and switch twice between distinct states
+   while watching for an intervening glyph or a new bake. The current
+   prototype reads one glow lane. Its `companion-glow` rule samples body 42,
+   while the companion’s grants name `companionBody`, which resolves to 52
+   in the debug world. Replace that fixed sample with the cue’s own body.
+   [Current prototype](../../../../worlds/debug/companion.puck) ·
+   [Senses and glow](../../../../worlds/standard/companion.puck) ·
+   [Body render lanes](../../../../.claude/skills/sdf-authoring/references/surface.md#render-lanes) ·
+   [Authored shading](../../../../.claude/skills/rendering/references/authored-shading.md)
+3. Extend the existing driver’s nearby exhibit and threat cues. Keep the
+   visual pose separate from the colliding body. Resolve player choices
+   through the existing target registers. Start with a real Gallery plinth
+   and the authored `companion.threat` input in the valley. At the plinth,
+   hover at a defined height above a surface ring. Try a small spotlight
+   and a nozzle-mounted `flow` volume gated by the ping’s envelope. Check
+   that the ring lands on the selected surface, clears on occlusion, follows
+   a changed lock, and survives day and night.
+   A portal crossing during an excursion should drop the source mark and
+   resolve a valid cue on arrival. [Existing driver](../../../../worlds/standard/addons/companion.wat) ·
+   [Point designation](../../../../worlds/debug/point-designation-tests.puck) ·
+   [Shape-mounted volumes](../../../../.claude/skills/sdf-authoring/references/surface.md#volumes) ·
+   [Gallery lighting](../../../../worlds/debug/gallery/gallery.puck)
+4. Connect a short authored line to speech and its light aperture. Capture
+   onset, vowel, release and a punctuation rest in a presented pass. Repeat
+   while muted, on cancellation and during danger, with the triangle still
+   readable. At close and chase range, identify each steady cue in grayscale
+   and with colour-vision simulation. The lead owns the lab and composition
+   checks. Per-body voice sync, quest and lock wiring, and camera-range
+   readability remain unverified.
+
+### Open product question
+
+The first implementation can treat low energy as a reason for shorter trips
+and a brief rest. Should recharge later become something the Moth actively
+helps with, or stay part of Pip’s routine?
+
+### References
+
+- Ocarina of Time makes the target marker a companion with a place in the
+  scene. Pip uses that relationship when it moves alongside a selected body.
+  [Nintendo’s interview with the developers](https://iwataasks.nintendo.com/interviews/3ds/zelda-ocarina-of-time/1/3/)
+- Firefall uses Battleframes to make mobility part of the suit’s identity.
+  Pip’s fins likewise suggest how it moves. [Red 5 Studios](https://red5studios.com/our-games/)
+- Mega Man 11’s Robot Masters make character readable through a few large
+  forms. Use Block Man as a study in proportions. [Capcom](https://news.capcomusa.com/mega_man/blog/2018/05/29/gear-up-for-mega-man-11-available-october-2nd)
+- MechWarrior’s MechLab presents machines as serviceable assemblies. Here
+  the single exposed hinge per fin makes that idea visible at toy scale.
+  [Piranha Games’ MechWarrior 5 manual](https://cdn.akamai.steamstatic.com/steam/apps/784080/manuals/MW5Mercs_Game_Manual.pdf)
+- Puck’s Gallery studies place small discoveries where circulation, planting
+  and exhibits meet. The plinth scene borrows that relationship and the
+  restrained glow of occupied places. [Gallery inspiration pack](../gallery-inspiration-pack/README.md) ·
+  [Gallery tree pack](../gallery-tree-pack/README.md)
