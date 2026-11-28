@@ -428,11 +428,11 @@ two can read in one tick.
 
 ### The ceiling
 
-`RuleCapacity.MaxWorkUnitsPerTick` is 4,200,000. A world whose sheet is
+`RuleCapacity.MaxWorkUnitsPerTick` is 4,400,000. A world whose sheet is
 unmodeled, overflowed, or above the ceiling is refused, and the refusal names
 the three costliest lines. The value was sized against a 30 Hz tick: it
-reserves a fifth of a 33.3 ms tick for the rule sweep, at about
-1.6 ns a unit.
+reserves about 7 ms of a 33.3 ms tick, a little over a fifth, for the rule
+sweep, at about 1.6 ns a unit.
 
 The search jobs run in the same tick, right after the rules, and draw on the
 same ceiling: a job's allowance is what the ceiling leaves after the sheet and

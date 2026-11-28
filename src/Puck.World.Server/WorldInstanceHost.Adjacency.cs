@@ -453,7 +453,7 @@ public sealed partial class WorldInstanceHost {
     // (WorldBody.FixedPreviousPosition) to its current one, so no speed, rate, or motion program can tunnel a body
     // through a face between two samples.
     //
-    // A body whose segment's bounds miss the face's bounds (WorldFaceAperture.Box.Bounds) can neither end inside the face
+    // A body whose segment's bounds miss the face's bounds grown by the segment (WorldFaceAperture.Box.Reaches) can neither end inside the face
     // nor cross it, so it takes the outside observation without the region test, and only a body that holds a latch
     // somewhere is observed at all: the scan costs a bounds compare per body and face, and a region test only near a
     // face.
@@ -508,7 +508,7 @@ public sealed partial class WorldInstanceHost {
                 }
                 occupancy.Release(placementId: placement.Id, faceName: faceName, seat: seat);
             }
-            if (!bounds.Intersects(other: FixedAabb.Empty.Enclose(point: from).Enclose(point: to))) {
+            if (!WorldFaceAperture.Box.Reaches(bounds: in bounds, from: in from, to: in to)) {
                 if (occupancy.Holds(seat: seat)) {
                     _ = occupancy.Observe(placementId: placement.Id, faceName: faceName, seat: seat, inside: false, crossed: false);
                 }

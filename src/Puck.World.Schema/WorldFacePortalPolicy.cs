@@ -13,13 +13,14 @@ namespace Puck.World;
 /// moves and resizes with the drawn face. While a body stands in the opening, contact with geometry behind the glass
 /// is ignored (<c>Puck.World.Server.WorldPortalHoleContactField</c>), so a door laid on solid ground lets a body drop
 /// through it.</para>
-/// <para>Depth is <c>max(frame half-depth, crossing floor)</c>: one step of the fastest declared travel behind the
-/// glass, so a body that passed through it is found in the slab on the next scan and the opening's band
-/// (<c>Puck.World.Server.WorldPortalHoleContactField</c>) covers a step. It decides no crossing: whether a door fires
-/// is the glass test (<see cref="WorldFaceRegion.Sweep"/>), which tests the whole previous-to-current segment and
-/// cannot be tunnelled at any speed, rate, or motion program. That matters because <see cref="SpeedCeiling"/> reads
-/// only what the document declares, and a seated player's live profile speed can exceed an unenveloped kit's
-/// authored speed — an underestimate here costs nothing but a thinner band.</para>
+/// <para>The slab's depth is the face's own, <c>max(frame half-depth, slab floor)</c>, the floor being the world's
+/// contact skin. Each reader widens it by the body it asks about, never by the fastest travel the world declares:
+/// <see cref="WorldFaceRegion.Sweep"/> reaches past the slab by the segment's own travel along the normal, so a body
+/// that passed through the glass this step is found in it, and the opening's band
+/// (<c>Puck.World.Server.WorldPortalHoleContactField</c>) reaches as far as the asking body's collider and its travel
+/// this step. A body standing clear of a door is pushed as it is anywhere else, however fast another kit can go. The
+/// depth decides no crossing: whether a door fires is the glass test, which tests the whole previous-to-current segment
+/// and cannot be tunnelled at any speed, rate, or motion program.</para>
 /// </remarks>
 public static class WorldFacePortalPolicy {
     private static FixedQ4816 Magnitude(float value) => FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: value));
@@ -34,24 +35,15 @@ public static class WorldFacePortalPolicy {
         );
     }
 
-    /// <summary>The least band depth a portal face admits: the declared <see cref="SpeedCeiling"/> travelled over one
-    /// simulation step, plus the world's contact skin. A resident, non-stepping world (rate zero) advances nobody, so
-    /// its floor is zero.</summary>
+    /// <summary>The least depth a portal face's slab has whatever the face's own thickness: the world's contact skin, so
+    /// a face drawn thinner than the skin still holds an origin the contact solve leaves at its glass.</summary>
     /// <param name="definition">The document to read.</param>
-    /// <returns>The crossing floor in world units.</returns>
+    /// <returns>The slab floor in world units.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static FixedQ4816 CrossingFloor(WorldDefinition definition) {
+    public static FixedQ4816 SlabFloor(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(definition);
 
-        var rate = definition.SimulationRateHz;
-
-        if (rate <= 0) {
-            return FixedQ4816.Zero;
-        }
-
-        var step = (FixedQ4816.One / FixedQ4816.FromInteger(value: rate));
-
-        return ((SpeedCeiling(definition: definition) * step) + FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: definition.Collision.ContactSkin)));
+        return FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: definition.Collision.ContactSkin));
     }
     /// <summary>The fastest travel a document declares, in world units per second — the maximum over the world's
     /// profileless motion default and, per kit, its speed row's ceiling (the authored <c>speed.envelope</c> upper
@@ -112,10 +104,10 @@ public static class WorldFacePortalPolicy {
     }
     /// <summary>Builds the enterable region a portal face opens.</summary>
     /// <param name="row">The derived face row.</param>
-    /// <param name="crossingFloor">The document's <see cref="CrossingFloor"/>.</param>
+    /// <param name="slabFloor">The document's <see cref="SlabFloor"/>.</param>
     /// <param name="aperture">The region on success; otherwise <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the face's shape kind opens a region.</returns>
-    public static bool TryAperture(in WorldFaceRow row, FixedQ4816 crossingFloor, out WorldFaceAperture? aperture) {
+    public static bool TryAperture(in WorldFaceRow row, FixedQ4816 slabFloor, out WorldFaceAperture? aperture) {
         if (row.Aperture is not { } recipe) {
             aperture = null;
 
@@ -124,7 +116,7 @@ public static class WorldFacePortalPolicy {
 
         aperture = recipe.Open(
             arg1: row.Frame,
-            arg2: crossingFloor
+            arg2: slabFloor
         );
 
         return true;

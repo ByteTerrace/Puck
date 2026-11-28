@@ -315,7 +315,7 @@ public sealed partial class WorldInputRuntime {
     public bool TryGetBodyOwner(int body, out Principal principal) {
         principal = default;
         if ((body < 0) || (body >= m_host.Population.Capacity) || (m_host.Body(index: body) is null)) { return false; }
-        var own = ((body < m_host.Population.LocalSeatCount) ? Principal.Seat(slot: body) : m_host.Population.PeerPrincipal(index: body));
+        var own = m_host.Population.OccupantPrincipal(index: body);
 
         if (m_owners.TryGetValue(key: own, value: out var admitted) && (admitted.Body == body)) { principal = own; return true; }
         if (!m_bodyOwners.TryGetValue(key: body, value: out var candidates)) { return false; }

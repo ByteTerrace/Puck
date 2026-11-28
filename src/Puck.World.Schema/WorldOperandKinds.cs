@@ -165,18 +165,24 @@ public sealed class BodyKinematicsOperand : WorldOperandFact {
     /// <summary>Gets the witness read.</summary>
     public WorldKinematicsWitness Witness { get; }
 }
-/// <summary>One world axis of a body's live position, in metres (<see cref="WorldRuleFacts.BodyPositionPrefix"/>); a
-/// reference resolving to no live body reads <c>0</c>.</summary>
+/// <summary>One world axis of a body's live pose (<see cref="WorldRuleFacts.BodyPositionPrefix"/>,
+/// <see cref="WorldRuleFacts.BodyForwardPrefix"/>): its position in metres, or its forward axis (local -Z under its
+/// orientation) as a unit vector. A reference resolving to no live body reads <c>0</c>.</summary>
 public sealed class BodyPositionOperand : WorldOperandFact {
+    /// <summary>The first <see cref="Axis"/> value that reads the forward axis rather than the position.</summary>
+    public const int ForwardAxis = 3;
+
     /// <summary>Initializes a new instance of the <see cref="BodyPositionOperand"/> class.</summary>
     /// <param name="body">The compiled body reference.</param>
-    /// <param name="axis">The world axis read: <c>0</c> for x, <c>1</c> for y, <c>2</c> for z.</param>
+    /// <param name="axis">The world axis read: <c>0</c> to <c>2</c> for the position's x, y and z, and
+    /// <see cref="ForwardAxis"/> plus <c>0</c> to <c>2</c> for the forward axis's.</param>
     public BodyPositionOperand(CompiledBodyRef body, int axis) : base(CellKind.Fixed) {
         Axis = axis;
         Body = body;
     }
 
-    /// <summary>Gets the world axis read: <c>0</c> for x, <c>1</c> for y, <c>2</c> for z.</summary>
+    /// <summary>Gets the world axis read: <c>0</c> to <c>2</c> for the position, <see cref="ForwardAxis"/> plus
+    /// <c>0</c> to <c>2</c> for the forward axis.</summary>
     public int Axis { get; }
     /// <summary>Gets the compiled body reference.</summary>
     public CompiledBodyRef Body { get; }
@@ -341,19 +347,42 @@ public sealed class PointerOperand : WorldOperandFact {
         };
     }
 }
-/// <summary>The nearest body carrying a tag-row cell (<see cref="WorldRuleFacts.NearestPrefix"/>); walks the tag row's
-/// held cells.</summary>
+/// <summary>The body a tag-row walk chooses (<see cref="WorldRuleFacts.NearestPrefix"/>,
+/// <see cref="WorldRuleFacts.TargetPrefix"/>): the nearest tagged body, or, under a <see cref="WorldTargetEnvelope"/>,
+/// the tagged body a target query picks inside the origin's range and forward cone. Walks the tag row's held
+/// cells.</summary>
 public sealed class NearestOperand : WorldOperandFact {
-    public NearestOperand(CompiledBodyRef bodyA, string row, StateHandle stateHandle) : base(CellKind.Int) {
+    /// <summary>Initializes a new instance of the <see cref="NearestOperand"/> class.</summary>
+    /// <param name="bodyA">The origin body.</param>
+    /// <param name="row">The keyed tag row whose nonzero cells name the candidates.</param>
+    /// <param name="stateHandle">The tag row's compiled handle.</param>
+    /// <param name="envelope">The target query's range, cone and current target, or <see langword="null"/> for the
+    /// plain nearest body.</param>
+    public NearestOperand(CompiledBodyRef bodyA, string row, StateHandle stateHandle, WorldTargetEnvelope? envelope = null) : base(CellKind.Int) {
         BodyA = bodyA;
         Row = row;
         StateHandle = stateHandle;
+        Envelope = envelope;
     }
 
+    /// <summary>Gets the origin body.</summary>
     public CompiledBodyRef BodyA { get; }
+    /// <summary>Gets the target query's envelope, or <see langword="null"/> for the plain nearest body.</summary>
+    public WorldTargetEnvelope? Envelope { get; }
+    /// <summary>Gets the keyed tag row's name.</summary>
     public string Row { get; }
+    /// <summary>Gets the tag row's compiled handle.</summary>
     public StateHandle StateHandle { get; }
 }
+/// <summary>What a target query admits and how it orders: a candidate stands within <paramref name="Range"/> metres of
+/// the origin and within <paramref name="HalfAngle"/> of its planar forward axis. With no current target the query picks
+/// the candidate whose distance, weighted by one plus its bearing off forward in radians, is least; with one it cycles,
+/// picking the next candidate to the origin's right by bearing after the current target and wrapping to the leftmost.
+/// Ties resolve to the lowest body index.</summary>
+/// <param name="Range">The greatest distance, in metres.</param>
+/// <param name="HalfAngle">The widest bearing off the origin's planar forward axis, in radians.</param>
+/// <param name="Current">The body the query cycles from, or <see langword="null"/> to pick afresh.</param>
+public sealed record WorldTargetEnvelope(FixedQ4816 Range, FixedQ4816 HalfAngle, CompiledBodyRef? Current);
 /// <summary>Why a body's producer stands down. A body whose producer stands down for any reason runs none of its
 /// producer program: it stages the inert intent, as a body naming no producer does, and its producer runtime (the
 /// route, the curve station, the flock seed) is cleared. When every reason has gone the producer starts again from
@@ -470,4 +499,139 @@ public sealed class PairKeyFact {
 
     public CompiledBodyRef BodyA { get; }
     public CompiledBodyRef BodyB { get; }
+}
+/// <summary>What one identity record read answers (<see cref="IdentityRecordOperand"/>).</summary>
+public enum IdentityRecordRead : byte {
+    /// <summary>One field of the live instance in a slot (<see cref="WorldRuleFacts.RecordPrefix"/>).</summary>
+    Field,
+    /// <summary>One field of the lowest live instance whose key field holds a literal, or that instance's slot when no
+    /// field is named (<see cref="WorldRuleFacts.RecordFindPrefix"/>).</summary>
+    Find,
+    /// <summary>The live instances of a pool, or those whose key field holds a literal
+    /// (<see cref="WorldRuleFacts.RecordCountPrefix"/>).</summary>
+    Count,
+    /// <summary>The slot the next claim of a pool takes (<see cref="WorldRuleFacts.RecordFreePrefix"/>).</summary>
+    Free,
+}
+/// <summary>One read of the record store on the identity a body drives under: a field, a match, a count or the next free
+/// slot of one of its pools.</summary>
+/// <remarks>A field reads in fixed point: an integer as itself, a fixed-point value exactly, a flag as <c>0</c> or
+/// <c>1</c>, and a text field compared with <see cref="Text"/> as <c>1</c> when equal and <c>0</c> otherwise. A field read
+/// is absent for a body under no identity, a slot holding no live instance, a pool or field the store does not hold, or a
+/// text field read with no text. A slot (a match with no field, or the next free slot) reads <c>-1</c> for none, and a
+/// count reads <c>0</c>.</remarks>
+public sealed class IdentityRecordOperand : WorldOperandFact {
+    /// <summary>The <see cref="Slot"/> value naming the swept key, read as a slot index.</summary>
+    public const int EachSlot = -1;
+
+    /// <summary>Initializes a new instance of the <see cref="IdentityRecordOperand"/> class.</summary>
+    /// <param name="body">The compiled body reference.</param>
+    /// <param name="read">What the read answers.</param>
+    /// <param name="pool">The pool on the identity's own document.</param>
+    /// <param name="slot">The non-negative slot a <see cref="IdentityRecordRead.Field"/> read names, or
+    /// <see cref="EachSlot"/> for the swept key; ignored by the other reads.</param>
+    /// <param name="field">The field read, or <see langword="null"/> for a read that answers a slot or a count.</param>
+    /// <param name="keyField">The field a match compares, or <see langword="null"/> for none.</param>
+    /// <param name="keyValue">The literal a match compares the key field with, or <see langword="null"/> for none.</param>
+    /// <param name="text">The text a text field read is compared with, or <see langword="null"/> to read a number.</param>
+    public IdentityRecordOperand(CompiledBodyRef body, IdentityRecordRead read, CellName pool, int slot, CellName? field, CellName? keyField, string? keyValue, string? text = null) : base(((field is not null) ? CellKind.Fixed : CellKind.Int)) {
+        Body = body;
+        Field = field;
+        KeyField = keyField;
+        KeyValue = keyValue;
+        Pool = pool;
+        Read = read;
+        Slot = slot;
+        Text = text;
+    }
+
+    /// <summary>Gets the compiled body reference.</summary>
+    public CompiledBodyRef Body { get; }
+    /// <summary>Gets the field read, or <see langword="null"/> for a read that answers a slot or a count.</summary>
+    public CellName? Field { get; }
+    /// <summary>Gets the field a match compares, or <see langword="null"/> for none.</summary>
+    public CellName? KeyField { get; }
+    /// <summary>Gets the literal a match compares the key field with, or <see langword="null"/> for none.</summary>
+    public string? KeyValue { get; }
+    /// <summary>Gets the pool on the identity's own document.</summary>
+    public CellName Pool { get; }
+    /// <summary>Gets what the read answers.</summary>
+    public IdentityRecordRead Read { get; }
+    /// <summary>Gets the slot a <see cref="IdentityRecordRead.Field"/> read names, or <see cref="EachSlot"/>.</summary>
+    public int Slot { get; }
+    /// <summary>Gets the text a text field read is compared with, or <see langword="null"/> to read a number.</summary>
+    public string? Text { get; }
+
+    /// <summary>Answers this read from an identity's record store as it stands.</summary>
+    /// <param name="identity">The identity the addressed body drives under, or <see langword="null"/> for none.</param>
+    /// <param name="slot">The slot a <see cref="IdentityRecordRead.Field"/> read names, its <see cref="EachSlot"/>
+    /// resolved to the swept key's index by the host; ignored by the other reads.</param>
+    /// <returns>The fact, as this type's remarks describe.</returns>
+    public Fact Answer(WorldIdentity? identity, int slot) {
+        switch (Read) {
+            case IdentityRecordRead.Count:
+                return Fact.Finite(kind: CellKind.Int, value: ((identity is null)
+                    ? 0L
+                    : (((KeyField is { } countField) && (KeyValue is { } countValue))
+                        ? identity.MatchRecords(count: true, field: countField, literal: countValue, pool: Pool)
+                        : identity.CountRecords(pool: Pool))));
+            case IdentityRecordRead.Free:
+                return Fact.Finite(kind: CellKind.Int, value: ((identity is null) ? -1L : identity.FreeRecordSlot(pool: Pool)));
+            case IdentityRecordRead.Find: {
+                var found = (((identity is not null) && (KeyField is { } findField) && (KeyValue is { } findValue))
+                    ? identity.MatchRecords(count: false, field: findField, literal: findValue, pool: Pool)
+                    : -1);
+
+                return (Field is { } read)
+                    ? FieldAt(identity: identity, slot: found, field: read)
+                    : Fact.Finite(kind: CellKind.Int, value: found);
+            }
+            default:
+                return (Field is { } field) ? FieldAt(identity: identity, slot: slot, field: field) : Fact.Absent(kind: CellKind.Fixed);
+        }
+    }
+
+    private Fact FieldAt(WorldIdentity? identity, int slot, CellName field) {
+        if ((identity is null) || (slot < 0) || !identity.TryReadRecord(field: field, pool: Pool, slot: slot, value: out var value)) {
+            return Fact.Absent(kind: CellKind.Fixed);
+        }
+        if (Text is { } text) {
+            return ((value.Kind == CellKind.Text)
+                ? Fact.Finite(value: (string.Equals(a: value.AsText, b: text, comparisonType: StringComparison.Ordinal) ? FixedQ4816.One : FixedQ4816.Zero))
+                : Fact.Absent(kind: CellKind.Fixed));
+        }
+
+        return value.Kind switch {
+            CellKind.Int => Fact.Finite(value: FixedQ4816.FromInteger(value: value.AsInt)),
+            CellKind.Fixed => Fact.Finite(value: FixedQ4816.FromRawBits(value: value.AsFixed)),
+            CellKind.Bool => Fact.Finite(value: (value.AsBool ? FixedQ4816.One : FixedQ4816.Zero)),
+            _ => Fact.Absent(kind: CellKind.Fixed),
+        };
+    }
+}
+/// <summary>Whether the principal holding a body (a local seat's, or a remote participant's) holds a membership row in a
+/// group of the world's own <c>groups</c> section (<see cref="WorldRuleFacts.InGroupPrefix"/>): <c>1</c> while it does,
+/// <c>0</c> otherwise, for a group the document does not declare, or for a reference resolving to no live body.</summary>
+public sealed class GroupMemberOperand : WorldOperandFact {
+    /// <summary>Initializes a new instance of the <see cref="GroupMemberOperand"/> class.</summary>
+    /// <param name="body">The compiled body reference.</param>
+    /// <param name="group">The group's id.</param>
+    public GroupMemberOperand(CompiledBodyRef body, string group) : base(CellKind.Int) {
+        Body = body;
+        Group = group;
+    }
+
+    /// <summary>Gets the compiled body reference.</summary>
+    public CompiledBodyRef Body { get; }
+    /// <summary>Gets the group's id.</summary>
+    public string Group { get; }
+}/// <summary>The index of the body a reference names (<see cref="WorldRuleFacts.BodyIndexPrefix"/>): a literal index, the
+/// index a sweep bound, or the index a cell holds; <c>-1</c> for a reference that names no body.</summary>
+public sealed class BodyIndexOperand : WorldOperandFact {
+    /// <summary>Initializes a new instance of the <see cref="BodyIndexOperand"/> class.</summary>
+    /// <param name="body">The compiled body reference.</param>
+    public BodyIndexOperand(CompiledBodyRef body) : base(CellKind.Int) => Body = body;
+
+    /// <summary>Gets the compiled body reference.</summary>
+    public CompiledBodyRef Body { get; }
 }

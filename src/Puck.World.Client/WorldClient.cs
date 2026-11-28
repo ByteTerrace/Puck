@@ -637,8 +637,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         // A seat whose control frames a held face by the body (seatControl.faceFrame) moves in the body's own heading while
         // its body holds one: the camera orbits without changing which push climbs, and no travel turns the heading.
         var onFace = (
-            (definition.Views.SeatControl.FaceFrame == WorldSeatFaceFrame.Body) &&
-            ((body.Facts & BodyFacts.HoldingUnwalkable) != 0)
+            ((definition.Views.SeatControl.FaceFrame == WorldSeatFaceFrame.Body) &&
+            ((body.Facts & BodyFacts.HoldingUnwalkable) != 0)) ||
+            ((definition.Views.SeatControl.HeadingFrame is not null) &&
+            HeadingFramed(bodyIndex: bodyIndex, binding: definition.Views.SeatControl.HeadingFrame, mirror: endpoint.Mirror.FollowState(), slot: slot))
         );
 
         if (onFace) {
@@ -941,6 +943,28 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             roles: roles
         );
     }
+    // Whether the seat control's heading-frame binding reads nonzero for the seat's body, read through one lease per local
+    // seat bound to the mirror and body the composition addresses (WorldSeatViewControl.HeadingFrame).
+    private bool HeadingFramed(int slot, int bodyIndex, BindableScalar? binding, WorldStateMirror mirror) {
+        if (binding is not { } scalar) {
+            return false;
+        }
+        if ((scalar.State is null) && (scalar.Keys is null)) {
+            return ((scalar.Literal ?? 0f) != 0f);
+        }
+        if (slot >= m_headingReads.Length) {
+            Array.Resize(array: ref m_headingReads, newSize: (slot + 1));
+        }
+
+        var reads = (m_headingReads[slot] ??= new WorldStateLease());
+
+        reads.Bind(bodyIndex: bodyIndex, mirror: mirror);
+
+        return (reads.Scalar(fallback: 0f, scalar: in scalar) != 0f);
+    }
+
+    private WorldStateLease?[] m_headingReads = [];
+
     // Writes a commanded world facing to the Face roles the world claims; an unclaimed role is left out.
     private static PlayerIntent WriteFacing(RoleChannelOrdinals roles, PlayerIntent intent, Vector3 facing) {
         intent = roles.Write(

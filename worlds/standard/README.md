@@ -49,6 +49,29 @@ pinned driver ([addons/companion.wat](addons/companion.wat)) flies the body.
 `companionUnlock` and `companionSight` keep what it learns on its owner's
 identity. The debug world's faerie is one (`../debug/companion.puck`).
 
+[journal.puck](journal.puck) is the journal, which is also the menu: `journalPlay(kinds)` opens it on the journal key,
+chooses a pause or an action read each tick, turns its pages (the menagerie first) and swaps the active companion.
+[wrist-panel.puck](wrist-panel.puck) is the panel that wears it on a forearm: an avatar or a suit names a mount and
+its palette slots, and the panel brings its geometry, flap, screen, the arm's raise and the camera's focus.
+[menagerie.puck](menagerie.puck) is the companions a character keeps, one active at a time: `menagerie(kinds,
+granted)` keeps them on body registers saved as the character's facts and records, and dresses a companion
+(`companion(menagerie: true)`) as the active kind. The debug world set's Moth wears all three
+(`../debug/avatars/moth.puck`), and its lab is `../debug/labs/journal.puck`.
+
+[lockon.puck](lockon.puck) is lock-on targeting: `lockOn(targets)` declares what
+can be targeted (the `lockable` row), the lock and cycle keys, the rules that pick
+a target with the engine's target query (`target(…)`), and a seat framing that
+holds the camera behind the body facing its target while the seat moves in its
+body's heading. The standard walker faces the target through its `faceAt`
+counters ([motion.puck](motion.puck)), so a sideways push strafes round it.
+`companionLock(owner)` sends that owner's companion to the locked target.
+[marks.puck](marks.puck) is players' marks: `playerMarks(place)` gives a ping the
+group sees and a placed mark kept in the character's `marks` crossing pool
+([identity.puck](identity.puck)), read back with `record(…)` into rows only the
+group reads (`audience: "public"` lets everyone), and `companionMarks(owner)`
+flies the companion to the group's pings. The debug world expands both in
+`../debug/targeting.puck`.
+
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
 
@@ -136,6 +159,14 @@ resting page (the `on-foot` overlay) every refinement builds on. `walker.puck` i
 walks, runs, jumps and falls, framed by `chaseCamera`. It imports the standard and refines it, so a world imports it in
 the standard's place; an author's own avatar refines its `walker` kit, look and prototype by id, or replaces it (the
 debug world's avatar is its own, [`../debug/avatars/moth.puck`](../debug/avatars/moth.puck)).
+
+`character.puck` names the identity template every character an account mints starts as, `identity.puck`, whose
+record pools hold what a character keeps: the journal's notes, tags and links, its marks, items and quests.
+`quests.puck` is a library a world imports to give quests: `questStart`, `questAdvance` and `questSetAsideNow` splice
+into a rule over the players, and `questChain` declares a chain of parts, each open to a character who finished the one
+before it, and the share that offers the chain to a group's members, each joining at the farthest part it qualifies
+for, with the sharer's journal recording who accepted, completed or did not qualify. The debug world's lantern trail is
+the worked chain ([`../debug/lantern-trail.puck`](../debug/lantern-trail.puck)).
 
 `motion.puck` authors the standard's body motion programs: `walk`, which every avatar that walks imports, so a
 correction to it reaches them all. An avatar's speeds, holds, turn and actions stay in its own kit; a

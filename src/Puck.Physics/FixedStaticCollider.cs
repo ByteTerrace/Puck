@@ -206,7 +206,7 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
     // exactly one in magnitude.
     internal static bool IsWorldAxis(FixedVector3 axis) =>
         ((((((axis.X == FixedQ4816.Zero) ? 1 : 0) + ((axis.Y == FixedQ4816.Zero) ? 1 : 0)) + ((axis.Z == FixedQ4816.Zero) ? 1 : 0)) == 2) &&
-         (((FixedQ4816.Abs(value: axis.X) + FixedQ4816.Abs(value: axis.Y)) + FixedQ4816.Abs(value: axis.Z)) == FixedQ4816.One));
+         (FixedVector3.L1Norm(value: axis) == FixedQ4816.One));
 
     /// <summary>Creates a static half-space.</summary>
     public static FixedStaticCollider HalfSpace(FixedVector3 point, FixedVector3 normal) =>

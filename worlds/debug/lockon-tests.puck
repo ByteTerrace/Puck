@@ -1,0 +1,199 @@
+// Lock-on targeting (../standard/lockon.puck) on the standard walker: `puck test worlds/debug/lockon-tests.puck --jobs 1
+// --reproduce`. The seat stands at the origin facing -Z with three posts ahead of it: body 2 to the right at x 3, body 3
+// dead ahead at 6 m, body 4 to the left at x -3 (inhabitants number from the top of the capacity down, the first placement
+// highest). The invariants are the target query's choice and order (exact fixed-point bearings, ties to the lowest body),
+// and that a locked body keeps facing its target while it moves sideways, which running alone cannot pin.
+schema: "puck.world.definition.v1"
+documentId: "lockon-tests"
+
+import "../standard/walker"
+import "../standard/lockon"
+import "../standard/kits"
+
+lockOn(targets: [2, 3, 4], seats: 2)
+
+bodies {
+  capacity: 5
+  localSeats: 2
+  networkPlayers: 0
+  reconnectGraceSeconds: 0
+  seatSpawns [start, beside]
+  sleepAfterSeconds: 0s
+}
+
+spawnPoints [
+  { id: "start", position [0, 0, 0], yawDegrees: 0 }
+  { id: "beside", position [-6, 0, 4], yawDegrees: 0 }
+]
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  isActive: true
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, -18, 0]
+}
+
+kits [
+  {
+    name: "post"
+    bodyContact: Solid
+    bodyMotionProgram: "walk"
+    collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
+    motion: walkerMotion
+  }
+]
+
+looks [
+  {
+    name: "post"
+    scale: 1
+    source: creation(prototypeId: post)
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+    }
+  }
+]
+
+prototypes {
+  prototype "post" {
+    document {
+      name: "post"
+      schema: "puck.creation.v2"
+      palette [{ color: "#B5651D", roughness: 0.6 }]
+      shape Capsule "body" {
+        material: 0
+        position [0, 0.3, 0]
+        scale [0.3, 2.2, 0.3]
+      }
+    }
+  }
+  prototype "lockon-floor" {
+    document {
+      name: "lockon-floor"
+      schema: "puck.creation.v2"
+      palette [{ color: "#ADA69F", roughness: 0.85 }]
+      shape Box {
+        material: 0
+        position [0, -0.2, 0]
+        scale [40, 0.2, 40]
+      }
+    }
+  }
+}
+
+// One post, standing at `at`, which the population numbers from the top down.
+template lockonPost(id, at) {
+  placement $"{id}" {
+    prototype: "post"
+    position: at
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "post"
+      look: "post"
+      source: "Idle"
+    }
+  }
+}
+
+placements {
+  placement "lockon-floor" {
+    prototype: "lockon-floor"
+    position [0, 0, 0]
+    solid
+  }
+  lockonPost(id: "post-left", at: [-3, 0, -8])
+  lockonPost(id: "post-ahead", at: [0, 0, -6])
+  lockonPost(id: "post-right", at: [3, 0, -8])
+}
+
+// The cosine between where body 0 faces and the way to its target, planar: 1 when it faces it exactly.
+function facesTarget(t) = (bodyForward(body, 0, x) * (bodyPosition(body, t, x) - bodyPosition(body, 0, x)) +
+  bodyForward(body, 0, z) * (bodyPosition(body, t, z) - bodyPosition(body, 0, z))) /
+  squareRoot((bodyPosition(body, t, x) - bodyPosition(body, 0, x)) * (bodyPosition(body, t, x) - bodyPosition(body, 0, x)) +
+  (bodyPosition(body, t, z) - bodyPosition(body, 0, z)) * (bodyPosition(body, t, z) - bodyPosition(body, 0, z)))
+
+// A press picks the most central, nearest post in the cone: the one dead ahead.
+test "a lock takes the target dead ahead" {
+  when {
+    ticks 20
+    seat1: body.press lock 1 0.2 0
+    ticks 10
+  }
+  expect {
+    lockOn["0"] == 1
+    lockTarget["0"] == 3
+  }
+}
+
+// Cycling steps right from the post ahead to the right one, then wraps to the leftmost.
+test "cycling steps to the right and wraps to the left" {
+  when {
+    ticks 20
+    seat1: body.press lock 1 0.2 0
+    ticks 10
+    seat1: body.press lockCycle 1 0.2 0
+    ticks 10
+  }
+  expect {
+    lockTarget["0"] == 2
+  }
+}
+
+test "a second cycle wraps to the leftmost target" {
+  when {
+    ticks 20
+    seat1: body.press lock 1 0.2 0
+    ticks 10
+    seat1: body.press lockCycle 1 0.2 0
+    ticks 10
+    seat1: body.press lockCycle 1 0.2 0
+    ticks 10
+  }
+  expect {
+    lockTarget["0"] == 4
+  }
+}
+
+// Locked on the post ahead, a second of strafing carries the body sideways while it keeps facing the post.
+test "a locked body strafes and keeps facing its target" {
+  when {
+    ticks 20
+    seat1: body.press lock 1 0.2 0
+    ticks 10
+    seat1: body.press strafe 1 1 0
+    ticks 40
+  }
+  expect {
+    lockTarget["0"] == 3
+    bodyPosition(body, 0, x) > 0.5
+    facesTarget(3) > 0.98
+  }
+}
+
+// A second press lets go: the lock and the facing both end.
+test "a second press releases the lock" {
+  when {
+    ticks 20
+    seat1: body.press lock 1 0.2 0
+    ticks 10
+    seat1: body.press lock 1 0.2 0
+    ticks 10
+  }
+  expect {
+    lockOn["0"] == 0
+    lockTarget["0"] == -1
+    bodyState(body, 0, faceAt) == 0
+  }
+}

@@ -22,9 +22,18 @@ public static class WorldExpressionJson {
         LowerProgramMember(diagnostics: diagnostics, member: "pointX", obj: obj);
         LowerProgramMember(diagnostics: diagnostics, member: "pointY", obj: obj);
         LowerProgramMember(diagnostics: diagnostics, member: "pointZ", obj: obj);
-        if ((obj["$type"] is JsonValue discriminator) && (discriminator.GetValue<string>() == "compareValue")) {
+        var type = ((obj["$type"] is JsonValue discriminator) && (discriminator.GetValueKind() == System.Text.Json.JsonValueKind.String))
+            ? discriminator.GetValue<string>()
+            : null;
+
+        if (type is "compareValue" or "claimIdentityPair") {
             LowerProgramMember(diagnostics: diagnostics, member: "left", obj: obj);
             LowerProgramMember(diagnostics: diagnostics, member: "right", obj: obj);
+        }
+        // An identity record write or release names its slot and the lifetime it expects as programs.
+        if (type is "setIdentityRecord" or "releaseIdentityRecord") {
+            LowerProgramMember(diagnostics: diagnostics, member: "slot", obj: obj);
+            LowerProgramMember(diagnostics: diagnostics, member: "generation", obj: obj);
         }
         if (array == "patterns") {
             LowerProgramMember(diagnostics: diagnostics, member: "value", obj: obj);

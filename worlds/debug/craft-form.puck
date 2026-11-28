@@ -3,7 +3,7 @@
 // `craft` and `space` registers, the space kit's camera and motion taking over where nothing pulls), so a
 // ship that crosses the sky seam is a ship here and the Moth steps out of a painting in the form she left in. The
 // debug world's own `form` also counts noclip (noclip.puck); a world that imports this file imports suit.puck for the
-// suit register and the pilot's kit and look, and replaces its selectors with these.
+// suit register and the pilot's kit and look, and refines its `form` selectors by name with these.
 
 import "../standard/ship"
 import "suit"
@@ -24,27 +24,33 @@ state {
 
 kits {
   assignment {
-    select {
-      bodyState: "form"
-      cases [
-        { value: 0, row: "pilot" }
-        { value: 4, row: "ship" }
-        { value: 5, row: "ship-space" }
-      ]
-    }
+    select [
+      {
+        name: "form"
+        bodyState: "form"
+        cases [
+          { value: 0, row: "pilot" }
+          { value: 4, row: "ship" }
+          { value: 5, row: "ship-space" }
+        ]
+      }
+    ]
   }
 }
 
 looks {
   assignment {
-    select {
-      bodyState: "form"
-      cases [
-        { value: 0, row: "moth-pilot" }
-        { value: 4, row: "ship" }
-        { value: 5, row: "ship" }
-      ]
-    }
+    select [
+      {
+        name: "form"
+        bodyState: "form"
+        cases [
+          { value: 0, row: "moth-pilot" }
+          { value: 4, row: "ship" }
+          { value: 5, row: "ship" }
+        ]
+      }
+    ]
   }
 }
 
@@ -52,7 +58,9 @@ looks {
 // read one local whose every value the form register's envelope keeps, so the work sheet sees that a firing closes its
 // own gate and prices the rule by the registers that move.
 rule "craft-form" {
-  local target = (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * bodyState(each, suit))
+  local target = (
+    (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * bodyState(each, suit))
+  )
   when bodyState(each, form) != target
   mode: Level
   forEach: $bodies

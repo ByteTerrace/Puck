@@ -22,6 +22,12 @@ public sealed partial class WorldRuleHost {
     // A body's facts read through a placement reference: a move names the placement's ordinal, which TryFactKey answers
     // as the key a placement roster's sweep binds for it.
     private const int PlacementFactsSource = 11;
+    // The record store of the identity a body drives under: its version moves when the body's identity, or that
+    // identity's revision, differs from what the last derivation saw.
+    private const int IdentitySource = 12;
+    // One group's roster, by the group's place in the watched list: its version moves when the live document's row
+    // for the group is another row.
+    private const int GroupSource = 13;
 
     // The facts versioned by the value they answer: a read that names no binding (a literal seat, a compiled census)
     // and answers from host state alone, so its value moves only where the host's state does. Each is read again
@@ -296,7 +302,9 @@ public sealed partial class WorldRuleHost {
                 facts.Add(item: new FactRead(Body: WatchValue(fact: bodyOperand, readsInput: false, spelling: bodyOperand.Describe), Source: ValueSource));
 
                 return true;
-            case NearestOperand nearest when (nearest.BodyA.Kind == CompiledBodyRefKind.Literal): {
+            // A target query cycling from a body a cell names reads that cell's row too, which the watch does not name:
+            // it stays volatile.
+            case NearestOperand nearest when ((nearest.BodyA.Kind == CompiledBodyRefKind.Literal) && (nearest.Envelope?.Current is null)): {
                 var tagRow = OrdinalOf(handle: nearest.StateHandle);
 
                 if (tagRow >= 0) {
@@ -343,6 +351,22 @@ public sealed partial class WorldRuleHost {
                 WatchPlacements();
                 facts.Add(item: new FactRead(Body: ((placementFact.Body.PlacementOrdinals is not null) ? FactRead.EachBody : placementFact.Body.Index), Source: PlacementFactsSource));
 
+                return true;
+            // A record store read follows the identity a body drives under and that identity's revision, which every
+            // install of a stage (a rule's claim, write or release, an adoption) and every fact write moves.
+            case IdentityRecordOperand record when TryBodyScope(body: record.Body, scope: out var identityScope):
+                WatchIdentities();
+                facts.Add(item: new FactRead(Body: identityScope, Source: IdentitySource));
+
+                return true;
+            // Membership follows the group's roster and which principal holds the body, which moves with its liveness.
+            case GroupMemberOperand member when TryBodyScope(body: member.Body, scope: out _):
+                facts.Add(item: new FactRead(Body: WatchGroup(group: member.Group), Source: GroupSource));
+                facts.Add(item: new FactRead(Body: FactRead.Whole, Source: LiveBodiesSource));
+
+                return true;
+            // A literal body's index, and the index a sweep bound, are its binding's own: nothing moves them.
+            case BodyIndexOperand index when TryBodyScope(body: index.Body, scope: out _):
                 return true;
             // Why a body's producer stands down: the reasons a hold effect and the engagement fold write.
             case ProducerOperand producer when TryBodyScope(body: producer.BodyA, scope: out var producerScope):
@@ -412,6 +436,14 @@ public sealed partial class WorldRuleHost {
 
             return true;
         }
+        if (source == GroupSource) {
+            if (((uint)body) >= ((uint)m_groupVersions.Count)) {
+                return false;
+            }
+            version = m_groupVersions[body];
+
+            return true;
+        }
         if (source == FieldRowSource) {
             if (((uint)body) >= ((uint)m_fieldRowVersions.Count)) {
                 return false;
@@ -465,6 +497,10 @@ public sealed partial class WorldRuleHost {
                 version = m_producerVersions[body];
 
                 return true;
+            case IdentitySource when (((uint)body) < ((uint)m_identityVersions.Length)):
+                version = m_identityVersions[body];
+
+                return true;
             case LiveBodiesSource when (body == FactRead.Whole):
                 version = m_liveVersion;
 
@@ -504,6 +540,8 @@ public sealed partial class WorldRuleHost {
         ValueSource => "value",
         FieldRowSource => "field",
         ProducerSource => "producer",
+        IdentitySource => "identity",
+        GroupSource => "group",
         _ => $"source {source}",
     });
 
@@ -569,10 +607,14 @@ public sealed partial class WorldRuleHost {
             m_seenValueMoves = Arena.MoveSequence;
             DeriveValues(arenaMoved: arenaMoved, bodies: m_factsStale, inputs: inputsStale);
         }
+        if (m_watchIdentities && (m_factsStale || (m_identityCommits != m_seenIdentityCommits))) {
+            DeriveIdentities();
+        }
         if (!m_factsStale) {
             return;
         }
         m_factsStale = false;
+        DeriveGroups();
         DeriveClocks();
         DeriveFields();
         BindInteractionInputs();
@@ -652,6 +694,85 @@ public sealed partial class WorldRuleHost {
         }
     }
 
+    // What a record store read answers of one body: the identity it drives under and that identity's revision.
+    private readonly record struct IdentitySeen(WorldIdentity? Identity, int Revision) {
+        public static IdentitySeen Of(WorldBody? body) => ((body?.Profile is { } identity) ? new IdentitySeen(Identity: identity, Revision: identity.FactsRevision) : default);
+    }
+
+    private IdentitySeen[] m_seenIdentities = [];
+    private ulong[] m_identityVersions = [];
+    private bool m_watchIdentities;
+    // Moved by every install of a rule's identity stage (FlushIdentityStages), so a record a firing commits mid-pass is
+    // derived at the next drain: a reader later in the walk is due this tick, an earlier one the next, as an in-place
+    // read would first see it.
+    private long m_identityCommits;
+    private long m_seenIdentityCommits;
+    private readonly List<string> m_memberGroups = [];
+    private readonly List<WorldGroup?> m_seenGroups = [];
+    private readonly List<ulong> m_groupVersions = [];
+
+    private void WatchIdentities() {
+        if (m_watchIdentities) {
+            return;
+        }
+        m_watchIdentities = true;
+        m_factMovesAll = true;
+        DeriveIdentities();
+    }
+    // Compares every population slot's identity and revision with what it answered when the versions were last
+    // derived. Identities change without moving a body (a firing's commit, an adoption, a seat's switch), so every slot
+    // is read, which is a reference and an integer each.
+    private void DeriveIdentities() {
+        var capacity = Host.Population.Capacity;
+
+        m_seenIdentityCommits = m_identityCommits;
+        if (m_seenIdentities.Length != capacity) {
+            m_seenIdentities = new IdentitySeen[capacity];
+            m_identityVersions = new ulong[capacity];
+            for (var index = 0; (index < capacity); index++) {
+                m_seenIdentities[index] = IdentitySeen.Of(body: Host.Body(index: index));
+                m_identityVersions[index] = 1UL;
+            }
+            m_factMovesAll = true;
+
+            return;
+        }
+        for (var index = 0; (index < capacity); index++) {
+            _ = See(move: new FactRead(Body: index, Source: IdentitySource), now: IdentitySeen.Of(body: Host.Body(index: index)), seen: ref m_seenIdentities[index], version: ref m_identityVersions[index]);
+        }
+    }
+    // Starts versioning one group's roster for a rule that reads membership in it, and answers the scope its fact names
+    // it by.
+    private int WatchGroup(string group) {
+        var scope = m_memberGroups.IndexOf(item: group);
+
+        if (scope < 0) {
+            scope = m_memberGroups.Count;
+            m_memberGroups.Add(item: group);
+            m_seenGroups.Add(item: GroupRow(group: group));
+            m_groupVersions.Add(item: 1UL);
+            m_factMovesAll = true;
+        }
+
+        return scope;
+    }
+    private WorldGroup? GroupRow(string group) => ((Host.Document.Definition.Groups is { } section) ? WorldGroup.Find(groups: section.Groups, id: group) : null);
+    // A group's row is replaced whole by every accepted membership change, so a row that is another instance is a
+    // roster that may read differently.
+    private void DeriveGroups() {
+        var seen = CollectionsMarshal.AsSpan(list: m_seenGroups);
+        var versions = CollectionsMarshal.AsSpan(list: m_groupVersions);
+
+        for (var index = 0; (index < seen.Length); index++) {
+            var now = GroupRow(group: m_memberGroups[index]);
+
+            if (!ReferenceEquals(objA: seen[index], objB: now)) {
+                seen[index] = now;
+                versions[index]++;
+                m_factMoves.Add(item: new FactRead(Body: index, Source: GroupSource));
+            }
+        }
+    }
     private void DeriveFields() {
         var seen = CollectionsMarshal.AsSpan(list: m_seenFieldRows);
         var versions = CollectionsMarshal.AsSpan(list: m_fieldRowVersions);

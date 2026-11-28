@@ -82,7 +82,9 @@ public enum CompiledBodyRefKind : byte {
 /// <param name="Key">The cell key for a cell read.</param>
 /// <param name="Handle">The compiled handle of <paramref name="Row"/>.</param>
 /// <param name="PlacementOrdinals">For <c>placement:$each</c>, the placement ordinal per <c>forEach</c> cell, in cell order.</param>
-public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, StateHandle Handle = default, IReadOnlyList<int>? PlacementOrdinals = null);
+/// <param name="KeyBinding">For a cell read whose key is a binding (<c>cell:&lt;row&gt;:$each</c>), the binding the key
+/// is read through at each evaluation; <see cref="BoundKey.None"/> for a literal <paramref name="Key"/>.</param>
+public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, StateHandle Handle = default, IReadOnlyList<int>? PlacementOrdinals = null, BoundKey KeyBinding = BoundKey.None);
 /// <summary>The co-occurrence an interaction evaluates.</summary>
 /// <param name="Left">The left property.</param>
 /// <param name="Right">The right property, or the region placement.</param>
@@ -178,6 +180,12 @@ public enum WorldRuleRefusal : byte {
     KinematicsMalformed,
     [Refusal(door: "world.rule.compile", condition: "a '$net:' channel does not spell '$net:<placementId>:<reading>' naming a placement that carries a net facet and a reading WorldNetVocabulary declares", kind: RefusalKind.Verdict)]
     NetMalformed,
+    [Refusal(door: "world.rule.compile", condition: "a '$record:', '$recordFind:', '$recordCount:' or '$recordFree:' channel does not spell its body reference, then a pool and the slot, key field, value and field its read names as cell names and literals", kind: RefusalKind.Verdict)]
+    IdentityRecordReadMalformed,
+    [Refusal(door: "world.rule.compile", condition: "an '$inGroup:' channel does not spell '$inGroup:<bodyRef>:<group>' with a group id", kind: RefusalKind.Verdict)]
+    InGroupMalformed,
+    [Refusal(door: "world.rule.compile", condition: "a '$bodyIndex:' channel does not spell exactly one body reference", kind: RefusalKind.Verdict)]
+    BodyIndexMalformed,
 }
 /// <summary>The runtime refusals only a world-owned effect arm can draw; the state-neutral ones are
 /// <see cref="RuleEffectRefusal"/>'s, and both share the evaluator's ledger.</summary>
