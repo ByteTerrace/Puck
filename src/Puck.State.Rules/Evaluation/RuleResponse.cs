@@ -39,11 +39,15 @@ public enum RuleLatching : byte {
 /// <param name="Latching">What stops a binding that fired from firing again.</param>
 /// <param name="Why">The derivation, for the read-back.</param>
 public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching Latching, string Why) {
-    /// <summary>Gets a value indicating whether the line is a sweep over a row family that a member's change alone
-    /// opens: nothing fires at rest, and every read at rest reaches the binding through its member (a family selection
-    /// or a cell under <c>$member</c>), none under <c>$each</c> or shared. Its firings in one tick are then one member's,
-    /// so a gate pin on a cell under <c>$member</c> discriminates it from another such line
-    /// (<see cref="RuleWorkBudget.PinnedCells"/>).</summary>
+    /// <summary>Gets a value indicating whether a gate pin on a cell under <c>$member</c> discriminates the line from
+    /// another such line (<see cref="RuleWorkBudget.PinnedCells"/>): it sweeps a row family, nothing of it is judged or
+    /// fires at rest, no deadline wakes it (deadlines come due whatever changes) and nothing shared is read, so it fires
+    /// only for the one change the sheet prices, and only at the members whose pinned cell holds a value in its range.
+    /// Lines pinning one row's member cell to disjoint ranges then fire at disjoint members whatever that change reaches:
+    /// a member's change opens that member, which only one of them fires at, and a change of the cell under one
+    /// <c>$each</c> key opens that key in every member, one binding a member, which each line reading it is priced at
+    /// (one change opens at least every member's binding there, and at most one member's bindings). So the dearest of
+    /// them bounds them all.</summary>
     public bool PinsByMember { get; init; }
     /// <summary>Derives a line's response.</summary>
     /// <param name="rule">The compiled rule.</param>
@@ -62,12 +66,13 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         var closure = ((rule.Mode == ActionTriggerMode.Edge) ? Closure.None : Prove(context: context, rule: rule));
         var latching = ((rule.Mode == ActionTriggerMode.Edge)
             ? RuleLatching.Edge
-            : ((closure != Closure.None) ? RuleLatching.ClosesItself : (Settles(rule: rule) ? RuleLatching.Settles : RuleLatching.None)));
+            : ((closure != Closure.None) ? RuleLatching.ClosesItself : (Settles(context: context, rule: rule) ? RuleLatching.Settles : RuleLatching.None)));
         var never = (holdsNever ? "; its gate never holds on this host" : string.Empty);
 
         // A sweep of this tick's events binds nothing at rest, and one event, the change the sheet prices, binds one
-        // binding whatever it reads. A maxFirings bound or a host that judges in place keeps the capacity price.
-        if (!inPlace && (rule.MaxFirings <= 0) && (rule.Iteration is { BindsEvents: true })) {
+        // binding whatever it reads. A maxFirings bound only caps the firings of the events that arrived, which the
+        // due list visits in full: none at rest. A host that judges in place keeps the capacity price.
+        if (!inPlace && (rule.Iteration is { BindsEvents: true })) {
             return new RuleResponse(
                 Fired: Math.Min(val1: firings, val2: 1L),
                 Judged: Math.Min(val1: multiplier, val2: 1L),
@@ -111,8 +116,6 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
         // A member-each read (`family[$member][$each]`) opens the one binding its cell names.
         long Own(CellAccess access) => (access.Members ? 1L : (access.Each ? members.Count : ((access.IsMember || access.MemberKey) ? members.Capacity : 1L)));
-        // A read at rest under $each, or a host fact read for $each's body, opens that key in every member.
-        var eachRead = false;
 
         if (deadline is not null) {
             var due = new List<CellAccess>();
@@ -141,7 +144,6 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             }
             opened = Math.Max(val1: opened, val2: (each ? members.Count : multiplier));
             shared |= !each;
-            eachRead |= each;
         }
         foreach (var access in reads) {
             if (!context.RowRests(rowOrdinal: access.RowOrdinal)) {
@@ -151,7 +153,6 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             }
             if (access.Each || access.Members || access.OwnMember || access.MemberKey) {
                 opened = Math.Max(val1: opened, val2: Own(access: access));
-                eachRead |= access.Each;
 
                 continue;
             }
@@ -203,7 +204,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             Judged: judged,
             Latching: latching,
             Why: $"{rest}; {fire}; one change opens {opened} of {multiplier} binding(s)"
-        ) { PinsByMember = ((rule.ForEachFamily is not null) && !shared && !eachRead && (judgedAtRest == 0L) && (firedAtRest == 0L)) };
+        ) { PinsByMember = ((rule.ForEachFamily is not null) && !shared && (deadline is null) && (judgedAtRest == 0L) && (firedAtRest == 0L) && (opened <= members.Capacity)) };
     }
     /// <summary>Returns whether a rule's gate provably never holds on the host its context describes: a host that
     /// answers one search ply (<see cref="RuleCompileContext.SearchPlyIsFixed"/>) answers the live ply, zero
@@ -224,25 +225,56 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         var gate = rule.Gate;
 
         return (GateTruth.Fold(gate: gate, leaf: index => AtLivePly(token: gate[index])) == GateTruth.False);
+    }
+    /// <summary>Returns how many leading tokens of a rule's gate the evaluator runs on a host that answers one search
+    /// ply (<see cref="RuleCompileContext.SearchPlyIsFixed"/>) when a conjunct of the gate's top-level conjunction is a
+    /// comparison of the ply that host proves false: the conjuncts before it, it, and the short circuit after it, which
+    /// skips the rest (the gate's closure tree stops a conjunction at its first false conjunct). The gate's other tokens
+    /// are never evaluated there, so a check is priced at this prefix.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <param name="context">The context the rule compiled in.</param>
+    /// <returns>The prefix's token count, or zero when no such conjunct stops the gate before its end.</returns>
+    public static int ClosedPrefix(CompiledRule rule, RuleCompileContext context) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+        ArgumentNullException.ThrowIfNull(argument: context);
 
-        // A comparison of the ply against a literal, answered at the live ply's raw value, zero in either numeric
-        // kind; any other comparison is unknown.
-        static byte AtLivePly(in GateToken token) {
-            var live = FixedQ4816.FromRawBits(value: 0L);
+        var gate = rule.Gate.Tokens;
+        var last = (gate.Length - 1);
 
-            if ((token.Op != GateOp.Compare) ||
-                (token.Comparison is not (ExpressionOp.Equal or ExpressionOp.NotEqual or ExpressionOp.Less or ExpressionOp.LessOrEqual or ExpressionOp.Greater or ExpressionOp.GreaterOrEqual))) {
-                return GateTruth.Unknown;
-            }
-            if ((Operand(source: token.LeftSource) is SearchPlyOperand) && token.RightSource.IsLiteral) {
-                return (token.Comparison.Holds(expected: FixedQ4816.FromRawBits(value: token.RightSource.RawValue), value: live) ? GateTruth.True : GateTruth.False);
-            }
-            if ((Operand(source: token.RightSource) is SearchPlyOperand) && token.LeftSource.IsLiteral) {
-                return (token.Comparison.Holds(expected: live, value: FixedQ4816.FromRawBits(value: token.LeftSource.RawValue)) ? GateTruth.True : GateTruth.False);
-            }
+        if (!context.SearchPlyIsFixed || (gate.Length < 3) || (gate[last].Op != GateOp.All)) {
+            return 0;
+        }
 
+        // The top-level conjunction's short circuits jump to its own token; a nested group's jump to that group's.
+        for (var (start, index) = (0, 0); (index < last); index++) {
+            if ((gate[index].Op != GateOp.ShortCircuit) || gate[index].SkipWhen || ((index + gate[index].Skip) != last)) {
+                continue;
+            }
+            if (((index - start) == 1) && (AtLivePly(token: gate[start]) == GateTruth.False)) {
+                return (index + 1);
+            }
+            start = (index + 1);
+        }
+
+        return 0;
+    }
+    // A comparison of the ply against a literal, answered at the live ply's raw value, zero in either numeric kind; any
+    // other comparison is unknown.
+    private static byte AtLivePly(in GateToken token) {
+        var live = FixedQ4816.FromRawBits(value: 0L);
+
+        if ((token.Op != GateOp.Compare) ||
+            (token.Comparison is not (ExpressionOp.Equal or ExpressionOp.NotEqual or ExpressionOp.Less or ExpressionOp.LessOrEqual or ExpressionOp.Greater or ExpressionOp.GreaterOrEqual))) {
             return GateTruth.Unknown;
         }
+        if ((Operand(source: token.LeftSource) is SearchPlyOperand) && token.RightSource.IsLiteral) {
+            return (token.Comparison.Holds(expected: FixedQ4816.FromRawBits(value: token.RightSource.RawValue), value: live) ? GateTruth.True : GateTruth.False);
+        }
+        if ((Operand(source: token.RightSource) is SearchPlyOperand) && token.LeftSource.IsLiteral) {
+            return (token.Comparison.Holds(expected: live, value: FixedQ4816.FromRawBits(value: token.LeftSource.RawValue)) ? GateTruth.True : GateTruth.False);
+        }
+
+        return GateTruth.Unknown;
     }
     // A swept family's member count and its widest member's capacity, read from declarations.
     private static (long Count, long Capacity) MemberShape(RuleCompileContext context, RowFamily family) {
@@ -257,9 +289,10 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         return (Math.Max(val1: count, val2: 1L), Math.Max(val1: capacity, val2: 1L));
     }
     /// <summary>Returns whether a rule's firing provably closes its own gate, so a binding that fired stays closed
-    /// until another line writes: the gate is one comparison, or a conjunction one of whose terms is a comparison,
-    /// that tests a cell the binding itself names (a literal key or the key bound to <c>$each</c>); the rule's one write to that cell's row
-    /// is an unconditional set of that cell; and the value written fails the comparison. Either the comparison is
+    /// until another line writes: the gate holds only while a comparison does that tests a cell the binding itself
+    /// names (a literal key or the key bound to <c>$each</c>), or a disjunction does every one of whose terms is such a
+    /// comparison; the rule's one write that can reach that cell (another literal key of the same row cannot) is an
+    /// unconditional set of that cell; and the value written fails the comparison. Either the comparison is
     /// against a literal the written literal fails, or it is <c>cell != source</c> and the write is
     /// <c>cell = source</c>, the same read (one plain cell, or one local of the rule), of rows and facts the firing
     /// does not write. With <paramref name="context"/>, the cell may also be a host fact an effect sets exactly
@@ -269,52 +302,126 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
     /// alone.</param>
     /// <returns><see langword="true"/> when the proof holds; <see langword="false"/> proves nothing either way.</returns>
     public static bool ClosesItself(CompiledRule rule, RuleCompileContext? context = null) => (Prove(context: context, rule: rule) != Closure.None);
-    /// <summary>Returns whether a Level rule's firing provably settles: every effect, at any depth of its transactions
-    /// and branches, is a plain set of an arena cell, and nothing the firing computes its values, keys, rows or
-    /// branches from (its locals and its effects' reads) is a row the firing writes. A second firing over reads that
-    /// have not moved then writes exactly what the first wrote, and <see cref="RuleEvaluator"/> takes a Level firing
-    /// that moved nothing as settled, so the binding is not visited again until something its firing reads or writes
-    /// moves. Whether the reads rest is the caller's to judge.</summary>
+    /// <summary>Returns whether a Level rule's firing provably settles: along every path through its branches and
+    /// savepoints, either every step is an idempotent write (a plain set of an arena cell, or a whole-row copy) of rows
+    /// nothing the firing computes its values, keys, rows or branches from (its locals and its effects' reads), or the
+    /// path writes a cell its gate tests to a value the gate rejects (<see cref="ClosesItself"/>, proved over that
+    /// path's steps). A binding that took a settling path reads the same values on its next firing, takes the same path
+    /// and writes exactly what the first wrote, and <see cref="RuleEvaluator"/> takes a Level firing that moved nothing
+    /// as settled, so the binding is not visited again until something its firing reads or writes moves; one that took
+    /// a closing path stays closed until another line writes. Whether the reads rest is the caller's to judge.</summary>
     /// <param name="rule">The compiled rule.</param>
+    /// <param name="context">The context the rule compiled in, or <see langword="null"/> to prove a path's closure over
+    /// arena cells alone.</param>
     /// <returns><see langword="true"/> when the proof holds; <see langword="false"/> proves nothing either way.</returns>
-    public static bool Settles(CompiledRule rule) {
+    public static bool Settles(CompiledRule rule, RuleCompileContext? context = null) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
-        if ((rule.Mode == ActionTriggerMode.Edge) || (rule.Effects.Length == 0) || !PlainSets(effects: rule.Effects)) {
+        if ((rule.Mode == ActionTriggerMode.Edge) || (rule.Effects.Length == 0)) {
             return false;
         }
 
         var reads = new List<CellAccess>();
-        var writes = RuleDataflow.Writes(rule: rule);
+        var writes = new List<CellAccess>();
 
         foreach (var local in (rule.Locals ?? [])) {
             RuleDataflow.CollectExpression(into: reads, tokens: local.Expression);
         }
-        foreach (var effect in rule.Effects) {
-            effect.CollectReads(into: reads);
+        Computed(effects: rule.Effects, into: reads);
+
+        // A branch or savepoint whose every step, along every arm, is stable is one stable step of any path through it,
+        // so the paths walked are those that differ in how they close or fail to.
+        if (Paths(effects: rule.Effects, whole: Stable) is not { } paths) {
+            return false;
+        }
+        foreach (var path in paths) {
+            if (!path.TrueForAll(match: Stable) && (Prove(context: context, effects: path, rule: rule) == Closure.None)) {
+                return false;
+            }
         }
 
-        return !reads.Exists(match: read => writes.Exists(match: write => (write.RowOrdinal == read.RowOrdinal)));
+        return true;
 
-        static bool PlainSets(IReadOnlyList<IRuleEffect> effects) {
+        // A step that, run again over the values it read the first time, writes what is already there, to rows nothing
+        // the firing computes from reads.
+        bool Stable(IRuleEffect step) {
+            if (!Idempotent(step: step)) {
+                return false;
+            }
+            writes.Clear();
+            step.CollectWrites(into: writes);
+
+            return !reads.Exists(match: read => writes.Exists(match: write => (write.RowOrdinal == read.RowOrdinal)));
+        }
+        static bool Idempotent(IRuleEffect step) => step switch {
+            WriteEffect { Write: StateWriteKind.Set, IsTextEdit: false } or TransformStateEffect { Arena: ArenaTransform.CopyRow } => true,
+            IfEffect or TransactionEffect => step.Arms.All(predicate: static arm => arm.All(predicate: Idempotent)),
+            _ => false,
+        };
+        // What the firing computes its values, keys, rows and branches from. A copy reads its destination only to pass
+        // over a cell that already holds the copied value, so what it writes is computed from its source and the cells
+        // its ends' indices resolve through.
+        static void Computed(IReadOnlyList<IRuleEffect> effects, List<CellAccess> into) {
             foreach (var effect in effects) {
                 switch (effect) {
-                    case WriteEffect { Write: StateWriteKind.Set, IsTextEdit: false }:
+                    case TransformStateEffect { Arena: ArenaTransform.CopyRow } copy:
+                        copy.CollectFixedReads(into: into);
+                        copy.FromRow?.CollectReads(into: into);
                         break;
-                    case TransactionEffect or IfEffect:
-                        foreach (var arm in effect.Arms) {
-                            if (!PlainSets(effects: arm)) {
-                                return false;
-                            }
-                        }
+                    case IfEffect branch:
+                        RuleDataflow.CollectGate(gate: branch.Condition, into: into);
+                        Computed(effects: branch.Then, into: into);
+                        Computed(effects: branch.Else, into: into);
+                        break;
+                    case TransactionEffect savepoint:
+                        Computed(effects: savepoint.Effects, into: into);
+                        Computed(effects: savepoint.OnFailure, into: into);
                         break;
                     default:
-                        return false;
+                        effect.CollectReads(into: into);
+                        break;
                 }
             }
-
-            return true;
         }
+    }
+
+    /// <summary>The most paths through one rule's effects the settle proof walks; a rule with more proves nothing.</summary>
+    private const int MaxPaths = 64;
+
+    // Every way a firing can run through a list of effects, each as the steps it runs in order: a branch runs one of its
+    // arms, and a savepoint its own steps, or its refusal branch when it has one. A savepoint with no refusal branch
+    // lands its steps whenever the firing lands, as ClosesItself takes it. A branch or savepoint `whole` accepts is kept
+    // as one step. Null when an effect holds arms of another kind or the paths pass MaxPaths.
+    private static List<List<IRuleEffect>>? Paths(IReadOnlyList<IRuleEffect> effects, Func<IRuleEffect, bool> whole) {
+        var paths = new List<List<IRuleEffect>> { new() };
+
+        foreach (var effect in effects) {
+            var ways = (((effect.Arms.Count == 0) || whole(arg: effect))
+                ? [[effect]]
+                : effect switch {
+                    IfEffect branch => Either(left: Paths(effects: branch.Then, whole: whole), right: Paths(effects: branch.Else, whole: whole)),
+                    TransactionEffect { OnFailure.Length: 0 } savepoint => Paths(effects: savepoint.Effects, whole: whole),
+                    TransactionEffect savepoint => Either(left: Paths(effects: savepoint.Effects, whole: whole), right: Paths(effects: savepoint.OnFailure, whole: whole)),
+                    _ => null,
+                });
+
+            if ((ways is null) || ((((long)paths.Count) * ways.Count) > MaxPaths)) {
+                return null;
+            }
+
+            var next = new List<List<IRuleEffect>>(capacity: (paths.Count * ways.Count));
+
+            foreach (var path in paths) {
+                foreach (var way in ways) {
+                    next.Add(item: [.. path, .. way]);
+                }
+            }
+            paths = next;
+        }
+
+        return paths;
+
+        static List<List<IRuleEffect>>? Either(List<List<IRuleEffect>>? left, List<List<IRuleEffect>>? right) => (((left is null) || (right is null) || ((left.Count + right.Count) > MaxPaths)) ? null : [.. left, .. right]);
     }
 
     // Whether anything a firing reads beyond its judgement moves with time: the tick, the search ply, a host-owned row,
@@ -346,50 +453,62 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
     private static Closure Prove(CompiledRule rule, RuleCompileContext? context) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
+        return Prove(context: context, effects: rule.Effects, rule: rule);
+    }
+    // How a firing that runs `effects` (the rule's whole effect list, or the steps of one path through it) closes the
+    // rule's gate.
+    private static Closure Prove(CompiledRule rule, RuleCompileContext? context, IReadOnlyList<IRuleEffect> effects) {
         var gate = Array.FindAll(array: rule.Gate.Tokens, match: static token => (token.Op != GateOp.ShortCircuit));
 
         if (gate.Length == 0) {
             return Closure.None;
         }
 
-        var writes = RuleDataflow.Writes(rule: rule);
+        var writes = new List<CellAccess>();
+
+        foreach (var effect in effects) {
+            effect.CollectWrites(into: writes);
+        }
+
         var last = (gate.Length - 1);
 
-        // The gate's top-level terms: the gate itself when it is one comparison, or each operand of the conjunction it
-        // ends in. A term that is itself a disjunction or a negation proves nothing and is passed over; the gate
-        // holds only while every term does, so one comparison the firing falsifies closes it.
-        if (gate[last].Op == GateOp.Compare) {
-            return ((gate.Length == 1) ? Falsified(token: gate[0]) : Closure.None);
-        }
-        if (gate[last].Op != GateOp.All) {
-            return Closure.None;
-        }
+        return ((TermStart(end: last, gate: gate) == 0) ? Term(end: last) : Closure.None);
 
-        var best = Closure.None;
+        // The gate holds only while its term does: a comparison the firing falsifies closes it, a conjunction closes
+        // when one of its terms does, and a disjunction when every one of its terms does. A negation proves nothing.
+        // A closure that holds only while a mirrored value stands is the weaker of the two.
+        Closure Term(int end) {
+            var token = gate[end];
 
-        for (var (operand, end) = (0, (last - 1)); ((operand < gate[last].Arity) && (end >= 0)); operand++) {
-            var start = TermStart(gate: gate, end: end);
-
-            if ((start == end) && (gate[end].Op == GateOp.Compare)) {
-                var term = Falsified(token: gate[end]);
-
-                if (term == Closure.Literal) {
-                    return term;
-                }
-                best = ((term == Closure.Mirror) ? term : best);
+            if (token.Op == GateOp.Compare) {
+                return Falsified(token: token);
             }
-            end = (start - 1);
+            if ((token.Op is not (GateOp.All or GateOp.Any)) || (token.Arity == 0)) {
+                return Closure.None;
+            }
+
+            var every = (token.Op == GateOp.Any);
+            var result = (every ? Closure.Literal : Closure.None);
+
+            for (var (operand, operandEnd) = (0, (end - 1)); ((operand < token.Arity) && (operandEnd >= 0)); operand++) {
+                var term = Term(end: operandEnd);
+
+                result = (every ? Weaker(left: result, right: term) : Stronger(left: result, right: term));
+                operandEnd = (TermStart(end: operandEnd, gate: gate) - 1);
+            }
+
+            return result;
         }
-
-        return best;
-
         Closure Falsified(GateToken token) {
-            var closure = Closes(cell: token.LeftSource, comparison: token.Comparison, context: context, other: token.RightSource, rule: rule, writes: writes);
+            var closure = Closes(cell: token.LeftSource, comparison: token.Comparison, context: context, effects: effects, other: token.RightSource, rule: rule, writes: writes);
 
             return (((closure == Closure.None) && (token.Comparison == ExpressionOp.NotEqual))
-                ? Closes(cell: token.RightSource, comparison: token.Comparison, context: context, other: token.LeftSource, rule: rule, writes: writes)
+                ? Closes(cell: token.RightSource, comparison: token.Comparison, context: context, effects: effects, other: token.LeftSource, rule: rule, writes: writes)
                 : closure);
         }
+        static int Strength(Closure closure) => closure switch { Closure.Literal => 2, Closure.Mirror => 1, _ => 0 };
+        static Closure Stronger(Closure left, Closure right) => ((Strength(closure: left) >= Strength(closure: right)) ? left : right);
+        static Closure Weaker(Closure left, Closure right) => ((Strength(closure: left) <= Strength(closure: right)) ? left : right);
     }
 
     // Where the postfix term ending at `end` starts: a comparison is one token, and a connective follows its operands.
@@ -408,18 +527,19 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         return start;
     }
 
-    // Whether the rule's one write to what `cell` reads is an unconditional set of it to a value `cell <comparison>
-    // other` rejects: an arena cell the binding names, or a host fact an effect sets exactly.
-    private static Closure Closes(in CompiledValueSource cell, ExpressionOp comparison, RuleCompileContext? context, in CompiledValueSource other, CompiledRule rule, List<CellAccess> writes) {
+    // Whether the one write `effects` make to what `cell` reads is an unconditional set of it to a value `cell
+    // <comparison> other` rejects: an arena cell the binding names, or a host fact an effect sets exactly. `writes` is
+    // what `effects` write.
+    private static Closure Closes(in CompiledValueSource cell, ExpressionOp comparison, RuleCompileContext? context, in CompiledValueSource other, CompiledRule rule, IReadOnlyList<IRuleEffect> effects, List<CellAccess> writes) {
         CompiledValueSource written;
         CellKind kind;
 
         if ((Cell(source: cell) is { } read) && Owned(read: read)) {
-            if (!Fixed(key: read.KeyFrom) || !SetsCell(read: read, rule: rule, writes: writes, written: out written)) {
+            if (!Fixed(key: read.KeyFrom) || !SetsCell(effects: effects, read: read, written: out written)) {
                 return Closure.None;
             }
             kind = read.ValueKind;
-        } else if ((context is not null) && (Operand(source: cell) is { } fact and not (StateCellOperand or LocalOperand)) && SetsFact(context: context, fact: fact, rule: rule, written: out written)) {
+        } else if ((context is not null) && (Operand(source: cell) is { } fact and not (StateCellOperand or LocalOperand)) && SetsFact(context: context, effects: effects, fact: fact, written: out written)) {
             kind = fact.ValueKind;
         } else {
             return Closure.None;
@@ -456,7 +576,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
                 RuleDataflow.CollectExpressionSchedulingFacts(into: facts, tokens: bound.Expression);
             }
             foreach (var observed in facts.FacetFacts) {
-                if (WritesFact(effects: rule.Effects, fact: observed)) {
+                if (WritesFact(effects: effects, fact: observed)) {
                     return Closure.None;
                 }
             }
@@ -466,23 +586,44 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
         return (reads.Exists(match: access => writes.Exists(match: write => (write.RowOrdinal == access.RowOrdinal))) ? Closure.None : Closure.Mirror);
     }
-    // Whether the rule's one write to `read`'s row is an unconditional set of that cell.
-    private static bool SetsCell(StateCellOperand read, CompiledRule rule, List<CellAccess> writes, out CompiledValueSource written) {
+    // Whether the one write `effects` make that can reach `read`'s cell is an unconditional set of that cell. Two
+    // writes of one row reach different cells when both name the same row for every binding and distinct literal keys.
+    private static bool SetsCell(StateCellOperand read, IReadOnlyList<IRuleEffect> effects, out CompiledValueSource written) {
         written = default;
 
-        var count = 0;
-        var row = RowOf(live: read.RowFrom, own: read.RowOrdinal);
+        var rows = new List<CellAccess>();
+        var scratch = new List<CellAccess>();
 
-        foreach (var write in writes) {
-            if (write.RowOrdinal == row) {
-                count++;
-            }
-        }
-        if (count != 1) {
+        read.CollectReads(into: rows);
+
+        if (Reaching(effects: effects) != 1) {
             return false;
         }
 
-        return Find(effects: rule.Effects, read: read, written: out written);
+        return Find(effects: effects, read: read, written: out written);
+
+        int Reaching(IReadOnlyList<IRuleEffect> effects) {
+            var count = 0;
+
+            foreach (var effect in effects) {
+                if (effect is IfEffect or TransactionEffect) {
+                    foreach (var arm in effect.Arms) {
+                        count += Reaching(effects: arm);
+                    }
+
+                    continue;
+                }
+                if ((effect is WriteEffect write) && SameRow(left: write.RowFrom, leftOrdinal: write.RowOrdinal, right: read.RowFrom, rightOrdinal: read.RowOrdinal) &&
+                    (write.KeyFrom is null) && (read.KeyFrom is null) && write.Key.IsValid && read.Key.IsValid && (write.Key != read.Key)) {
+                    continue;
+                }
+                scratch.Clear();
+                effect.CollectWrites(into: scratch);
+                count += (scratch.Exists(match: access => rows.Exists(match: row => (row.RowOrdinal == access.RowOrdinal))) ? 1 : 0);
+            }
+
+            return count;
+        }
 
         // A savepoint with no refusal branch lands its steps whenever the firing lands, as the firing's top-level steps
         // do; one with a refusal branch can land that branch instead.
@@ -503,15 +644,15 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             return false;
         }
     }
-    // Whether the rule's one write to what a host fact reads is an unconditional, exact set of it. Every effect at any
-    // depth is an arena effect or a fact setter, so no host effect the proof cannot see moves the fact.
-    private static bool SetsFact(IRuleOperand fact, RuleCompileContext context, CompiledRule rule, out CompiledValueSource written) {
+    // Whether the one write `effects` make to what a host fact reads is an unconditional, exact set of it. Every effect
+    // at any depth is an arena effect or a fact setter, so no host effect the proof cannot see moves the fact.
+    private static bool SetsFact(IRuleOperand fact, RuleCompileContext context, IReadOnlyList<IRuleEffect> effects, out CompiledValueSource written) {
         written = default;
 
-        if (!Transparent(effects: rule.Effects) || (CountWrites(effects: rule.Effects, fact: fact) != 1)) {
+        if (!Transparent(effects: effects) || (CountWrites(effects: effects, fact: fact) != 1)) {
             return false;
         }
-        foreach (var effect in rule.Effects) {
+        foreach (var effect in effects) {
             if ((effect is IFactSettingEffect setter) && setter.Writes(fact: fact)) {
                 written = setter.Source;
 
@@ -562,9 +703,6 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         ? (leftOrdinal == rightOrdinal)
         : ((left is { Family: { } leftFamily, SelectsOwnMember: true }) && (right is { Family: { } rightFamily, SelectsOwnMember: true }) &&
             (leftFamily.FirstOrdinal == rightFamily.FirstOrdinal) && (leftFamily.Count == rightFamily.Count)));
-    // The row a write to an address is counted against: a fixed row's own, or its family's first member, which every
-    // write to a member the binding selects names once.
-    private static int RowOf(LiveRow? live, int own) => (((live is { Family: { } family }) && family.TryFirstOrdinal(ordinal: out var first)) ? first : own);
     // A key the binding itself fixes: a literal, or the key bound to $each or $member.
     private static bool Fixed(CompiledCellRef? key) => ((key is null) || key.Value.IsEach || key.Value.IsMember);
     // A key no program or key fact computes, so two equal references name the same cell.
