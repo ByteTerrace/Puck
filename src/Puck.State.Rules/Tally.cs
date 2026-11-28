@@ -132,11 +132,7 @@ public sealed class TallyAddEffect : RuleEffect, IStateAddressedEffect, IValueSo
         ArgumentNullException.ThrowIfNull(argument: into);
 
         // Which bucket a new key claims depends on every key claimed before it, so two adds do not commute as cells.
-        if (RowFrom is { } live) {
-            live.CollectRows(into: into, isSet: true);
-        } else {
-            into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: RowOrdinal));
-        }
+        LiveRow.CollectWholeRowWrites(into: into, live: RowFrom, rowOrdinal: RowOrdinal);
     }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) =>
@@ -171,11 +167,7 @@ public sealed class TallyResetEffect : RuleEffect {
     public override void CollectWrites(List<CellAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        if (RowFrom is { } live) {
-            live.CollectRows(into: into, isSet: true);
-        } else {
-            into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: RowOrdinal));
-        }
+        LiveRow.CollectWholeRowWrites(into: into, live: RowFrom, rowOrdinal: RowOrdinal);
     }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => (2L + (2L * TallyWork.CellWrite));

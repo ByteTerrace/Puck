@@ -251,6 +251,25 @@ public sealed class LiveRow {
             ));
         }
     }
+    /// <summary>Appends the whole row a write replaces or claims cells of: every row <paramref name="live"/> can select, or
+    /// the fixed row when <paramref name="live"/> is <see langword="null"/>.</summary>
+    /// <param name="live">The live row, or <see langword="null"/> for a fixed row.</param>
+    /// <param name="rowOrdinal">The fixed row's catalog ordinal, read when <paramref name="live"/> is
+    /// <see langword="null"/>.</param>
+    /// <param name="into">The write set being collected.</param>
+    public static void CollectWholeRowWrites(LiveRow? live, int rowOrdinal, List<CellAccess> into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        if (live is { } selected) {
+            selected.CollectRows(into: into, isSet: true);
+        } else {
+            into.Add(item: new CellAccess(
+                IsSet: true,
+                Key: default,
+                RowOrdinal: rowOrdinal
+            ));
+        }
+    }
     /// <summary>Gets a value indicating whether the selection is the family member the binding's own key spells
     /// (<see cref="RuleReads.BoundOwnIndex"/>: <c>$member</c> in a sweep over a row family, <c>$each</c> in any other):
     /// each binding of a sweep then reaches its own member row and no other.</summary>
