@@ -136,8 +136,8 @@ template gameStationRoom(stations, seats = gameStationSeats, extraBodies = 0, au
   }
 
   spawnPoints [
-    { id: "hero", position: gameStationChairAt(stations[0], "near"), yawDegrees: 180 }
-    { id: "rival", position: gameStationChairAt(stations[0], "far"), yawDegrees: 0 }
+    { id: "hero", position: gameStationChairAt(stations[0], "near"), yawDegrees: gameStationChairYaw(stations[0], "near") }
+    { id: "rival", position: gameStationChairAt(stations[0], "far"), yawDegrees: gameStationChairYaw(stations[0], "far") }
   ]
 
   text {

@@ -491,22 +491,26 @@ function toyboxAt(s) = [bayX(s.bay), galleryFloor[toyboxLevel], tileZ(s.row)]
 // (level 3) are: six along the south gallery and six along the north, one to an arcade bay in the portals' bays, each
 // row mirrored about the nave so a north station stands across the void from its south twin. A row stands on its
 // gallery's tile row two in from its arcade's piers, so the chair on the balcony side keeps 1.6 m to the edge and the
-// one on the wall side 2.9 m to the wall. A station stands with no yaw (the standard's game station: its topologies are
-// world-axis-aligned), so its near chair, the menu's, is at its -z edge: on the south gallery the wall's side, the player
-// facing the void, and on the north gallery the balcony's. A station's id is its gallery and column (`a1` to `a6` south
-// west to east, `b1` to `b6` north), which names its table, board and bodies; the console and the stations' rows name it
-// by its place in the list, 0 to 11 in that order.
+// one on the wall side 2.9 m to the wall. Every station faces the nave, turned as a whole (the standard's game station
+// turns its table, glass, chairs and boards with its yaw), so its near chair, the menu's and White's, stands on the
+// wall's side and its player faces the void: a row south of the nave's middle line stands at yaw 0 (near chair at the
+// world's -z), a row north of it at 180, and so each north station mirrors its south twin. A station's id is its gallery
+// and column (`a1` to `a6` south west to east, `b1` to `b6` north), which names its table, board and bodies; the console
+// and the stations' rows name it by its place in the list, 0 to 11 in that order.
 let gameStationLevel = wingLevel
 let galleryGameBays = galleryPortalBayList
 let galleryGameRows = [
   { name: "a", z: tileZ((arcadeRowSouth - 2)) }
   { name: "b", z: tileZ((arcadeRowNorth + 2)) }
 ]
+// The yaw that turns a station standing at `z` to face the nave: its near chair away from the nave's middle line.
+function galleryFacingNave(z) = ((z < ((arcadeSouth + arcadeNorth) / 2)) ? 0 : 180)
 // Every station in the world's frame, south row then north, each west to east. A station's creation's floor lies 0.5 m
 // under its origin (the standard's gameStationFloor), so it stands on level 2.
 let galleryGameStations = flatMap(galleryGameRows, row => map(range(0, length(galleryGameBays)), n => {
   id: $"{row.name}{n + 1}"
   at: galleryWorld(bayX(galleryGameBays[n]), (galleryFloor[gameStationLevel] - 0.5), row.z)
+  yaw: galleryFacingNave(row.z)
 }))
 // The stations the gallery booted alone stands (games.puck): the plan's first `galleryRoomStood`, every one, since the
 // stations play one set of rules (game-station.md, "Cost").

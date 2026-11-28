@@ -7,7 +7,10 @@ through its menu, as a display station's turntable swaps shapes. Its table has
 a cream cap bevelled at the rim, the console glass set in it, a glowing line
 under the cap's lip, an ochre apron with a teal seam, a brass rail along each
 chair's edge, and a cream column on a teal foot. The glass stands 0.95 m over
-the floor and is 1.72 m across by 1.6 m deep.
+the floor and is 1.72 m across by 1.6 m deep. A station placed with a `yaw`
+turns as one: its table and glass, the menu's lettering, its chairs, its pick
+grid and boards (which turn with the placement that anchors them), and the
+pieces and cards its games stand on it.
 
 ## The owner's rulings
 
@@ -102,8 +105,10 @@ Worlds that stand stations:
 - The gallery's board game room on level 2 ([`gallery/games.puck`](gallery/games.puck))
   plans twelve stations, six along each gallery like the portals and the toybox,
   `a1` to `a6` on the south gallery and `b1` to `b6` on the north
-  ([`gallery/layout.puck`](gallery/layout.puck)'s `galleryGameStations`). The
-  gallery booted alone (`gallery-root.puck`) stands all twelve, places 0 to 11
+  ([`gallery/layout.puck`](gallery/layout.puck)'s `galleryGameStations`). Every
+  station faces the void: the north row stands at yaw 180, so each `b` station
+  mirrors its south twin, its near chair (the menu's, White's) on the wall side.
+  The gallery booted alone (`gallery-root.puck`) stands all twelve, places 0 to 11
   in that order, each holding its own games and its cards as a holodeck pool.
   The debug world stands only the first, `a1`
   ([`game-station-deck.puck`](game-station-deck.puck)): it numbers its bodies

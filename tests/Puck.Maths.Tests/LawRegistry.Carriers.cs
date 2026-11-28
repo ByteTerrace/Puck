@@ -1125,6 +1125,10 @@ internal static partial class LawRegistry {
             id: "complex.angle-seam"
         ),
         ClaimCase(
+            claim: Subjects.ComplexCardinalYaw,
+            id: "complex.cardinal-yaw"
+        ),
+        ClaimCase(
             claim: Subjects.ComplexMultiplyRoutesAllocateNothing,
             id: "complex.multiply-routes-allocate-nothing"
         ),

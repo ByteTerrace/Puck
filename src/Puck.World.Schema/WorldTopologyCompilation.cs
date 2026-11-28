@@ -1,8 +1,8 @@
 
 namespace Puck.World;
 
-/// <summary>The document-anchored entrance to <see cref="TopologyCompilation"/>: a Grid topology a placement's
-/// <c>board</c> facet names takes its world origin from that placement's resolved frame.</summary>
+/// <summary>The document-anchored entrance to <see cref="TopologyCompilation"/>: a topology a placement's
+/// <c>board</c> facet names is placed in that placement's resolved frame, its position and its yaw.</summary>
 public static class WorldTopologyCompilation {
     private static readonly Puck.Abstractions.CodeDerivedTable<LatticeTopology, AnchoredCompile> Cache = new();
 
@@ -16,11 +16,12 @@ public static class WorldTopologyCompilation {
     private static WorldPlacement? FindAnchor(WorldDefinition definition, string topologyName) =>
         WorldPlacementIndex.Of(placements: definition.Placements).BoardOf(topology: topologyName);
 
-    /// <summary>Finds and compiles a discrete topology by name, anchored: a Grid topology a placement's <c>board</c>
-    /// facet names (<see cref="WorldPlacementBoard.Topology"/>) takes its world origin from that placement's own
-    /// <see cref="WorldDefinitionRows.ResolvedFrame"/> plus its authored (now local) <c>origin</c> — translation only;
-    /// the anchor's yaw is not applied to the grid's own axes, which stay world-axis-aligned regardless of the
-    /// anchor's heading. An unanchored topology (no placement's <c>board</c> facet names it) resolves exactly as
+    /// <summary>Finds and compiles a discrete topology by name, anchored: a topology a placement's <c>board</c> facet
+    /// names (<see cref="WorldPlacementBoard.Topology"/>) is placed in that placement's own
+    /// <see cref="WorldDefinitionRows.ResolvedFrame"/>: its authored <c>origin</c> is a point of that frame and its own
+    /// axes turn with the frame's yaw (<see cref="CompiledTopology.Heading"/>), so a board, its cells and every
+    /// position resolved against it turn with the placement that carries it. The frame's scale is not applied: a
+    /// cell keeps its authored size. An unanchored topology (no placement's <c>board</c> facet names it) resolves exactly as
     /// authored, identical to <see cref="TopologyCompilation.Find(IReadOnlyList{LatticeTopology}?, string)"/>. Cached
     /// per (topology, anchor placement instance) pair, so a mutation that moves the anchor — a new
     /// <see cref="WorldPlacement"/> instance, since rows are replaced wholesale, never mutated in place — recompiles
@@ -70,13 +71,16 @@ public static class WorldTopologyCompilation {
                 ) ||
                     (cache.Compiled is null)
                 ) {
+                    var frame = WorldDefinitionRows.ResolvedFrame(
+                        definition: definition,
+                        placement: anchor
+                    );
+
                     cache.Anchor = anchor;
                     cache.Compiled = TopologyCompilation.Compile(
                         topology: topology,
-                        anchorOffset: WorldDefinitionRows.ResolvedFrame(
-                            definition: definition,
-                            placement: anchor
-                        ).Position
+                        anchorPosition: frame.FixedPosition,
+                        anchorYawRadians: frame.FixedYawRadians
                     );
                 }
 
