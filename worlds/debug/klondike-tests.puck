@@ -39,12 +39,11 @@ state {
   }
 }
 
-use gameStationGames as station(station: rootStation, index: 0)
 
 // The deal: a card a tick gathers, shuffles, then deals the 28 cards of the tableau; the stock keeps 24.
 test "the seeded deal fills the tableau and leaves 24 in the stock" {
   given {
-    gameStationGame.station = 1
+    gameStationGame[0] = 1
   }
   when {
     ticks 400
@@ -73,7 +72,7 @@ test "the seeded deal fills the tableau and leaves 24 in the stock" {
 // A draw turns the stock's top card over onto the waste.
 test "the stock draws a card to the waste" {
   given {
-    gameStationGame.station = 1
+    gameStationGame[0] = 1
   }
   when {
     ticks 400
@@ -92,7 +91,7 @@ test "the stock draws a card to the waste" {
 // The waste is empty after the deal, so a move out of it is refused and the tableau stands as dealt.
 test "a move out of the empty waste is refused" {
   given {
-    gameStationGame.station = 1
+    gameStationGame[0] = 1
   }
   when {
     ticks 400
@@ -114,33 +113,33 @@ test "a move out of the empty waste is refused" {
 // the chess pieces' bodies; showing chess again releases the cards and stands the pieces where the game left them.
 test "the deal materializes the cards, and a switch back to chess releases them" {
   given {
-    gameStationGame.station = 1
+    gameStationGame[0] = 1
   }
   when {
     ticks 400
-    seat1: world.state.cell.set gameStationGame station 0
+    seat1: world.state.cell.set gameStationGame 0 0
     ticks 60
   }
   expect {
     klondikeDeals[0] == 1
     holodeckShown["0"] == 0
-    station.holodeckShown.pieces == 1
-    station.chessHold == 0
+    chessShown[0] == 1
+    chessHold0 == 0
   }
 }
 
 // While Klondike is shown every card stands and lies in the slot the glass read it at, and no chess piece stands.
 test "while Klondike is shown every card stands in its slot and no piece does" {
   given {
-    gameStationGame.station = 1
+    gameStationGame[0] = 1
   }
   when {
     ticks 400
   }
   expect {
     holodeckShown["0"] == 1
-    station.holodeckShown.pieces == 0
-    station.chessHold == 1
+    chessShown[0] == 0
+    chessHold0 == 1
     holodeckAt["station-card0"] >= 0
   }
 }

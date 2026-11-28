@@ -5,7 +5,7 @@
 // centre stands at x = -0.6 + 0.15 * (column + 0.5), z = -0.56 + 0.15 * (row + 0.5), the glass at y = 0.95, and its cell
 // is 8 * row + column, column = 7 - file (e2 is cell 11 at x -0.075, z -0.335; e4 cell 27 at z -0.035; g1 cell 1 at
 // x -0.375, z -0.485; g3 cell 17 at z -0.185). With the near chair taken, the computer plays Black. The claims read the
-// board the settled pieces were read into, by cell (`station.board[<cell>]`, a piece's code: 1 a white pawn, 2 a white
+// board the settled pieces were read into, by cell (`chessBoard0[<cell>]`, a piece's code: 1 a white pawn, 2 a white
 // knight, -1 a black pawn), since the pieces' own rows are keyed by the station's qualified placement names.
 
 schema: "puck.world.definition.v1"
@@ -42,7 +42,6 @@ state {
   }
 }
 
-use gameStationGames as station(station: rootStation, index: 0)
 
 // The holodeck stands every piece, the pieces settle, and the judge reads the starting position off them.
 test "the station materializes its 32 pieces and reads the starting position off them" {
@@ -50,13 +49,13 @@ test "the station materializes its 32 pieces and reads the starting position off
     ticks 240
   }
   expect {
-    station.holodeckShown.pieces == 1
-    sum(station.holodeckLive) == 32
-    station.gameStarted == 1
-    station.boardCollisions == 0
-    station.board[11] == 1
-    station.board[51] == -1
-    station.illegalCount == 0
+    chessShown[0] == 1
+    sum(chessLive) == 32
+    chessGameStarted0 == 1
+    chessBoardCollisions0 == 0
+    chessBoard0[11] == 1
+    chessBoard0[51] == -1
+    chessIllegalCount0 == 0
   }
 }
 
@@ -78,13 +77,13 @@ test "a seated player lifts e2 and sets it on e4, and the computer's reply lands
     ticks 450
   }
   expect {
-    station.board[27] == 1
-    station.board[11] == 0
-    station.chessStationPlies == 2
-    station.turn == White
-    station.verdict == 1
-    station.illegalCount == 0
-    station.putDown.judging == 0
+    chessBoard0[27] == 1
+    chessBoard0[11] == 0
+    chessStationPlies0 == 2
+    chessTurn0 == White
+    chessVerdict0 == 1
+    chessIllegalCount0 == 0
+    chessPutDownOf0.judging == 0
   }
 }
 
@@ -106,13 +105,13 @@ test "an illegal physical move is refused and the knight stands on g1 again" {
     ticks 300
   }
   expect {
-    station.board[1] == 2
-    station.board[17] == 0
-    station.illegalCount == 1
-    station.turn == White
-    station.chessStationPlies == 0
-    station.putDown.judging == 0
-    sum(station.holodeckLive) == 32
+    chessBoard0[1] == 2
+    chessBoard0[17] == 0
+    chessIllegalCount0 == 1
+    chessTurn0 == White
+    chessStationPlies0 == 0
+    chessPutDownOf0.judging == 0
+    sum(chessLive) == 32
   }
 }
 
@@ -120,13 +119,13 @@ test "an illegal physical move is refused and the knight stands on g1 again" {
 test "a game switch releases the pieces and stands the cards" {
   when {
     ticks 240
-    seat1: world.state.cell.set gameStationGame station 1
+    seat1: world.state.cell.set gameStationGame 0 1
     ticks 60
   }
   expect {
-    station.holodeckShown.pieces == 0
-    station.chessHold == 1
-    station.board[11] == 1
+    chessShown[0] == 0
+    chessHold0 == 1
+    chessBoard0[11] == 1
     holodeckShown["0"] == 1
   }
 }
@@ -137,9 +136,9 @@ test "a game switch releases the pieces and stands the cards" {
 test "a switch away and back stands every piece on its square again" {
   when {
     ticks 240
-    seat1: world.state.cell.set gameStationGame station 1
+    seat1: world.state.cell.set gameStationGame 0 1
     ticks 60
-    seat1: world.state.cell.set gameStationGame station 0
+    seat1: world.state.cell.set gameStationGame 0 0
     ticks 300
     seat1: body.press interact
     ticks 5
@@ -154,14 +153,14 @@ test "a switch away and back stands every piece on its square again" {
     ticks 450
   }
   expect {
-    station.holodeckShown.pieces == 1
+    chessShown[0] == 1
     holodeckShown["0"] == 0
-    station.chessHold == 0
-    station.boardCollisions == 0
-    station.illegalCount == 0
-    station.board[27] == 1
-    station.board[11] == 0
-    station.board[1] == 2
-    station.chessStationPlies == 2
+    chessHold0 == 0
+    chessBoardCollisions0 == 0
+    chessIllegalCount0 == 0
+    chessBoard0[27] == 1
+    chessBoard0[11] == 0
+    chessBoard0[1] == 2
+    chessStationPlies0 == 2
   }
 }

@@ -15200,6 +15200,10 @@ export type WorldSearchRow = {
    * Optional integer slot copied to best.revision with the completed answer.
    */
   revision?: string | null;
+  /**
+   * The one family index the job's judge binds every sweep over a row family to, for a job over one member of a set of rules (a game station's own game among a room of stations), or null for every member: its candidates judge that member's bindings alone, and a row only another member's bindings reach is no input of the job, so a move at another member never restarts it.
+   */
+  member?: number | null;
 };
 
 export type WorldSearchSection = {

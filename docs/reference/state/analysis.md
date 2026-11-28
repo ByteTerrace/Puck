@@ -723,6 +723,17 @@ station and card (worlds/games/patience-station.puck). There the binding's own
 member is the one `$member` names: `pile[$member]` and `$zones[i]` select the
 binding's station, a read `pile[$member][$each]` is a cell of it, and a cell
 `table[$member]` of a row keyed by station is reached as `RowReach.MemberKey`.
+A cell of the binding's own member read under its own key, `pile[$member][$each]`, is reached as that one cell
+(`CellReach.MemberEach`, kept as `RowReach.MemberEach`): a move of cell `k` of member `m` marks member `m`'s binding
+keyed `k`, so a rule about one station's pieces judges and prices the piece that moved. A reserved channel whose
+argument names the binding's own member, `board(mask, board[$member], 1, 6)` or `physics(quiescent, pieces[$member])`,
+compiles once per member with that member's row in the argument (`MemberOperand`), each member's read reaching its
+member's bindings alone; a pose names a member's board the same way (`poseCell(topology: board[$member], …)`). A
+family of slots is read and written by its member, `turn[$member]` over `slot turn[n]`; a family member's literal cell
+is `move[$member].from`; a family of tallies counts and empties by member (`counts[$member][key] += 1`,
+`counts[$member] = 0`); and `copyRow` and `boardCombine` take a member at either end. A Level line that writes the
+cell its gate compares, a fixed row's or the binding's own member's, closes its own gate the same way
+(`RuleResponse.Prove`).
 The due list keeps one snapshot of (member, key) positions per family
 (`RuleDueList.FamilySnapshot`): a move of member `m`'s row, or of the cell keyed
 `m` that a rule reads under `$member`, marks member `m`'s bindings; a move of a

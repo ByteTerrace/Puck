@@ -388,7 +388,23 @@ an answer only when it still fits the position.
   and apply an answer only while `best.revision` equals the current revision.
 
 A game station's holodeck chess (`worlds/games/chess-station.puck`, over the rules library's `chessMoveDoor`) applies its answer this way: `chess-ai-request` fires only when
-`aiEnabled` is 1, `aiBest[revision] == aiRevision`, and the physics has settled.
+the station's `chessAiEnabled` is 1, its `chessAiBestOf` member's `revision` equals its `chessAiRevision`, and the physics has
+settled.
+
+### One job for each member of a set of rules
+
+When one set of rules plays many games at once, each rule sweeping a row family
+(`forEach: pile`, `$member` the game), each game keeps a job of its own over its
+own family members, named literally (`tokens: chessPieceCellOf3`, `turn:
+chessTurn3`), and declares the member it is for with `member: 3`. Its judge
+binds every sweep over a row family to that member alone
+(`RuleEvaluator.MemberScope`), so a candidate judges its own game's bindings and
+prices them alone (`WorldSearchCompilation.JudgeCost`), and a row only another
+member's bindings reach (`CellAccess.OwnMember`) is no input of the job
+(`RuleDataflow.KeyRows`): a move at another game never restarts it. A row read
+under `$member` as a cell of one row for every game (`table[$member]`) is still a
+whole input row, so a set whose games each keep a job holds what its judge reads
+in families (`slot turn[n]`, read `turn[$member]`).
 
 ### Finish compound moves with `$search:ply`
 

@@ -65,7 +65,7 @@ public static partial class RuleCompiler {
             accesses.Clear();
             end?.CollectRows(into: accesses, isSet: false);
             if (end is { SelectsOwnMember: true }) {
-                bound.UnionWith(other: accesses.Where(predicate: static access => access.IsMember).Select(selector: static access => (access.RowOrdinal, access.Member)));
+                bound.UnionWith(other: accesses.Where(predicate: static access => access.OwnMember).Select(selector: static access => (access.RowOrdinal, access.Member)));
             }
             return accesses.Select(selector: static access => access.RowOrdinal).Distinct().ToArray();
         }
@@ -80,7 +80,7 @@ public static partial class RuleCompiler {
         scalar.CollectFixedReads(into: accesses);
         accesses.AddRange(collection: controls);
         foreach (var access in accesses) {
-            if (!access.IsMember) {
+            if (!access.OwnMember) {
                 if (!reads.Contains(item: access.RowOrdinal)) { reads.Add(item: access.RowOrdinal); }
             } else if (!bound.Contains(item: (access.RowOrdinal, access.Member))) {
                 var member = new CellAccess(Key: default, Member: access.Member, Reach: CellReach.Member, RowOrdinal: access.RowOrdinal);

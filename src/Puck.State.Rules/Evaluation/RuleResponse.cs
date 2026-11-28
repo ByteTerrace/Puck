@@ -109,6 +109,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         // key's binding in every member. Any other sweep's own reads open one binding.
         var members = ((rule.ForEachFamily is { } family) ? MemberShape(context: context, family: family) : (Count: 1L, Capacity: 1L));
 
+        // A member-each read (`family[$member][$each]`) opens the one binding its cell names.
         long Own(CellAccess access) => (access.Members ? 1L : (access.Each ? members.Count : ((access.IsMember || access.MemberKey) ? members.Capacity : 1L)));
         // A read at rest under $each, or a host fact read for $each's body, opens that key in every member.
         var eachRead = false;
@@ -119,7 +120,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
             (deadline.TickOnLeft ? token.RightSource : token.LeftSource).CollectReads(into: due);
 
-            var ownDue = ((due.Count > 0) && due.TrueForAll(match: static access => (access.Each || access.IsMember || access.MemberKey)));
+            var ownDue = ((due.Count > 0) && due.TrueForAll(match: static access => (access.Each || access.OwnMember || access.MemberKey)));
 
             opened = (ownDue ? due.Max(selector: Own) : multiplier);
             shared = (!ownDue || (RuleDueList.SweepKind(rule: rule) == RuleDueList.Visit.Whole));
@@ -148,7 +149,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
                 continue;
             }
-            if (access.Each || access.Members || access.IsMember || access.MemberKey) {
+            if (access.Each || access.Members || access.OwnMember || access.MemberKey) {
                 opened = Math.Max(val1: opened, val2: Own(access: access));
                 eachRead |= access.Each;
 
@@ -413,7 +414,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         CompiledValueSource written;
         CellKind kind;
 
-        if (Cell(source: cell) is { RowFrom: null } read) {
+        if ((Cell(source: cell) is { } read) && Owned(read: read)) {
             if (!Fixed(key: read.KeyFrom) || !SetsCell(read: read, rule: rule, writes: writes, written: out written)) {
                 return Closure.None;
             }
@@ -438,8 +439,8 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         // line moves one of them.
         var reads = new List<CellAccess>();
 
-        if ((Cell(source: other) is { RowFrom: null } mirrored) && (Cell(source: written) is { RowFrom: null } source)) {
-            if (!((mirrored.RowOrdinal == source.RowOrdinal) && (mirrored.Key == source.Key) && Nullable.Equals(n1: mirrored.KeyFrom, n2: source.KeyFrom) &&
+        if ((Cell(source: other) is { } mirrored) && Owned(read: mirrored) && (Cell(source: written) is { } source) && Owned(read: source)) {
+            if (!(SameRow(left: mirrored.RowFrom, leftOrdinal: mirrored.RowOrdinal, right: source.RowFrom, rightOrdinal: source.RowOrdinal) && (mirrored.Key == source.Key) && Nullable.Equals(n1: mirrored.KeyFrom, n2: source.KeyFrom) &&
                 (mirrored.ValueKind == kind) && Plain(key: mirrored.KeyFrom))) {
                 return Closure.None;
             }
@@ -470,9 +471,10 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         written = default;
 
         var count = 0;
+        var row = RowOf(live: read.RowFrom, own: read.RowOrdinal);
 
         foreach (var write in writes) {
-            if (write.RowOrdinal == read.RowOrdinal) {
+            if (write.RowOrdinal == row) {
                 count++;
             }
         }
@@ -486,8 +488,8 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         // do; one with a refusal branch can land that branch instead.
         static bool Find(IReadOnlyList<IRuleEffect> effects, StateCellOperand read, out CompiledValueSource written) {
             foreach (var effect in effects) {
-                if ((effect is WriteEffect { Write: StateWriteKind.Set, RowFrom: null, Text: null } set) &&
-                    (set.RowOrdinal == read.RowOrdinal) && (set.Key == read.Key) && Nullable.Equals(n1: set.KeyFrom, n2: read.KeyFrom)) {
+                if ((effect is WriteEffect { Write: StateWriteKind.Set, Text: null } set) &&
+                    SameRow(left: set.RowFrom, leftOrdinal: set.RowOrdinal, right: read.RowFrom, rightOrdinal: read.RowOrdinal) && (set.Key == read.Key) && Nullable.Equals(n1: set.KeyFrom, n2: read.KeyFrom)) {
                     written = set.Source;
 
                     return true;
@@ -551,6 +553,18 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
     private static StateCellOperand? Cell(in CompiledValueSource source) => (Operand(source: source) as StateCellOperand);
     // The one operand a source reads: the operand itself, or a program of that one read.
     private static IRuleOperand? Operand(in CompiledValueSource source) => (source.Operand ?? ((source.Expression is [{ Operand: { } operand }]) ? operand : null));
+    // One cell the binding names whatever moves: a fixed row's, or the cell of the family member the binding's own key
+    // selects (`turn[$member]` over `slot turn[n]`), which no other binding's firing reaches.
+    private static bool Owned(StateCellOperand read) => ((read.RowFrom is null) || (read.RowFrom is { Family: not null, SelectsOwnMember: true }));
+    // Whether two cell addresses name one row for every binding: one fixed row, or one family's member the binding's own
+    // key selects.
+    private static bool SameRow(LiveRow? left, int leftOrdinal, LiveRow? right, int rightOrdinal) => (((left is null) && (right is null))
+        ? (leftOrdinal == rightOrdinal)
+        : ((left is { Family: { } leftFamily, SelectsOwnMember: true }) && (right is { Family: { } rightFamily, SelectsOwnMember: true }) &&
+            (leftFamily.FirstOrdinal == rightFamily.FirstOrdinal) && (leftFamily.Count == rightFamily.Count)));
+    // The row a write to an address is counted against: a fixed row's own, or its family's first member, which every
+    // write to a member the binding selects names once.
+    private static int RowOf(LiveRow? live, int own) => (((live is { Family: { } family }) && family.TryFirstOrdinal(ordinal: out var first)) ? first : own);
     // A key the binding itself fixes: a literal, or the key bound to $each or $member.
     private static bool Fixed(CompiledCellRef? key) => ((key is null) || key.Value.IsEach || key.Value.IsMember);
     // A key no program or key fact computes, so two equal references name the same cell.

@@ -159,6 +159,10 @@ public sealed record WorldSearchChance([property: DocumentName(WorldNameKind.Sta
 /// <see cref="SearchMethod.MonteCarlo"/>, whose outcome backprop alternates sign along the path.</param>
 /// <param name="Enabled">Optional integer slot; zero suspends candidate work.</param>
 /// <param name="Revision">Optional integer slot copied to best.revision with the completed answer.</param>
+/// <param name="Member">The one family index the job's judge binds every sweep over a row family to, for a job over one
+/// member of a set of rules (a game station's own game among a room of stations), or <see langword="null"/> for every
+/// member: its candidates judge that member's bindings alone, and a row only another member's bindings reach is no input
+/// of the job, so a move at another member never restarts it.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchRow(
     [property: DocumentText("a search job name is the search section's own namespace")] string Name,
@@ -181,7 +185,8 @@ public sealed record WorldSearchRow(
     WorldSearchChance? Chance = null,
     [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Scores = null,
     [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Enabled = null,
-    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Revision = null
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Revision = null,
+    int? Member = null
 ) {
     /// <summary>The one candidate shape a job with none authored enumerates: a plain relocation that evicts
     /// whatever stood on the target — this section's original, unconditional behavior.</summary>
@@ -747,7 +752,10 @@ public static class WorldSearchCompilation {
     /// sum.</summary>
     /// <param name="judge">The judge rules.</param>
     /// <param name="context">The compile context.</param>
-    public static RuleWork JudgeCost(CompiledRule[] judge, WorldFactsCompileContext context) {
+    /// <param name="member">The one family index the judge binds a sweep over a row family to
+    /// (<see cref="WorldSearchRow.Member"/>), whose bindings alone a run evaluates; <see langword="null"/> for every
+    /// member.</param>
+    public static RuleWork JudgeCost(CompiledRule[] judge, WorldFactsCompileContext context, int? member = null) {
         ArgumentNullException.ThrowIfNull(argument: judge);
         ArgumentNullException.ThrowIfNull(argument: context);
 
@@ -757,10 +765,12 @@ public static class WorldSearchCompilation {
         // A judge run evaluates its rules in one pass in array order (RuleArenaSearchJudge), so each runs at its index.
         for (var index = 0; (index < judge.Length); index++) {
             var rule = judge[index];
-            var multiplier = RuleWorkBudget.ForEachCount(
-                context: context,
-                rule: rule
-            );
+            var multiplier = (((member is { } scope) && (rule.ForEachFamily is { } family))
+                ? (family.TryGetOrdinal(index: scope, ordinal: out var ordinal) ? context.RowCapacity(rowOrdinal: ordinal) : 0L)
+                : RuleWorkBudget.ForEachCount(
+                    context: context,
+                    rule: rule
+                ));
 
             contributors.Add(item: RuleWorkBudget.Contributor(
                 context: context,
@@ -956,6 +966,8 @@ public static class WorldSearchCompilation {
             writes[index] = [];
             judge[index].CollectReads(into: reads[index]);
             judge[index].CollectWrites(into: writes[index]);
+            _ = reads[index].RemoveAll(match: access => !RuleDataflow.InScope(access: access, member: row.Member));
+            _ = writes[index].RemoveAll(match: access => !RuleDataflow.InScope(access: access, member: row.Member));
         }
 
         for (var grew = true; grew;) {
@@ -1564,7 +1576,8 @@ public static class WorldSearchCompilation {
 
             var judgeCost = JudgeCost(
                 context: context,
-                judge: judges[index]
+                judge: judges[index],
+                member: rows[index].Member
             );
 
             if (!judgeCost.IsKnown) {
@@ -1592,7 +1605,7 @@ public static class WorldSearchCompilation {
             resolvedPlans[index] = resolved!;
             try {
                 RuleCompiler.RequireEnclosedAudience(
-                    resolved.Dependencies(RuleDataflow.KeyRows(judges[index], compiledScore)), resolved.Outputs(),
+                    resolved.Dependencies(RuleDataflow.KeyRows(judges[index], compiledScore, rows[index].Member)), resolved.Outputs(),
                     rows[index].Name, context, RuleRefusal.SearchWidensAudience);
             } catch (RuleException exception) {
                 reason = exception.Message;
@@ -1603,7 +1616,7 @@ public static class WorldSearchCompilation {
         for (var index = 0; (index < plans.Length); index++) {
             var plan = plans[index];
             var resolved = resolvedPlans[index];
-            var keyRows = resolved.Dependencies(RuleDataflow.KeyRows(judges[index], scores[index]));
+            var keyRows = resolved.Dependencies(RuleDataflow.KeyRows(judges[index], scores[index], rows[index].Member));
             var outputs = resolved.Outputs();
             // Every tick checks the job's audience, and a completed job checks again immediately before landing; every
             // tick also stamps the rows its key folds that it does not write itself.
@@ -1621,7 +1634,7 @@ public static class WorldSearchCompilation {
 
             if (!TryPrice(definition, rows[index], plan.Work.Judge, allowance, position, context,
                 plan.Shapes, plan.CellCount, (plan.Chance?.CellCount ?? 0), scores[index], out var work, out reason)) {
-                var priced = resolvedPlans[index].Dependencies(RuleDataflow.KeyRows(judges[index], scores[index]))
+                var priced = resolvedPlans[index].Dependencies(RuleDataflow.KeyRows(judges[index], scores[index], rows[index].Member))
                     .Append(resolvedPlans[index].TokensOrdinal).Append(resolvedPlans[index].ScoresOrdinal);
                 var uncapped = judges[index].Aggregate(
                     seed: WorldRuleWorkBudget.RowsAtCeiling(context: context, ordinals: priced),

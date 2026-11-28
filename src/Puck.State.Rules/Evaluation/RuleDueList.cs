@@ -215,6 +215,9 @@ internal sealed class RuleDueList {
     private readonly Dictionary<int, int[]> m_wholeRowReaders;
     // The keyed sweeps that read a row as the family member one binding's key selects, with that member's index.
     private readonly Dictionary<int, (int Rule, int Member)[]> m_memberRowReaders;
+    // The family sweeps that read the cell under $each of the member $member selects: a move of cell k of member m's row
+    // reaches member m's binding keyed k, and a move of the row whole member m's bindings.
+    private readonly Dictionary<int, (int Rule, int Member)[]> m_memberEachRowReaders;
     // The family sweeps that read a row's cell under $member: a move of the cell whose key spells index m reaches
     // member m's bindings.
     private readonly Dictionary<int, int[]> m_memberKeyRowReaders;
@@ -269,6 +272,7 @@ internal sealed class RuleDueList {
         var snapshots = new Dictionary<int, RowSnapshot>();
         var familySnapshots = new Dictionary<string, FamilySnapshot>(comparer: StringComparer.Ordinal);
         var memberRow = new Dictionary<int, List<(int Rule, int Member)>>();
+        var memberEachRow = new Dictionary<int, List<(int Rule, int Member)>>();
         var memberKeyRow = new Dictionary<int, List<int>>();
 
         static void Add<TKey>(Dictionary<TKey, List<int>> index, TKey key, int rule) where TKey : notnull {
@@ -326,6 +330,16 @@ internal sealed class RuleDueList {
 
                         continue;
                     }
+                    // The cell under $each of the member $member selects: a move of cell k reaches member m's binding
+                    // keyed k, and a move of the row whole member m's bindings.
+                    if ((memberOnly == RowReach.MemberEach) && (member >= 0) && (kind == Visit.FamilySweep)) {
+                        if (!memberEachRow.TryGetValue(key: row, value: out var cellReaders)) {
+                            memberEachRow[row] = cellReaders = [];
+                        }
+                        cellReaders.Add(item: (index, member));
+
+                        continue;
+                    }
                     // A cell under $member: a move of the cell keyed m reaches member m's bindings, and a move of the
                     // row whole every binding.
                     if ((kind == Visit.FamilySweep) && (memberOnly == RowReach.MemberKey)) {
@@ -337,7 +351,7 @@ internal sealed class RuleDueList {
 
                         continue;
                     }
-                    if ((reach & (RowReach.Member | RowReach.MemberKey)) != RowReach.None) {
+                    if ((reach & (RowReach.Member | RowReach.MemberKey | RowReach.MemberEach)) != RowReach.None) {
                         reach = RowReach.Any;
                     }
 
@@ -397,6 +411,7 @@ internal sealed class RuleDueList {
         m_eachFactReaders = Freeze(index: each);
         m_wholeFactReaders = Freeze(index: whole);
         m_memberRowReaders = memberRow.ToDictionary(keySelector: static pair => pair.Key, elementSelector: static pair => pair.Value.Distinct().ToArray());
+        m_memberEachRowReaders = memberEachRow.ToDictionary(keySelector: static pair => pair.Key, elementSelector: static pair => pair.Value.Distinct().ToArray());
         m_memberKeyRowReaders = memberKeyRow.ToDictionary(keySelector: static pair => pair.Key, elementSelector: static pair => pair.Value.Distinct().ToArray());
         MarkAll();
     }
@@ -555,7 +570,7 @@ internal sealed class RuleDueList {
             m_arena = arena;
             m_movesRead = -1L;
             // Every row a schedule names is one the list follows; the read below takes every row as moved.
-            foreach (var row in m_wholeRowReaders.Keys.Concat(m_memberRowReaders.Keys).Concat(m_memberKeyRowReaders.Keys)) {
+            foreach (var row in m_wholeRowReaders.Keys.Concat(m_memberRowReaders.Keys).Concat(m_memberEachRowReaders.Keys).Concat(m_memberKeyRowReaders.Keys)) {
                 arena.WatchCellMoves(rowOrdinal: row);
             }
             // Another arena counts its structure versions from its own start, so no snapshot stands against it.
@@ -579,6 +594,15 @@ internal sealed class RuleDueList {
                 if (m_memberRowReaders.TryGetValue(key: move.Row, value: out var members)) {
                     foreach (var (reader, member) in members) {
                         MarkMember(index: reader, member: member);
+                    }
+                }
+                if (m_memberEachRowReaders.TryGetValue(key: move.Row, value: out var cells)) {
+                    foreach (var (reader, member) in cells) {
+                        if (move.Key.IsValid) {
+                            MarkMemberKey(index: reader, key: move.Key, member: member);
+                        } else {
+                            MarkMember(index: reader, member: member);
+                        }
                     }
                 }
                 if (!move.Key.IsValid) {
@@ -915,6 +939,21 @@ internal sealed class RuleDueList {
         var (start, end) = m_familySnapshots[index]!.RangeOf(member: member);
 
         for (var position = start; (position < end); position++) {
+            SetBinding(binding: position, index: index);
+        }
+    }
+    // A move of the cell under one key of member m's row: member m's binding keyed by it. A snapshot that no longer
+    // stands names no binding, so the rule is due in full.
+    private void MarkMemberKey(int index, int member, CellKey key) {
+        if (m_full[index]) {
+            return;
+        }
+        if (!FamilySnapshotStands(index: index)) {
+            MarkFull(index: index);
+
+            return;
+        }
+        if (m_familySnapshots[index]!.TryPositionOf(key: key, member: member, position: out var position)) {
             SetBinding(binding: position, index: index);
         }
     }

@@ -41,7 +41,9 @@
 // A game that releases one body while the rest stand (a captured piece, a pawn whose look changes) sweeps the pool's
 // roster and passes `holodeckSet` whether the body under `$each` is wanted.
 //
-// The pool's rows (inside a module instance they are the instance's own, so a station's pool never touches another's):
+// The pool's rows, named by default as below; a world holding the pools of several games gives each game rows of its own
+// (`holodeckState(rows: { live: "chessLive", ... })`, and the same names to the functions and doors as bare rows), so one
+// game's pool keys and body keys never meet another's:
 //
 //   holodeckShown  per pool, 1 while its game is shown and its bodies stand, 0 while they are released
 //   holodeckSince  per pool, the tick its bodies exist from at its latest showing, which every pose's mark folds in
@@ -61,30 +63,33 @@
 // a pose two ticks on addresses a body that exists.
 let holodeckArrival = 2
 
+// The rows a pool lives in, by default; a game with rows of its own passes its names (holodeckState's header).
+let holodeckRows = { live: "holodeckLive", at: "holodeckAt", shown: "holodeckShown", since: "holodeckSince" }
+
 // The body under `$each` stands and exists. Read inside a rule sweeping the pool's roster; `pool` is the pool's key (a
 // literal, or the binding that spells it).
-function holodeckStands(pool) = ((holodeckShown[pool] == 1) and
-  (holodeckLive[$each] == 1) and
-  ($tick >= maximum(holodeckSince[pool], 0 - holodeckAt[$each])))
+function holodeckStands(pool, live = holodeckLive, at = holodeckAt, shown = holodeckShown, since = holodeckSince) = ((shown[pool] == 1) and
+  (live[$each] == 1) and
+  ($tick >= maximum(since[pool], 0 - at[$each])))
 
 // The mark a pose of the body under `$each` at the game's code `code` (non-negative, under 2^20) leaves in
 // `holodeckAt`: the code with the pool's showing folded in, so a mark from an earlier showing never matches.
-function holodeckMark(pool, code) = code + 1048576 * holodeckSince[pool]
+function holodeckMark(pool, code, since = holodeckSince) = code + 1048576 * since[pool]
 
 // The pool's bodies, inside a `placements` block: each an inhabited placement admitted by the pool's cell of
-// `holodeckShown` and counted by its own cell of `holodeckLive`, under `kit`, spawning at `at` (in `parent`'s frame when a
-// parent is named).
-template holodeckPool(bodies, kit, pool, parent = null) {
+// `holodeckShown` and counted by its own cell of `holodeckLive` (or the rows `rows` names), under `kit`, spawning at `at`
+// (in `parent`'s frame when a parent is named).
+template holodeckPool(bodies, kit, pool, parent = null, rows = holodeckRows) {
   for body in bodies {
     placement $"{body.id}" {
       prototype: body.prototype
       inhabit {
         count {
-          row: holodeckLive
+          row: rows.live
           key: body.id
         }
         pool {
-          row: holodeckShown
+          row: rows.shown
           key: pool
         }
         distribution {
@@ -108,26 +113,30 @@ template holodeckPool(bodies, kit, pool, parent = null) {
   }
 }
 
-// The pool rows, inside a `state.world` block: every body's cells, and each of `pools`' cells. `shown` is what every
-// pool starts at: 0, a pool whose game shows it, or 1 for bodies a world stands always while the game's rules still read
-// the pool's cells.
-template holodeckState(bodies, pools, shown = 0) {
-  table holodeckLive capacity(auto) {
+// The pool rows, inside a `state.world` block: every body's cells, and each of `pools`' cells, in the rows `rows` names.
+// `shown` is what every pool starts at: 0, a pool whose game shows it, or 1 for bodies a world stands always while the
+// game's rules still read the pool's cells.
+template holodeckState(bodies, pools, shown = 0, rows = holodeckRows) {
+  let live = rows.live
+  let at = rows.at
+  let shownRow = rows.shown
+  let since = rows.since
+  table live capacity(auto) {
     for body in bodies {
       [body.id] = 1
     }
   }
-  table holodeckAt capacity(auto) {
+  table at capacity(auto) {
     for body in bodies {
       [body.id] = -1
     }
   }
-  table holodeckShown capacity(auto) {
+  table shownRow capacity(auto) {
     for pool in pools {
       [pool] = shown
     }
   }
-  table holodeckSince capacity(auto) {
+  table since capacity(auto) {
     for pool in pools {
       [pool] = 0
     }
@@ -159,21 +168,21 @@ template holodeckLookState(looks) {
 // holodeckShown[pool] != shown`): it writes the cell, standing or releasing every body of the pool at once, and the tick
 // from which they exist. The write of `shown` closes the rule's own gate, so the price sheet charges a pool at rest
 // nothing (RuleResponse.ClosesItself).
-rule template holodeckShow(pool, shown) {
-  holodeckShown[pool] = shown
-  holodeckSince[pool] = $tick + holodeckArrival
+rule template holodeckShow(pool, shown, shownRow = holodeckShown, since = holodeckSince) {
+  shownRow[pool] = shown
+  since[pool] = $tick + holodeckArrival
 }
 
 // One body's door, spliced into a rule that sweeps the pool's roster and fires only while the body's count differs from
 // `live` (`when holodeckLive[$each] != live`): it writes the count, asking for or releasing the body under `$each`, and
 // marks it to be posed once it exists. The write of `live` closes the rule's own gate.
-rule template holodeckSet(live) {
-  holodeckLive[$each] = live
-  holodeckAt[$each] = 0 - ($tick + holodeckArrival)
+rule template holodeckSet(live, liveRow = holodeckLive, at = holodeckAt) {
+  liveRow[$each] = live
+  at[$each] = 0 - ($tick + holodeckArrival)
 }
 
 // Marks the body under `$each` to be posed again at its cell: a body knocked off its square that the game puts back, or
 // one lifted off the board.
-rule template holodeckTidy() {
-  holodeckAt[$each] = -1
+rule template holodeckTidy(at = holodeckAt) {
+  at[$each] = -1
 }

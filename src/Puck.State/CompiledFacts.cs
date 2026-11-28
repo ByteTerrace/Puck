@@ -25,6 +25,12 @@ public enum CellReach : byte {
     /// <summary>The cell under the key a sweep over a row family binds to <c>$member</c>: a move of the cell whose key
     /// spells family index <c>m</c> reaches every binding of member <c>m</c>, and no other binding.</summary>
     MemberKey,
+
+    /// <summary>The cell under the <c>$each</c> key of one member of a row family, the member a sweep over a row family
+    /// selects by <c>$member</c> (<c>family[$member][$each]</c>): a move of cell <c>k</c> of the row reaches the one binding
+    /// of member <see cref="CellAccess.Member"/> whose key is <c>k</c>, and a move of the row whole that member's
+    /// bindings.</summary>
+    MemberEach,
 }
 /// <summary>One state cell a compiled rule reads or writes, addressed by ordinal: the row's catalog ordinal and the
 /// interned cell key, never a name. An invalid <paramref name="Key"/> means "any cell of the row" — what a read that
@@ -46,6 +52,12 @@ public readonly record struct CellAccess(int RowOrdinal, CellKey Key, bool IsSet
     /// <summary>Gets a value indicating whether the access reaches the family member its binding selects, and no other
     /// binding's.</summary>
     public bool IsMember => ((Reach == CellReach.Member) && (Member >= 0));
+    /// <summary>Gets a value indicating whether the access reaches one cell, under the binding's <c>$each</c> key, of the
+    /// family member its binding selects, and no other binding's.</summary>
+    public bool IsMemberEach => ((Reach == CellReach.MemberEach) && (Member >= 0));
+    /// <summary>Gets a value indicating whether only the bindings of family member <see cref="Member"/> make the access
+    /// (<see cref="IsMember"/> or <see cref="IsMemberEach"/>).</summary>
+    public bool OwnMember => (IsMember || IsMemberEach);
     /// <summary>Gets a value indicating whether the cell is the one under the key bound to <c>$member</c>.</summary>
     public bool MemberKey => (Reach == CellReach.MemberKey);
 
@@ -75,4 +87,11 @@ public interface IRuleCostContext {
 public interface ICompiledFact {
     /// <summary>Gets the facet this fact's type declares, or <see langword="null"/> when it needs none.</summary>
     FacetRef? RequiredFacet { get; }
+}
+/// <summary>A compiled fact that answers through other compiled facts, one of which each read chooses (a channel compiled
+/// once per family member). A rule's needs fold every part, so a schedule versions and a disclosure classifies the facts
+/// a read can reach rather than the fact that chooses among them.</summary>
+public interface ICompositeFact : ICompiledFact {
+    /// <summary>Gets the facts a read can answer through, <see langword="null"/> at a position no read reaches.</summary>
+    IReadOnlyList<ICompiledFact?> Parts { get; }
 }

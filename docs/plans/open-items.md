@@ -517,9 +517,8 @@ item 3 with the board games' performance and memory solved; item 1 starts only a
    - coloured light through glass;
    - emitters too weak at night;
    - the haze, the black smudge and the pier blotches.
-3. [high] [Card tables in the board game room](#card-tables-in-the-board-game-room): twelve game stations under
-   the work sheet ceiling. The ordered remainder (the chairs, chess, placing the twelve, room in the debug world) is
-   that packet's first item.
+3. [high] [Card tables in the board game room](#card-tables-in-the-board-game-room): physical cards on the holodeck,
+   and the twelve stations' set's dearest lines (that packet's items).
 4. [medium] The verification still owed from that session:
    - the affine bounds lane's laws and its review-only skip review (`SdfMeshPathBake.Classify`, `FixedAffineForms`);
    - a long sampled `puck test` run, to see whether the multi-GB growth the RTX 2060 measured survives the
@@ -5933,7 +5932,7 @@ confirming its site in the debug world and its work-budget share.
 ### Card tables in the board game room
 
 Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
-ordinary, the owner's direction · Next: physical cards on the holodeck (below); twelve game stations on the work sheet;
+ordinary, the owner's direction · Next: physical cards on the holodeck (below); the stations' set's dearest lines;
 the windowed look at the game station's holodeck chess, Klondike and FreeCell, close and wide, in the board games lab
 (`worlds/debug/labs/board-games.puck`, `worlds/debug/game-station.md`); then Spider.
 
@@ -5966,39 +5965,16 @@ shell, each usable alone, each named for what it does.
   prototype, at most 16 volumes) would let a king topple as a king does, and a queened pawn would need its kit chosen by
   its code.
 
-- [high] Twelve game stations on the work sheet. The engine sweeps a set of stations per binding: a family member
-  the binding's key selects and a zone table over families are reached and priced as that station's alone, and a rule
-  may sweep a row family itself (`forEach: pile`, `$each` the card, `$member` the station), due per (member, key) and
-  priced at one member's bindings (docs/reference/state/analysis.md). Klondike, FreeCell and the patience layout are
-  one set of rules over every station (worlds/games/klondike.puck, freecell.puck, patience-station.puck
-  `patienceSetRules`). With holodeck chess, one station prices 359 thousand, twelve playing themselves (the board games
-  stress lab) 2.71 million, the debug world with its one station 3.54 million (`puck compile <world> --validate
-  --budget 40`; worlds/debug/game-station.md, "Cost"); each station past the first adds about 214 thousand, most of it
-  chess's instance lines; a switch is one write of the pool's cell (`WorldPlacementInhabit.Pool`), a settle reads only
-  the pieces that came to rest (`fact(placement, $each, Resting)`), and the 32-binding pose a switch or a put-back
-  opens (18 thousand) is the largest chess line left. In order: (1) the chairs (worlds/standard/game-station.puck
-  `gameStationRules`) as a set over the stations, writing rows keyed by the station's number
-  (`gameStationChairNear[i]`, `gameStationEdgesNear[i]`, `gameStationPointerNear[i]`, ...) so `patienceStationRules`
-  and chess-station join their sets; that needs a host fact over a family member (`board(pointer, <id>Cells, seat)`,
-  `seatAtSide`; `BoardSeat` matches its anchor by topology, WorldFactsVocabulary.Operands.cs, so stations sharing one
-  pick grid need it found by occupancy row) and per-binding channel versions, so a `$each` channel read is due only
-  when that station's seat input moves. (2) chess.puck's digital form and chess-station.puck as family sweeps (a
-  station's pieces and cells as members, `forEach: chessPiecesOf`): `board(…)` over a family member, and one search
-  job per station whose key rows are that station's cells only, with no clock-reading rules (`world.search` prints
-  `lastRestart=`); the repetition count is no longer a sweep of the 75 ages (`tabletop-board-history` counts a
-  position key in the tally row `positionCounts`). (3) The
-  instances go and the twelve are placed: delete the module instances and their `use` lines, place all twelve in
-  gallery-root (which stands eleven today, gallery/layout.puck `galleryRoomStood`, at 4.38 million of the 4.4) and
-  in debug (which stands one, worlds/debug/game-station-deck.puck), let game-station-root boot a list, and re-key
-  `station.game`, `station.chess` and the station rows (`gameStationGame`, `gameStationStatus`, `gameStationPick`,
-  `gameStationRowInk`, the paints' `state.gameStationStatus.<id>`) by the station's number, the spelling the
-  Klondike and FreeCell commands use. (4) Room in the debug world: `go-sync-mark` and `go-sync-keep` (200 and 189
-  thousand: one `goSync` pulse, a scalar every binding reads, opens all 361 stones; mark only the stones whose
-  indexed cell moved), `reversi-read-discs` (67), `go-play-1`/`-2` (56 each, judged every tick),
-  `terminal-console-key-1`..`4` (47 each, judged in place). (5) The parser gaps: an interpolated family pile name in
-  a declaration (`pile $"x{k}Of"[n]`, so FreeCell's sixteen and Klondike's nineteen pile lines become a `for`), and
-  the patience pose line's eight member-cell reads (its check is 118 units a card; a face row the reads write would
-  cut it to one).
+- [medium] The game stations' set prices a firing at every station for a line whose firing does not provably close its
+  own gate (`RuleResponse.Prove`): `chess-play-revert-codes`, `patience-pick`, `chess-station-save`,
+  `chess-station-pick-near`/`-far` and `chess-put` cost 37 to 65 thousand each in the gallery booted alone, which stands
+  all twelve at 3.19 million (`puck compile worlds/debug/gallery-root.puck --validate --budget 40`). Each waits on a cell
+  it does not write (a put-down's revert, a press's edge, a settle), so its gate holds while it waits; a gate that closes
+  on its own write (a request it clears, a mirror it copies) prices one station's firing. The chairs' presses
+  (`game-station-near`/`-far`) read seat channels for literal seats, unversioned for a sweep, so they are judged every
+  tick at every station; per-binding channel versions would make them due only when that station's seat input moves.
+  The debug world stands one station at 4.28 million, 6.84 ms of its 8.33 ms on the RTX 4070: more there needs room (`go-sync-mark` and `go-sync-keep`, one
+  `goSync` pulse opening all 361 stones; `reversi-read-discs`; `go-play-1`/`-2`; `terminal-console-key-1`..`4`).
 - [low] A rule sweeping per-seat private piles is refused at compile: `RuleCompiler.RequireTransformControlAudience`
   pairs every candidate a live end can select with every other read, so `transfer(from: hand[$each], to: …)` over a
   family whose members each admit only their own seat reads seat 1's hand into seat 2's audience on paper, though a

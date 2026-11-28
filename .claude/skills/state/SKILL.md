@@ -52,7 +52,7 @@ corrected in the same change.
 | A chain reaction, staged phases, take back a turn | rule groups (`RuleGroup.cs`, `RuleEvaluator.Groups.cs`) and arena undo (`ArenaUndo.cs`, served through `ArenaEffectHost`) | [rule groups](../../../docs/reference/state/rule-groups.md) |
 | Reproducible dice, decks, generated text, Penrose patches, lookup tables | `GeneratorEngine`, `ArenaDraws`, `PenrosePatch`, `CompiledTable` (Generators); unbiased bounded draws come from `Puck.Maths` `BoundedRandomSampling` | [generators](../../../docs/reference/state/generators.md) |
 | Vector rows: nearest, mix, mean, remember | `ArenaVectorTransforms` (Vectors) | [vectors](../../../docs/reference/state/vectors.md) |
-| Legal moves, a computer opponent's best move, chance nodes | `ArenaSearch` over journal scopes, judged by `IArenaSearchJudge.Judge` (`RuleArenaSearchJudge`, over a `RuleLatch.Fresh` latch that writes no edge bit); world jobs are `search` rows (`WorldSearchSection`) | [search](../../../docs/reference/state/search.md) |
+| Legal moves, a computer opponent's best move, chance nodes | `ArenaSearch` over journal scopes, judged by `IArenaSearchJudge.Judge` (`RuleArenaSearchJudge`, over a `RuleLatch.Fresh` latch that writes no edge bit); world jobs are `search` rows (`WorldSearchSection`); a job for one member of a set of rules (`member:`) judges that member's bindings alone (`RuleEvaluator.MemberScope`) and keys on its own rows (`RuleDataflow.KeyRows`, `CellAccess.OwnMember`) | [search](../../../docs/reference/state/search.md) |
 | Schedule a distance or region interaction | `WorldRuleHost` supplies carrier rows, positions and sampled occupancy to `RuleDueList`. `RuleEvaluator.DrainFactMoves` delivers moves to both rule families. | [analysis](../../../docs/reference/state/analysis.md) |
 | Read and write sets, order-sensitive pairs, judge a binding only when something it reads moved, price a tick by that | `RuleDataflow`, `RuleHazards`, `RuleSchedule` and `RuleDueList` (per rule, and per binding of a keyed sweep, fed by `StateArena.TryReadCellMoves` and the host's fact moves), `RuleResponse` and `RuleWorkBudget`, converted to time by each device's `RuleCostCalibration` (`puck bench rules`) and held to the tick's rule budget (`WorldRuleTimePricing`) | [analysis](../../../docs/reference/state/analysis.md) |
 | Bound the values a program or a read can answer; prove a written value lands inside what its destination keeps | `RuleBounds.Of` over `RuleCompileContext.ReadBounds` (a `ValueBounds`: an exact set by enumerating the reads' declared values through the one evaluator, else a range over `FixedInterval`); a host answers for its facts (`WorldBodyStateReads.TryCounterBounds`) | [bounds](../../../docs/reference/state/analysis.md#bound-what-a-program-can-answer) |
@@ -219,8 +219,14 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   cell. A rule sweeping a row family (`forEach: pile`, `CompiledRule.ForEachFamily`)
   binds `$each` to a member's key and `$member` to its family index; its own
   member is `$member`'s (`LiveRow.SelectsOwnMember`, `RuleReads.BoundOwnIndex`),
-  a cell under `$member` is `RowReach.MemberKey`, and the due list's
-  `FamilySnapshot` maps a move to (member, key) positions. A host fact read for
+  a cell under `$member` is `RowReach.MemberKey`, the own member's cell under
+  `$each` (`pile[$member][$each]`, `LiveRow.CollectCellReads`) is
+  `RowReach.MemberEach`, and the due list's `FamilySnapshot` maps a move to
+  (member, key) positions. A reserved channel spelling `family[$member]` in an
+  argument compiles once per member (`MemberOperand`, an `ICompositeFact` whose
+  parts a rule's needs fold), each member's own reads tagged with its index; a
+  new walk over operands unwraps it, or misses the facts and reads inside. A
+  host fact read for
   `$each` normally moves by body index, which the due list maps to the key that
   spells the index; a source whose `$each` reads address what the key names
   (a body fact read through `placement:$each`, `WorldRuleHost`'s placement facts

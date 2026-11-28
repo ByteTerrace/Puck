@@ -219,20 +219,21 @@ doors, with the north car's key 0 and the south car's 1.
 
 ## The board game room
 
-The board game room is level 2's south gallery from x 12.8 and the projecting
-wing over the south forecourt. Its stations are the debug world set's game
-stations ([game-station.md](game-station.md)), each one table that plays chess,
-Klondike and FreeCell on a holodeck board, in two rows of six, one to an arcade
-bay from bay 5 to bay 10 (layout.puck's `galleryGameStations`): the front row
-(`a1` to `a6`) on the south gallery, the back row (`b1` to `b6`) out in the
-wing. Each station's near chair faces north across its glass.
+The board game room is level 2's two galleries. Its stations are the debug
+world set's game stations ([game-station.md](game-station.md)), each one table
+that plays chess, Klondike and FreeCell on a holodeck board, laid out as the
+toybox's machines on level 1 and the portals on level 3 are (layout.puck's
+`galleryGameStations`): six along the south gallery (`a1` to `a6`) and six along
+the north (`b1` to `b6`), one to an arcade bay in the portals' bays, each row two
+tiles in from its arcade's piers and mirrored about the nave, so each north
+station stands across the void from its south twin. A station stands with no
+yaw, so its near chair (the menu's) is at its south edge: the wall's side on the
+south gallery, where the player faces the void, and the balcony's on the north.
 
-The gallery booted alone stands the first eleven ([gallery/games.puck](gallery/games.puck));
+The gallery booted alone stands all twelve ([gallery/games.puck](gallery/games.puck));
 the debug world stands only `a1` ([game-station-deck.puck](game-station-deck.puck)),
-beside its own older tables. Each station is a module instance of its own, and
-the rule work sheet a tick admits holds eleven beside the rest of the building;
-the twelfth waits on the stations' rules becoming one set over every station
-([open items](../../docs/plans/open-items.md#card-tables-in-the-board-game-room)).
+beside its own older tables. The stations play one set of rules, each station's
+game its own ([game-station.md](game-station.md#how-a-station-is-built)).
 `debug.go boardroom` stands a body at the room's west end; `gallery.shot
 board-room` looks along it.
 

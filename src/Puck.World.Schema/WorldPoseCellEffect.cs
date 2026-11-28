@@ -13,7 +13,10 @@ namespace Puck.World;
 /// <param name="pitch">The pitch, in radians, a teleport stands the body at.</param>
 /// <param name="frame">The placement whose composed frame the cell and the offset are read in, or
 /// <see langword="null"/> for the world.</param>
-public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledProgram expression, FixedVector3 offset, bool glide = false, FixedQ4816 roll = default, FixedQ4816 pitch = default, string? frame = null) : WorldFactEffect(describe: $"poseCell {topology}", reach: WorldDisclosureReach.Bodies) {
+/// <param name="memberTopologies">Each family index's topology when the pose names the binding's own member of a family
+/// of boards (<c>topology: board[$member]</c>), <see langword="null"/> at a gap; <see langword="null"/> when it names one
+/// topology.</param>
+public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledProgram expression, FixedVector3 offset, bool glide = false, FixedQ4816 roll = default, FixedQ4816 pitch = default, string? frame = null, IReadOnlyList<string?>? memberTopologies = null) : WorldFactEffect(describe: $"poseCell {topology}", reach: WorldDisclosureReach.Bodies) {
     /// <summary>The position of the cell ordinal among the sources.</summary>
     public const int CellSource = 0;
     /// <summary>The frame spelling that names the placement whose id is the swept key (<see cref="FrameEach"/>).</summary>
@@ -23,8 +26,19 @@ public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, Comp
     public WorldBodyRef Body { get; } = body;
     /// <inheritdoc/>
     public override EffectSource[] Sources { get; } = [EffectSource.Expression(kind: CellKind.Int, program: expression)];
-    /// <summary>Gets the topology name.</summary>
+    /// <summary>Gets the topology name, the first member's when the pose names a family member's.</summary>
     public string Topology { get; } = topology;
+    /// <summary>Gets each family index's topology when the pose names the binding's own member of a family of boards,
+    /// or <see langword="null"/> when it names one topology.</summary>
+    public IReadOnlyList<string?>? MemberTopologies { get; } = memberTopologies;
+
+    /// <summary>Returns the topology a firing poses on: the one topology, or the member's the binding's own family index
+    /// selects.</summary>
+    /// <param name="member">The family index the firing binds, or <see langword="null"/> when it binds none.</param>
+    /// <returns>The topology name, or <see langword="null"/> when the binding selects no member.</returns>
+    public string? TopologyFor(long? member) => ((MemberTopologies is not { } members)
+        ? Topology
+        : (((member is { } index) && (((ulong)index) < ((ulong)members.Count))) ? members[(int)index] : null));
     /// <summary>Gets the placement whose frame the cells and the offset are read in, or <see langword="null"/> for
     /// the world.</summary>
     public string? Frame { get; } = frame;
