@@ -1059,6 +1059,18 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             AuthoritativeTick: m_client.Tick
         );
 
+        // The seat's rig frames the seat's perceived body, so an operand keyed $body (a chase framing's blend weight,
+        // such as a body's wall or worn-screen focus) reads that body's cell; without these reads it reads its
+        // fallback.
+        var perceivedBody = m_anchor.PerceivedBody(slot: slot);
+        var seatBodyReads = m_seatReads[slot];
+
+        seatBodyReads.Bind(
+            bodyIndex: perceivedBody,
+            mirror: state
+        );
+        rig.Reads = seatBodyReads;
+
         (eye, target, fieldOfView) = rig.Resolve(
             anchor: in anchor,
             clock: in clock
@@ -1070,19 +1082,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // scale: the look target's height above the root, then the eye's offset from that rescaled target (the orbit
         // radius the boom eases toward). Chase-rig-only, like the seatUp alignment below: a camera-mode application
         // frames its own subject's pose directly and is not an orbit around this body at all.
-        var perceivedBody = m_anchor.PerceivedBody(slot: slot);
         var liveScale = 1f;
 
         if (ReferenceEquals(
             objA: rig,
             objB: chase
         )) {
-            var reads = m_seatReads[slot];
-
-            reads.Bind(
-                bodyIndex: perceivedBody,
-                mirror: state
-            );
+            var reads = seatBodyReads;
 
             liveScale = WorldGaitDrivers.LiveBodyScale(
                 reads: reads,

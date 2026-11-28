@@ -78,11 +78,12 @@ function wallFraming(distance = 5.4, pitch = -0.12, pivotOffset = [0, 1.8, 0], f
 
 // A chase camera's framing of something a body holds before it to read (a screen on its arm, a map in its hands), for
 // `chaseCamera(focus:)`: `distance` metres of boom at `pitch` radians of elevation about `pivotOffset` in the body's
-// frame, whose x leans toward the body's left; the same framing mirrored leans toward its right. The camera eases toward
+// frame (+X the body's right, as a creation's frame has it), whose x leans toward the body's left (negative); the same
+// framing mirrored leans toward its right. The camera eases toward
 // the left framing by the `left` row and toward the right one by the `right` row (keyed by body: 0 the ordinary
 // framing, 1 the focus), each eased by its row's own dynamics; a body holds one thing at a time, so one of them is 0
 // (the menu's `menuRaiseLeft` and `menuRaiseRight`).
-function focusFraming(left, right, distance = 1.9, pitch = 0.45, pivotOffset = [0.3, 1.35, 0.1]) = {
+function focusFraming(left, right, distance = 1.9, pitch = 0.45, pivotOffset = [-0.2, 1.35, -0.3]) = {
   left: left
   right: right
   distance: distance

@@ -59,8 +59,9 @@
 
 // The screen's look: a deep plum field the interface glows on, a mint for the companion with you, an amber for the mark,
 // a cream for what is kept and a muted lilac for the rest, with a mint rule under the tabs. Minimal on purpose; a
-// reference restyles it here.
-let menuGlass = { color: "#140E1C", roughness: 0.3, specular: 0.04, emissive: 2600, emissiveLane: 0 }
+// reference restyles it here. The glass glows always: its cover hides it while the menu is shut. It reads no render lane,
+// since a body's lane 0 is also every weathering's default lane, and a lane raised to light the glass weathered her suit.
+let menuGlass = { color: "#140E1C", roughness: 0.3, specular: 0.04, emissive: 2600 }
 let menuLook = {
   field: "#140E1C"
   rule: "#7FD8B4"

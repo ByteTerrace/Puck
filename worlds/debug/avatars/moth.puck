@@ -2397,11 +2397,12 @@ looks {
         gaitAmplitude: 0
         replayFrames: false
         secondsPerFrame: 0
-        // Lane 0 is her worn screen's glass, lit as its arm rises. Lane 1 is the jets: dark out of flight mode, a pilot
-        // flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is flight mode itself, the heel and
-        // nozzle glows it lights. Lane 3 is the boot jets' flame under the air jump.
+        // Lane 0 stays 0: it is every weathering's default lane, so the suit's plates keep their pristine floor. Lane 1
+        // is the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as she flies.
+        // Lane 2 is flight mode itself, the heel and nozzle glows it lights. Lane 3 is the boot jets' flame under the air
+        // jump.
         lanes [
-          maximum(menuRaiseLeft[$body], menuRaiseRight[$body])
+          0
           maximum(bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body]), dashPose[$body])
           maximum(bodyState($body, flightFuel) / 1000, dashPose[$body])
           bootBoost[$body]
