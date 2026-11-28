@@ -86,7 +86,7 @@ of headroom over every tread.
 | 0 | The south-west stair; the west hall and its lobby inside the entrance (in the debug world, the desktop and the typesetter's bench); the painting wing from x 30; the south-east stair and the south lift's landing | The showcase: twelve displays, a pair across the nave in each odd arcade bay, the central tree at its centre, and the climbing wall on the east wall between the lifts | The north aisle between the north-west and north-east stairs, holding the lab wing ([the labs](labs/README.md)): a door onto each lab, three either side of the tree's bay; the north lift's landing |
 | 1 | The toybox: a lounge beside the south-west stair; its game stations; the south-east rental stall; the south lift's landing | void | The toybox's other game stations, facing the south ones across the void; the north lift's landing |
 | 2 | The board game room, the south gallery from x 12.8 and the projecting wing, its stations in two rows | void | the north lift's landing (every display is on level 0) |
-| 3 | The terrace, with the south-west stair's head; the south gallery, its outer wall the six south portals' | void, and the east walkway along the east wall | The north gallery, open, its outer wall the six north portals' |
+| 3 | The terrace, with the south-west stair's head; the south gallery, its outer wall the six south portals' ([the portals](#the-portals)) | void, and the east walkway along the east wall | The north gallery, open, its outer wall the six north portals' |
 
 [shapes.md](shapes.md) lists the displays and what each exhibit shows,
 [paintings.md](paintings.md) the wing, and the tables' own pages their games.
@@ -102,7 +102,61 @@ across the aisle and the corner stairs stay clear. Level 0's north wall keeps
 no bench or planter behind a door. Walk into a door's glass to stand in its
 lab, and walk back into the lab's `arrival` frame to come out of the door.
 [layout.puck](gallery/layout.puck)'s `labWingPlan` holds one row a lab, and
-[the lab book](labs/README.md) lists them.
+[the lab book](labs/README.md) lists them. Each door is the standard portal
+module (below, [the portals](#the-portals)) standing free in the labs' teal,
+leading to its lab's entry of the portal library, so a lab that opens joins the
+library level 3's panels list.
+
+## The portals
+
+The owner's rulings: a painting portal is one module an artist places, as the
+game stations and gaming devices are, and the gallery's level 3 holds twelve,
+one against the outer wall of each of six bays on each gallery, facing across
+the nave's void as level 1's deck stations face it. Each stands a control panel
+at its right, in the shape displays' design language, that points it at any
+entry of a library of destinations, and a repoint is seen by everyone
+([decision](../../docs/decisions/play.md#portals-and-their-panels)).
+
+[gallery/portals.puck](gallery/portals.puck) stands them where
+[layout.puck](gallery/layout.puck)'s `galleryPortalBays` puts them: bays 5 to
+10 on each side, the south ones against the projecting wing's south face (whose
+floor reaches 4 m past the building's south wall from the lift's bay east), the
+north ones against the north wall, each `portalStandOff` in from its wall. A
+portal is the standard's portal module
+([worlds/standard/portal.puck](../standard/portal.puck)) in a teal frame over
+a brass lip, and its panel the standard's control panel
+([worlds/standard/panel.puck](../standard/panel.puck)). Every portal of the
+building is the same module: the painting wing's canvases hang it on a wall
+([paintings.md](paintings.md)), and the lab wing's doors stand it free.
+
+The library is [portal-library.puck](portal-library.puck)'s
+`galleryPortalLibrary`: the showcase worlds (the garden, the night field, the
+city, the hearth, the moon, the planetoids, Perihelion and the bottle world),
+then every open lab of the lab wing. An entry names the destination it opens,
+the world's document, the face a traveller steps out of there, the colour the
+glass shows past the deepest window inside a window, and the title and note the
+panel shows. [gallery/portals.puck](gallery/portals.puck) declares the
+library's references and destinations once for every portal of the building.
+The twelve start on the library's first twelve entries, south then north, west
+to east.
+
+Walk up to a panel and press the context button (E, or the pad's RB): the
+camera eases to the panel's desk view and the left mouse button taps its glass.
+A tap on a world in its list points the portal there; PREV and NEXT turn the
+list a page. The glass beside it shows the new world at once, and a body that
+walks in arrives there. The same press steps back. The panel's choice is the
+world cell `panelChoice` at the portal's id, which the portal's door reads
+through its routes (the engine's `WorldFaceRoutes`), so
+`world.state.cell.set panelChoice portal-south-5 2` points the first south
+portal at the city from the console, and `world.portals` names each routed
+door's route (`route=2/15`). The panels are terminals too, numbered after the
+display stations in the gallery's one `terminalPlay`; their hidden console
+belongs to the displays alone.
+
+`debug.go portal-south-5` (any portal's id) stands a body before a portal,
+facing it, and `debug.go portal-south-5-panel` at its panel. A portal's glass
+draws at the share of the screen it covers and only while it is seen, and it
+holds a session only while its door is open, one route at a time.
 
 ## The entrance
 

@@ -7,7 +7,7 @@
 // the door into the aisle. The frame's glass is dark (a `none` source) rather than a window onto the gallery, so a lab
 // booted alone never starts the debug world beside it: the debug world starts only when a body crosses back.
 
-import "../painting-kit"
+import "../../standard/portal"
 import "../../standard/visitors"
 
 // The colour the labs' frames and the wing's doors wear: a dark teal, apart from the painting wing's gilt, black and
@@ -83,7 +83,7 @@ template labWayBack(id, at, yaw = 0) {
   prototypes {
     prototype "frame" {
       document {
-        arrivalFrame(color: labFrameColor, roughness: 0.4, specular: 0.3, post: labFramePost)
+        portalFrame(color: labFrameColor, roughness: 0.4, specular: 0.3, post: labFramePost)
       }
     }
   }

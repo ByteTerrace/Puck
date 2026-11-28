@@ -344,6 +344,10 @@ let labWingPlan = [
     id: "board-games", bay: 10, open: true, document: "labs/board-games"
     title: "BOARD GAME LAB", note: "The physical chess table beside a game station playing chess, Klondike and FreeCell, on one floor."
   }
+  {
+    id: "portals", bay: 11, open: true, document: "labs/portals"
+    title: "PORTAL LAB", note: "One portal and the panel that points it: walk in, step back out, and repoint it at another world."
+  }
 ]
 // Whether level 0's north wall keeps its bench or planter at plan x `x`: none stands behind a lab's door.
 function labWingClear(x) = (count(labWingPlan, lab => (bayX(lab.bay) == x)) == 0)

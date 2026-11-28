@@ -142,71 +142,8 @@ admission [
   visitorAdmissionRow(domain: "*")
 ]
 
-references [
-  {
-    document: "garden"
-    name: "garden"
-  }
-  {
-    document: "night"
-    name: "night"
-  }
-  {
-    document: "city"
-    name: "city"
-  }
-  {
-    document: "moon"
-    name: "moon"
-  }
-  {
-    document: "galaxy"
-    name: "galaxy"
-  }
-  {
-    document: "globe"
-    name: "globe"
-  }
-]
-
-destinations [
-  {
-    durability: persisted
-    name: "garden"
-    reference: "garden"
-    scope: global
-  }
-  {
-    durability: persisted
-    name: "night"
-    reference: "night"
-    scope: global
-  }
-  {
-    durability: persisted
-    name: "city"
-    reference: "city"
-    scope: global
-  }
-  {
-    durability: persisted
-    name: "moon"
-    reference: "moon"
-    scope: global
-  }
-  {
-    durability: persisted
-    name: "galaxy"
-    reference: "galaxy"
-    scope: global
-  }
-  {
-    durability: persisted
-    name: "globe"
-    reference: "globe"
-    scope: global
-  }
-]
+// The worlds the gallery's portals lead to are its portal library's references and destinations (gallery/portals.puck,
+// portal-library.puck), declared once for every portal of the building.
 
 // The font the shape gallery's plinth labels emboss in.
 text {

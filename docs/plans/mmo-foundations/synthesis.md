@@ -87,7 +87,7 @@ the memo:
    adoption asks `HomeIdentity`, which answers only for a non-peer arrival, and
    every reservation decoded from the federation wire is a peer admission
    ([puck-today, section 2](puck-today.md#2-write-back-and-the-travelling-projection)).
-   Reopened **[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:1701-1702`):
+   Reopened **[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:1692-1693`):
 
    ```csharp
    private WorldIdentity? HomeIdentity(WorldCrossingArrival arrival, int index, string id) => ((
@@ -308,7 +308,7 @@ assigned (a search for `DurableImages =` over `src/` finds nothing) **[opened]**
 ```
 
 The destination's consumed-epoch fence is real and per destination
-**[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:2480-2482`):
+**[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:2471-2473`):
 
 ```csharp
                 (knownEpoch >= mobility.Epoch)
@@ -811,7 +811,7 @@ nothing in `src/` binds an authority to an account or marks one neutral
 **The seat's view.** The first revision moved the host's view of a table from
 the dealer to the room without noticing. A screen in a player's room observes
 a nested destination as the room's authority, into the room's mirror
-**[opened]** (`src/Puck.World.Server/WorldInstanceHost.ScreenSessions.cs:312-315`):
+**[opened]** (`src/Puck.World.Server/WorldInstanceHost.ScreenSessions.cs:326-329`):
 
 ```csharp
         if (target!.Server.TryObserveAsSession(

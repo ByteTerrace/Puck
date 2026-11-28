@@ -406,6 +406,17 @@ public sealed partial class WorldInstanceHost {
             var placement = definition.Placements[row];
             var closed = ((portal.Open is WorldPlacementResponseCondition.StateCondition open) && !open.Holds(arena: server.Arena, definition: server.Configuration, engineTick: server.CompletedEngineTicks, tick: server.CompletedTick));
 
+            // A routed door leads by the route its cell names this tick, and is closed while it names none; the record
+            // is what the door's window session observes (DeclaredSessions), so the two never part.
+            if (face.Routes is { } routes) {
+                var route = routes.Pick(arena: server.Arena, definition: server.Configuration, engineTick: server.CompletedEngineTicks, tick: server.CompletedTick);
+
+                population.PortalClosures.SetRoute(face: face.Face, placementId: placement.Id, route: route);
+                closed |= (route == WorldFaceRoutes.Closed);
+                face = WorldFaceRouting.On(face: face, route: route);
+                portal = (face.Portal ?? portal);
+            }
+
             population.PortalClosures.Set(closed: closed, face: face.Face, placementId: placement.Id);
             portalFaces.Add(item: new PortalFace(Aperture: aperture, Closed: closed, Face: face, Placement: placement, Portal: portal));
         }

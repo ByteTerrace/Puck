@@ -67,6 +67,7 @@ public sealed partial class WorldScreenBinder {
     private static Func<WorldWindowFit?> FitWindow(SessionFeed feed) => WorldWindowFrustumFit.FitFrom(
         destination: () => feed.Mirror.Definition,
         local: feed.Local,
+        observed: feed.Destination,
         screen: feed.Row,
         viewer: feed.Viewer
     );

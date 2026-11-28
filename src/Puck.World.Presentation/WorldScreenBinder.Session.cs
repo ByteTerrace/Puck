@@ -60,27 +60,28 @@ public sealed partial class WorldScreenBinder {
         for (var at = 0; (at < rows.Count); at++) {
             var row = rows[at];
 
+            // The slot's own feed answers first, so a steady frame reads no face of the catalog.
             if (
                 (row.Source is not WorldScreenSource.Session declared) ||
                 !m_slots.TryGetValue(
                 key: row.Index,
                 value: out var slot
             ) ||
+                ((slot.Session is { } bound) && (Observations.Screen(owner: WorldDefinitionLoader.BootInstanceName, screen: row.Index) is { } published) &&
+                ReferenceEquals(objA: bound.Hosted.Token, objB: published.Token)) ||
                 (HostedSession(
                 index: row.Index,
                 source: declared
-            ) is not { } hosted) ||
-                ReferenceEquals(
-                objA: slot.Session?.Hosted.Token,
-                objB: hosted.Token
-            )
+            ) is not { } hosted)
             ) {
                 continue;
             }
 
+            // A routed face's session observes the route the authority's door scan chose, so the slot binds the source the
+            // authority opened rather than the one the face declares.
             _ = ApplySessionSource(
                 index: row.Index,
-                session: declared,
+                session: hosted.Source,
                 slot: slot
             );
         }
@@ -100,13 +101,23 @@ public sealed partial class WorldScreenBinder {
             Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} -> destination '{feed.Destination}' instance '{feed.InstanceName}' retired — its picture is withdrawn]");
         }
     }
-    // The session the boot world's authority holds for a screen, when it holds one for this very source.
+    // The session the boot world's authority holds for a screen, when it holds one for this very source, or, for a face
+    // that carries routes, for any route the face shows (WorldFaceRouting.Shows): the authority's door scan, never the
+    // presentation, chooses which.
     private WorldObservedSession? HostedSession(int index, WorldScreenSource.Session source) => (((Observations.Screen(
         owner: WorldDefinitionLoader.BootInstanceName,
         screen: index
-    ) is { } hosted) && (hosted.Source == source))
+    ) is { } hosted) && ((hosted.Source == source) || ShowsRoute(definition: BootDefinition(), index: index, session: hosted.Source)))
         ? hosted
         : null);
+    // Whether a world's face on a screen carries routes and shows a session on one of them.
+    private static bool ShowsRoute(WorldDefinition? definition, int index, WorldScreenSource.Session session) => (
+        (definition is not null) &&
+        WorldFaceCatalog.For(definition: definition).TryFindScreen(row: out var row, screenIndex: index) &&
+        (WorldDefinitionRows.FindPlacement(id: row.PlacementId, placements: definition.Placements) is { } placement) &&
+        (WorldDefinitionRows.FindPlacementFace(face: row.FaceName, placement: placement) is { Routes: not null } face) &&
+        WorldFaceRouting.Shows(face: face, session: session)
+    );
     // Completes a resolved session's view registration — deferred from ResolveSession because the render envelope
     // (m_viewPipelines) is not known until the render factory calls ConfigureViews (or a live reconcile runs, by which
     // point it always is). Registration only names the view and fits a window: a session that renders as a view of its

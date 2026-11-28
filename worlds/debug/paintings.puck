@@ -3,6 +3,12 @@
 // leads while you stand outside. The debug world imports this file whole, and paintings.md beside it says how to get
 // in, what each painting does and how to get out.
 //
+// Every wall painting is the standard's portal module (../standard/portal.puck) hung on a wall, as level 3's routed
+// portals (gallery/portals.puck) and the lab wing's doors (lab-wing.puck) are the same module standing free: a row of
+// `wallPaintings` names where it hangs, its frame and where it leads, and the module builds its canvas, frame, plaque and
+// face. A painting leads to one world for good, so it stands no panel; its route is an entry of the debug world set's
+// portal library (portal-library.puck), or, for the pair that faces each other, a door into this world itself.
+//
 // The wing is the south aisle from x 30 to the east wall, in the building's frame (gallery/layout.puck, gallery.md),
 // open to the nave through the arcade. Two fins stand out from the south wall and make it two courts:
 //
@@ -23,7 +29,8 @@
 // rather than a second copy of it.
 
 import "../standard/bounds"
-import "painting-kit"
+import "../standard/portal"
+import "portal-library"
 import "shapes"
 
 // The wing's floor and the slab above it (gallery/layout.puck).
@@ -35,191 +42,92 @@ let courtWall = galleryWall
 let courtFins = [courtWest, courtFin, courtStairFin]
 let courtEast = galleryEast
 
-// The canvas of a wall painting: a thin rim box 2.24 m wide and 2.84 m tall whose centre is carved away, so the glass,
-// which fills the face shape a centimetre short of its faces, shows through. Its lower 0.12 m is below the floor so a
-// body's feet stand within the opening. `canvasRim` is the rim's width, and the carve leaves the rest.
-let canvasHalfWidth = 1.12
-let canvasHalfHeight = 1.42
-let canvasCenter = 1.3
-let canvasRim = 0.02
+// The frames: rings round a canvas that stands `proud` out from its wall, each ring `width` wide and reaching `front` out
+// from the wall in its palette row, from the canvas out: a dark lip, a mat or not, then the border.
 let canvasProud = 0.03
+let matRow = { color: "#EDEAE3", roughness: 0.7 }
+let brassRow = { color: "#B58F4F", roughness: 0.35, specular: 0.5 }
+let ornate = {
+  proud: canvasProud
+  rings [{ width: 0.05, front: 0.08, back: 0, row: portalLipRow }, { width: 0.22, front: 0.11, back: 0, row: portalGiltRow }]
+  plaque: "wall"
+}
+let modern = {
+  proud: canvasProud
+  rings [{ width: 0.14, front: 0.05, back: 0, row: matRow }, { width: 0.07, front: 0.11, back: 0, row: portalBlackRow }]
+  plaque: "wall"
+}
+let brass = {
+  proud: canvasProud
+  rings [{ width: 0.03, front: 0.08, back: 0, row: portalBlackRow }, { width: 0.12, front: 0.11, back: 0, row: brassRow }]
+  plaque: "wall"
+}
 
-// What a glass shows past the deepest level of windows inside windows, by destination.
-let fallbackGarden = "#FF9A4D"
-let fallbackNight = "#070B16"
-let fallbackCity = "#E8C48A"
-let fallbackMoon = "#CFC8BC"
-let fallbackGalaxy = "#02030A"
-let fallbackGlobe = "#1B2330"
-let fallbackSun = "#02030A"
+// The two faces of the pair that leads across the room, each into the other in this world itself.
+function selfRoute(counterpart) = {
+  destination: "self"
+  counterpart: counterpart
+  fallback: portalFallbackSelf
+  title: "ACROSS THE ROOM"
+  note: "Step in and you step out of its twin on the far wall, facing out."
+}
 
+// The wall paintings. `x` and `z` stand the painting's foot on the wall it hangs on, in the building's frame, `yaw`
+// turns its front (yaw 0 faces -Z, 180 faces +Z, 90 faces -X, 270 faces +X), `to` is where it leads and `title` and
+// `note` its plaque, the route's own unless the painting says otherwise. The moon painting's door opens only while the
+// moon agrees to it, so moon-door.puck hangs it, on the frame this file builds.
+let wallPaintings = [
+  { name: "garden", x: courtWallDoors[0], z: courtWall, yaw: 180, look: ornate, to: galleryRoute("garden") }
+  { name: "night", x: courtWallDoors[1], z: courtWall, yaw: 180, look: modern, to: galleryRoute("night") }
+  { name: "city", x: courtWallDoors[2], z: courtWall, yaw: 180, look: ornate, to: galleryRoute("city") }
+  {
+    name: "moon", x: courtWallDoors[3], z: courtWall, yaw: 180, look: modern, to: galleryRoute("moon")
+    title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on. Knock and wait for the moon to answer; the frame it opens leads back."
+  }
+  { name: "galaxy", x: courtWallDoors[4], z: courtWall, yaw: 180, look: brass, to: galleryRoute("galaxy") }
+  {
+    name: "sun", x: courtEast, z: 6.6, yaw: 90, look: brass, to: galleryRoute("sun")
+    title: "PERIHELION", note: "A rock the sun passes once a day, the same sun that lights the valley. Step in and watch it come; keep to the rock while it passes, and do not fly to it."
+  }
+  {
+    name: "globe", x: (courtFins[0] + galleryWall), z: 2.4, yaw: 270, look: ornate, to: galleryRoute("globe")
+    title: "THE BOTTLE WORLD", note: "A room whose gravity this gallery owns. Press the lever before it and watch which way the marbles fall; step in and someone out here can turn you over."
+  }
+  { name: "link-west", x: (courtFins[1] + galleryWall), z: 2.4, yaw: 270, look: brass, to: selfRoute("painting-link-east/glass") }
+  { name: "link-east", x: courtFins[2], z: 2.4, yaw: 90, look: brass, to: selfRoute("painting-link-west/glass") }
+]
+// Each painting as a portal of the module, hung under the building's root on the wing's floor.
+let paintingPortals = map(wallPaintings, painting => portalOf(
+  id: $"painting-{painting.name}",
+  x: painting.x,
+  y: wingFloor,
+  z: painting.z,
+  yaw: painting.yaw,
+  site: gallerySite,
+  parent: "gallery",
+  look: painting.look,
+  to: painting.to,
+  plaque: ({ title: painting.to.title, note: painting.to.note } with painting)
+))
+
+// The floor and ceiling paintings of the endless fall (layout.puck's `fallPlan`) stand over the same point; the ceiling
+// one hangs under the slab, in the hole level 1's floor leaves over it, and a balustrade rings that hole
+// (gallery/shell.puck). Each is a canvas lying flat rather than hung, so each is a creation of its own here, wearing
+// the module's face.
+let fallHalf = 1.12
+let canvasRim = portalCanvasRim
 // Shape rotations, as authored quaternions [x, y, z, w]: a quarter turn about +X lays a canvas (its +Z face) flat. The
 // floor turns it to face up and the ceiling to face down; the ceiling placement's half turn about up then lines its right
 // and up axes with the floor's, so a crossing keeps the traveller's heading.
 let faceUp = [0.707107, 0, 0, 0.707107]
 let faceDown = [-0.707107, 0, 0, 0.707107]
-
-// Palette slots every painting prototype shares.
+// The fall paintings' palette slots.
 let paintGilt = 0
 let paintLip = 1
 let paintBlack = 2
-let paintMat = 3
-let paintBrass = 4
-let paintBoard = 5
-let paintInk = 6
-let paintingPalette = [
-  paintingGiltRow
-  paintingLipRow
-  paintingBlackRow
-  { color: "#EDEAE3", roughness: 0.7 }
-  { color: "#B58F4F", roughness: 0.35, specular: 0.5 }
-  paintingBoardRow
-  paintingInkRow
-]
-
-// The frames: a dark lip against the canvas, an optional mat, then the border, each a ring of the given width.
-let ornate = { lip: paintLip, lipWidth: 0.05, mat: paintMat, matWidth: 0, border: paintGilt, borderWidth: 0.22 }
-let modern = { lip: paintBlack, lipWidth: 0, mat: paintMat, matWidth: 0.14, border: paintBlack, borderWidth: 0.07 }
-let brass = { lip: paintBlack, lipWidth: 0.03, mat: paintMat, matWidth: 0, border: paintBrass, borderWidth: 0.12 }
-
-// The wall paintings. `x` and `z` stand the painting's foot on the wall it hangs on, in the building's frame, `yaw`
-// turns its front (yaw 0 faces -Z, 180 faces +Z, 90 faces -X, 270 faces +X), and `counterpart` is the face a crossing
-// arrives out of.
-let wallPaintings = [
-  {
-    name: "garden", x: courtWallDoors[0], z: courtWall, yaw: 180, frame: ornate, destination: "garden", counterpart: "arrival/glass", fallback: fallbackGarden
-    title: "THE GARDEN", note: "A sunset plot beyond the glass. Walk or jump in; the frame behind you leads back."
-  }
-  {
-    name: "night", x: courtWallDoors[1], z: courtWall, yaw: 180, frame: modern, destination: "night", counterpart: "arrival/glass", fallback: fallbackNight
-    title: "THE NIGHT FIELD", note: "A snowfield under the stars. Step in; turn round to come back."
-  }
-  {
-    name: "city", x: courtWallDoors[2], z: courtWall, yaw: 180, frame: ornate, destination: "city", counterpart: "arrival/glass", fallback: fallbackCity
-    title: "THE CITY", note: "A town on a river bend, its market, terraces, works and quay. Step in; the frame behind you leads back."
-  }
-  {
-    name: "moon", x: courtWallDoors[3], z: courtWall, yaw: 180, frame: modern, destination: "moon", counterpart: "moon-socket/glass", fallback: fallbackMoon
-    title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on. Knock and wait for the moon to answer; the frame it opens leads back."
-  }
-  {
-    name: "galaxy", x: courtWallDoors[4], z: courtWall, yaw: 180, frame: brass, destination: "galaxy", counterpart: "arrival/glass", fallback: fallbackGalaxy
-    title: "THE PLANETOIDS", note: "Six small worlds in open space, each with gravity of its own shape. Step in; the glowing pads launch you from one to the next."
-  }
-  {
-    name: "sun", x: courtEast, z: 6.6, yaw: 90, frame: brass, destination: "sun", counterpart: "arrival/glass", fallback: fallbackSun
-    title: "PERIHELION", note: "A rock the sun passes once a day, the same sun that lights the valley. Step in and watch it come; keep to the rock while it passes, and do not fly to it."
-  }
-  {
-    name: "globe", x: (courtFins[0] + galleryWall), z: 2.4, yaw: 270, frame: ornate, destination: "globe", counterpart: "arrival/glass", fallback: fallbackGlobe
-    title: "THE BOTTLE WORLD", note: "A room whose gravity this gallery owns. Press the lever before it and watch which way the marbles fall; step in and someone out here can turn you over."
-  }
-  {
-    name: "link-west", x: (courtFins[1] + galleryWall), z: 2.4, yaw: 270, frame: brass, destination: "self", counterpart: "painting-link-east/glass", fallback: fallbackSelf
-    title: "ACROSS THE ROOM", note: "Step in and you step out of its twin on the far wall, facing out."
-  }
-  {
-    name: "link-east", x: courtFins[2], z: 2.4, yaw: 90, frame: brass, destination: "self", counterpart: "painting-link-west/glass", fallback: fallbackSelf
-    title: "ACROSS THE ROOM", note: "Step in and you step out of its twin on the far wall, facing out."
-  }
-]
-
-// The floor and ceiling paintings of the endless fall (layout.puck's `fallPlan`) stand over the same point; the ceiling
-// one hangs under the slab, in the hole level 1's floor leaves over it, and a balustrade rings that hole
-// (gallery/shell.puck).
-let fallHalf = 1.12
-
-// A wall painting: face 0, the rim, names the glass, which stands `canvasProud` out from the wall; the frame is the
-// rings round it and the plaque stands on the wall to its right.
-template wallPainting(label, frame, title, note) {
-  behavior {
-    faces [{ name: "glass", shapeId: 0 }]
-  }
-  name: label
-  schema: "puck.creation.v2"
-  palette: paintingPalette
-  // A box's face is its local +Z, so the rim's half turn faces the glass to the creation's front (-Z), away from the
-  // wall: a door fires only for a body passing through its glass from the side it faces.
-  shape Box "rim" {
-    material: paintBlack
-    position [0, canvasCenter, -canvasProud]
-    rotation [0, 1, 0, 0]
-    scale [canvasHalfWidth, canvasHalfHeight, 0.04]
-  }
-  shape Box "opening" {
-    blend: Subtraction
-    material: paintBlack
-    position [0, canvasCenter, -canvasProud]
-    scale [(canvasHalfWidth - canvasRim), (canvasHalfHeight - canvasRim), 0.3]
-  }
-  for width in ((frame.lipWidth > 0) ? [frame.lipWidth] : []) {
-    barRing(
-      label: "lip",
-      ix: canvasHalfWidth,
-      y0: (canvasCenter - canvasHalfHeight),
-      y1: (canvasCenter + canvasHalfHeight),
-      w: width,
-      depth: 0.08,
-      slot: frame.lip
-    )
-  }
-  for width in ((frame.matWidth > 0) ? [frame.matWidth] : []) {
-    barRing(
-      label: "mat",
-      ix: (canvasHalfWidth + frame.lipWidth),
-      y0: (canvasCenter - canvasHalfHeight),
-      y1: (canvasCenter + canvasHalfHeight + frame.lipWidth),
-      w: width,
-      depth: 0.05,
-      slot: frame.mat
-    )
-  }
-  barRing(
-    label: "border",
-    ix: (canvasHalfWidth + frame.lipWidth + frame.matWidth),
-    y0: (canvasCenter - canvasHalfHeight),
-    y1: (canvasCenter + canvasHalfHeight + frame.lipWidth + frame.matWidth),
-    w: frame.borderWidth,
-    depth: 0.11,
-    slot: frame.border
-  )
-  // The plaque: a cream board on the wall, a hand's width beyond the frame.
-  boundsBox(
-    label: "plaque",
-    x0: (0 - (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 1.15)),
-    x1: (0 - (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.15)),
-    y0: 1.0,
-    y1: 1.4,
-    z0: -0.025,
-    z1: 0,
-    slot: paintBoard
-  )
-  textRuns [
-    {
-      text: title
-      position [(0 - (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65)), 1.31, -0.025]
-      rotation [0, 1, 0, 0]
-      emHeight: 0.06
-      depth: 0.004
-      mode: "emboss"
-      material: paintInk
-      align: "center"
-      maxWidth: 0.94
-    }
-    {
-      text: note
-      position [(0 - (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.65)), 1.22, -0.025]
-      rotation [0, 1, 0, 0]
-      emHeight: 0.028
-      depth: 0.003
-      mode: "emboss"
-      material: paintInk
-      align: "center"
-      maxWidth: 0.94
-      lineSpacing: 1.15
-    }
-  ]
-}
+let paintBoard = 3
+let paintInk = 4
+let fallPalette = [portalGiltRow, portalLipRow, portalBlackRow, portalBoardRow, portalInkRow]
 
 // The wing's shell: a partition wall with a doorway, and a lining over the south, north and east walls, up to the slab
 // above. Every piece is a box rather than a subtraction, so a visitor in the doorway meets analytic boxes rather than a
@@ -227,13 +135,9 @@ template wallPainting(label, frame, title, note) {
 // room and still carries its fixtures' light (gallery/gallery.puck's wingDownlights and wingWashes) about each canvas.
 let wingWall = 0
 let wingTrim = 1
-let wingBoard = 2
-let wingInk = 3
 let wingPalette = [
   { color: "#D8D2C6", roughness: 0.85, specular: 0.04 }
   { color: "#1B1F25", roughness: 0.6, specular: 0.15 }
-  { color: "#F2EEE4", roughness: 0.6 }
-  { color: "#3A3F47", roughness: 0.6 }
 ]
 
 references [
@@ -253,8 +157,7 @@ destinations [
 ]
 
 prototypes {
-  // The wing's three fins, each a wall standing out from the south wall to the slab above, and the board that names the
-  // wing where the lobby meets it.
+  // The wing's three fins, each a wall standing out from the south wall to the slab above.
   prototype "wing-fins" {
     document {
       name: "wing-fins"
@@ -285,18 +188,7 @@ prototypes {
     }
   }
 
-  for painting in wallPaintings {
-    prototype $"painting-{painting.name}" {
-      document {
-        wallPainting(
-          label: $"painting-{painting.name}",
-          frame: painting.frame,
-          title: painting.title,
-          note: painting.note
-        )
-      }
-    }
-  }
+  portalPrototypes(portals: paintingPortals)
 
   // The floor painting of the endless fall: a gilt square lying flat, its canvas a hand proud of the floor, with a
   // plaque lying on the floor before it, read from the south.
@@ -307,7 +199,7 @@ prototypes {
       }
       name: "painting-fall-floor"
       schema: "puck.creation.v2"
-      palette: paintingPalette
+      palette: fallPalette
       shape Box "rim" {
         material: paintBlack
         position [0, 0, 0]
@@ -352,8 +244,7 @@ prototypes {
     }
   }
 
-  // The rail round the hole over the ceiling painting on level 1: a black parapet with a gilt cap, so nobody drops into
-  // the wing by accident, and a line of text on its south face. Written in world bounds (boundsBox), solid.
+  // The ceiling painting of the endless fall: the floor's twin hung face down under the slab.
   prototype "painting-fall-ceiling" {
     document {
       behavior {
@@ -361,7 +252,7 @@ prototypes {
       }
       name: "painting-fall-ceiling"
       schema: "puck.creation.v2"
-      palette: paintingPalette
+      palette: fallPalette
       shape Box "rim" {
         material: paintBlack
         position [0, 0, 0]
@@ -389,21 +280,13 @@ placements {
     solid
   }
 
-  for painting in filter(wallPaintings, p => (p.name != "moon")) {
-    placement $"painting-{painting.name}" {
-      prototype: $"painting-{painting.name}"
-      parent: "gallery"
-      position [painting.x, wingFloor, painting.z]
-      yawDegrees: painting.yaw
-      paintingFace(destination: painting.destination, counterpart: painting.counterpart, fallback: painting.fallback)
-    }
-  }
+  portalPlacements(portals: filter(paintingPortals, portal => (portal.id != "painting-moon")))
 
   placement "painting-fall-floor" {
     prototype: "painting-fall-floor"
     parent: "gallery"
     position [fallPlan[0], wingFloor, fallPlan[1]]
-    paintingFace(destination: "self", counterpart: "painting-fall-ceiling/glass", fallback: fallbackSelf)
+    portalFace(destination: "self", counterpart: "painting-fall-ceiling/glass", fallback: portalFallbackSelf)
   }
 
   placement "painting-fall-ceiling" {
@@ -411,7 +294,7 @@ placements {
     parent: "gallery"
     position [fallPlan[0], (wingTop - 0.03), fallPlan[1]]
     yawDegrees: 180
-    paintingFace(destination: "self", counterpart: "painting-fall-floor/glass", fallback: fallbackSelf)
+    portalFace(destination: "self", counterpart: "painting-fall-floor/glass", fallback: portalFallbackSelf)
   }
 }
 

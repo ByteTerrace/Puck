@@ -20,7 +20,7 @@ simulation {
 import "set-controls"
 import "suit"
 import "size"
-import "painting-kit"
+import "../standard/portal"
 import "../standard/place"
 import "../standard/visitors"
 // The pond plot west of the frames: a hound pack, stalking spiders, dragonflies and fish (pond.puck).
@@ -189,7 +189,7 @@ placements {
           destination: "debug"
           fallback: "#FF00FF"
           projection: window
-          attention: windowAttention
+          attention: portalAttention
         }
       }
     ]
@@ -217,7 +217,7 @@ placements {
           destination: "debug"
           fallback: "#FF00FF"
           projection: window
-          attention: windowAttention
+          attention: portalAttention
         }
       }
     ]
@@ -245,7 +245,7 @@ placements {
           destination: "hearth"
           fallback: "#3A160C"
           projection: window
-          attention: windowAttention
+          attention: portalAttention
         }
       }
     ]
@@ -283,7 +283,7 @@ prototypes {
   // rim, names the glass, which shows through the opening carved out of it.
   prototype "frame" {
     document {
-      arrivalFrame(color: "#C9A43A", roughness: 0.4, specular: 0.4, post: 0.12)
+      portalFrame(color: "#C9A43A", roughness: 0.4, specular: 0.4, post: 0.12)
     }
   }
 

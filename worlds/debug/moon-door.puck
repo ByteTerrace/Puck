@@ -13,11 +13,11 @@
 import "../standard/agreement"
 import "../standard/bounds"
 import "moon-frame"
-import "painting-kit"
+import "../standard/portal"
 import "../standard/place"
 import "../standard/reach"
 
-// The painting hangs on the wing's south wall at x 66, its canvas facing +Z (paintings.puck's `wallPaintings`); the
+// The painting hangs on the wing's south wall, its canvas facing +Z (paintings.puck's `wallPaintings`); the
 // step is the floor before it, and the curtain hangs a hand in front of the canvas.
 let moonDoorX = 58.5
 let moonDoorWall = 12.3
@@ -82,28 +82,13 @@ placements {
       prototype: door.prototype
       position: door.position
       yawDegrees: door.yaw
-      faceSources [
-        {
-          face: "glass"
-          filter: linear
-          portal {
-            arrival: "mapped"
-            counterpart: $"{door.socket}/glass"
-            destination: "moon"
-            travel: "body"
-            open: state(state: $"{door.agreement}Open", comparison: Equal, value: 1)
-            gate { state: $"{door.agreement}Pass", comparison: Equal, value: 1 }
-          }
-          source {
-            $type: "session"
-            destination: "moon"
-            fallback: "#CFC8BC"
-            projection: window
-            attention: windowAttention
-            ripple: true
-          }
-        }
-      ]
+      portalFace(
+        destination: "moon",
+        counterpart: $"{door.socket}/glass",
+        fallback: "#CFC8BC",
+        open: state(state: $"{door.agreement}Open", comparison: Equal, value: 1),
+        gate: { state: $"{door.agreement}Pass", comparison: Equal, value: 1 }
+      )
     }
   }
 
@@ -124,7 +109,7 @@ prototypes {
   // The valley door: a standing frame whose glass reaches the ground.
   prototype "moon-door-valley" {
     document {
-      arrivalFrame(color: "#C9A43A", roughness: 0.4, specular: 0.4, post: 0.12)
+      portalFrame(color: "#C9A43A", roughness: 0.4, specular: 0.4, post: 0.12)
     }
   }
 

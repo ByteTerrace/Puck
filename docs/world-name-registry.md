@@ -1432,6 +1432,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].routes.state` | State | Names | Read | `WorldFaceRoutes.State` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].routes.key` | State | Key | Read | `WorldFaceRoutes.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -2025,6 +2027,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].routes.state` | State | Names | Read | `WorldFaceRoutes.State` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].routes.key` | State | Key | Read | `WorldFaceRoutes.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -2618,6 +2622,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].routes.state` | State | Names | Read | `WorldFaceRoutes.State` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].routes.key` | State | Key | Read | `WorldFaceRoutes.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -3076,6 +3082,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `placements.rows[].faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `placements.rows[].faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `placements.rows[].faceSources[].routes.state` | State | Names | Read | `WorldFaceRoutes.State` |
+| `placements.rows[].faceSources[].routes.key` | State | Key | Read | `WorldFaceRoutes.Key` |
 | `placements.rows[].attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `placements.rows[].attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `placements.rows[].contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -3956,6 +3964,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].routes.state` | State | Names | Read | `WorldFaceRoutes.State` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].routes.key` | State | Key | Read | `WorldFaceRoutes.Key` |
 | `rules[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `rules[].effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `rules[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -4567,6 +4577,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].routes.state` | State | Names | Read | `WorldFaceRoutes.State` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].routes.key` | State | Key | Read | `WorldFaceRoutes.Key` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -5201,6 +5213,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].routes.state` | State | Names | Read | `WorldFaceRoutes.State` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].routes.key` | State | Key | Read | `WorldFaceRoutes.Key` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -5777,6 +5791,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].routes.state` | State | Names | Read | `WorldFaceRoutes.State` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].routes.key` | State | Key | Read | `WorldFaceRoutes.Key` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -6717,6 +6733,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.destination` | `WorldPlacementPortal.Destination` | a destination name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.counterpart` | `WorldPlacementPortal.Counterpart` | a counterpart in the destination world |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -7164,6 +7183,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.destination` | `WorldPlacementPortal.Destination` | a destination name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.counterpart` | `WorldPlacementPortal.Counterpart` | a counterpart in the destination world |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -7611,6 +7633,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.destination` | `WorldPlacementPortal.Destination` | a destination name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.counterpart` | `WorldPlacementPortal.Counterpart` | a counterpart in the destination world |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -7954,6 +7979,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `placements.rows[].faceSources[].portal.destination` | `WorldPlacementPortal.Destination` | a destination name |
 | `placements.rows[].faceSources[].portal.counterpart` | `WorldPlacementPortal.Counterpart` | a counterpart in the destination world |
+| `placements.rows[].faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
+| `placements.rows[].faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `placements.rows[].faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `placements.rows[].board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `placements.rows[].deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `placements.rows[].spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -8378,6 +8406,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].portal.destination` | `WorldPlacementPortal.Destination` | a destination name |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].portal.counterpart` | `WorldPlacementPortal.Counterpart` | a counterpart in the destination world |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `rules[].effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `rules[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -8842,6 +8873,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.destination` | `WorldPlacementPortal.Destination` | a destination name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.counterpart` | `WorldPlacementPortal.Counterpart` | a counterpart in the destination world |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -9324,6 +9358,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.destination` | `WorldPlacementPortal.Destination` | a destination name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.counterpart` | `WorldPlacementPortal.Counterpart` | a counterpart in the destination world |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -9779,6 +9816,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.destination` | `WorldPlacementPortal.Destination` | a destination name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.counterpart` | `WorldPlacementPortal.Counterpart` | a counterpart in the destination world |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `interactions.interactions[].effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |

@@ -457,7 +457,21 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         var any = false;
 
         foreach (var placement in definition.Placements) {
-            foreach (var face in (placement.FaceSources ?? [])) {
+            foreach (var authored in (placement.FaceSources ?? [])) {
+                // A routed door reads as the route the door scan last recorded, and names it among its routes.
+                var routeText = "";
+                var face = authored;
+
+                if (authored.Routes is { } routes) {
+                    var route = WorldFaceRoutes.Closed;
+                    var scanned = ((resolved?.PortalClosures is { } closures) && closures.TryRoute(face: authored.Face, placementId: placement.Id, route: out route));
+
+                    routeText = ((!scanned)
+                        ? $" route=unread/{routes.Entries.Count}"
+                        : ((route == WorldFaceRoutes.Closed) ? $" route=closed/{routes.Entries.Count}" : $" route={route}/{routes.Entries.Count}"));
+                    face = WorldFaceRouting.On(face: authored, route: (scanned ? route : WorldFaceRoutes.Closed));
+                }
+
                 if (face.Portal is not { } portal) {
                     continue;
                 }
@@ -483,7 +497,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                     : "population"
                 );
 
-                _ = builder.Append(value: $" {placement.Id}/{face.Face}[-> {portal.Destination} durability={durability} travel={WorldDestinationTokens.TravelToken(travel: travel)} arrival={arrivalToken}{counterpartText} holdSeconds={defaults.HoldSeconds.ToString(provider: CultureInfo.InvariantCulture)} full={defaults.Full.ToString().ToLowerInvariant()} partyAllOrNothing={defaults.PartyAllOrNothing.ToString().ToLowerInvariant()} capacity={capacityText} inside={DescribeOccupancy(
+                _ = builder.Append(value: $" {placement.Id}/{face.Face}[-> {portal.Destination}{routeText} durability={durability} travel={WorldDestinationTokens.TravelToken(travel: travel)} arrival={arrivalToken}{counterpartText} holdSeconds={defaults.HoldSeconds.ToString(provider: CultureInfo.InvariantCulture)} full={defaults.Full.ToString().ToLowerInvariant()} partyAllOrNothing={defaults.PartyAllOrNothing.ToString().ToLowerInvariant()} capacity={capacityText} inside={DescribeOccupancy(
                     instance: resolved,
                     placementId: placement.Id,
                     faceName: face.Face

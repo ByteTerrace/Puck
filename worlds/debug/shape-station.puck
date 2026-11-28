@@ -86,8 +86,9 @@ let galleryConsole = {
 // The station for each of `displays`: a station view per display, the terminals that engage them, the console rules that
 // work each one's screen and turntable, the pick rules that carry `gallery.go` and `gallery.show` to the display an
 // exhibit is home to, and the commands that step, turn and film a display. A display's terminal is its place in
-// `displays` from 1.
-template shapeStation(displays = galleryDisplays) {
+// `displays` from 1; `terminals` are the world's other terminals (a panel's, ../standard/panel.puck's `panelTerminals`),
+// numbered after the displays, since a world plays all its terminals through one `terminalPlay`.
+template shapeStation(displays = galleryDisplays, terminals = []) {
   // One camera per display, a terminal's desk view anchored on its plinth placement (`display-<id>-plinth`, which stays
   // put while an exhibit is lifted or swapped) and placed in that placement's own axes, so it frames the exhibit and the
   // whole console from the same vantage whichever way the display faces and wherever it stands, and follows the display
@@ -103,13 +104,17 @@ template shapeStation(displays = galleryDisplays) {
   ))
 
   terminalPlay(
-    terminals: map(displays, display => {
-      at: displayWorld(display, displayStand)
-      camera: $"gallery-station-{display.id}"
-      spawn: $"display-{display.id}"
-    }),
+    terminals: concat(
+      map(displays, display => {
+        at: displayWorld(display, displayStand)
+        camera: $"gallery-station-{display.id}"
+        spawn: $"display-{display.id}"
+      }),
+      terminals
+    ),
     near: 2.6,
-    console: galleryConsole
+    console: galleryConsole,
+    consoleTerminals: length(displays)
   )
 
   // A display's terminal mailbox (terminalAction and terminalValue, keyed by its terminal number) carried into the cells

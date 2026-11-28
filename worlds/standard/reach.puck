@@ -41,7 +41,8 @@ function pressing() = channel(each, interact) >= 1
 
 // Whether a point (px, py, pz) stands within `r` of the world point `at` on the ground plane and within `h` of it up or
 // down: the round reach of a thing a body walks up to and uses in place (a terminal, a speaker), which its rules read at
-// one radius to enter and a wider one to leave.
-function reachedFrom(at, px, py, pz, r, h) = ((((px - at[0]) * (px - at[0])) + ((pz - at[2]) * (pz - at[2])) <=
-  (r * r)) and
-  (absolute(py - at[1]) <= h))
+// one radius to enter and a wider one to leave. `reachedAt` takes the point's coordinates apart, so a rule can read them
+// from cells (a reach whose place is state).
+function reachedFrom(at, px, py, pz, r, h) = reachedAt(at[0], at[1], at[2], px, py, pz, r, h)
+function reachedAt(x, y, z, px, py, pz, r, h) = ((((px - x) * (px - x)) + ((pz - z) * (pz - z)) <= (r * r)) and
+  (absolute(py - y) <= h))

@@ -1,0 +1,40 @@
+// Level 3's portals: twelve doors against the galleries' outer walls, each with the panel that points it at any world of
+// the debug world set's library (../portal-library.puck), standing where gallery/layout.puck's `galleryPortalBays` puts
+// them. Each is the standard's portal module (../../standard/portal.puck) and its panel the standard's control panel
+// (../../standard/panel.puck): walk up to a panel, press the context button (E, or the pad's RB), tap a world on its list,
+// and the portal beside it leads there, for everyone, since the panel's choice is world state its door reads. The gallery
+// imports this file, so the gallery booted alone (gallery-root.puck) and the debug world both stand them; the panels'
+// terminals join the display stations' in the gallery's one `terminalPlay` (gallery.puck's `shapeStation`).
+//
+// The library's worlds are this document's references and destinations, declared once here for every portal of the
+// building that leads to one (the painting wing and the lab wing hang fixed portals onto its entries).
+
+import "../../standard/portal"
+import "../../standard/panel"
+import "../portal-library"
+
+references: portalReferences(galleryPortalLibrary)
+destinations: portalDestinations(galleryPortalLibrary)
+
+prototypes {
+  portalPrototypes(portals: galleryPortals)
+  panelPrototypes(panels: galleryPanels)
+}
+
+placements {
+  portalPlacements(portals: galleryPortals)
+  panelPlacements(panels: galleryPanels)
+}
+
+state {
+  world {
+    panelState(panels: galleryPanels)
+  }
+}
+
+panelRules(panels: galleryPanels)
+
+cameras: panelCameras(galleryPanels)
+
+// A spawn point before each portal, facing it, and one at each panel.
+spawnPoints: concat(portalSpawns(galleryPortals), panelSpawns(galleryPanels))

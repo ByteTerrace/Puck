@@ -1,0 +1,282 @@
+// A portal: a framed canvas that is a door. Walk into its glass and you pass through it into another world, or another
+// place in this one; while you stand outside, its glass is a window onto where it leads, rippling like an event horizon.
+// A library: it hands its importers the portal's creation, its face, its placements, the panel that points it, and its
+// library's rows as templates and functions, and emits no document. Where each portal stands, how its frame looks and
+// where it leads are the importing world's: one portal is a row, and a world places any number from its layout.
+//
+// A portal is a row (`portalOf` writes one with its defaults):
+//
+//   id          its placement's and its prototype's id, and its panel's; a crossing names `<id>/glass` as its counterpart
+//   x, y, z     its foot, on the glass's plane, in the frame of `parent` (a placement id, or null for the world), which
+//   site        stands at the world point `site`
+//   yaw         the way its glass faces, as a placement's yaw turns it (0 faces -z, 180 faces +z)
+//   look        its frame (`portalStanding`, or a world's own: the canvas's `proud` and its `rings`, below)
+//   to          where a fixed portal leads: a route `{ destination, counterpart, fallback }`, or null
+//   library     where a routed portal may lead: a list of routes, and `route` the one it boots on; null for a fixed one
+//   plaque      `{ title, note }` lettered on a plaque beside it (a wall or a post, as its look says), or null
+//   sign        what the glass reads while it leads nowhere (`to` and `library` both null)
+//
+// A routed portal stands its panel (panel.puck) at its right: a console whose list is the library, so a player points
+// the portal at any entry, as a display station browses its catalog. The portal's face routes by the panel's choice (its
+// `routes` read `panelChoice` at the portal's id), so the authority's door scan, which reads that cell, decides both
+// where the door leads and what its glass shows, and everyone sees the same (the engine's `WorldFaceRoutes`). A route is
+// a library entry: `destination` names a `destinations` row (`portalReferences` and `portalDestinations` write the
+// library's rows), `counterpart` the destination's border face a traveller steps out of, and `fallback` the colour the
+// glass shows past the deepest window inside a window; `title` and `note` are what the panel shows of it and
+// `document` the world it opens.
+//
+// A portal's glass is a window drawn at the share of the screen it covers and only while it is seen (the engine's portal
+// visibility), and it holds a session only while its door is open, one route at a time: the module adds no work of its
+// own that grows with where it leads.
+import "bounds"
+import "panel"
+
+// The canvas: 2.24 m wide and 2.84 m tall, its foot 0.12 m under the floor so a body's feet cross the glass, and a rim of
+// `portalCanvasRim` round the opening carved out of it, through which the glass shows.
+let portalCanvasHalf = [1.12, 1.42]
+let portalCanvasCentre = 1.3
+let portalCanvasRim = 0.02
+
+// Frame palette rows a world's looks may wear.
+let portalGiltRow = { color: "#C9A43A", roughness: 0.4, specular: 0.4 }
+let portalLipRow = { color: "#5C2B26", roughness: 0.55, specular: 0.2 }
+let portalBlackRow = { color: "#15171B", roughness: 0.45, specular: 0.2 }
+let portalBoardRow = { color: "#F2EEE4", roughness: 0.6 }
+let portalInkRow = { color: "#3A3F47", roughness: 0.6 }
+
+// What a glass shows past the deepest level of windows inside windows when it leads into its own world.
+let portalFallbackSelf = "#10141B"
+
+// How far a glass's attention reaches, in metres from it to the nearest player in the world that stands it: within the
+// first its destination is watched, within the second glimpsed, and beyond it unobserved. A destination reads this
+// against its own `simulation.stepsAt`, so a world nobody stands near costs its clocks alone.
+let portalAttention = { watchedWithin: 12, glimpsedWithin: 26 }
+
+// A freestanding look: posts and a lintel `post` metres thick round the canvas in one palette row, standing as far behind
+// the glass as before it, and a plaque on a post at the right.
+function portalStanding(color, roughness = 0.45, specular = 0.2, post = 0.08) = {
+  proud: 0
+  rings [{ width: (2 * post), front: 0.08, back: 0.08, row { color: color, roughness: roughness, specular: specular } }]
+  plaque: "post"
+}
+
+// A portal row, with the defaults a fixed, unlettered portal in the world's own frame takes.
+function portalOf(id, x, z, yaw, look, y = 0, site = [0, 0, 0], parent = null, to = null, library = null, route = 0, plaque = null, sign = ["OPENING", "SOON"]) = {
+  id: id
+  x: x
+  y: y
+  z: z
+  yaw: yaw
+  site: site
+  parent: parent
+  look: look
+  to: to
+  library: library
+  route: route
+  plaque: plaque
+  sign: sign
+}
+// Where a portal leads when it boots: its route in its library, or its fixed route.
+function portalRouteOf(portal) = ((portal.library != null) ? portal.library[portal.route] : portal.to)
+// The rings' widths out to ring `k`, and the frame's whole reach past the canvas.
+function portalRingInset(look, k) = reduce(range(0, k), 0, (sum, j) => (sum + look.rings[j].width))
+function portalOuter(look) = (portalCanvasHalf[0] + portalRingInset(look, length(look.rings)))
+
+// One ring round the canvas, `width` wide from `inset` past it: two posts from the canvas's foot and a lintel over them,
+// reaching `front` before the glass's plane (toward the creation's front, -Z) and `back` behind it.
+template portalRing(label, inset, ring, slot) {
+  let ix = (portalCanvasHalf[0] + inset)
+  let y0 = (portalCanvasCentre - portalCanvasHalf[1])
+  let y1 = ((portalCanvasCentre + portalCanvasHalf[1]) + inset)
+  boundsBox(label: $"{label}-left", x0: ix, x1: (ix + ring.width), y0: y0, y1: (y1 + ring.width), z0: (0 - ring.front), z1: ring.back, slot: slot)
+  boundsBox(label: $"{label}-right", x0: (0 - (ix + ring.width)), x1: (0 - ix), y0: y0, y1: (y1 + ring.width), z0: (0 - ring.front), z1: ring.back, slot: slot)
+  boundsBox(label: $"{label}-top", x0: (0 - ix), x1: ix, y0: y1, y1: (y1 + ring.width), z0: (0 - ring.front), z1: ring.back, slot: slot)
+}
+
+// A portal's creation, named `label`: face 0, the canvas's rim, names the glass, which shows through the opening carved
+// out of it and stands `look.proud` before the creation's plane; then the look's rings, and the plaque, lettered with
+// `plaque` when it is not null. Its palette is the canvas's black, a row a ring, then the plaque's board, ink and post.
+template portalCreation(label, look, plaque = null) {
+  let board = (length(look.rings) + 1)
+  let outer = portalOuter(look)
+  behavior {
+    faces [{ name: "glass", shapeId: 0 }]
+  }
+  name: label
+  schema: "puck.creation.v2"
+  palette: concat([portalBlackRow], map(look.rings, ring => ring.row), [portalBoardRow, portalInkRow, portalBlackRow])
+  // A box's face is its local +Z, so the rim's half turn faces the glass to the creation's front (-Z): a door fires only
+  // for a body passing through its glass from the side it faces.
+  shape Box "rim" {
+    material: 0
+    position [0, portalCanvasCentre, (0 - look.proud)]
+    rotation [0, 1, 0, 0]
+    scale [portalCanvasHalf[0], portalCanvasHalf[1], 0.04]
+  }
+  shape Box "opening" {
+    blend: Subtraction
+    material: 0
+    position [0, portalCanvasCentre, (0 - look.proud)]
+    scale [(portalCanvasHalf[0] - portalCanvasRim), (portalCanvasHalf[1] - portalCanvasRim), 0.3]
+  }
+  for (ring, k) in look.rings {
+    portalRing(label: $"ring-{k}", inset: portalRingInset(look, k), ring: ring, slot: (k + 1))
+  }
+  // A wall plaque: a cream board on the wall a hand's width right of the frame.
+  for lettering in (((plaque != null) and (look.plaque == "wall")) ? [plaque] : []) {
+    boundsBox(label: "plaque", x0: (0 - (outer + 1.15)), x1: (0 - (outer + 0.15)), y0: 1.0, y1: 1.4, z0: -0.025, z1: 0, slot: board)
+  }
+  // A post plaque: a board on a post a step right of the frame, its face toward the door's front.
+  for lettering in (((plaque != null) and (look.plaque == "post")) ? [plaque] : []) {
+    shape Box "plaque-post" {
+      material: (board + 2)
+      position [portalPostX(look), 0.5, 0.015]
+      scale [0.035, 0.5, 0.035]
+    }
+    shape Box "plaque" {
+      material: board
+      position [portalPostX(look), 1.3, 0]
+      scale [0.5, 0.3, 0.015]
+    }
+  }
+  textRuns: portalPlaqueRuns(look, plaque)
+}
+// Where a post plaque stands across the creation, right of the frame.
+function portalPostX(look) = (0 - ((portalOuter(look) + 0.35) + 0.5))
+// A plaque's lettering: its title over its note, embossed on the board in the plaque's ink, or none without a plaque.
+function portalPlaqueRuns(look, plaque) = ((plaque == null) ? [] : ((look.plaque == "wall") ? [
+  portalRun(plaque.title, [(0 - (portalOuter(look) + 0.65)), 1.31, -0.025], 0.06, 0.004, look, 0.94)
+  (portalRun(plaque.note, [(0 - (portalOuter(look) + 0.65)), 1.22, -0.025], 0.028, 0.003, look, 0.94) with { lineSpacing: 1.15 })
+] : [
+  portalRun(plaque.title, [portalPostX(look), 1.47, -0.015], 0.07, 0.004, look, 0.88)
+  (portalRun(plaque.note, [portalPostX(look), 1.36, -0.015], 0.032, 0.003, look, 0.88) with { lineSpacing: 1.15 })
+]))
+function portalRun(text, at, em, depth, look, width) = {
+  text: text
+  position: at
+  rotation [0, 1, 0, 0]
+  emHeight: em
+  depth: depth
+  mode: "emboss"
+  material: (length(look.rings) + 2)
+  align: "center"
+  maxWidth: width
+}
+
+// The frame a destination world stands a traveller's way back in: a freestanding portal of the look `portalStanding`
+// gives, named `label`, with no plaque.
+template portalFrame(color, roughness = 0.45, specular = 0.2, post = 0.08, label = "frame") {
+  portalCreation(label: label, look: portalStanding(color: color, roughness: roughness, specular: specular, post: post))
+}
+
+// A portal's door, leading to `destination` and stepping a traveller out of `counterpart` there, open while `open` holds
+// (a state condition, or null for always) and passing whom `gate` admits (or null for everyone).
+function portalDoor(destination, counterpart, open = null, gate = null) = (({
+  arrival: "mapped"
+  counterpart: counterpart
+  destination: destination
+  travel: "body"
+} with ((open == null) ? {} : { open: open })) with ((gate == null) ? {} : { gate: gate }))
+
+// The glass face a portal wears: a door onto `destination` and a window showing what lies past it, rippling with every
+// body that touches or passes through. `routes`, when not null, points the door and the window at one of a list of
+// destinations by a state cell (`portalRoutes`); `destination`, `counterpart` and `fallback` are then the route it shows
+// before the authority first reads the cell.
+template portalFace(destination, counterpart, fallback, routes = null, open = null, gate = null) {
+  faceSources [
+    ({
+      face: "glass"
+      filter: linear
+      portal: portalDoor(destination: destination, counterpart: counterpart, open: open, gate: gate)
+      source {
+        $type: "session"
+        destination: destination
+        fallback: fallback
+        projection: window
+        attention: portalAttention
+        ripple: true
+      }
+    } with ((routes == null) ? {} : { routes: routes }))
+  ]
+}
+// The routes a routed portal's face reads: its library, chosen by its panel's `panelChoice` cell.
+function portalRoutes(portal) = {
+  state: "panelChoice"
+  key: portal.id
+  entries: map(portal.library, entry => { destination: entry.destination, counterpart: entry.counterpart, fallback: entry.fallback })
+}
+
+// A library's `references` and `destinations` rows: an entry's `document` opened as the destination its `destination`
+// names, persisted and global, so every portal routed to it opens the one world.
+function portalReferences(library) = map(library, entry => { document: $"{entry.document}", name: entry.destination })
+function portalDestinations(library) = map(
+  library,
+  entry => { durability: persisted, name: $"{entry.destination}", reference: $"{entry.destination}", scope: global }
+)
+
+// Where a routed portal's panel stands, facing +Z from the portal's foot: right of the frame, a step before its glass.
+function portalPanelAt(portal) = [((portalOuter(portal.look) + 0.3) + panelGlassHalf[0]), 0, 0.35]
+// The panels of `portals`' routed portals, one a portal, keyed by the portal's id: what a world puts in its panel set
+// (panel.puck's `panelSet`) with its other panels.
+function portalPanels(portals) = map(filter(portals, portal => (portal.library != null)), portal => {
+  id: portal.id
+  title: $"DESTINATIONS {length(portal.library)}"
+  entries: map(portal.library, entry => { title: entry.title, note: entry.note })
+  choice: portal.route
+  site: portal.site
+  x: facingPoint(portal, portalPanelAt(portal))[0]
+  y: facingPoint(portal, portalPanelAt(portal))[1]
+  z: facingPoint(portal, portalPanelAt(portal))[2]
+  yaw: portal.yaw
+  parent: portal.parent
+})
+
+// Each portal's creation. A routed portal's panel is a panel of the world's set (panel.puck's `panelSet`), which the world
+// stands with its other panels (`panelPrototypes` and `panelPlacements` over the set).
+template portalPrototypes(portals) {
+  for portal in portals {
+    prototype $"{portal.id}" {
+      document {
+        portalCreation(label: portal.id, look: portal.look, plaque: portal.plaque)
+      }
+    }
+  }
+}
+
+// Each portal's placement, wearing its face: a routed portal's routes over its library, a fixed portal's one route, or,
+// leading nowhere, its sign.
+template portalPlacements(portals) {
+  for portal in portals {
+    placement $"{portal.id}" {
+      prototype: portal.id
+      if portal.parent != null {
+        parent: portal.parent
+      }
+      position [portal.x, portal.y, portal.z]
+      yawDegrees: portal.yaw
+      if portalRouteOf(portal) != null {
+        portalFace(
+          destination: portalRouteOf(portal).destination,
+          counterpart: portalRouteOf(portal).counterpart,
+          fallback: portalRouteOf(portal).fallback,
+          routes: ((portal.library != null) ? portalRoutes(portal) : null)
+        )
+      } else {
+        faceSources [
+          {
+            face: "glass"
+            filter: linear
+            source { $type: "text", lines: portal.sign }
+          }
+        ]
+      }
+    }
+  }
+}
+
+// A spawn point before each portal, facing its glass, 3.2 m out: in the world's frame, so it names no parent.
+function portalSpawns(portals) = map(portals, portal => {
+  id: portal.id
+  position: facingWorld(portal, [0, 0, 3.2])
+  yawDegrees: (portal.yaw + 180)
+})

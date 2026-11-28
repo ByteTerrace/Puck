@@ -22,7 +22,7 @@
 // the two paintings, which are authored in their own frame (x across the canvas, y up, z out of the wall).
 import "../standard/bounds"
 import "gallery/layout"
-import "painting-kit"
+import "../standard/portal"
 
 let wonderWall = "#6FA6A8"
 let wonderFloor = "#C9B79C"
@@ -30,7 +30,7 @@ let wonderSkirting = "#3A3F47"
 // The stairs' game cases, in turn: red, blue, yellow, green.
 let wonderCaseSlots = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1]
 // What a glass shows past the deepest level of windows inside windows.
-let wonderFallback = fallbackSelf
+let wonderFallback = portalFallbackSelf
 
 // The lobby's floor and the room's are both at 0.05.
 let wonderFloorTop = 0.05
@@ -49,7 +49,7 @@ let wonderPaintLip = 1
 let wonderPaintBlack = 2
 let wonderPaintBoard = 3
 let wonderPaintInk = 4
-let wonderPaintPalette = [paintingGiltRow, paintingLipRow, paintingBlackRow, paintingBoardRow, paintingInkRow]
+let wonderPaintPalette = [portalGiltRow, portalLipRow, portalBlackRow, portalBoardRow, portalInkRow]
 
 // A painting at `size` times the big one, in the painting wing's ornate frame: face 0, the black rim on the wall's
 // plane (z 0), names the glass, and its lower eighth of a metre (at full size) sinks below the floor so a body's feet
@@ -114,7 +114,7 @@ spawnPoints [
 
 // A door onto its twin and a window showing what lies past it, rippling as the painting wing's do.
 template wonderFace(counterpart) {
-  paintingFace(destination: "wonderland", counterpart: counterpart, fallback: wonderFallback)
+  portalFace(destination: "wonderland", counterpart: counterpart, fallback: wonderFallback)
 }
 
 placements {

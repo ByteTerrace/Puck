@@ -23,7 +23,7 @@ documentId: "galaxy"
 // The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's size.
 import "set-controls"
 import "size"
-import "painting-kit"
+import "../standard/portal"
 import "../standard/place"
 import "../standard/visitors"
 import "../standard/gravity"
@@ -422,7 +422,7 @@ prototypes {
 
   prototype "frame" {
     document {
-      arrivalFrame(color: "#B9C2D9", roughness: 0.4, specular: 0.4, post: 0.12)
+      portalFrame(color: "#B9C2D9", roughness: 0.4, specular: 0.4, post: 0.12)
     }
   }
 

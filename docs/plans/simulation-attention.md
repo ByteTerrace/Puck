@@ -74,7 +74,7 @@ its errand names costs a tick nothing once it has stood for the idle floor
 ([the server's account](../../src/Puck.World.Server/README.md)).
 
 The debug world authors these: its paintings and arrival frames carry
-`windowAttention` (`worlds/debug/painting-kit.puck`), the city, the garden and
+`portalAttention` (`worlds/standard/portal.puck`), the city, the garden and
 the night field step from `Glimpsed`, the hearth from `Watched`, the
 standard citizen and vehicle kits carry a far tier, and the toybox's twelve
 decks and the range's three televisions carry an attention

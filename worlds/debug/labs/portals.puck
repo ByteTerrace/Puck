@@ -1,0 +1,128 @@
+// The portal lab (README.md): one portal of the standard's portal module (../../standard/portal.puck) and the panel that
+// points it (../../standard/panel.puck), on a bare floor, booted alone so a change to either bakes and boots without the
+// building. Walk into the portal's glass to cross to the world it shows; walk up to the panel at its right, press the
+// context button (E, or the pad's RB) and tap another world on its list, and the portal leads there instead, its glass
+// showing it at once, for everyone, since the panel's choice is the world state the door reads. The gallery's level 3
+// stands twelve of the same portal (../gallery/portals.puck).
+//
+// Boot it with `--world worlds/debug/labs/portals.puck`; the gallery's lab wing reaches it through its door
+// `lab-portals`, and the `arrival` frame behind the seat leads back there. Its small library is a few showcase worlds and
+// two labs, each a document named from this lab's own directory.
+
+schema: "puck.world.definition.v1"
+basis: "../avatars/moth"
+documentId: "lab-portals"
+
+// A clear, neutral midday that hardly moves.
+import "../still-noon"
+import "../../standard/contexts/modes"
+import "../set-controls"
+import "../noclip"
+import "../ship-rows"
+import "../../standard/portal"
+import "../../standard/panel"
+import "lab-kit"
+
+metadata {
+  title: "Portal lab"
+  description: "One portal and the panel that points it at any world of a small library, on a bare floor."
+}
+
+// The way back stands 8 m before the portal, facing it, so a body walks out of it toward the portal.
+labWayBack(id: "portals", at: [0, 0, 8], yaw: 0)
+labFloor(halfX: 12, halfZ: 12)
+labText()
+
+// The library: where the portal may lead, as the debug world set's portal library names them (../portal-library.puck),
+// each document named from this directory.
+let labLibrary = [
+  {
+    destination: "garden", document: "../garden", counterpart: "arrival/glass", fallback: "#FF9A4D"
+    title: "THE GARDEN", note: "A sunset plot beyond the glass. Walk or jump in; the frame behind you leads back."
+  }
+  {
+    destination: "night", document: "../night", counterpart: "arrival/glass", fallback: "#070B16"
+    title: "THE NIGHT FIELD", note: "A snowfield under the stars. Step in; turn round to come back."
+  }
+  {
+    destination: "city", document: "../city", counterpart: "arrival/glass", fallback: "#E8C48A"
+    title: "THE CITY", note: "A town on a river bend, its market, terraces, works and quay."
+  }
+  {
+    destination: "lab-shapes", document: "shapes", counterpart: "arrival/glass", fallback: "#8C8A86"
+    title: "SHAPE LAB", note: "One display station holding the whole catalog."
+  }
+  {
+    destination: "lab-light", document: "light", counterpart: "arrival/glass", fallback: "#8C8A86"
+    title: "LIGHT LAB", note: "A room a subject: occluders, a dark room of bulbs, stained glass, the magic barrier, haze."
+  }
+]
+
+// The one portal: freestanding at the floor's middle, its glass facing +z toward the way back, its panel at its right.
+let labPortals = [
+  portalOf(
+    id: "portal",
+    x: 0,
+    z: -2,
+    yaw: 180,
+    look: portalStanding(color: labFrameColor, roughness: 0.4, specular: 0.3, post: labFramePost),
+    library: labLibrary,
+    route: 0
+  )
+]
+let labPanels = panelSet(portalPanels(labPortals))
+
+references: portalReferences(labLibrary)
+destinations: portalDestinations(labLibrary)
+
+// The seat boots at the panel, so the context button works it at once; `portal` stands before the portal's glass.
+spawnPoints: concat(
+  [{ id: "hero", position: facingWorld(labPanels[0], panelStandAt), yawDegrees: (labPanels[0].yaw + 180) }],
+  portalSpawns(labPortals),
+  panelSpawns(labPanels)
+)
+
+commands [
+  goCommand(
+    help: "Poses a body at one of the portal lab's places (hero at the panel, portal before the portal's glass, portal-panel at the panel, or any spawn point) and returns the view to the play layout's chase camera."
+  )
+]
+
+bodies {
+  capacity: 12
+  localSeats: 4
+  networkPlayers: 8
+  seatSpawns [hero]
+}
+
+// What a seat may press: the Moth's movement and forms, the context button that engages the panel and the tap that
+// presses its glass, and the terminal's own channels while engaged.
+inputModes {
+  global: concat(movementChannels, ["interact", "tap", "scroll", "jump", "rise", "flight", "dash", "suit", "noclip"])
+  families [
+    terminalFamily()
+  ]
+}
+
+prototypes {
+  portalPrototypes(portals: labPortals)
+  panelPrototypes(panels: labPanels)
+}
+
+placements {
+  portalPlacements(portals: labPortals)
+  panelPlacements(panels: labPanels)
+}
+
+state {
+  world {
+    panelState(panels: labPanels)
+  }
+}
+
+panelRules(panels: labPanels)
+
+cameras: panelCameras(labPanels)
+
+// The panel is the lab's one terminal; its desk view's near plane cuts away the body standing before it.
+terminalPlay(terminals: panelTerminals(labPanels), near: 2.6)

@@ -15,7 +15,7 @@ documentId: "globe"
 
 import "set-controls"
 import "size"
-import "painting-kit"
+import "../standard/portal"
 import "../standard/place"
 import "../standard/visitors"
 import "../standard/kits"
@@ -297,7 +297,7 @@ prototypes {
 
   prototype "frame" {
     document {
-      arrivalFrame(color: "#D9B36A", roughness: 0.4, specular: 0.4, post: 0.12)
+      portalFrame(color: "#D9B36A", roughness: 0.4, specular: 0.4, post: 0.12)
     }
   }
 

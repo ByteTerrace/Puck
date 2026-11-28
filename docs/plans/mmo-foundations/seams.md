@@ -291,9 +291,9 @@ In Puck's current codebase, "running without a frame" is already supported at tw
 
 - **Evidence in the codebase (`[opened]`):**
   1. **`WorldAdjacency` has no placement or frame at all:** `src/Puck.World.Schema/WorldAdjacencies.cs:144-146` **[opened]** states: `"It is topology, not visible furniture: no placement, screen, or portal is required. The compiler derives the overlap needed for observation, interaction, grounding, and handoff from the two delivered documents."` And `src/Puck.World.Client/WorldAdjacencySceneEmitter.cs:26-27` **[opened]** notes: `"A placement with no solid facet (a portal frame, a decorative prop) never qualifies"`.
-  2. **A `WorldPlacementFace` portal does not require a visual frame around its aperture:** In `worlds/debug/paintings.puck:105-153` **[opened]**, the visible frame (`lip`, `mat`, `border`, `plaque`) is authored SDF creation geometry around the `rim`/`opening` subtraction box. The engine's window glass simply fills the creation's aperture edge-to-edge with no bezel (`docs/architecture/worlds.md:1105-1107` **[opened]**: `"the glass shows it edge to edge, with no bezel. That glass lies inside the face's own shape, a centimetre short of each of its faces, so it fills whatever aperture the creation cuts through that shape"`), and the crossing trigger fires on the swept origin passing through that plane (`docs/decisions/engine-design.md:259-260` **[opened]**). Furthermore, `src/Puck.World.Schema/WorldPlacement.cs:306-307` **[opened]** notes that `"the door and the screen it shows are independent facts about the same face."`
+  2. **A `WorldPlacementFace` portal does not require a visual frame around its aperture:** In the standard portal module's `portalCreation` (`worlds/standard/portal.puck`), the visible frame (a look's `rings` and its `plaque`) is authored SDF creation geometry around the `rim`/`opening` subtraction box. The engine's window glass simply fills the creation's aperture edge-to-edge with no bezel (`docs/architecture/worlds.md:1105-1107` **[opened]**: `"the glass shows it edge to edge, with no bezel. That glass lies inside the face's own shape, a centimetre short of each of its faces, so it fills whatever aperture the creation cuts through that shape"`), and the crossing trigger fires on the swept origin passing through that plane (`docs/decisions/engine-design.md:259-260` **[opened]**). Furthermore, `src/Puck.World.Schema/WorldPlacement.cs:306-307` **[opened]** notes that `"the door and the screen it shows are independent facts about the same face."`
 - **How an author writes a frameless portal today:** Author a creation consisting solely of an invisible/non-solid aperture shape with a declared face, place it with `WorldPlacementFace(Face, Source, Portal: new WorldPlacementPortal(..., Arrival: WorldPortalArrival.Mapped, Counterpart: ...))`. If `Source` is a `window` session, the aperture renders the seamless parallax view of the destination (`projection: window`) with zero bezel; if `Source` is `none` (or the destination is resolved via script/region), it acts as an invisible swept crossing plane.
-- **What it costs:** Zero C# architectural churn; only a standard-library template in `worlds/standard/` (an `aperture` or `threshold` template alongside `worlds/debug/painting-kit.puck:1-38` **[opened]**) so authors do not have to hand-roll an empty creation to get a frameless doorway.
+- **What it costs:** Zero C# architectural churn; only a standard-library template in `worlds/standard/` (an `aperture` or `threshold` template beside `portalFrame` in `worlds/standard/portal.puck`) so authors do not have to hand-roll an empty creation to get a frameless doorway.
 
 #### Option F2: Allow `WorldAdjacency` to optionally attach an off-axis `window` fallback when direct geometry projection is unavailable or across non-persisted scopes
 
@@ -457,8 +457,8 @@ Each leading option can be proved in `worlds/debug` with a small, concrete scena
 - `src/Puck.World.Client/WorldAdjacencySceneEmitter.cs:1-300`
 - `worlds/debug/debug.puck:1-200`
 - `worlds/debug/garden.puck:1-150`
-- `worlds/debug/paintings.puck:1-432`
-- `worlds/debug/painting-kit.puck:1-38`
+- `worlds/debug/paintings.puck`
+- `worlds/standard/portal.puck`
 
 ### Web sources summarized (`[summary]` — pages for a reader lane to open if exact quotes are needed)
 

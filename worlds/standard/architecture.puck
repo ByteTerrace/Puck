@@ -91,6 +91,22 @@ function faceText(at, rotation, half, template, ink, em, align = "center", wrap 
   color: ink
   text: faceLettering(template, em, align, wrap, markup, spacing, anchor)
 }
+// The faces' font's line height in ems (Inter's ascent and descent): a list's text sets its line spacing to its row pitch
+// over this times its em, so each line falls on the row a pointer surface's list region counts.
+let faceFontLine = 1.21
+// A rectangle on a glass, `x0..x1` across and `y0..y1` up from its centre: its middle and its half extents.
+function faceMid(rect) = [((rect.x0 + rect.x1) / 2), ((rect.y0 + rect.y1) / 2)]
+function faceHalf(rect) = [((rect.x1 - rect.x0) / 2), ((rect.y1 - rect.y0) / 2)]
+// The same rectangle as the region of a pointer surface over a glass of half extents `half`: the fractions of the glass a
+// pointer hit reads, x right from its left edge and y down from its top edge, a list region dividing into `rows`.
+function faceRegion(id, rect, half, rows = 1) = {
+  id: id
+  left: ((rect.x0 + half[0]) / (2 * half[0]))
+  top: ((half[1] - rect.y1) / (2 * half[1]))
+  right: ((rect.x1 + half[0]) / (2 * half[0]))
+  bottom: ((half[1] - rect.y0) / (2 * half[1]))
+  rows: rows
+}
 // A text paint's lettering; `anchor` names the line of the block that stands on the box's middle (`capMiddle` centres
 // a line of capitals), and null centres the whole block.
 function faceLettering(template, em, align, wrap, markup, spacing, anchor) = ((anchor == null) ? {

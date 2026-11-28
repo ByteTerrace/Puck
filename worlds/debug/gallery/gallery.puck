@@ -37,6 +37,8 @@ import "../../standard/place"
 import "../../standard/reach"
 import "../shapes"
 import "../shape-station"
+import "../portal-library"
+import "../../standard/panel"
 import "layout"
 import "shell"
 import "look"
@@ -49,6 +51,7 @@ import "rentals"
 import "wonder"
 import "mouse-house"
 import "stewards"
+import "portals"
 // The companion hears the lifts' authored door edges through its read-only sensory projection, and the world that stands
 // the building binds its camera to the inspection lever's cells (the debug world's exposure.puck).
 exports {
@@ -1333,8 +1336,8 @@ cameras: map(lookShots, view => {
 
 // The twelve display stations (shape-station.puck): their station views, terminals, console rules and commands, over the
 // state and placements shapes.puck gives them. Every display is a terminal, and the backtick turns its screen into its
-// hidden console.
-shapeStation()
+// hidden console. Level 3's portal panels (portals.puck) are terminals too, numbered after the displays.
+shapeStation(terminals: panelTerminals(galleryPanels))
 
 commands [
   {

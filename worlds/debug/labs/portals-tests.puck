@@ -1,0 +1,71 @@
+// The portal lab's routed door (portals.puck), each scenario booted in the lab alone:
+// `puck test worlds/debug/labs/portals-tests.puck --reproduce --jobs 1`. The portal's face routes by its panel's
+// `panelChoice` cell (the engine's `WorldFaceRoutes`): the authority's door scan reads the cell once a tick and the
+// crossing it mints leads to that route's destination. The invariant is that one decision: a write to the cell, by a tap
+// or a console line, moves where the next crossing lands, and a cell naming no route closes the door.
+//
+// A headless seat's camera faces -Z, so `body.fly 1 …` walks her -Z from the portal's own spawn point (3.2 m before its
+// glass) into it. The routes the scenarios take are the library's two labs, whose way-back frames show no window, so a
+// crossing starts only the lab it lands in. `shapes { … }` and `light { … }` are judged in the lab the crossing starts:
+// each lab's way back stands at z 8 or 10 and walks a traveller out toward -z, so a body there past z 0.5 has arrived,
+// and a lab that never started fails its claim by name.
+
+schema: "puck.world.definition.v1"
+basis: "portals"
+documentId: "lab-portals"
+
+test "the portal leads where its panel's cell points it" {
+  when {
+    ticks 5
+    seat1: world.state.cell.set panelChoice portal 3
+    ticks 25
+    seat1: body.pose spawn:portal 0
+    ticks 10
+    seat1: body.fly 1 0 0 0 0 0 2
+    ticks 70
+  }
+  expect {
+    panelShownAt.portal == 3
+    shapes {
+      bodyPosition(body, 0, z) > 0.5
+    }
+  }
+}
+
+test "a repoint moves where the next crossing lands" {
+  when {
+    ticks 5
+    seat1: world.state.cell.set panelChoice portal 3
+    ticks 25
+    seat1: world.state.cell.set panelChoice portal 4
+    ticks 5
+    seat1: body.pose spawn:portal 0
+    ticks 10
+    seat1: body.fly 1 0 0 0 0 0 2
+    ticks 70
+  }
+  expect {
+    panelShownAt.portal == 4
+    light {
+      bodyPosition(body, 0, z) > 0.5
+    }
+  }
+}
+
+// The control for both: with the cell past the library's last route the door is closed, so she walks through the empty
+// frame and out behind it, still in the lab.
+test "a cell that names no route closes the door, and a body walks through its frame" {
+  when {
+    ticks 5
+    seat1: world.state.cell.set panelChoice portal 99
+    ticks 25
+    seat1: body.pose spawn:portal 0
+    ticks 10
+    seat1: body.fly 1 0 0 0 0 0 2
+    ticks 70
+  }
+  expect {
+    panelShownAt.portal == 0
+    bodyPosition(body, 0, z) < -3
+  }
+}
