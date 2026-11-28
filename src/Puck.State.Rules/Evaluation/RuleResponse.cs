@@ -456,9 +456,11 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         return Prove(context: context, effects: rule.Effects, rule: rule);
     }
     // How a firing that runs `effects` (the rule's whole effect list, or the steps of one path through it) closes the
-    // rule's gate.
+    // rule's gate: the gate folds false (GateTruth) once every comparison the firing falsifies is false and every other
+    // is unknown, so a conjunction closes when one of its terms does and a disjunction when every one does. A closure
+    // that holds only while a mirrored value stands is the weaker.
     private static Closure Prove(CompiledRule rule, RuleCompileContext? context, IReadOnlyList<IRuleEffect> effects) {
-        var gate = Array.FindAll(array: rule.Gate.Tokens, match: static token => (token.Op != GateOp.ShortCircuit));
+        var gate = rule.Gate.Tokens;
 
         if (gate.Length == 0) {
             return Closure.None;
@@ -470,35 +472,19 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             effect.CollectWrites(into: writes);
         }
 
-        var last = (gate.Length - 1);
+        var closures = new Closure[gate.Length];
 
-        return ((TermStart(end: last, gate: gate) == 0) ? Term(end: last) : Closure.None);
-
-        // The gate holds only while its term does: a comparison the firing falsifies closes it, a conjunction closes
-        // when one of its terms does, and a disjunction when every one of its terms does. A negation proves nothing.
-        // A closure that holds only while a mirrored value stands is the weaker of the two.
-        Closure Term(int end) {
-            var token = gate[end];
-
-            if (token.Op == GateOp.Compare) {
-                return Falsified(token: token);
-            }
-            if ((token.Op is not (GateOp.All or GateOp.Any)) || (token.Arity == 0)) {
-                return Closure.None;
-            }
-
-            var every = (token.Op == GateOp.Any);
-            var result = (every ? Closure.Literal : Closure.None);
-
-            for (var (operand, operandEnd) = (0, (end - 1)); ((operand < token.Arity) && (operandEnd >= 0)); operand++) {
-                var term = Term(end: operandEnd);
-
-                result = (every ? Weaker(left: result, right: term) : Stronger(left: result, right: term));
-                operandEnd = (TermStart(end: operandEnd, gate: gate) - 1);
-            }
-
-            return result;
+        for (var index = 0; (index < gate.Length); index++) {
+            closures[index] = ((gate[index].Op == GateOp.Compare) ? Falsified(token: gate[index]) : Closure.None);
         }
+        if (GateTruth.Fold(gate: gate, leaf: index => ((closures[index] == Closure.Literal) ? GateTruth.False : GateTruth.Unknown)) == GateTruth.False) {
+            return Closure.Literal;
+        }
+
+        return ((GateTruth.Fold(gate: gate, leaf: index => ((closures[index] != Closure.None) ? GateTruth.False : GateTruth.Unknown)) == GateTruth.False)
+            ? Closure.Mirror
+            : Closure.None);
+
         Closure Falsified(GateToken token) {
             var closure = Closes(cell: token.LeftSource, comparison: token.Comparison, context: context, effects: effects, other: token.RightSource, rule: rule, writes: writes);
 
@@ -506,25 +492,6 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
                 ? Closes(cell: token.RightSource, comparison: token.Comparison, context: context, effects: effects, other: token.LeftSource, rule: rule, writes: writes)
                 : closure);
         }
-        static int Strength(Closure closure) => closure switch { Closure.Literal => 2, Closure.Mirror => 1, _ => 0 };
-        static Closure Stronger(Closure left, Closure right) => ((Strength(closure: left) >= Strength(closure: right)) ? left : right);
-        static Closure Weaker(Closure left, Closure right) => ((Strength(closure: left) <= Strength(closure: right)) ? left : right);
-    }
-
-    // Where the postfix term ending at `end` starts: a comparison is one token, and a connective follows its operands.
-    private static int TermStart(GateToken[] gate, int end) {
-        var operands = (gate[end].Op switch {
-            GateOp.All or GateOp.Any => gate[end].Arity,
-            GateOp.Not => 1,
-            _ => 0,
-        });
-        var start = end;
-
-        for (var operand = 0; ((operand < operands) && (start > 0)); operand++) {
-            start = TermStart(end: (start - 1), gate: gate);
-        }
-
-        return start;
     }
 
     // Whether the one write `effects` make to what `cell` reads is an unconditional set of it to a value `cell

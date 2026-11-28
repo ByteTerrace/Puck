@@ -5955,16 +5955,31 @@ shell, each usable alone, each named for what it does.
   prototype, at most 16 volumes) would let a king topple as a king does, and a queened pawn would need its kit chosen by
   its code.
 
-- [medium] The game stations' set prices a firing at every station for a line whose firing does not provably close its
-  own gate (`RuleResponse.Prove`): `chess-play-revert-codes`, `patience-pick`, `chess-station-save`,
-  `chess-station-pick-near`/`-far` and `chess-put` cost 37 to 65 thousand each in the gallery booted alone, which stands
-  all twelve at 3.19 million (`puck compile worlds/debug/gallery-root.puck --validate --budget 40`). Each waits on a cell
-  it does not write (a put-down's revert, a press's edge, a settle), so its gate holds while it waits; a gate that closes
-  on its own write (a request it clears, a mirror it copies) prices one station's firing. The chairs' presses
-  (`game-station-near`/`-far`) read seat channels for literal seats, unversioned for a sweep, so they are judged every
-  tick at every station; per-binding channel versions would make them due only when that station's seat input moves.
-  The debug world stands one station at 4.28 million, 6.84 ms of its 8.33 ms on the RTX 4070: more there needs room (`go-sync-mark` and `go-sync-keep`, one
-  `goSync` pulse opening all 361 stones; `reversi-read-discs`; `go-play-1`/`-2`; `terminal-console-key-1`..`4`).
+- [high] The worlds under the calibrated rules budget. With the measured `rules` figures in `worlds/standard/quality.puck`'s
+  device rows, the RTX 2060 prices the gallery booted alone past the rules' 8.33 ms and the debug world far past it on both
+  devices (`puck compile <world> --validate --budget 60`, which orders lines by their time on the slowest device), so the
+  figures are not yet authored. What still holds the price up, costliest first:
+  - The stations' press lines whose Level gate is a one-tick press edge another rule writes (`patience-pick`,
+    `patience-step`, `chess-station-step-*`, `chess-station-cancel-*`): the sheet cannot see the edge clear, so it
+    charges every station a firing every tick. `chess-station-pick-*` became an Edge, which is equivalent for a gate of
+    one button's edge; the others read several buttons' edges, so an Edge could miss a second button pressed on the next
+    tick.
+  - Klondike's and FreeCell's deal, gather, draw and recycle loops, priced at every station at once, and Klondike's seven
+    reveals, whose gate (`count(column) == 0`) a transfer into that column closes but no proof reads.
+  - Sweeps bounded by `maxFirings`, judged in full every tick (`RuleDueList.Classify`): the four `chess-ai-relocate-*`
+    lines, `chess-station-hover-*`, `chess-ai-request` and `chess-input-move`, 384 bindings each in the gallery. A due
+    list that carries the positions a capped sweep left unvisited would price them by change.
+  - Input channels read for the body a sweep binds (`$channel:each:*`) have no version, so every line reading one is
+    judged every tick at every player (the learn panels' wheels, the menu, every interact Edge), and the chairs' presses
+    (`game-station-near`/`-far`) read a literal seat's channel shared by every station's binding. Per-binding channel
+    versions (`WorldRuleHost.ScheduleFact`) would make them due when that player's input moves.
+  - The debug world adds Go (about 11 ms on the RTX 2060: the play doors, report, evaluate and score lines are single
+    heavy firings over 361 cells, and the scoring flood), the quest share (`lanternTrail-share`, a firing at each of
+    twelve recipients) and the granary's influence lines, which read moving facts.
+- [high] A rule group's lines are priced at one pass (`WorldRuleWorkBudget.Lines` passes each line once, in place),
+  but a fixpoint group runs up to its `maxPasses` in one tick: Go's `stabilize goFlood maxPasses(goPoints + 2)` can run
+  363 passes of its two flood lines on the tick scoring opens, which the sheet charges as one. The sheet under-prices
+  that tick; a group's lines should be charged its pass ceiling, and a group whose trigger rests charged nothing at rest.
 - [low] A rule sweeping per-seat private piles is refused at compile: `RuleCompiler.RequireTransformControlAudience`
   pairs every candidate a live end can select with every other read, so `transfer(from: hand[$each], to: …)` over a
   family whose members each admit only their own seat reads seat 1's hand into seat 2's audience on paper, though a
