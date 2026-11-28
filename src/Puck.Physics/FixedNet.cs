@@ -88,10 +88,10 @@ public sealed record FixedNetState(FixedVector3[] Offsets, FixedVector3[] Veloci
 /// whole movement; <see cref="FixedNetSpec.Damping"/> takes its share as the next step integrates.
 /// </summary>
 /// <remarks>The kernel decides nothing about bodies: the host turns the bodies that hold or lean on the net into
-/// <see cref="FixedNetLoad"/> and <see cref="FixedNetPusher"/> records, and decides when it is touched. A net that no
-/// step touches and whose every node stays under <see cref="FixedNetSpec.RestSpeed"/> for
-/// <see cref="FixedNetSpec.SleepTicks"/> sleeps, and a sleeping net's <see cref="Step"/> returns at once; only a load or
-/// a pusher (or <see cref="Wake"/>) wakes it.
+/// <see cref="FixedNetLoad"/> and <see cref="FixedNetPusher"/> records, and the net decides from its nodes whether a pusher touches it (reaches a
+/// free node). A net that no step touches and whose every node stays under <see cref="FixedNetSpec.RestSpeed"/> for
+/// <see cref="FixedNetSpec.SleepTicks"/> sleeps, and a sleeping net's <see cref="Step"/> returns after one reach test
+/// per pusher; only a load, a pusher that reaches a node (or <see cref="Wake"/>) wakes it.
 /// <para>Invariant: every node stays within <see cref="FixedNetSpec.Reach"/> of its rest position after any step or
 /// restore, so a reader may bound the drawn and colliding net by the rest layout grown by the reach. The last pass of
 /// <see cref="Step"/> and the range check of <see cref="Restore"/> are the two writers of <see cref="Offsets"/>, and
@@ -220,6 +220,8 @@ public sealed class FixedNet {
     public int Revision { get; private set; }
     /// <summary>Gets the farthest any node stands from its rest position, in metres, as of the latest step.</summary>
     public FixedQ4816 MaxDeflection { get; private set; }
+    /// <summary>Gets how many of the latest step's pushers reached a free node, and so touched the net.</summary>
+    public int Pressers { get; private set; }
 
     /// <summary>Returns a node's current position: its rest position plus its offset.</summary>
     /// <param name="node">The node, row by row.</param>
@@ -287,20 +289,28 @@ public sealed class FixedNet {
         : FixedVector3.Zero);
 
     /// <summary>Steps the net once: a sleeping net that nothing touches returns at once; otherwise it wakes, integrates,
-    /// solves and settles as <see cref="FixedNet"/> describes, and may fall asleep at the end.</summary>
+    /// solves and settles as <see cref="FixedNet"/> describes, and may fall asleep at the end. The net is touched by a
+    /// load, or by a pusher that reaches a free node (closer to its segment than its radius); a pusher that reaches none
+    /// (a body standing near the net, not leaning on it) neither wakes it nor keeps it awake.</summary>
     /// <param name="gravity">The acceleration every free node feels, in metres a second squared.</param>
     /// <param name="stepTicks">The step's length, in engine ticks; positive.</param>
     /// <param name="loads">The forces bodies apply this step.</param>
-    /// <param name="pushers">The capsules that push nodes out this step.</param>
+    /// <param name="pushers">The capsules that may push nodes out this step.</param>
     /// <returns>Whether any node moved.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
     public bool Step(in FixedVector3 gravity, ulong stepTicks, ReadOnlySpan<FixedNetLoad> loads, ReadOnlySpan<FixedNetPusher> pushers) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
 
-        var touched = (!loads.IsEmpty || !pushers.IsEmpty);
-
-        if (touched) { Wake(); }
-        if (!Awake) { return false; }
+        if (!Awake) {
+            if (loads.IsEmpty) {
+                Pressers = 0;
+                if (pushers.IsEmpty) { return false; }
+                for (var node = 0; (node < NodeCount); node++) { m_positions[node] = Position(node: node); }
+                Pressers = Pressing(pushers: pushers);
+                if (Pressers == 0) { return false; }
+            }
+            Wake();
+        }
 
         var rate = (FixedQ4816.FromInteger(value: (long)FixedTickConversion.TicksPerSecond) / FixedQ4816.FromInteger(value: checked((long)stepTicks)));
         var rateSquared = (rate * rate);
@@ -327,6 +337,10 @@ public sealed class FixedNet {
         foreach (ref readonly var load in loads) {
             ApplyLoad(load: in load, rateSquared: rateSquared);
         }
+        Pressers = Pressing(pushers: pushers);
+
+        var touched = (!loads.IsEmpty || (Pressers != 0));
+
         Array.Clear(array: m_lambda);
         for (var pass = 0; (pass < Spec.Iterations); pass++) {
             var strand = 0;
@@ -360,7 +374,7 @@ public sealed class FixedNet {
                 }
             }
             foreach (ref readonly var pusher in pushers) {
-                Push(pusher: in pusher);
+                _ = Push(move: true, pusher: in pusher);
             }
         }
         ProcessWork.Add(kind: Iterations, amount: Spec.Iterations);
@@ -368,9 +382,8 @@ public sealed class FixedNet {
         ProcessWork.Add(kind: NodesSolved, amount: NodeCount);
 
         var moved = false;
-        var fastest = FixedQ4816.Zero;
-        var farthest = FixedQ4816.Zero;
-        var restSpeedSquared = (Spec.RestSpeed * Spec.RestSpeed);
+        var still = true;
+        var farthest = FixedVector3.Zero;
 
         for (var node = 0; (node < NodeCount); node++) {
             if (m_inverseMass[node] == FixedQ4816.Zero) { continue; }
@@ -390,15 +403,15 @@ public sealed class FixedNet {
                 m_dirty[node] = true;
                 moved = true;
             }
-            fastest = FixedQ4816.Max(x: fastest, y: velocity.LengthSquared);
-            farthest = FixedQ4816.Max(x: farthest, y: offset.LengthSquared);
+            still &= velocity.IsWithin(radius: Spec.RestSpeed);
+            if (offset.CompareLengthTo(other: farthest) > 0) { farthest = offset; }
         }
-        MaxDeflection = FixedQ4816.Sqrt(value: farthest);
+        MaxDeflection = farthest.Length;
         if (moved) {
             Revision++;
             m_anyDirty = true;
         }
-        if (touched || (fastest > restSpeedSquared)) {
+        if (touched || !still) {
             m_stillTicks = 0UL;
         } else {
             m_stillTicks += stepTicks;
@@ -489,19 +502,19 @@ public sealed class FixedNet {
             throw new ArgumentException(message: $"A {Spec.Columns}x{Spec.Rows} net holds {NodeCount} nodes, not {state.Offsets.Length}.", paramName: nameof(state));
         }
 
-        var farthest = FixedQ4816.Zero;
+        var farthest = FixedVector3.Zero;
 
         for (var node = 0; (node < NodeCount); node++) {
             if (!state.Offsets[node].IsWithin(radius: Spec.Reach)) {
                 throw new ArgumentException(message: $"Node {node}'s offset lies past the net's reach.", paramName: nameof(state));
             }
-            farthest = FixedQ4816.Max(x: farthest, y: state.Offsets[node].LengthSquared);
+            if (state.Offsets[node].CompareLengthTo(other: farthest) > 0) { farthest = state.Offsets[node]; }
         }
         state.Offsets.CopyTo(array: m_offsets, index: 0);
         state.Velocities.CopyTo(array: m_velocities, index: 0);
         Awake = state.Awake;
         m_stillTicks = state.StillTicks;
-        MaxDeflection = FixedQ4816.Sqrt(value: farthest);
+        MaxDeflection = farthest.Length;
         Array.Fill(array: m_dirty, value: true);
         m_anyDirty = true;
         Revision++;
@@ -546,12 +559,23 @@ public sealed class FixedNet {
         if (m_inverseMass[node] == FixedQ4816.Zero) { return; }
         m_positions[node] += (displacement * m_inverseMass[node]);
     }
-    // Moves every free node within the pusher's radius of its segment out to that radius, along the line from the
-    // segment's nearest point, or along the rest normal for a node on the segment itself.
-    private void Push(in FixedNetPusher pusher) {
+    // How many pushers reach a free node of the step's positions.
+    private int Pressing(ReadOnlySpan<FixedNetPusher> pushers) {
+        var pressing = 0;
+
+        foreach (ref readonly var pusher in pushers) {
+            pressing += (Push(move: false, pusher: in pusher) ? 1 : 0);
+        }
+        return pressing;
+    }
+    // Whether the pusher reaches a free node of the step's positions: one closer to its segment than its radius. With
+    // `move`, every such node moves out to that radius, along the line from the segment's nearest point, or along the
+    // rest normal for a node on the segment itself.
+    private bool Push(in FixedNetPusher pusher, bool move) {
         var segment = (pusher.End - pusher.Start);
-        var radiusSquared = (pusher.Radius * pusher.Radius);
         var reach = new FixedAabb(Minimum: FixedVector3.Min(left: pusher.Start, right: pusher.End), Maximum: FixedVector3.Max(left: pusher.Start, right: pusher.End)).Grow(margin: pusher.Radius);
+        var pressed = false;
+
         for (var node = 0; (node < NodeCount); node++) {
             if (m_inverseMass[node] == FixedQ4816.Zero) { continue; }
             var position = m_positions[node];
@@ -561,9 +585,10 @@ public sealed class FixedNet {
             var along = FixedVector3.SegmentParameter(point: (position - pusher.Start), segment: segment);
             var nearest = (pusher.Start + (segment * along));
             var away = (position - nearest);
-            var distanceSquared = away.LengthSquared;
 
-            if (distanceSquared >= radiusSquared) { continue; }
+            if (away.CompareLengthTo(other: new FixedVector3(X: pusher.Radius, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)) >= 0) { continue; }
+            pressed = true;
+            if (!move) { return true; }
 
             var direction = away.Normalize();
 
@@ -572,6 +597,7 @@ public sealed class FixedNet {
             }
             m_positions[node] = (nearest + (direction * pusher.Radius));
         }
+        return pressed;
     }
     // The node at the grid cell's low corner holding a point, and the point's fraction across that cell; the point is
     // clamped onto the grid.

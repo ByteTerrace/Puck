@@ -340,6 +340,16 @@ public static partial class WorldDocumentEmitter {
             : GeneratedName.Append(name: state, part: key)
         );
     }
+    // The cell key a channel read is recorded under: its parts past the reserved prefix, joined (`$net:panel:awake` is
+    // `net$panel$awake`), or null when a part is empty or carries the joiner itself.
+    private static string? ChannelSawKey(string channel) {
+        var parts = channel[1..].Split(separator: ':');
+
+        return ((parts.Length > 1) && parts.All(predicate: static part => ((part.Length != 0) && !part.Contains(value: GeneratedName.Joiner)))
+            ? GeneratedName.Join(parts: parts)
+            : null
+        );
+    }
     // Every (row, key) a lowered gate reads. A `compareValue` node holds operand text rather than a row, so it
     // folds nothing: what it read is an expression, and the verdict row holds cells.
     private static void CollectGateReads(JsonNode? node, List<(string State, string? Key)> into) {
@@ -1484,7 +1494,18 @@ public static partial class WorldDocumentEmitter {
                         ["state"] = WitnessRow(kind: CellKind.Fixed, verdict: row),
                     });
                 }
+                continue;
+            }
 
+            // A channel whose spelling decides its kind (a net's reading, a body's kinematic witness) is recorded as a
+            // row of that kind would be, under its parts joined: `$net:panel:awake` as `net$panel$awake`.
+            if (
+                (readKey is null) &&
+                WorldRuleFacts.TryKindOfSpelling(channel: readState, kind: out var channelKind) &&
+                (ChannelSawKey(channel: readState) is { } channelKey) &&
+                folded.Add(item: (channelKind, channelKey))
+            ) {
+                AddSaw(fromKey: null, fromState: readState, kind: channelKind, key: channelKey);
                 continue;
             }
 
@@ -1512,37 +1533,7 @@ public static partial class WorldDocumentEmitter {
                 continue;
             }
 
-            var into = row;
-
-            if (kind == CellKind.Int) {
-                cells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = 0 });
-            } else {
-                into = WitnessRow(
-                    kind: kind,
-                    verdict: row
-                );
-
-                if (!witnesses.TryGetValue(
-                    key: kind,
-                    value: out var witnessCells
-                )) {
-                    witnessCells = [];
-                    witnesses[kind] = witnessCells;
-                }
-                witnessCells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = UnseenValue(kind: kind) });
-            }
-
-            var fold = new JsonObject {
-                ["$type"] = "setState",
-                ["fromState"] = readState,
-                ["key"] = key,
-                ["state"] = into,
-            };
-
-            if (readKey is not null) {
-                fold["fromKey"] = readKey;
-            }
-            effects.AppendNode(item: fold);
+            AddSaw(fromKey: readKey, fromState: readState, kind: kind, key: key);
         }
         // No `generated` flag: `StateRow.Generated` is engine-minted and no document member carries it, so
         // what marks these rows as machinery is the verdict trait itself.
@@ -1565,6 +1556,42 @@ public static partial class WorldDocumentEmitter {
                 ),
                 ["witness"] = row,
             });
+        }
+
+        // An Int read is a cell of the verdict row, any other kind a cell of that kind's witness, and an effect after
+        // the verdict's own copies what was read into it.
+        void AddSaw(CellKind kind, string key, string fromState, string? fromKey) {
+            var into = row;
+
+            if (kind == CellKind.Int) {
+                cells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = 0 });
+            } else {
+                into = WitnessRow(
+                    kind: kind,
+                    verdict: row
+                );
+
+                if (!witnesses.TryGetValue(
+                    key: kind,
+                    value: out var witnessCells
+                )) {
+                    witnessCells = [];
+                    witnesses[kind] = witnessCells;
+                }
+                witnessCells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = UnseenValue(kind: kind) });
+            }
+
+            var fold = new JsonObject {
+                ["$type"] = "setState",
+                ["fromState"] = fromState,
+                ["key"] = key,
+                ["state"] = into,
+            };
+
+            if (fromKey is not null) {
+                fold["fromKey"] = fromKey;
+            }
+            effects.AppendNode(item: fold);
         }
     }
 

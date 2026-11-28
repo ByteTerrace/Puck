@@ -3378,6 +3378,16 @@ left worse, then the valley sectors' buried colliders.
 Owner: physics lane · ordinary · Next: per-surface contacts over a field
 collider, then the lifecycle lows as one pass.
 
+- [high · the owner's call, for the RTX 4070 side] A rope net under a climber
+  always gives to its full reach instead of bellying by weight
+  (`labs/climbing.puck`, `climb-net`; `net-tests` reads `netDeepest` equal to
+  `netFarthest` equal to the reach). The load is about 600 N, and a node moves
+  about 0.67 m a step before the strands are solved, and `FixedNet` runs only 4
+  solver passes. So the net feels rigid at its cap rather than net-like, which
+  misses the owner's ask that it sag and give under weight. The fix is in the
+  solver: more passes, a stiffer strand solve, or a substepped load, so that
+  deflection tracks the weight.
+
 - [low · unconfirmed] A field lattice's travel resistance may stand stale
   when lattices reinstall without the population rebuilding, a lead from the
   lane that made installs follow product inputs. Reinstall a lattice under a
