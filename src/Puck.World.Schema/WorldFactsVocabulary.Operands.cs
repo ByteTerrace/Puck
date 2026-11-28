@@ -66,6 +66,11 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.EngagedPrefix}<bodyRef>:<screen>",
             $"{WorldRuleFacts.BodyStatePrefix}<bodyRef>:<slot>",
             $"{WorldRuleFacts.IdentityPrefix}<bodyRef>:<fact>",
+            $"{WorldRuleFacts.RecordFindPrefix}<bodyRef>:<pool>:<keyField>:<value>[:<field>]",
+            $"{WorldRuleFacts.RecordCountPrefix}<bodyRef>:<pool>[:<keyField>:<value>]",
+            $"{WorldRuleFacts.RecordFreePrefix}<bodyRef>:<pool>",
+            $"{WorldRuleFacts.InGroupPrefix}<bodyRef>:<group>",
+            $"{WorldRuleFacts.BodyIndexPrefix}<bodyRef>",
             $"{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>",
             $"{WorldRuleFacts.ProducerPrefix}<bodyRef>:held|possessed|down",
             $"{WorldRuleFacts.ParkedPrefix}<bodyRef>",
@@ -361,6 +366,119 @@ public static partial class WorldFactsVocabulary {
             rowOrdinal: rowOrdinal,
             valueKind: valueKind
         );
+        // Which identity record read a reserved channel spells, or null for none.
+        private static IdentityRecordRead? IdentityRecordReadOf(string name) {
+            foreach (var (prefix, read) in IdentityRecordPrefixes) {
+                if (name.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix)) {
+                    return read;
+                }
+            }
+            return null;
+        }
+
+        private static readonly (string Prefix, IdentityRecordRead Read)[] IdentityRecordPrefixes = [
+            (WorldRuleFacts.RecordPrefix, IdentityRecordRead.Field),
+            (WorldRuleFacts.RecordFindPrefix, IdentityRecordRead.Find),
+            (WorldRuleFacts.RecordCountPrefix, IdentityRecordRead.Count),
+            (WorldRuleFacts.RecordFreePrefix, IdentityRecordRead.Free),
+        ];
+
+        // One read of the record store on the identity a body drives under. The pool and its fields live on the
+        // identity's own document, which a world's compile cannot read, so they are checked as names here and answer
+        // nothing when the store does not hold them. A read that walks the pool's live instances is priced at the fixed
+        // bound the record effects use; a field read resolves one slot, and a whole-pool count reads one cell.
+        private static WorldBodyFactOperand IdentityRecordFact(string name, IdentityRecordRead read, string ruleName, string[] tokens, WorldFactsCompileContext world) {
+            var width = WorldFactsCompileContext.BodyRefTokenWidth(start: 0, tokens: tokens);
+            var rest = (tokens.Length - width);
+            var (prefix, shape, fits) = read switch {
+                IdentityRecordRead.Field => (WorldRuleFacts.RecordPrefix, "<pool>:<slot>:<field>[:<text>]", (rest is 3 or 4)),
+                IdentityRecordRead.Find => (WorldRuleFacts.RecordFindPrefix, "<pool>:<keyField>:<value>[:<field>]", (rest is 3 or 4)),
+                IdentityRecordRead.Count => (WorldRuleFacts.RecordCountPrefix, "<pool>[:<keyField>:<value>]", (rest is 1 or 3)),
+                _ => (WorldRuleFacts.RecordFreePrefix, "<pool>", (rest == 1)),
+            };
+            var slot = IdentityRecordOperand.EachSlot;
+            var pool = default(CellName);
+            CellName? field = null;
+            CellName? keyField = null;
+            string? keyValue = null;
+            string? text = null;
+            var spelled = (fits && CellName.TryParse(candidate: tokens[width], name: out pool, reason: out _));
+
+            if (spelled && (read == IdentityRecordRead.Field)) {
+                var slotToken = tokens[width + 1];
+
+                spelled = ((slotToken is "$each" or "each") || (int.TryParse(s: slotToken, style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out slot) && (slot >= 0))) &&
+                    TryName(token: tokens[width + 2], name: out field);
+                text = ((rest == 4) ? tokens[width + 3] : null);
+            } else if (spelled && (rest >= 3)) {
+                keyValue = tokens[width + 2];
+                spelled = TryName(token: tokens[width + 1], name: out keyField) && ((rest == 3) || TryName(token: tokens[width + 3], name: out field));
+            }
+            if (!spelled) {
+                throw new RuleException(
+                    detail: $"'{name}' does not spell '{prefix}<bodyRef>:{shape}' ({WorldFactsCompileContext.BodyRefVocabulary}, then a pool of the identity's record store, its fields as names, a slot as a non-negative literal or $each, and a match or comparison as a literal)",
+                    refusal: WorldRuleRefusal.IdentityRecordReadMalformed,
+                    ruleName: ruleName
+                );
+            }
+            if ((read == IdentityRecordRead.Field) && (slot == IdentityRecordOperand.EachSlot)) {
+                RuleCompiler.RequireBindingInScope(binding: BoundKey.Each, context: world, ruleName: ruleName, spelled: tokens[width + 1], where: $"'{name}'");
+            }
+
+            var body = world.ResolveBodyRef(channel: name, ruleName: ruleName, start: 0, tokens: tokens);
+            var operand = new IdentityRecordOperand(body: body, field: field, keyField: keyField, keyValue: keyValue, pool: pool, read: read, slot: slot, text: text);
+            var walks = ((read is IdentityRecordRead.Find or IdentityRecordRead.Free) || (keyField is not null));
+
+            return BodyFact(
+                bodyA: body,
+                bodyB: default,
+                cost: (walks ? WorldIdentityRecords.StoreWalkWork : 16L),
+                describe: name,
+                reach: WorldDisclosureReach.Bodies,
+                payload: operand,
+                read: facet => facet.Read(operand: operand),
+                rowOrdinal: -1,
+                valueKind: operand.ValueKind,
+                world: world
+            );
+
+            static bool TryName(string token, out CellName? name) {
+                var parsed = CellName.TryParse(candidate: token, name: out var cellName, reason: out _);
+
+                name = (parsed ? cellName : null);
+                return parsed;
+            }
+        }
+        // Whether the principal holding a body is a member of a group. Groups form and change at run time
+        // (WorldMutation.FormGroup), so a group the document does not author is a group no one is a member of yet,
+        // never a refusal. The read finds the group and walks its roster, both bounded by the groups ceilings.
+        private static WorldBodyFactOperand GroupMemberFact(string name, string ruleName, string[] tokens, WorldFactsCompileContext world) {
+            var width = WorldFactsCompileContext.BodyRefTokenWidth(start: 0, tokens: tokens);
+
+            if ((tokens.Length != (width + 1)) || !SafeName.TryParse(candidate: tokens[width], name: out var group, reason: out _)) {
+                throw new RuleException(
+                    detail: $"'{name}' does not spell '{WorldRuleFacts.InGroupPrefix}<bodyRef>:<group>' ({WorldFactsCompileContext.BodyRefVocabulary}, then a group id)",
+                    refusal: WorldRuleRefusal.InGroupMalformed,
+                    ruleName: ruleName
+                );
+            }
+
+            var body = world.ResolveBodyRef(channel: name, ruleName: ruleName, start: 0, tokens: tokens);
+            var operand = new GroupMemberOperand(body: body, group: group.Value);
+
+            return BodyFact(
+                bodyA: body,
+                bodyB: default,
+                cost: (WorldGroupCapacity.MaxGroups + WorldGroupCapacity.MaxMembersPerGroup),
+                describe: name,
+                reach: WorldDisclosureReach.Bodies,
+                payload: operand,
+                read: facet => facet.Read(operand: operand),
+                rowOrdinal: -1,
+                valueKind: CellKind.Int,
+                world: world
+            );
+        }
         // What one input-history read walks: a pattern its matching program; a read of the event a sweep bound, or of a
         // hold, the one record it names; any other event read the newest-first scan of the retained history.
         private static long InputReadWork(WorldInputOperand input, WorldDefinition definition) {
@@ -1146,6 +1264,72 @@ public static partial class WorldFactsVocabulary {
                     valueKind: CellKind.Fixed,
                     world: world
                 );
+            } else if (IdentityRecordReadOf(name: name) is { } recordRead) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+                fact = IdentityRecordFact(
+                    name: name,
+                    read: recordRead,
+                    ruleName: ruleName,
+                    tokens: call!.Texts(),
+                    world: world
+                );
+            } else if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.InGroupPrefix
+            )) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+                fact = GroupMemberFact(
+                    name: name,
+                    ruleName: ruleName,
+                    tokens: call!.Texts(),
+                    world: world
+                );
+            } else if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.BodyIndexPrefix
+            )) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+
+                var tokens = call!.Texts();
+
+                if (tokens.Length != WorldFactsCompileContext.BodyRefTokenWidth(start: 0, tokens: tokens)) {
+                    throw new RuleException(
+                        detail: $"'{name}' does not spell '{WorldRuleFacts.BodyIndexPrefix}<bodyRef>' ({WorldFactsCompileContext.BodyRefVocabulary})",
+                        refusal: WorldRuleRefusal.BodyIndexMalformed,
+                        ruleName: ruleName
+                    );
+                }
+
+                var body = world.ResolveBodyRef(channel: name, ruleName: ruleName, start: 0, tokens: tokens);
+                var operand = new BodyIndexOperand(body: body);
+
+                fact = BodyFact(
+                    bodyA: body,
+                    bodyB: default,
+                    cost: 1L,
+                    describe: name,
+                    reach: WorldDisclosureReach.Bodies,
+                    payload: operand,
+                    read: facet => Fact.Finite(kind: CellKind.Int, value: facet.ResolveBody(bodyRef: operand.Body)),
+                    rowOrdinal: -1,
+                    valueKind: CellKind.Int,
+                    world: world
+                );
             } else if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: WorldRuleFacts.IdentityPrefix
@@ -1482,72 +1666,6 @@ public static partial class WorldFactsVocabulary {
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
                     valueKind: CellKind.Int,
-                    world: world
-                );
-            } else if (name.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: WorldRuleFacts.RecordPrefix
-            )) {
-                RuleCompiler.RefuseKeyOnReservedChannel(
-                    key: cell,
-                    keyFieldLabel: site.KeyFieldLabel,
-                    name: name,
-                    ruleName: ruleName
-                );
-
-                var tokens = call!.Texts();
-                var width = WorldFactsCompileContext.BodyRefTokenWidth(
-                    start: 0,
-                    tokens: tokens
-                );
-                var slot = IdentityRecordOperand.EachSlot;
-
-                if (
-                    ((tokens.Length != (width + 3)) && (tokens.Length != (width + 4))) ||
-                    !CellName.TryParse(candidate: tokens[width], name: out var pool, reason: out _) ||
-                    !CellName.TryParse(candidate: tokens[width + 2], name: out var field, reason: out _) ||
-                    ((tokens[width + 1] is not ("$each" or "each")) && (!int.TryParse(s: tokens[width + 1], style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out slot) || (slot < 0)))
-                ) {
-                    throw new RuleException(
-                        detail: $"'{name}' does not spell '{WorldRuleFacts.RecordPrefix}<bodyRef>:<pool>:<slot>:<field>[:<text>]' ({WorldFactsCompileContext.BodyRefVocabulary}, then the identity's pool, a non-negative slot or $each, the record field and, for a text field, the text it is compared with)",
-                        refusal: WorldRuleRefusal.IdentityRecordMalformed,
-                        ruleName: ruleName
-                    );
-                }
-                if (slot == IdentityRecordOperand.EachSlot) {
-                    RuleCompiler.RequireBindingInScope(
-                        binding: BoundKey.Each,
-                        context: world,
-                        ruleName: ruleName,
-                        spelled: tokens[width + 1],
-                        where: $"'{name}'"
-                    );
-                }
-
-                var body = world.ResolveBodyRef(
-                    channel: name,
-                    ruleName: ruleName,
-                    start: 0,
-                    tokens: tokens
-                );
-                var operand = new IdentityRecordOperand(
-                    body: body,
-                    field: field,
-                    pool: pool,
-                    slot: slot,
-                    text: ((tokens.Length == (width + 4)) ? tokens[width + 3] : null)
-                );
-
-                fact = BodyFact(
-                    bodyA: body,
-                    bodyB: default,
-                    cost: 16L,
-                    describe: name,
-                    reach: WorldDisclosureReach.Bodies,
-                    payload: operand,
-                    read: facet => facet.Read(operand: operand),
-                    rowOrdinal: -1,
-                    valueKind: CellKind.Fixed,
                     world: world
                 );
             } else if (name.StartsWith(

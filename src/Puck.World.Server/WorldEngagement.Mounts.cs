@@ -25,7 +25,7 @@ public sealed partial class WorldEngagement {
     /// <returns>The ridden body's index, or -1 when the set keeps the participant's own body, names no body, or names
     /// only bodies whose kits carry no rider.</returns>
     public int MountOf(int index) {
-        var applications = m_grants.Applications(principal: PrincipalOf(index: index));
+        var applications = m_grants.Applications(principal: m_population.OccupantPrincipal(index: index));
         var mount = -1;
 
         for (var slot = 0; (slot < applications.Count); slot++) {

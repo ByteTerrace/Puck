@@ -34,6 +34,7 @@ identity {
     { pool: marks, class: Crossing }
     { pool: items, class: Crossing }
     { pool: quests, class: Crossing }
+    { pool: questShares, class: Crossing }
   ]
 }
 
@@ -68,18 +69,33 @@ state {
     item: Text = ""
     count: Int bounds(0..9999) = 1
   }
-  // A quest the character follows: which, the step it has reached, and whether it is active, done or set aside.
+  // A quest the character follows: which, the chain it is a part of and its place there, the step it has reached,
+  // whether it is active, done or set aside (quests.puck's questActive, questDone, questSetAside), and the id of the
+  // character who shared it, empty for one the character took up alone.
   record Quest {
     quest: Text = ""
+    chain: Text = ""
+    part: Int bounds(0..255) = 0
     step: Int bounds(0..255) = 0
     status: Int bounds(0..3) = 0
+    sharedBy: Text = ""
+  }
+  // What came of a quest the character shared: the chain, who it went to, the part they joined at, and whether they
+  // accepted it, completed it or did not meet its requirements (quests.puck's shareAccepted, shareCompleted,
+  // shareUnqualified).
+  record QuestShare {
+    chain: Text = ""
+    recipient: Text = ""
+    part: Int bounds(0..255) = 0
+    outcome: Int bounds(0..3) = 0
   }
 
   pool notes of Note capacity(512)
   pool tags of Tag capacity(64)
-  pairPool noteTags record Join left notes right tags maxLive 1024
-  pairPool noteLinks record Join left notes right notes maxLive 1024
+  pairPool noteTags record Join left notes right tags maxLive 1024 directed true allowSelf false
+  pairPool noteLinks record Join left notes right notes maxLive 1024 directed true allowSelf false
   pool marks of Mark capacity(256)
   pool items of Item capacity(128)
   pool quests of Quest capacity(64)
+  pool questShares of QuestShare capacity(256)
 }

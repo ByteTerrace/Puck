@@ -1516,9 +1516,7 @@ public sealed partial class WorldTransferEscrow {
     // that has not landed here, or that the grant table refuses, leaves the participant driving itself.
     private void ResumeDrive(int slot, WorldEntityAddress driven) {
         var population = m_server.Population;
-        var principal = ((slot < population.LocalSeatCount)
-            ? Principal.Seat(slot: slot)
-            : population.PeerPrincipal(index: slot));
+        var principal = population.OccupantPrincipal(index: slot);
 
         for (var index = 0; (index < population.Capacity); index++) {
             if (

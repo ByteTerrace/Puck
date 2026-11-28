@@ -489,6 +489,34 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
+    /// <remarks>The store read is the identity's as it stands: a record a firing earlier in this pass committed is
+    /// already installed (<see cref="Committed"/>), as the version a schedule names for it says.</remarks>
+    public Fact Read(IdentityRecordOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        return operand.Answer(
+            identity: Host.Body(index: ResolveBodyRef(bodyRef: operand.Body))?.Profile,
+            slot: ((operand.Slot == IdentityRecordOperand.EachSlot) ? BoundEachIndex() : operand.Slot)
+        );
+    }
+    /// <inheritdoc/>
+    /// <remarks>Membership is read from the live document's <c>groups</c> section, under the principal the body's
+    /// index stands for (<see cref="WorldPopulation.OccupantPrincipal"/>).</remarks>
+    public Fact Read(GroupMemberOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        var index = ResolveBodyRef(bodyRef: operand.Body);
+        var member = (
+            (index >= 0) &&
+            Host.Population.IsActive(index: index) &&
+            (Host.Document.Definition.Groups is { } section) &&
+            (WorldGroup.Find(groups: section.Groups, id: operand.Group) is { } group) &&
+            WorldGroup.HoldsLocal(members: group.Members, principal: Host.Population.OccupantPrincipal(index: index))
+        );
+
+        return Fact.Finite(kind: CellKind.Int, value: (member ? 1L : 0L));
+    }
+    /// <inheritdoc/>
     public Fact Read(EngagedOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
@@ -557,33 +585,6 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
                 tagRowOrdinal: OrdinalOf(handle: operand.StateHandle)
             )
         );
-    }
-    /// <inheritdoc/>
-    public Fact Read(IdentityRecordOperand operand) {
-        ArgumentNullException.ThrowIfNull(argument: operand);
-
-        var slot = ((operand.Slot == IdentityRecordOperand.EachSlot) ? BoundEachIndex() : operand.Slot);
-
-        if (
-            (slot < 0) ||
-            (Host.Body(index: ResolveBodyRef(bodyRef: operand.Body)) is not { Profile: { } identity }) ||
-            !identity.TryReadRecord(field: operand.Field, pool: operand.Pool, slot: slot, value: out var value)
-        ) {
-            return Fact.Absent(kind: CellKind.Fixed);
-        }
-
-        if (operand.Text is { } text) {
-            return ((value.Kind == CellKind.Text)
-                ? Fact.Finite(value: (string.Equals(a: value.AsText, b: text, comparisonType: StringComparison.Ordinal) ? FixedQ4816.One : FixedQ4816.Zero))
-                : Fact.Absent(kind: CellKind.Fixed));
-        }
-
-        return value.Kind switch {
-            CellKind.Int => Fact.Finite(value: FixedQ4816.FromInteger(value: value.AsInt)),
-            CellKind.Fixed => Fact.Finite(value: FixedQ4816.FromRawBits(value: value.AsFixed)),
-            CellKind.Bool => Fact.Finite(value: (value.AsBool ? FixedQ4816.One : FixedQ4816.Zero)),
-            _ => Fact.Absent(kind: CellKind.Fixed),
-        };
     }
     /// <inheritdoc/>
     public Fact Read(NavigationOperand operand) {
@@ -765,6 +766,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         rowOrdinal: rowOrdinal
     ),
     });
+
 
     /// <summary>Initializes the rule host over the server it evaluates against.</summary>
     /// <param name="host">The owning server.</param>

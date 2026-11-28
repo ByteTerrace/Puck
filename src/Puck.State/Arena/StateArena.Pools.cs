@@ -556,6 +556,39 @@ public sealed partial class StateArena {
 
     /// <summary>Attempts to resolve the catalog-seeded numeric key for one pool identity slot.</summary>
     public bool TryPoolKey(int slot, out CellKey key) => m_catalog.TryGetPoolKey(key: out key, slot: slot);
+    /// <summary>Returns the slot the next claim of a compiled pool takes: its lowest free slot.</summary>
+    /// <param name="poolOrdinal">The catalog-relative pool ordinal.</param>
+    /// <returns>The slot, or <c>-1</c> when every slot holds a live instance or the ordinal names no pool.</returns>
+    public int FreePoolSlot(int poolOrdinal) => ((((uint)poolOrdinal) < ((uint)m_catalog.Pools.Count))
+        ? FirstFreePoolSlot(pool: m_catalog.Pools[poolOrdinal])
+        : -1);
+    /// <summary>Walks a pool's live instances in slot order, over its occupancy words, and answers the lowest slot whose
+    /// field holds a value, or how many hold it.</summary>
+    /// <param name="poolOrdinal">The catalog-relative pool ordinal.</param>
+    /// <param name="fieldOrdinal">The pool field compared, as <see cref="StatePoolFieldDescriptor.Ordinal"/> names it.</param>
+    /// <param name="value">The value the field must hold.</param>
+    /// <param name="count">Whether to count every match rather than stop at the first.</param>
+    /// <returns>The lowest matching slot (or <c>-1</c>), or the number of matches when <paramref name="count"/>.</returns>
+    public int MatchPoolSlots(int poolOrdinal, int fieldOrdinal, in CellValue value, bool count) {
+        var matches = 0;
+
+        if (((uint)poolOrdinal) >= ((uint)m_catalog.Pools.Count)) {
+            return (count ? 0 : -1);
+        }
+        for (var slot = NextOccupiedPoolSlot(poolOrdinal: poolOrdinal, start: 0); (slot >= 0); slot = NextOccupiedPoolSlot(poolOrdinal: poolOrdinal, start: (slot + 1))) {
+            if (!TryResolvePoolSlot(handle: out var handle, poolOrdinal: poolOrdinal, slot: slot) ||
+                !TryRead(fieldOrdinal: fieldOrdinal, handle: handle, value: out var held) ||
+                !held.Equals(other: value)) {
+                continue;
+            }
+            if (!count) {
+                return slot;
+            }
+            matches++;
+        }
+
+        return (count ? matches : -1);
+    }
 
     private bool PoolSlotOccupied(int poolOrdinal, int slot) => BitWords.Contains(index: slot, words: m_poolOccupancy[poolOrdinal]);
     private int FirstFreePoolSlot(StatePoolDescriptor pool) {

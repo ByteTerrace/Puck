@@ -125,8 +125,9 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
     /// <summary>Returns whether a world fact rests (<see cref="Puck.State.Rules.RuleCompileContext.FactRests"/>): the
     /// facts the world host versions that answer a count, a flag or an event, so that they move when something
     /// happens rather than with time or motion. A region's occupants, the population and quiescence censuses, a
-    /// musical beat, an input event read for a literal owner, and a body's fact bits, counter registers and producer
-    /// stand-down for a literal body or the one bound to <c>$each</c> rest, and so do a body's fact bits read through a
+    /// musical beat, an input event read for a literal owner, and a body's fact bits, counter registers, producer
+    /// stand-down, identity record reads and group membership for a literal body or the one bound to <c>$each</c> rest,
+    /// and so do a body's fact bits read through a
     /// literal placement or <c>placement:$each</c> (a piece's <c>fact(placement, $each, Resting)</c>); a pose, a distance, a pointer, a channel and every fact the
     /// host versions no source for do not. The host refuses to leave unversioned a fact this answers for
     /// (<c>WorldRuleHost.TryScheduleFact</c>), so the work sheet never prices by change a fact judged every tick.</summary>
@@ -151,6 +152,15 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
             // version (WorldRuleHost.TryScheduleFact); a timer's presented value ages with time.
             case WorldBodyFactOperand { Payload: BodyStateOperand { Kind: Puck.Physics.Motion.ActionStateKind.Counter } state }:
                 return BodyRests(body: state.Body, each: out each);
+            // An identity's record store and a group's roster move only when something writes them, which the host
+            // names as the read's version: the identity's revision for the body, the group row it reads.
+            case WorldBodyFactOperand { Payload: IdentityRecordOperand record }:
+                return BodyRests(body: record.Body, each: out each);
+            case WorldBodyFactOperand { Payload: GroupMemberOperand member }:
+                return BodyRests(body: member.Body, each: out each);
+            // A literal body's index, or the one a sweep bound, never moves for its binding.
+            case WorldBodyFactOperand { Payload: BodyIndexOperand index }:
+                return BodyRests(body: index.Body, each: out each);
             case WorldBodyFactOperand { Payload: WorldInputOperand input }:
                 return InputRests(input: input);
             case WorldBodyFactOperand { Payload: ClockOperand { Input: { } input } }:

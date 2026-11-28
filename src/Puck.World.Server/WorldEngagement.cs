@@ -203,12 +203,6 @@ public sealed partial class WorldEngagement {
     // Whether a principal's Index is its own body — only a seat's and a peer's is. An application set is written for a
     // body's participant, so any other identity (a session's ordinal, the console, an addon) owns no set here.
     private static bool OwnsABody(Principal principal) => (principal.Kind is PrincipalKind.Seat or PrincipalKind.Peer);
-    // The principal a 0-based entity index resolves to — a seat slot below the local seat count, a population peer
-    // identity above it (see the class remarks: no roster indirection is needed on the read half).
-    private Principal PrincipalOf(int index) => ((index < m_population.LocalSeatCount)
-        ? Principal.Seat(slot: index)
-        : m_population.PeerPrincipal(index: index)
-    );
     // Clear the composed application set of every principal collected as stale this pass (its body no longer live).
     // Runs over the scratch copy, so it never mutates a live enumeration.
     private void PruneStale() {
@@ -478,7 +472,7 @@ public sealed partial class WorldEngagement {
         if ((Body(index: bodyIndex) is null) || !m_grants.Allows(actor, WorldCapability.Drive, GrantSubject.Body(index: bodyIndex)).IsAllowed) {
             return false;
         }
-        var principal = PrincipalOf(index: bodyIndex);
+        var principal = m_population.OccupantPrincipal(index: bodyIndex);
 
         if (screenIndex < 0) {
             return (Dissolve(actingPrincipal: actor, entityIndex: bodyIndex, targetPrincipal: principal) != ControlOutcome.Denied);
@@ -549,7 +543,7 @@ public sealed partial class WorldEngagement {
             return false;
         }
 
-        var applications = m_grants.Applications(principal: PrincipalOf(index: bodyIndex));
+        var applications = m_grants.Applications(principal: m_population.OccupantPrincipal(index: bodyIndex));
 
         for (var slot = 0; (slot < applications.Count); slot++) {
             if (applications[slot].Target == target) {
@@ -573,7 +567,7 @@ public sealed partial class WorldEngagement {
             return false;
         }
 
-        var applications = m_grants.Applications(principal: PrincipalOf(index: bodyIndex));
+        var applications = m_grants.Applications(principal: m_population.OccupantPrincipal(index: bodyIndex));
         var device = false;
 
         IndexRows();
@@ -628,7 +622,7 @@ public sealed partial class WorldEngagement {
                 continue;
             }
 
-            var principal = PrincipalOf(index: index);
+            var principal = m_population.OccupantPrincipal(index: index);
             var applications = WithoutDepartedBodies(
                 applications: m_grants.Applications(principal: principal),
                 index: index,

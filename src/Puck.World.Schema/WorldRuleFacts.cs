@@ -103,13 +103,32 @@ public static class WorldRuleFacts {
     public const string IdentityPrefix = "$identity:";
     /// <summary>The prefix; <c>$record:&lt;bodyRef&gt;:&lt;pool&gt;:&lt;slot&gt;:&lt;field&gt;[:&lt;text&gt;]</c>
     /// (<c>record(body, 0, marks, $each, x)</c> in <c>.puck</c>) reads one field of the live instance in a slot of a
-    /// record pool on the identity the named body drives under (<see cref="WorldIdentity.TryReadRecord"/>): an Int
-    /// field as its integer, a Fixed field as itself, a flag as 0 or 1, and a text field compared with the trailing
-    /// text as 1 when equal and 0 otherwise. The slot is a non-negative literal or
-    /// <c>$each</c>, the swept key read as a slot index. It reads absent for a body under no identity, an empty slot, a
-    /// pool or field the identity does not hold, or a text field read with no text. The pool and field live on the identity's own
-    /// document, which a world's compile cannot read, so they are checked as names only.</summary>
+    /// record pool on the identity the named body drives under (<see cref="IdentityRecordOperand"/>): an Int field as its
+    /// integer, a Fixed field as itself, a flag as 0 or 1, and a text field compared with the trailing text as 1 when
+    /// equal and 0 otherwise. The slot is a non-negative literal or <c>$each</c>, the swept key read as a slot index. It
+    /// reads absent for a body under no identity, an empty slot, a pool or field the identity does not hold, or a text
+    /// field read with no text. The pool and field live on the identity's own document, which a world's compile cannot
+    /// read, so they are checked as names only.</summary>
     public const string RecordPrefix = "$record:";
+    /// <summary>The prefix; <c>$recordFind:&lt;bodyRef&gt;:&lt;pool&gt;:&lt;keyField&gt;:&lt;value&gt;[:&lt;field&gt;]</c>
+    /// (<c>recordFind(each, quests, quest, lanternLit, step)</c>) reads, as <see cref="RecordPrefix"/> reads a slot's, a
+    /// field of the lowest live instance of a pool whose key field holds the literal (read as that field's own kind); with
+    /// no field named, it reads that instance's slot, or <c>-1</c> for none.</summary>
+    public const string RecordFindPrefix = "$recordFind:";
+    /// <summary>The prefix; <c>$recordCount:&lt;bodyRef&gt;:&lt;pool&gt;[:&lt;keyField&gt;:&lt;value&gt;]</c> counts the live
+    /// instances of a pool on the identity a body drives under, or those whose key field holds the literal: <c>0</c> for a
+    /// body under no identity or a pool the identity does not hold.</summary>
+    public const string RecordCountPrefix = "$recordCount:";
+    /// <summary>The prefix; <c>$recordFree:&lt;bodyRef&gt;:&lt;pool&gt;</c> reads the slot the next claim of a pool on the
+    /// identity a body drives under takes, or <c>-1</c> when the pool is full or the body has no identity.</summary>
+    public const string RecordFreePrefix = "$recordFree:";
+    /// <summary>The reserved channel reading whether the principal holding a body is a member of a group the world's
+    /// <c>groups</c> section declares: <c>$inGroup:&lt;bodyRef&gt;:&lt;group&gt;</c> (<see cref="GroupMemberOperand"/>).</summary>
+    public const string InGroupPrefix = "$inGroup:";
+    /// <summary>The reserved channel reading the index of the body a reference names: <c>$bodyIndex:&lt;bodyRef&gt;</c>,
+    /// the index a cell holds or the one a sweep bound, so a rule compares two bodies by their indices
+    /// (<see cref="BodyIndexOperand"/>).</summary>
+    public const string BodyIndexPrefix = "$bodyIndex:";
     /// <summary><c>$influence:&lt;channel&gt;:&lt;placementId&gt;</c> counts distinct other placements covering
     /// the target with the named influence. An optional read key addresses a dealt child of the named template.
     /// Channels are opaque shared labels, so importing a module does not rename them. A missing child reads absent.</summary>

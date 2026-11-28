@@ -1271,8 +1271,13 @@ public static class WorldModuleNamespace {
         (ChannelName(spelling: WorldRuleFacts.EngagedPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.BodyStatePrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.IdentityPrefix), static read => read.BodyReferenceThen(rows: null)),
-        // An identity's pool and field live on the identity's own document, which no module renames.
+        // An identity's pools and fields live on its own document, and a group id is the world's: no module renames them.
         (ChannelName(spelling: WorldRuleFacts.RecordPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.RecordFindPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.RecordCountPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.RecordFreePrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.InGroupPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.BodyIndexPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.NavigationPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.ProducerPrefix), static read => read.BodyReferenceThen(rows: null)),
         (ChannelName(spelling: WorldRuleFacts.ParkedPrefix), static read => read.BodyReferenceThen(rows: null)),
