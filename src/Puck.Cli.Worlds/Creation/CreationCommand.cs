@@ -210,9 +210,6 @@ public static partial class CreationCommand {
         foreach (var shape in CreationMotion.UngroupedBlends(rig: rig)) {
             Console.Out.WriteLine(value: $"  warning {PuckDiagnosticCodes.UngroupedBlend}: '{id}' {CreationMotion.DescribeUngrouped(document: document, shape: shape)}");
         }
-        foreach (var shape in CreationStretchedCapsules.Of(document: document)) {
-            Console.Out.WriteLine(value: $"  warning {PuckDiagnosticCodes.StretchedCapsule}: '{id}' {CreationStretchedCapsules.Describe(document: document, shape: shape)}");
-        }
 
         if (document.Palette is { Count: > 0 } palette) {
             var usage = new int[palette.Count];

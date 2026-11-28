@@ -1,6 +1,6 @@
 // Which actions the debug world accepts in which context: the standard's families for the contexts it has
 // (../standard/contexts/modes.puck's engagement, the instrument, the typing bench, the terminals, a conversation) beside
-// the two that follow its avatar's own registers, her form and her jetpack, and her journal's, which offers its page
+// the two that follow its avatar's own registers, her form and her jetpack, and her menu's, which offers its page
 // and mark keys while it is open. Eligibility follows body registers and engagement, independently of binding pages.
 import "../standard/contexts/modes"
 import "../standard/instrument"
@@ -8,11 +8,11 @@ import "../standard/typing"
 import "../standard/contexts/terminal"
 import "../standard/contexts/terminal-console"
 import "../standard/contexts/conversation"
-import "../standard/journal"
+import "../standard/menu"
 
 let movement = movementChannels
-// The lock-on and marks keys (targeting.puck) and her journal's key are hers in every form she walks or flies in.
-let controls = ["jump", "suit", "noclip", "lock", "lockCycle", "ping", "mark", "markClear", "journal"]
+// The lock-on and marks keys (targeting.puck) and her menu's key are hers in every form she walks or flies in.
+let controls = ["jump", "suit", "noclip", "lock", "lockCycle", "ping", "mark", "markClear", "menu"]
 let flyingRise = [{ keep ["rise"], from { flight: "flying" }, to { flight: "flying" } }]
 let talking = { family: "conversation", states ["talking"] }
 // A seat engaged anywhere, at a bench, at a terminal or talking with a steward, has none of the families that move her
@@ -83,7 +83,15 @@ inputModes {
     conversationFamily(
       suspendedBy: [whileEngaged, { family: "typing", states ["seated"] }, { family: "terminal", states ["engaged"] }]
     )
-    // Her journal's page and mark keys while it is open (avatars/moth/moth.puck), none while she is engaged anywhere.
-    journalFamily(suspendedBy: engagedAnywhere)
+    // Her menu's page and mark keys while it is open (avatars/moth/moth.puck): none while she is engaged anywhere but at a
+    // machine, where holding the pad's Menu button opens the menu over the running screen (standard/menu.puck).
+    menuFamily(
+      suspendedBy: [
+        { family: "engagement", states ["tabletop", "screen", "body"] }
+        { family: "typing", states ["seated"] }
+        { family: "terminal", states ["engaged"] }
+        talking
+      ]
+    )
   ]
 }

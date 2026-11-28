@@ -48,7 +48,7 @@ Decisions: [worlds and federation](../decisions/worlds-and-federation.md), [play
 
 - [Play](play.md): the reference game's remaining engineering, the finder that admits a party across authorities, and the MCP adapter.
 - [The press](../game/press.md): the debug world's typing game, a game page rather than a plan: its design, the capabilities it wires for real, and what it does not do yet.
-- [The hub, player saves and the player menu](hub-and-saves.md): the account as the player save, the hub as the reserved destination, the pause menu, durable images and machine save RAM.
+- [The hub, player saves and the player menu](hub-and-saves.md): the account as the player save, the hub as the reserved destination, the menu, durable images and machine save RAM.
 - [Companion custody protocol](companion-redesign.md): the specification the companion build follows, with the model that checks it.
 - [MMO foundations](mmo-foundations.md): the closed round that settled the federation register, and the records the register cites.
 - [A hosted world on a client](remote-content.md): how a world simulated elsewhere shows its text, its machines and its windows on the client that presents it (content by pin, machines run from replicated inputs, windows relayed by the authority that owns the screen), and the fixes that let a remote seat play, with the build order.

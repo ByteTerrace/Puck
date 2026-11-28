@@ -263,12 +263,13 @@ public record StateRow(
     /// for a site whose source never exhausts.</summary>
     public IReadOnlyList<ClosedBitset256>? DrawnMasks { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: DrawnMasks);
 
-    /// <summary>Gets the initial storage room reserved by a keyed row: its explicit capacity or its authored cells.
-    /// Further growth is admitted and charged by the arena before a mint lands. This is storage only: the cells a
-    /// definition carries are its live members at every export, so no price reads it (a price reads the declared
-    /// room, <c>RuleCompileContext.RowCapacity</c>).</summary>
+    /// <summary>Gets the initial storage room reserved by a keyed row: its explicit capacity, a tally's whole table
+    /// (its declared capacity fixes the table, and every probe walk spans it), or its authored cells. Further growth is
+    /// admitted and charged by the arena before a mint lands, so a row whose room is declared never grows while a tick
+    /// runs. This is storage only: the cells a definition carries are its live members at every export, so no price
+    /// reads it (a price reads the declared room, <c>RuleCompileContext.RowCapacity</c>).</summary>
     [JsonIgnore]
-    public virtual int InitialCellCapacity => ((Capacity is not null) ? CellCeiling : Math.Min(val1: CellCeiling, val2: Math.Max(val1: (Cells?.Count ?? 0), val2: (ReservedCapacity ?? 0))));
+    public virtual int InitialCellCapacity => (((Capacity is not null) || (EffectiveDomain is StateDomain.Tally)) ? CellCeiling : Math.Min(val1: CellCeiling, val2: Math.Max(val1: (Cells?.Count ?? 0), val2: (ReservedCapacity ?? 0))));
     /// <summary>Gets the admitted runtime room of a growable row. Exports preserve it so a checkpoint resumes
     /// with the same memory reservation. Authored rows normally omit it.</summary>
     public int? ReservedCapacity { get; init; }

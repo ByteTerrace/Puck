@@ -64,10 +64,6 @@ public interface IWorldFacts : IFacet {
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
     Fact Read(BodyKinematicsOperand operand);
-    /// <summary>Returns one reading of the net a placement carries.</summary>
-    /// <param name="operand">The operand.</param>
-    /// <returns>The fact.</returns>
-    Fact Read(WorldNetOperand operand);
     /// <summary>Returns one read of the record store on the identity a body drives under.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
@@ -76,6 +72,10 @@ public interface IWorldFacts : IFacet {
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
     Fact Read(GroupMemberOperand operand);
+    /// <summary>Returns one reading of the net a placement carries.</summary>
+    /// <param name="operand">The operand.</param>
+    /// <returns>The fact.</returns>
+    Fact Read(WorldNetOperand operand);
     /// <summary>Returns whether a body's participant holds a control application onto a screen.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>

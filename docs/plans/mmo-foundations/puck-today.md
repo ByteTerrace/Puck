@@ -161,7 +161,7 @@ because the profile is foreign **[opened]**
 
 `WorldIdentity.TryAdopt` writes every carried fact through `TrySetFact`, as the
 identity's own owner, skipping a home-scoped one, and records the first refusal
-**[opened]** (`src/Puck.World.Schema/WorldIdentity.Records.cs:228-234`):
+**[opened]** (`src/Puck.World.Schema/WorldIdentity.Records.cs:241-247`):
 
 ```csharp
         foreach (var cell in (carried.Facts?.Cells ?? [])) {
@@ -279,7 +279,7 @@ engine's doors **[inference]**. Facts carry no record of which world wrote them
 Home adopts only a colocated seat of its own coming home. `WorldTransferEscrow.AdoptHomeProfiles`
 asks `HomeIdentity` for each traveller (`src/Puck.World.Server/WorldTransferEscrow.cs:1357-1366`),
 and `HomeIdentity` answers only for a non-peer arrival **[opened]**
-(`src/Puck.World.Server/WorldTransferEscrow.cs:1671-1683`):
+(`src/Puck.World.Server/WorldTransferEscrow.cs:1690-1702`):
 
 ```csharp
     // The owned identity a local seat of this authority left with, when traveler `index` is that seat coming home: a

@@ -573,6 +573,16 @@ look).
 - **Exact where a closed form exists.** Box extents, an elliptical cylinder, a
   torus scaled equally in X and Z, and every regular polygon as its scaled
   convex polygon already lower to exact fields (`SdfSolidGeometry`).
+- **A capsule's X and Z scales are its section's radii** (the lead's ruling).
+  A capsule scaled apart in X and Z has an elliptical section and half-ellipsoid
+  ends whose Y radius is the geometric mean of the two
+  (`SdfSolidGeometry.CapsuleRadii`), which is the round capsule when they are
+  equal. The unit capsule under a stretch, whose ends grow with the segment's
+  scale, was never a capsule an author asked for, so this defines the surface
+  rather than replacing one. It lowers to its segment elongating the
+  exponent-2 superellipsoid, so it reads the ellipsoid's distance and takes the
+  ellipsoid's solve when that lands: until then a bound with the gauge's gain,
+  admitted by contact.
 - **A bounded closest-point solve elsewhere**, with its answer certified: an
   enclosing interval and a residual bound, interior points and axis and centre
   degeneracies included. A fixed iteration count alone certifies nothing.

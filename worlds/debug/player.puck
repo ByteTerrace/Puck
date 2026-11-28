@@ -7,12 +7,12 @@ schema: "puck.world.definition.v1"
 import "../standard/inputs"
 import "../standard/player/player"
 import "../standard/player/actions"
-import "../standard/wrist-panel"
+import "../standard/worn-screen"
 import "avatars/moth/contract"
 import "avatars/moth/moth"
 
-// While her journal is open the camera focuses in on her wrist panel, fully when she stands and a little as she moves.
-player(avatar: mothAvatar, rig: "moth-camera", focus: wristPanelFocus())
+// While her menu is open the camera focuses in on her worn screen, fully when she stands and a little as she moves.
+player(avatar: mothAvatar, rig: "moth-camera", focus: wornScreenFocus())
 
 // The climb's stamina wheel, low on the view while it is not full.
 staminaGauge()

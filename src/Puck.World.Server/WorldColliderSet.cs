@@ -21,7 +21,8 @@ namespace Puck.World.Server;
 /// <para>Single-pass-per-iteration relaxation (up to <c>MaxIterations</c>): two adjacent solid boxes can push a body
 /// back and forth within one tick. Accepted at authoring scale; the fix (push-order by penetration depth) is cheap and
 /// additive. Boxes retain the drawn fillet through <see cref="FixedStaticCollider.RoundedBox"/>; chamfered Boxes
-/// and Superellipsoids use their exact convex support maps, and a round capsule is the rounded box around its segment. Spheres and plain circular cylinders
+/// and Superellipsoids use their exact convex support maps, a round capsule is the rounded box around its segment, and a
+/// capsule scaled unlike in X and Z is the superellipsoid elongated along its segment. Spheres and plain circular cylinders
 /// use their closest-point geometry; rounded/chamfered circular rims use contained cores with computed error bounds.
 /// A creation whose shapes carve, smooth or otherwise blend each other, or that carries relief, collides as its composed
 /// field (<see cref="CollidesAsField"/>); any other finite primitive uses its oriented bounding box
@@ -446,18 +447,18 @@ public sealed partial class WorldColliderSet : IContactField {
         hash.Add(value: collider.Radius.Value);
         hash.Add(value: collider.Chamfer.Value);
         hash.Add(value: collider.Exponent.Value);
+        hash.Add(value: collider.Elongation.Value);
         hash.Add(value: collider.Rotation.X.Value);
         hash.Add(value: collider.Rotation.Y.Value);
         hash.Add(value: collider.Rotation.Z.Value);
         hash.Add(value: collider.Rotation.W.Value);
     }
 
-    // Boxes retain their authored rounding (sharp without one), and circular cylinders and ellipsoids their surface; other
-    // finite primitives retain a bound.
+    // Boxes retain their authored rounding (sharp without one), and circular cylinders, capsules and ellipsoids their
+    // surface; other finite primitives retain a bound.
     private static readonly FixedQ4816 SqrtTwo = FixedQ4816.Sqrt(value: FixedQ4816.FromInteger(value: 2));
     private static readonly FixedQ4816 BevelFactor = (FixedQ4816.FromInteger(value: 2) - SqrtTwo);
-    // A capsule's half segment per unit of its scale.y: the segment is 0.5·scale.y long.
-    private static readonly FixedQ4816 CapsuleHalfSegment = FixedQ4816.FromDouble(value: 0.25);
+    private static readonly FixedQ4816 EllipsoidColliderExponent = FixedQ4816.FromDouble(value: SdfProgramBuilder.MinSuperellipsoidExponent);
 
     // The one collider a solid row compiles for a creation's primitive copy, static and attached rows alike: a plane a
     // half-space, an exponent-2 ellipsoid-family shape scaled alike on every axis a sphere, anything else its finite
@@ -519,20 +520,21 @@ public sealed partial class WorldColliderSet : IContactField {
             }
             return FixedStaticCollider.RoundedBox(copy.Center, copy.Rotation, inner, (radius + margin));
         }
-        if ((copy.Shape.Type == SdfSolidPrimitive.Capsule) && (MathF.Abs(x: copy.Shape.Scale.X) == MathF.Abs(x: copy.Shape.Scale.Z))) {
-            // A capsule is a rounded box whose inner box is its segment, which runs 0.5·scale.y from the shape's position
-            // along its own Y (SdfSolidGeometry's unit law): scale.y stretches the segment, never the radius. The copy's
-            // centre is its box's (SdfSolidGeometry.LocalBox), the segment's midpoint, and its X half-extent the radius.
-            var segmentScale = FixedQ4816.Max(x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.Y)),
-                y: FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale));
-            var halfSegment = ((segmentScale * copy.StampScale) * CapsuleHalfSegment);
+        if (copy.Shape.Type == SdfSolidPrimitive.Capsule) {
+            // A capsule is its segment, which runs 0.5·scale.y from the shape's position along its own Y (SdfSolidGeometry's
+            // unit law), swept by the ellipsoid of its radii (SdfSolidGeometry.CapsuleRadii); the copy's centre is its box's
+            // (SdfSolidGeometry.LocalBox), the segment's midpoint. Scaled alike in X and Z the ellipsoid is a ball and the
+            // capsule a rounded box whose inner box is the segment; otherwise it is the elongated ellipsoid the field draws,
+            // whose distance contact measures outside it, inside the field's margined gauge.
+            var radii = (FixedVector3.FromVector3(value: SdfSolidGeometry.CapsuleRadii(scale: copy.Shape.Scale)) * copy.StampScale);
+            var halfSegment = (FixedQ4816.FromDouble(value: SdfSolidGeometry.CapsuleHalfSegment(scaleY: copy.Shape.Scale.Y)) * copy.StampScale);
 
-            return FixedStaticCollider.RoundedBox(
-                copy.Center,
-                copy.Rotation,
-                new FixedVector3(X: FixedQ4816.Zero, Y: halfSegment, Z: FixedQ4816.Zero),
-                (copy.LocalHalfExtents.X + margin)
-            );
+            if (radii.X == radii.Z) {
+                return FixedStaticCollider.RoundedBox(copy.Center, copy.Rotation,
+                    new FixedVector3(X: FixedQ4816.Zero, Y: halfSegment, Z: FixedQ4816.Zero), (radii.X + margin));
+            }
+            return FixedStaticCollider.Superellipsoid(center: copy.Center, elongation: halfSegment, exponent: EllipsoidColliderExponent,
+                radii: radii, rotation: copy.Rotation) with { Radius = margin };
         }
         if (EllipsoidExponent(copy: in copy) is { } exponent) {
             // Its radii swept by the margin. At exponent two the collider measures the ellipsoid's true distance, which is

@@ -1,0 +1,130 @@
+// The menu on its worn screen (../standard/menu.puck) and the companion roster (../standard/companion-roster.puck), each
+// scenario booted in the menu's lab: `puck test worlds/debug/menu-tests.puck --jobs 1 --reproduce`. Body 0 is the
+// Moth (seat 1) and body 7 her companion. The rows read here are the menu's aims, which the rig and the camera ease
+// toward; the aims are simulation state, so each claim is exact.
+
+schema: "puck.world.definition.v1"
+basis: "labs/menu"
+documentId: "menu"
+
+test "she starts keeping Mintstitch and Tangerine, with Mintstitch active and worn by her companion" {
+  when {
+    ticks 30
+  }
+  expect {
+    bodyState(body, 0, rosterKeeps1) == 1
+    bodyState(body, 0, rosterKeeps2) == 1
+    bodyState(body, 0, companionActive) == 1
+    bodyState(body, 7, companionKind) == 1
+    menuOpen[0] == 0
+  }
+}
+
+test "opened standing still, the menu takes the focused read on her left forearm" {
+  when {
+    ticks 30
+    seat1: body.press menu 1 0.2 0
+    ticks 15
+  }
+  expect {
+    menuOpen[0] == 1
+    bodyState(body, 0, menu) == 1
+    menuRaiseLeft[0] == 1
+    menuRaiseRight[0] == 0
+  }
+}
+
+test "opened while walking, the menu takes the glance read, and the walk goes on" {
+  when {
+    ticks 30
+    seat1: body.press forward 1 2 0
+    ticks 10
+    seat1: body.press menu 1 0.2 0
+    ticks 15
+  }
+  expect {
+    menuOpen[0] == 1
+    menuRaiseLeft[0] == 0.55
+    (absolute(bodyPosition(body, 0, x)) + absolute(bodyPosition(body, 0, z))) > 0.5
+  }
+}
+
+test "a second press of the menu key closes it, and cancel closes it too" {
+  when {
+    ticks 30
+    seat1: body.press menu 1 0.2 0
+    ticks 15
+    seat1: body.press menu 1 0.2 0
+    ticks 15
+    seat1: body.press menu 1 0.2 0
+    ticks 15
+    seat1: body.press cancel 1 0.2 0
+    ticks 15
+  }
+  expect {
+    menuOpen[0] == 0
+    bodyState(body, 0, menu) == 0
+    menuRaiseLeft[0] == 0
+  }
+}
+
+test "on the companions page a step down and a pick swap the active companion to Tangerine" {
+  when {
+    ticks 30
+    seat1: body.press menu 1 0.2 0
+    ticks 15
+    seat1: body.press menuStep -1 0.2 0
+    ticks 15
+    seat1: body.press confirm 1 0.2 0
+    ticks 15
+  }
+  expect {
+    menuMark[0] == 2
+    bodyState(body, 0, companionActive) == 2
+    bodyState(body, 7, companionKind) == 2
+  }
+}
+
+// The control for the swap: the same pick with the menu closed changes nothing.
+test "a pick with the menu closed swaps nothing" {
+  when {
+    ticks 30
+    seat1: body.press menuStep -1 0.2 0
+    ticks 15
+    seat1: body.press confirm 1 0.2 0
+    ticks 15
+  }
+  expect {
+    menuMark[0] == 1
+    bodyState(body, 0, companionActive) == 1
+    bodyState(body, 7, companionKind) == 1
+  }
+}
+
+test "the page keys turn the pages round, back from the companions to the notes" {
+  when {
+    ticks 30
+    seat1: body.press menu 1 0.2 0
+    ticks 15
+    seat1: body.press menuPage -1 0.2 0
+    ticks 15
+  }
+  expect {
+    menuPage[0] == 3
+  }
+}
+
+test "asked for her right forearm, the menu opens there and the left stays shut" {
+  when {
+    ticks 30
+    seat1: world.state.cell.set wornScreenSideAsk 0 1
+    ticks 5
+    seat1: body.press menu 1 0.2 0
+    ticks 15
+  }
+  expect {
+    bodyState(body, 0, wornScreenSide) == 1
+    menuRaiseRight[0] == 1
+    menuRaiseLeft[0] == 0
+  }
+}

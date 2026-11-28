@@ -1,0 +1,61 @@
+// The menu's lab: the Moth, her menu on its worn screen and her companion, on the basis's floor under a clear day,
+// booted alone so a change to the menu, its worn screen, its pages, the companion roster or a companion's creation bakes
+// and settles in a fraction of the debug world's time (AGENTS.md, the labs ruling). Boot it with
+// `--world worlds/debug/labs/menu.puck`; the seat starts on the stage.
+//
+// What it holds, and nothing else:
+//
+//   - the Moth (../avatars/moth/moth.puck), whose stage basis brings her menu (../../standard/menu.puck), its worn
+//     screen on her gauntlets (../../standard/worn-screen.puck) and her companion roster
+//     (../../standard/companion-roster.puck, with ../companion-roster.puck's kinds), so she starts keeping Mintstitch
+//     and Tangerine with Mintstitch active;
+//   - her companion (../../standard/companion.puck), wearing whichever kind is active.
+//
+// To work it: I, Escape or the pad's Menu button opens the menu and closes it (the View page's West on a pad), so does
+// Backspace while it is open. Standing still she raises her left forearm and the camera focuses in (the focused read);
+// walking, she glances at it (the glance read). The arrows' up and down mark a companion on the companions page, Enter
+// calls it, and the companion changes to it; the arrows' left and right turn to the quests, marks and notes pages.
+// `menu.hand.right` moves the worn screen to her right forearm, `menu.hand.left` back.
+//
+// The portal hook is the id `menu`. The gallery's lab wing connects it with one painting row named `menu` whose
+// destination is the reference `menu` (this document), and a crossing arrives at the spawn point `menu`, a few steps
+// from the stage facing it.
+
+schema: "puck.world.definition.v1"
+basis: "../stage"
+documentId: "menu"
+
+import "../set-controls"
+import "../../standard/skies"
+import "../../standard/companion"
+
+metadata {
+  title: "Menu lab"
+  description: "The Moth's menu on its worn screen, its companions page and her companion, on a small floor."
+}
+
+// The hook's arrival, facing the stage.
+spawnPoints [
+  { id: "menu", position [0, 0, 4], yawDegrees: 180 }
+]
+
+// The companion inhabits the population's top slot, the only inhabitant here.
+let menuLabCompanionBody = 7
+
+companionDesign(population: 8)
+companion(owner: 0, slot: menuLabCompanionBody, position: [-1.2, 1.52, 1], roster: true)
+
+render {
+  farDistance: 200
+  lighting {
+    lights [
+      sunlight(direction: [-2, 4, -3], color: "#FFF1D6", illuminance: 60000lx)
+    ]
+  }
+  sky {
+    clearDay()
+  }
+  atmosphere {
+    clearDayAir()
+  }
+}

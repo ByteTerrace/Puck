@@ -360,11 +360,6 @@ public static class PuckDiagnosticCodes {
     /// cannot compose: two arrays append and two objects merge member by member, so what is refused is a member both
     /// set, which would otherwise drop the earlier one silently.</summary>
     public const string RepeatedMember = "PUCK140";
-    /// <summary>PUCK141: a warning that a creation's <c>Capsule</c> scales x and z unequally. Only equal x and z keep the
-    /// capsule's ends round, so an unequal one draws as the unit capsule under a generic scale, its ends stretched along
-    /// every axis. An elliptic section with round ends is an <c>Ellipsoid</c> with <c>elongate</c>. Not an error: the
-    /// stretch may be the look.</summary>
-    public const string StretchedCapsule = "PUCK141";
 
     private static readonly FrozenSet<string> DeclaredCodes = typeof(PuckDiagnosticCodes)
         .GetFields(bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)

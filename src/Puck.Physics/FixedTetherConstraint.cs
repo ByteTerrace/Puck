@@ -136,20 +136,19 @@ public struct FixedTetherConstraint {
     /// removed, and only once the rope is taut.</param>
     /// <param name="anchor">The resolved anchor position this tick. Never written.</param>
     /// <returns>Whether the rope was taut this call.</returns>
+    /// <remarks>Both the slack test and the projection are exact against <see cref="Length"/>: the test compares the
+    /// exact sum of squares (<see cref="FixedVector3.IsWithin"/>) and the projection truncates toward the anchor
+    /// (<see cref="FixedVector3.WithLength"/>), so a projected position is never a raw past the cap, which a reader of
+    /// the cap as a bound (a net's reach, <see cref="FixedNet"/>) relies on.</remarks>
     public readonly FixedTetherResolution Solve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedVector3 anchor) {
         var offset = (position - anchor);
-        var distanceSquared = offset.LengthSquared;
-        var lengthSquared = (Length * Length);
 
-        if (distanceSquared <= lengthSquared) {
+        if (offset.IsWithin(radius: Length)) {
             return new FixedTetherResolution(Taut: false);
         }
 
-        var distance = FixedQ4816.Sqrt(value: distanceSquared);
-        var radial = (offset / distance);
-
-        position = (anchor + (radial * Length));
-        velocity = velocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: radial);
+        position = (anchor + offset.WithLength(length: Length));
+        velocity = velocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: offset.Normalize());
 
         return new FixedTetherResolution(Taut: true);
     }

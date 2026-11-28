@@ -15,10 +15,10 @@ import "../../../standard/styles"
 import "../../../standard/mirror"
 import "../../../standard/rig"
 import "../../../standard/occlusion"
-import "../../../standard/wrist-panel"
-import "../../menagerie"
+import "../../../standard/worn-screen"
+import "../../companion-roster"
 import "head"
-// Her wrist panel's mount and glass slots are her contract's (`mothWristMount`, `mothWornScreen`).
+// Her worn screen's mount and glass slots are her contract's (`mothWristMount`, `mothWornScreen`).
 import "contract"
 
 // What an importer binds: the creations its looks wear.
@@ -71,9 +71,9 @@ let bootCyan = 25 // #1F9BAE the heel lenses' idle pilot light
 let bootGlow = 26 // #D8FDFF the heel lenses' pale cores
 let pistonSteel = 27 // satin steel piston cylinders
 let torsoSuit = 28 // segmented charcoal fabric between the chest and belt
-// The journal panels' glass: their paints are the journal's interface (contract.puck's worn screen slots).
-let journalScreenLeft = mothMechSuit.wornScreen.screens.left
-let journalScreenRight = mothMechSuit.wornScreen.screens.right
+// The worn screens' glass: their paints are the menu's interface (contract.puck's worn screen slots).
+let wornScreenGlassLeft = mothMechSuit.wornScreen.screens.left
+let wornScreenGlassRight = mothMechSuit.wornScreen.screens.right
 let spineCharcoal = 6 // the spine, its joints painted
 
 // Each bone's bake group, by side: every shape riding that bone without a joint of its own joins it, so the bone bakes as
@@ -393,7 +393,7 @@ template mothLimbs(side, isRight, scout) {
       swing("cling", [-1, 0, 0], -2.2, mirrorX(isRight, [-0.295, 1.4515, 0])) with { wave: "constant" }
       // A mantle throws both arms up for the catch, brings the hands down onto the top, pushes and sweeps them back.
       swing("mantle", [-1, 0, 0], -2.4, mirrorX(isRight, [-0.295, 1.4515, 0])) with { wave: "curve:mantle-reach" }
-      for s in wristPanelSwings("upper", mothWristMount, side, isRight) { s }
+      for s in wornScreenSwings("upper", mothWristMount, side, isRight) { s }
     ]
   }
 
@@ -515,7 +515,7 @@ template mothLimbs(side, isRight, scout) {
         -1.4,
         mirrorX(isRight, [-0.336, 1.2201, -0.004])
       ) with { wave: "curve:mantle-elbow" }
-      for s in wristPanelSwings("fore", mothWristMount, side, isRight) { s }
+      for s in wornScreenSwings("fore", mothWristMount, side, isRight) { s }
     ]
   }
 
@@ -553,12 +553,12 @@ template mothLimbs(side, isRight, scout) {
     parent: $"forearm-{side}"
   }
 
-  wristPanel(
+  wornScreen(
     mount: mothWristMount,
     side: side,
     isRight: isRight,
     ids: [2000 + isRight * 68, 2001 + isRight * 68, 2002 + isRight * 68],
-    materials: { bezel: charcoal, flap: violet, screen: bySide(isRight, journalScreenLeft, journalScreenRight) }
+    materials: { bezel: charcoal, cover: violet, screen: bySide(isRight, wornScreenGlassLeft, wornScreenGlassRight) }
   )
 
   shape Capsule $"elbowRod-{side}" {
@@ -1706,9 +1706,9 @@ prototypes {
             }
           ]
         }
-        // The journal panels' glass (the wrist panel's), lettered with the journal's interface and lit as a flap opens.
-        wristPanelGlass("left", menagerieKinds)
-        wristPanelGlass("right", menagerieKinds)
+        // The worn screens' glass, lettered with the menu's interface and hidden under its cover while the menu is shut.
+        wornScreenGlass("left", rosterKinds)
+        wornScreenGlass("right", rosterKinds)
       ]
       shape Superellipsoid "pelvis" {
         id: 1
@@ -2101,8 +2101,8 @@ prototypes {
           blendOutSeconds: 0
           when ["always"]
         }
-        // Her wrist panel's arm raise and flaps.
-        for driver in wristPanelDrivers { driver }
+        // Her worn screen's arm raise and covers.
+        for driver in wornScreenDrivers { driver }
         // Her pace in metres per second, the X every gait curve reads.
         {
           name: "pace"

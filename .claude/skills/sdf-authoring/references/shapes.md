@@ -16,7 +16,7 @@ a magnitude of at least 0.0001.
 | `Box` | half-extents | (1,1,1): `scale` is the half-extent on each axis exactly, its corners filleted inside that box by 0.04 of the smallest axis |
 | `Torus` | uniform multiplier only; non-uniform rides a generic scale | major 1, minor 0.4 — band width is 0.4 × major |
 | `Cylinder` | x/z radius (x must equal z to bake), y half-height | r = 1, half-height 1 |
-| `Capsule` | x/z radius (x must equal z: an unequal pair warns PUCK141, and an elliptic section with round ends is an `Ellipsoid` with `elongate`), y twice the straight section's length | r = 1 around the segment from the position to 0.5 × y above it: **not centred**, it spans −r to 0.5y + r, a total height of 2r + 0.5y |
+| `Capsule` | x/z radius, y twice the straight section's length. With x ≠ z the section is the ellipse of radii x and z and each end a half-ellipsoid whose y radius is √(x·z) (`SdfSolidGeometry.CapsuleRadii`); its field is that ellipsoid's gauge, exact on the surface and a bound off it | r = 1 around the segment from the position to 0.5 × y above it: **not centred**, it spans −r to 0.5y + r, a total height of 2r + 0.5y |
 | `Ellipsoid` | per-axis radii | (1,1,1) |
 | `RoundCone` | uniform multiplier | lower r 1, upper r 0.5, height 1 |
 | `Plane` | **scale-invariant**; local +Y is the outward normal | — |
@@ -292,7 +292,7 @@ A uniform scale is always admitted, so this only bites an anisotropic shape.
 | Sphere, Ellipsoid, Superellipsoid, Box, Plane | RoundCone |
 | Torus when `scale.x == scale.z` (an elliptic section revolved) | Torus when `scale.x != scale.z` |
 | Prism with any profile (a Path prism scales its edges natively, and the fixed-point evaluator reads them at that scale) | none |
-| Capsule and Cone when `scale.x == scale.z`; Cylinder at any scale (elliptic when `scale.x != scale.z`) | Capsule and Cone when `scale.x != scale.z` |
+| Capsule and Cylinder at any scale (elliptic when `scale.x != scale.z`); Cone when `scale.x == scale.z` | Cone when `scale.x != scale.z` |
 
 None of the right column is refused by name — each validates, renders, and fails
 only when the contact field is constructed. For an anisotropic solid, prefer a

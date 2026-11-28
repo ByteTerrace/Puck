@@ -12,7 +12,7 @@ public sealed class WorldEmptyPopulationCheckpointLawTests {
         Assert.Empty(collection: checkpoint.Entries);
         population.Restore(
             checkpoint: checkpoint,
-            defaults: definition.PlayerDefaults,
+            definition: definition,
             tick: 0
         );
         var restored = population.Capture();
@@ -32,12 +32,12 @@ public sealed class WorldEmptyPopulationCheckpointLawTests {
         );
         Assert.Throws<InvalidOperationException>(testCode: () => population.Restore(
             checkpoint: checkpoint with { SeatKit = 1 },
-            defaults: definition.PlayerDefaults,
+            definition: definition,
             tick: 0
         ));
         Assert.Throws<InvalidOperationException>(testCode: () => population.Restore(
             checkpoint: checkpoint with { SimulatedCount = 1 },
-            defaults: definition.PlayerDefaults,
+            definition: definition,
             tick: 0
         ));
         Assert.Empty(collection: population.Capture().Entries);

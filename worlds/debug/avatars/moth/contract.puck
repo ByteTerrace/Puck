@@ -16,10 +16,10 @@
 import "../../../standard/player/player"
 import "../../../standard/player/actions"
 
-// Where her journal's wrist panel (../../../standard/wrist-panel.puck) mounts on each suit, in the left side's frame: on
-// each forearm, the middle of its gauntlet's outer face (suits.puck's `bracer-<side>`), raised about her shoulder and
-// elbow; its glass is palette slots 29 (left) and 30 (right). The panel's shape, flap, screen, raise and camera focus
-// are the panel module's.
+// Where her worn screen (../../../standard/worn-screen.puck) mounts on each suit, in the left side's frame: on each
+// forearm, the middle of its gauntlet's outer face (suits.puck's `bracer-<side>`), raised about her shoulder and elbow;
+// its glass is palette slots 29 (left) and 30 (right). The screen's shape, cover, glass, raise and camera focus are the
+// worn-screen module's.
 let mothWristMount = {
   part: "forearm"
   at [-0.513, 0.995, 0]
@@ -28,20 +28,20 @@ let mothWristMount = {
 }
 let mothWornScreen = wornScreenMount(mount: mothWristMount, screens: { left: 29, right: 30 })
 
-// Her own body's panel: on the outer face of each bare forearm's middle (body.puck's `forearm-<side>`), raised about
-// her shoulder and elbow, its glass palette slots 27 (left) and 28 (right). Her forearm is a third the gauntlet's
-// width, so the panel is a slim one: a screen 80 mm across and 64 mm along her arm in a bezel a little larger, under
-// a flap that covers both.
+// Her own body's worn screen: on the outer face of each bare forearm's middle (body.puck's `forearm-<side>`), raised
+// about her shoulder and elbow, its glass palette slots 27 (left) and 28 (right). Her forearm is a third the gauntlet's
+// width, so the screen is a slim one: glass 80 mm across and 64 mm along her arm in a bezel a little larger, under a
+// cover over both.
 let mothBodyWristMount = {
   part: "forearm"
   at [-0.259, 0.952, 0.022]
   shoulder [-0.172, 1.355, 0.015]
   elbow [-0.212, 1.068, 0.032]
 }
-let mothBodyPanelShape = {
+let mothBodyScreenShape = {
   bezel { half [0.005, 0.04, 0.045], rounding: 0.003 }
   screen { half [0.04, 0.032], depth: 0.003, out: 0.003 }
-  flap { half [0.003, 0.043, 0.048], rounding: 0.002, out: 0.0095, open: -1.9 }
+  cover { half [0.003, 0.043, 0.048], rounding: 0.002, out: 0.0095, open: -1.9 }
 }
 let mothBodyWornScreen = wornScreenMount(mount: mothBodyWristMount, screens: { left: 27, right: 28 })
 

@@ -138,6 +138,12 @@ rounded body stays painted and its tighter edges chip. `lines` tiles a scratch
 in every pattern cell; use a few parented paints for sparse, placed scuffs
 instead of increasing that all-over pattern.
 
+A weathering that names no `lane` reads lane 0
+(`PaletteLayersDocument`'s weathering default), so a look whose lane 0 rises for
+anything else (a glow, a flap) wears every such material toward fully weathered,
+which shows as speckled chips. Give a glow its own lane, or name each
+weathering's lane.
+
 ### Static landscape surfaces
 
 Static scenery supplies zero body lanes (0 to 3). A weathering pattern reading one

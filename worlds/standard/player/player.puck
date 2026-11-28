@@ -39,11 +39,11 @@ function bodyCamera(height) = {
   eye [0, (height * 0.85), 0.2]
 }
 
-// A suit's worn screen slot (../wrist-panel.puck): `mount` is where the screen sits, in the suit look's left-side frame
+// A suit's worn screen slot (../worn-screen.puck): `mount` is where the screen sits, in the suit look's left-side frame
 // (`part` the forearm it rides, `at` the middle of its face, `shoulder` and `elbow` the pivots its raise turns about),
 // mirrored for the right; `screens` the palette slots of the left and right glass; `side` the body register that says
-// which side wears it (the menu's `journalHand`). A form with no slot (null) carries no screen.
-function wornScreenMount(mount, screens, side = "journalHand") = { mount: mount, screens: screens, side: side }
+// which side wears it (the menu's `wornScreenSide`). A form with no slot (null) carries no screen.
+function wornScreenMount(mount, screens, side = "wornScreenSide") = { mount: mount, screens: screens, side: side }
 
 // One form, as the contract above describes it. `value` is the worn-suit register's value for a suit, 0 for the
 // body; `snap` the ground the kit follows down, metres; `camera` the camera's offsets (bodyCamera's shape).
@@ -114,7 +114,7 @@ template playerKit(form) {
 
 // The player: everything the module authors from one avatar's contract (see the head of this file). `rig` names the
 // chase camera's rig, `wall` its framing on a wall (camera.puck's `wallFraming`) and `focus` its framing while the
-// journal is open (../wrist-panel.puck's `wristPanelFocus`). The `suit` register holds the worn form's value, and the
+// menu is open (../worn-screen.puck's `wornScreenFocus`). The `suit` register holds the worn form's value, and the
 // `suit` channel's press steps it to the next the avatar owns, its own body counting as one.
 template player(avatar, rig = "player-camera", wall = wallFraming(), focus = null) {
   walkMotion()
@@ -236,14 +236,14 @@ template player(avatar, rig = "player-camera", wall = wallFraming(), focus = nul
 
 // The player's companion: the standard companion (../companion.puck) for the seat `owner`, its body in the world's
 // slot `slot`, arriving at the avatar's companion offset. The world supplies the slot, since it owns its population,
-// and its interests and senses through `companionDesign`; `menagerie` dresses it as the owner's active menagerie kind.
-template playerCompanion(avatar, owner, slot, attention = 4, lead = 3, menagerie = false) {
+// and its interests and senses through `companionDesign`; `roster` dresses it as the owner's active roster kind.
+template playerCompanion(avatar, owner, slot, attention = 4, lead = 3, roster = false) {
   companion(
     owner: owner,
     slot: slot,
     position: avatar.companion,
     attention: attention,
     lead: lead,
-    menagerie: menagerie
+    roster: roster
   )
 }

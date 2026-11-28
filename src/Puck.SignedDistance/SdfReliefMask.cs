@@ -211,7 +211,7 @@ public sealed record SdfReliefRegion {
 
         if (SdfSolidGeometry.AppendNativePrimitive(blend: SdfBlendOp.Union, chain: builder, chamfer: chamfer, detail: false, effectiveScale: SdfSolidGeometry.EffectiveScale(scale: scale),
             exponent: exponent, material: 0, rounding: rounding, smooth: 0f, type: type) is null) {
-            throw new ArgumentException(message: $"A relief region cannot be a {type} scaled {scale}: it has no native lowering at that scale (a capsule must be scaled alike in X and Z).", paramName: nameof(type));
+            throw new ArgumentException(message: $"A relief region cannot be a {type} scaled {scale}: it has no native lowering at that scale.", paramName: nameof(type));
         }
 
         var emitted = builder.EmittedInstructions;

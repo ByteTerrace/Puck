@@ -330,7 +330,9 @@ becomes a verdict row plus a rule gated on the export tick alone. Every name
 the lowering mints is a generated name ([`GeneratedName`](../../../../docs/reference/dsl.md#generated-names)):
 the world `<stem>~<slug>` (siblings `~<world>`), the verdict row and its rule
 `expect$<line>`, a witness `expect$<line>$fixed`/`$bool`, the status key
-`$status`, and a saw key `<row>` or `<row>$<key>`. The world it
+`$status`, and a saw key `<row>` or `<row>$<key>` (a read of an identity's record store, `recordFind(body, 0,
+quests, quest, x, step)`, is recorded in the Fixed witness under its channel spelled with dashes, an absent field as
+`-1`). The world it
 is added to is the enclosing document, or — with `with` — the named module
 expanded alone under those arguments. A subjectless block at the root of a
 source that emits worlds by name lowers to one document per world instead,

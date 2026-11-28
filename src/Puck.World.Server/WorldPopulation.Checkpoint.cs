@@ -384,13 +384,17 @@ public sealed partial class WorldPopulation {
     /// the generation's grant rows are released by <c>WorldServer.RestoreCheckpoint</c> right after the grant table
     /// restores, on the same argument the disconnect arm applies.</summary>
     /// <param name="checkpoint">The captured state to restore.</param>
-    /// <param name="defaults">The player defaults a restored profiled body's identity resolves colors against.</param>
+    /// <param name="definition">The document the checkpoint restores into: its player defaults resolve a restored profiled
+    /// body's colors, and its placements key the table a <c>placement:&lt;id&gt;</c> reference reads (rebuilt from the restored
+    /// entries, so no slot keeps the inhabitant it held before the restore).</param>
     /// <param name="tick">The restored current tick — the basis a freshly parked <see cref="Entry.ParkedUntilTick"/>
     /// is stamped from.</param>
     /// <param name="continuingFederatedBodies">Validated body indices whose captured federation input resumes.</param>
-    public void Restore(WorldPopulationCheckpoint checkpoint, WorldPlayerDefaults defaults, ulong tick, IReadOnlySet<int>? continuingFederatedBodies = null) {
+    public void Restore(WorldPopulationCheckpoint checkpoint, WorldDefinition definition, ulong tick, IReadOnlySet<int>? continuingFederatedBodies = null) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
-        ArgumentNullException.ThrowIfNull(argument: defaults);
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var defaults = definition.PlayerDefaults;
 
         ValidateCheckpoint(checkpoint: checkpoint);
         // The nets first: a net row's colliders are posed from its nodes as the attached rows restore.
@@ -444,6 +448,9 @@ public sealed partial class WorldPopulation {
         m_revision = checkpoint.Revision;
         RebuildCarryRelationships();
         RestoreSleepingIslands(checkpoint: checkpoint);
+        // The placement table derives from the entries, which the restore replaced: a placement whose inhabitant left
+        // after the checkpoint (a companion away with its owner) names its restored body again.
+        RebuildPlacementOrdinalTable(definition: definition);
         m_bodyCellDefinition = null;
         m_factAllSlotsDirty = true;
         // The cell-driven counts' cache describes the counts the replaced entries were reconciled to, not the restored

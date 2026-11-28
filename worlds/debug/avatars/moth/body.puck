@@ -11,14 +11,14 @@
 // She rides the suited Moth's drivers and dynamics; her stride curve (`pilot-stride`) is her own, scaled to her 0.85 m
 // hip. While `pilotHold` holds 1 for her body, the `hold` driver bends her arms in front of her and the `hold` frame
 // seats the handheld (75 x 133 x 27.5 mm) in her hands. Her mantle plays the suits' keyed pull-up (moth.puck's mantle
-// curves) at her own joints, and her journal rides a wrist panel on each forearm, a slim one for her bare arm
+// curves) at her own joints, and her menu rides a worn screen on each forearm, a slim one for her bare arm
 // (contract.puck's `mothBodyWristMount`).
 
 import "head"
 import "../../../standard/rig"
 import "../../../standard/mirror"
-import "../../../standard/wrist-panel"
-import "../../menagerie"
+import "../../../standard/worn-screen"
+import "../../companion-roster"
 import "contract"
 
 // What an importer binds: the creation its look wears, and the cell its look's hold pose reads, which the importer's
@@ -95,10 +95,10 @@ let brickChip = 23 // the processor
 let brickCartridge = 24 // the cartridge down its slot
 let brickCell = 25 // the two AA cells in the battery bay
 let brickLed = 26 // the red power light
-// Her journal panels: the glass of each (contract.puck's worn screen slots) and the lavender of their flaps.
-let journalScreenLeft = mothBody.wornScreen.screens.left
-let journalScreenRight = mothBody.wornScreen.screens.right
-let journalFlap = 29 // the panels' lavender flaps
+// Her worn screens: the glass of each (contract.puck's worn screen slots) and the lavender of their covers.
+let wornScreenGlassLeft = mothBody.wornScreen.screens.left
+let wornScreenGlassRight = mothBody.wornScreen.screens.right
+let wornScreenCover = 29 // the worn screens' lavender covers
 
 // Bake groups: the torso with its harness 40, the pelvis with its belt 43, the collar with the braid 39, and by side the
 // upper arm with its deltoid, the hand's wrist, palm and thumb, and the shin with its knee pad. Her fingers, sleeves,
@@ -116,9 +116,9 @@ let strapGrey = "#3A3C44"
 let patchLavender = "#8C6A94"
 let ochreTone = "#C98F35"
 
-// One arm: sleeve, shoulder patch, elbow pad, cuff, her journal's wrist panel and the bare hand with its four fingers
+// One arm: sleeve, shoulder patch, elbow pad, cuff, her worn screen and the bare hand with its four fingers
 // and thumb. Its upper arm swings at the shoulder and its forearm at the elbow, on the suited Moth's drivers; `hold`
-// brings both forward and in, the journal raises the panel to read, and the mantle plays her pull-up.
+// brings both forward and in, the menu raises the screen to read, and the mantle plays her pull-up.
 template pilotArm(name, side, baseId) {
   let isRight = (1 - side) / 2
 
@@ -151,7 +151,7 @@ template pilotArm(name, side, baseId) {
       swing("hold", [0, 1, 0], -0.5 * side, [side * -0.172, 1.355, 0.015]) with { wave: "constant" }
       // A mantle throws both arms up for the catch, brings the hands down onto the top, pushes and sweeps them back.
       swing("mantle", [-1, 0, 0], -2.4, [side * -0.172, 1.355, 0.015]) with { wave: "curve:mantle-reach" }
-      for s in wristPanelSwings("upper", mothBodyWristMount, name, isRight) { s }
+      for s in wornScreenSwings("upper", mothBodyWristMount, name, isRight) { s }
     ]
   }
 
@@ -197,7 +197,7 @@ template pilotArm(name, side, baseId) {
       swing("hold", [-1, 0, 0], -1.5, [side * -0.212, 1.068, 0.032]) with { wave: "constant" }
       // The elbows bend as she pulls over a ledge and straighten as she pushes.
       swing("mantle", [-1, 0, 0], -1.4, [side * -0.212, 1.068, 0.032]) with { wave: "curve:mantle-elbow" }
-      for s in wristPanelSwings("fore", mothBodyWristMount, name, isRight) { s }
+      for s in wornScreenSwings("fore", mothBodyWristMount, name, isRight) { s }
     ]
   }
 
@@ -219,14 +219,14 @@ template pilotArm(name, side, baseId) {
     exponent: 2.4
   }
 
-  // Her journal's panel on the forearm's outer face, slim enough for her bare arm.
-  wristPanel(
+  // Her worn screen on the forearm's outer face, slim enough for her bare arm.
+  wornScreen(
     mount: mothBodyWristMount,
     side: name,
     isRight: isRight,
     ids: [260 + isRight * 3, 261 + isRight * 3, 262 + isRight * 3],
-    materials: { bezel: belt, flap: journalFlap, screen: (side == 1) ? journalScreenLeft : journalScreenRight },
-    shape: mothBodyPanelShape
+    materials: { bezel: belt, cover: wornScreenCover, screen: (side == 1) ? wornScreenGlassLeft : wornScreenGlassRight },
+    shape: mothBodyScreenShape
   )
 
   // The bare hand hangs palm in, its fingers curling a little toward the palm.
@@ -710,9 +710,9 @@ prototypes {
         { color: "#4A4D54", roughness: 0.5, specular: 0.04 }
         { color: "#2C5E8C", roughness: 0.35, specular: 0.05, coat: 0.3 }
         { color: "#FF3A2A", emissive: 400, roughness: 0.3 }
-        // Her journal panels' glass, lettered with the journal's interface and lit as a flap opens, and their flaps.
-        wristPanelGlass("left", menagerieKinds, mothBodyPanelShape)
-        wristPanelGlass("right", menagerieKinds, mothBodyPanelShape)
+        // Her worn screens' glass, lettered with the menu's interface, and their covers.
+        wornScreenGlass("left", rosterKinds, mothBodyScreenShape)
+        wornScreenGlass("right", rosterKinds, mothBodyScreenShape)
         { color: patchLavender, roughness: 0.6, specular: 0.05, coat: 0.2 }
       ]
 
@@ -1284,8 +1284,8 @@ prototypes {
           blendOutSeconds: 0.2
           when ["state.pilotHold.$body"]
         }
-        // Her wrist panels' arm raise and flaps.
-        for driver in wristPanelDrivers { driver }
+        // Her worn screens' arm raise and covers.
+        for driver in wornScreenDrivers { driver }
         // The pull over a ledge, keyed over the mantle's progress (moth.puck's `mantlePose` and its mantle curves).
         progressLayer(name: "mantle", row: "mantlePose")
       ]

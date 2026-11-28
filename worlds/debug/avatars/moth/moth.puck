@@ -12,9 +12,9 @@ import "../../../standard/inputs"
 import "../../../standard/rig"
 import "body"
 import "suits"
-import "../../../standard/journal"
-import "../../../standard/menagerie"
-import "../../menagerie"
+import "../../../standard/menu"
+import "../../../standard/companion-roster"
+import "../../companion-roster"
 import "contract"
 
 // What an importer binds: the cell her body's hold pose reads, which a world's rules write to have her hold the
@@ -22,19 +22,19 @@ import "contract"
 exports {
   reads [pilotHold]
   actions [pilotHold]
-  // The wrist panel's raise, which the player's camera focus reads (player.puck's `wristPanelFocus`).
-  bindings [journalRaiseLeft, journalRaiseRight]
+  // The worn screen's raise, which the player's camera focus reads (player.puck's `wornScreenFocus`).
+  bindings [menuRaiseLeft, menuRaiseRight]
 }
 
-// Her journal, worn on her wrist (../../../standard/journal.puck, ../../../standard/wrist-panel.puck), and the
-// companions she keeps in its menagerie (../../menagerie.puck): every character of the set starts with Mintstitch and
-// Tangerine. The panel mounts on both suits' forearms (contract.puck's `mothWristMount`) and, slimmer, on her own
-// body's (`mothBodyWristMount`).
-journalPlay(kinds: menagerieKinds)
-menagerie(kinds: menagerieKinds, granted: [1, 2])
-menagerieCreatures()
+// Her menu, shown on a screen worn on her forearm (../../../standard/menu.puck, ../../../standard/worn-screen.puck),
+// and the companions she keeps in the roster (../../companion-roster.puck): every character of the set starts with
+// Mintstitch and Tangerine. The screen mounts on both suits' forearms (contract.puck's `mothWristMount`) and, slimmer,
+// on her own body's (`mothBodyWristMount`).
+menuPlay(kinds: rosterKinds)
+companionRoster(kinds: rosterKinds, granted: [1, 2])
+rosterCreatures()
 
-// The font her journal's screen letters in.
+// The font her worn screen letters the menu in.
 text {
   defaultFont: "inter"
   fonts [
@@ -47,10 +47,11 @@ text {
   ]
 }
 
-// Each form's look. Lane 0 is her journal's glass, lit as its arm rises (every form wears the wrist panel). Lane 1 is
-// the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is
-// flight mode itself, the heel and nozzle glows it lights. Lane 3 is the heel jets' flame under the air jump. The scout
-// suit grants no jetpack and no air jump, so only its dash lights its pods.
+// Each form's look. Lane 0 stays 0: it is every weathering's default lane, so the suits' plates keep their pristine
+// floor (the worn screen's glass glows always, under its cover). Lane 1 is the jets: dark out of flight mode, a pilot
+// flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is flight mode itself, the heel and nozzle
+// glows it lights. Lane 3 is the heel jets' flame under the air jump. The scout suit grants no jetpack and no air jump,
+// so only its dash lights its pods.
 looks [
   {
     motion {
@@ -58,7 +59,7 @@ looks [
       replayFrames: false
       secondsPerFrame: 0
       lanes [
-        maximum(journalRaiseLeft[$body], journalRaiseRight[$body])
+        0
         maximum(bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body]), dashPose[$body])
         maximum(bodyState($body, flightFuel) / 1000, dashPose[$body])
         bootBoost[$body]
@@ -76,7 +77,7 @@ looks [
       gaitAmplitude: 0
       replayFrames: false
       secondsPerFrame: 0
-      lanes [maximum(journalRaiseLeft[$body], journalRaiseRight[$body]), dashPose[$body], dashPose[$body], 0]
+      lanes [0, dashPose[$body], dashPose[$body], 0]
       poses {
         blink: "state.blink.$body"
       }
@@ -90,8 +91,8 @@ looks [
       gaitAmplitude: 0
       replayFrames: false
       secondsPerFrame: 0
-      // Lane 0 is her journal's glass, lit as its arm rises.
-      lanes [maximum(journalRaiseLeft[$body], journalRaiseRight[$body])]
+      // Lane 0 stays 0: it is every weathering's default lane.
+      lanes [0]
       // The first holding frame wins, so she keeps her eyes open while she holds the handheld.
       poses {
         hold: "state.pilotHold.$body"

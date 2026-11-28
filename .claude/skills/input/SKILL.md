@@ -37,7 +37,7 @@ is corrected in the same change.
 | Drive a seat's controls from a program each tick, as a player at a pad would (a benchmark route) | `seatPrograms` rows (`WorldSeatProgram`: `move`, `turn`, `hold`, `pulse`, `tap`) evaluated by `WorldSeatDriver` in the tick-complete hook (`WorldTickScript.Ticked`) and submitted through the seat's ingress (`WorldTickScript.SubmitSeat`); `routes` rows say where to go. The driver is the seat's client: it reads only what the seat's authority delivered (`WorldSeatSenses`), in process or remote | [the benchmark plan](../../../docs/plans/benchmark.md#the-route-is-places-played-by-an-authored-seat-program-stage-4) |
 | Map a key or button to an action or command; pages, chords, autorun toggles, wheels | `bindingOverlays` → `WorldBindingComposer.Compose` → `BindingProfile.Compile` → `PagedInputBindings` inside `InputRouter`, composed per seat by `WorldSeatBindings`; the standard's rows in `worlds/standard/controls.puck` |
 | Give a seat different controls by context (on foot, piloting a craft, swimming, at a tabletop, at a terminal) and switch between them | one binding group a context, selected by a binding overlay's `contexts` rows (`BindingContextDefinition`: a family, a state, a group; the first matching row wins), over a family the engine publishes (`WorldContextFamilies`: `engagement` reads `tabletop` at a board and `body` while the seat drives another body), a `state:<row>` family keyed by the seat's body, or a seat mode; the standard's sets are `worlds/standard/contexts/` (`onFootControls`, `pilotControls`, `swimPlay`, `tabletopControls`, `terminalPlay`), listed by `controls.puck` | [bindings.md](references/bindings.md), [the standard's contexts](../../../worlds/standard/README.md#contexts) | [bindings.md](references/bindings.md), [commands: bindings](../../../docs/reference/commands.md#bindings) |
-| A control no page or overlay can take (the console key, the pause menu) | `IAlwaysActiveInputBindings`, implemented by `TerminalInputBindings` (`Puck.Launcher`) | [below](#the-always-active-plane-and-reserved-gestures) |
+| A control no page or overlay can take (the console key) | `IAlwaysActiveInputBindings`, implemented by `TerminalInputBindings` (`Puck.Launcher`) | [below](#the-always-active-plane-and-reserved-gestures) |
 | Read a controller, keyboard or mouse; rumble, lights, adaptive triggers | `Puck.Input` (`GamepadManager`, `InputArbiter`, `GamepadCaptureSource`, `WindowInputMapper`, `InputSources`, `IGamepadOutput`); OS transports in `Puck.Platform.Windows` | [device input](../../../docs/reference/input.md) |
 | A machine's buttons while a seat is engaged | the route's kit `pad` map (`WorldKit`, `WorldPadElement`) | [engagement](../puck-world/references/engagement.md) (`puck-world`) |
 | Tap and drag on a diegetic surface (a console's glass, a screen's face): where the pointer lands, which named region and row, and the press | the seat's pointer ray (`PlayerIntent.SourceRay`, cast from the mouse by `WorldPointerRayCapture`; a seat whose view draws from its own first-person eye casts it and its mouse contacts through the view's centre, the reticle, `WorldSeatView.AimsByEye`, which the frame presenter publishes with the camera; a view a framing row, a screen or a board took over casts from the cursor even in first person) mapped through a placement's `pointer` surface or a `Simulation` screen, hit-tested against its `regions`, read by `pointer(<seat>\|any, <surface>, x\|y\|on\|region\|row\|press, …)`; the press is the standard's `tap` channel | [engagement](../puck-world/references/engagement.md#worldscreenrouteinput--where-a-pointer-hit-on-the-screen-goes) |
@@ -175,8 +175,7 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
   `inputAge` guard.
 - **Tap versus hold.** The tap is a pattern of a press then a release within a
   window shorter than the hold; the hold and the tap share one
-  `consumptionGroup` so one press cannot be both. The pause menu's Menu button
-  is specified this way ([hub plan](../../../docs/plans/hub-and-saves.md#11-menu-routing)).
+  `consumptionGroup` so one press cannot be both.
   A pattern step matches events only, so no step means "still held after N
   seconds": today the duration goes in the rule (a press pattern whose `held`
   names the action, plus an `inputAge` guard like the buffered example's), not
@@ -221,12 +220,16 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
 - Host-reserved gestures outside the binding profile: Control+Alt+Escape
   returns keyboard focus from a passthrough source (`SourceFocus`), and Escape
   closes an open console (`ConsoleInputSink`).
-- Ruled but not yet built: the pad's Menu (`gamepad.start`) and Escape always
-  reach the pause menu, and no binding may name them
-  ([play decisions](../../../docs/decisions/play.md#the-game)). Nothing
-  enforces it yet: `BindingProfile.Compile` refuses neither source, no `menu`
-  verb exists, and the standard's `start` row binds `gamepad.start`. Hub plan
-  step H4 owns it.
+- The menu is no reserved gesture: the pad's Menu (`gamepad.start`), Escape and
+  I are ordinary rows of the standard's menu overlay (`worlds/standard/menu.puck`,
+  `menuPlay`). An engaged machine reads the pad's Menu button as its Start (the
+  seat's mode offers `start` there and not `menu`), and holding it for `hold`
+  opens the menu through a rule over the `start` level and a deadline cell, not a
+  pattern. The machine still receives the hold's Start press: withholding it
+  needs a held-for-time pattern term and the matcher on the seat's own host
+  (hub plan H4b). Whether a menu pauses the world is the world's pause policy
+  (hub plan gap 10, H6)
+  ([play decisions](../../../docs/decisions/play.md#the-game)).
 
 ## Devices and haptics
 
@@ -282,18 +285,18 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
 | A contact's lift follows its touch; a stale touch never reaches a later tick | `WindowInputQueue.EnqueueContact` (numbering), `WorldContacts.Record` (per-seat live set), `WorldPointerRayCapture.CaptureContacts` (sends moves and lift only after the touch; an uncastable lift becomes a cancel), `WorldInputOwner.ContactsAt` (one tick's contacts) |
 | A mouse message the system made from pen or touch is not a second click | `Win32NativeWindow.IsMouseFromContact` and the raw-mouse check in `HandleRawMouse` (`MI_WP_SIGNATURE`) |
 | A press keeps the pointer context it landed in until release | `WorldPointerRayCapture.PublishPointer`, which skips a seat holding any pointer button |
-| Menu and Escape are reserved | nothing yet (H4) |
 
 ## Open gaps
 
 - **A hold completes with no closing event.** A pattern stage is satisfied
   only by an event, so a hold of N seconds cannot be pattern data; a term
   satisfied by time with the action still held (or a tick event closing the
-  stage) is the hub plan's H4 work.
+  stage) is the hub plan's H4b work.
 - **The matcher runs only in the authority.** `WorldInputOwner` lives in
   `Puck.World.Server` and only `WorldRuleHost` calls `TryMatch`; the
   always-active plane runs no matcher, so a remote authority decides every
-  pattern. H4 runs the one matcher on the plane over its local events.
+  pattern. Running the one matcher on the seat's own host over its local events
+  is the hub plan's H4b work.
 - **Cartridge rumble is unwired.** `WorldHapticDirector` drives
   `IGamepadOutput.Rumble` from authored `haptics` rows
   (`worlds/standard/instrument.puck` pulses on the beat), while a cartridge's

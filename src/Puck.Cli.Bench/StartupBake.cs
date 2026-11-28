@@ -38,7 +38,9 @@ public static class StartupBake {
             if (text.StartsWith("[bakes: settled at tick ", StringComparison.Ordinal)) { settled = true; }
             if (text.StartsWith("[bakes: not settled ", StringComparison.Ordinal)) { reasons.Add(text); }
             if (!text.StartsWith("[sdf.mesh-bake]", StringComparison.Ordinal)) { continue; }
-            if (text.Contains("failed:", StringComparison.Ordinal) || text.Contains("refused:", StringComparison.Ordinal)) { reasons.Add(text); }
+            // A bake failure prints " failed: <reason>" or " refused: <reason>" (SdfMeshBakeReport); a counter such as the done
+            // line's "refused:0" carries no space after its colon, so it never reads as one.
+            if (text.Contains(" failed: ", StringComparison.Ordinal) || text.Contains(" refused: ", StringComparison.Ordinal)) { reasons.Add(text); }
             var starting = text.StartsWith("[sdf.mesh-bake] start ", StringComparison.Ordinal);
             if (!starting && !text.StartsWith("[sdf.mesh-bake] done ", StringComparison.Ordinal)) { continue; }
             if (CliLineFields.Field(text, "residency-id") is not { } identity) {

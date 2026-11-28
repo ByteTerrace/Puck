@@ -15,9 +15,9 @@ import "../standard/quests"
 test "the lantern trail starts in the gallery, advances in the garden and finishes at home" {
   when {
     ticks 30
-    seat1: body.pose 57 0.05 36.3 180 0 0
+    seat1: body.pose spawn:portal-garden 0
     ticks 10
-    seat1: body.fly -1 0 0 0 0 0 2
+    seat1: body.fly 1 0 0 0 0 0 2
     ticks 70
     seat1: body.fly -1 0 0 0 0 0 1
     ticks 45
@@ -28,7 +28,7 @@ test "the lantern trail starts in the gallery, advances in the garden and finish
     }
     recordFind(body, 0, quests, quest, lanternLit, status) == questDone
     recordFind(body, 0, quests, quest, lanternLit, step) == 2
-    bodyPosition(body, 0, z) > 38
+    bodyPosition(body, 0, z) > 12.9
   }
 }
 
@@ -37,7 +37,7 @@ test "the lantern trail starts in the gallery, advances in the garden and finish
 test "the trail's second part is not taken up before the first is done" {
   when {
     ticks 30
-    seat1: body.pose 57 0.05 36.3 180 0 0
+    seat1: body.pose spawn:portal-garden 0
     ticks 10
   }
   expect {

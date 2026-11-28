@@ -37,7 +37,8 @@ public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 P
 /// into world space. A cylinder carries radius in X/Z and half-height in Y, with the same local-to-world rotation.
 /// A rounded box carries inner half-extents in Extent and the spherical offset in Radius.
 /// A chamfered box carries the drawing builder's inset half-extents, inset Chamfer and final Radius offset.
-/// A superellipsoid carries its per-axis radii in Extent, its Lp Exponent and the spherical offset in Radius.
+/// A superellipsoid carries its per-axis radii in Extent, its Lp Exponent, the spherical offset in Radius and, swept along
+/// its local Y, the half-length of a segment through <see cref="Center"/> in <see cref="Elongation"/> (an elliptic capsule).
 /// A half-space carries its unit normal in <see cref="Extent"/> and one boundary point in <see cref="Center"/>.</remarks>
 /// <param name="Kind">The analytic shape kind.</param>
 /// <param name="Center">The sphere/box center or a point on the half-space boundary.</param>
@@ -48,7 +49,9 @@ public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 P
 /// <param name="Exponent">The superellipsoid's Lp exponent.</param>
 /// <param name="Field">A field collider's surface, read in the frame of <paramref name="Center"/> and
 /// <paramref name="Rotation"/>; its local half-extent about that centre is in <paramref name="Extent"/>.</param>
-public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default, FixedQ4816 Radius = default, FixedQ4816 Chamfer = default, FixedQ4816 Exponent = default, FixedColliderField? Field = null) {
+/// <param name="Elongation">A superellipsoid's half-length, in metres, along its local Y: the solid is the segment from
+/// <c>-Elongation</c> to <c>+Elongation</c> swept by the superellipsoid, zero for none. Zero on every other kind.</param>
+public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default, FixedQ4816 Radius = default, FixedQ4816 Chamfer = default, FixedQ4816 Exponent = default, FixedColliderField? Field = null, FixedQ4816 Elongation = default) {
     private bool TryBoxPush(
         FixedVector3 position,
         in FixedQuaternion orientation,
@@ -140,10 +143,17 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
     public static FixedStaticCollider ChamferedBox(FixedVector3 center, FixedQuaternion rotation, FixedVector3 innerHalfExtents, FixedQ4816 chamfer, FixedQ4816 radius) =>
         new(Kind: FixedStaticColliderKind.ChamferedBox, Center: center, Extent: innerHalfExtents,
             Rotation: rotation.Normalize(), Radius: radius, Chamfer: chamfer);
-    /// <summary>Creates an oriented superellipsoid with positive radii and exponent at least two.</summary>
-    public static FixedStaticCollider Superellipsoid(FixedVector3 center, FixedQuaternion rotation, FixedVector3 radii, FixedQ4816 exponent) =>
+    /// <summary>Creates an oriented superellipsoid with positive radii and exponent at least two, swept along its local Y
+    /// over a segment of half-length <paramref name="elongation"/> through its centre.</summary>
+    /// <param name="center">The centre, the segment's midpoint.</param>
+    /// <param name="rotation">The local-to-world rotation; normalized on entry.</param>
+    /// <param name="radii">The per-axis radii, in metres.</param>
+    /// <param name="exponent">The Lp exponent; two is an ellipsoid, whose distance outside the swept solid is exact.</param>
+    /// <param name="elongation">The segment's half-length, in metres; zero for the superellipsoid alone.</param>
+    /// <returns>The <see cref="FixedStaticColliderKind.Superellipsoid"/> collider.</returns>
+    public static FixedStaticCollider Superellipsoid(FixedVector3 center, FixedQuaternion rotation, FixedVector3 radii, FixedQ4816 exponent, FixedQ4816 elongation = default) =>
         new(Kind: FixedStaticColliderKind.Superellipsoid, Center: center, Extent: radii,
-            Rotation: rotation.Normalize(), Exponent: exponent);
+            Rotation: rotation.Normalize(), Exponent: exponent, Elongation: elongation);
     /// <summary>Creates a field collider: the zero set of a scalar field read in the frame of a centre and rotation.</summary>
     /// <param name="center">The frame's world origin, which is also the centre its extent bounds the surface about.</param>
     /// <param name="rotation">The frame-to-world rotation; normalized on entry.</param>
@@ -251,12 +261,17 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         }
         return (Center + ((Kind == FixedStaticColliderKind.AxisAlignedBox) ? point : Rotation.Rotate(vector: point)));
     }
-    /// <summary>Returns whether the collider's distance and normal are exact everywhere: an exponent-2
-    /// <see cref="FixedStaticColliderKind.Superellipsoid"/>, an ellipsoid swept by <see cref="Radius"/>, measured through
-    /// <see cref="FixedEllipsoidProjection"/>.</summary>
+    /// <summary>Returns whether the collider's distance and normal are measured rather than bounded: an exponent-2
+    /// <see cref="FixedStaticColliderKind.Superellipsoid"/>, an ellipsoid swept by <see cref="Radius"/> and along its
+    /// <see cref="Elongation"/>, measured through <see cref="FixedEllipsoidProjection"/> at the point less its nearest
+    /// segment point. That is the exact distance outside the solid, since the ellipsoid is symmetric about its equator;
+    /// inside, it is the depth in the ellipsoid about that segment point, never deeper than the solid's.</summary>
     /// <returns><see langword="true"/> for an exponent-2 superellipsoid.</returns>
     public bool MeasuresDistance() => ((Kind == FixedStaticColliderKind.Superellipsoid) && (Exponent == EllipsoidExponent));
     private static readonly FixedQ4816 EllipsoidExponent = FixedQ4816.FromInteger(value: 2);
+    // How far the solid reaches about Center along its own axes before Radius: Extent, with a superellipsoid's elongation
+    // added along local Y (zero on every other kind).
+    internal FixedVector3 CoreExtent => (Extent + new FixedVector3(X: FixedQ4816.Zero, Y: Elongation, Z: FixedQ4816.Zero));
     /// <summary>Returns a finite solid's world-axis half-extent about <see cref="Center"/>, padded past fixed-point
     /// rounding. A body whose bounds, grown by the contact skin, miss this box needs no push from the solid, so a
     /// sweep may skip its exact query.</summary>

@@ -2615,6 +2615,24 @@ in [sweep](#sweep-and-visual-checks).
 
 ### Lighting and GI
 
+Known failures the labs show on settled scenes (RTX 2060, D3D12), each judged in
+its lab:
+
+- **Lamp shadows** (`labs/light.puck`, `debug.go light-occluders`). The
+  pendant is lit, and `world.occluders` keeps all five occluders for the view,
+  but no shadow from the lamp reads on the floor. The room is lit evenly,
+  probably because the lamp's bounce off the ceiling swamps its direct light.
+  The wall-to-wall corners also show small bright smudges.
+- **Screen spill** (`labs/light.puck`, `debug.go light-night`). The
+  test-pattern screen and the cyan panel cast almost no coloured light on the
+  walls and cabinet around them; only the bulb warms its ceiling.
+- **Metal reflection banding** (`labs/shapes.puck`, `gallery.show
+  shape-sphere`, camera at (0,1.5,2.6) looking at (0,1,0.3)). The copper
+  sphere's underside still shows horizontal dark bands and stair-steps after the
+  tangent-plane march. The next suspect is the step-budget fade (`late`), which
+  jumps with the pyramid's power-of-two alignment. The structural fix is a
+  cheaper march near surfaces.
+
 Owner: next lighting batch (rendering, principal-grade review) · high · Next:
 [what the GPU trace still owes](illumination.md#after-the-gpu-trace), the
 plan's step 3: the moving-sun lockstep drain and the outdoor difference from
@@ -3360,6 +3378,16 @@ left worse, then the valley sectors' buried colliders.
 
 Owner: physics lane · ordinary · Next: per-surface contacts over a field
 collider, then the lifecycle lows as one pass.
+
+- [high · the owner's call, for the RTX 4070 side] A rope net under a climber
+  always gives to its full reach instead of bellying by weight
+  (`labs/climbing.puck`, `climb-net`; `net-tests` reads `netDeepest` equal to
+  `netFarthest` equal to the reach). The load is about 600 N, and a node moves
+  about 0.67 m a step before the strands are solved, and `FixedNet` runs only 4
+  solver passes. So the net feels rigid at its cap rather than net-like, which
+  misses the owner's ask that it sag and give under weight. The fix is in the
+  solver: more passes, a stiffer strand solve, or a substepped load, so that
+  deflection tracks the weight.
 
 - [low · unconfirmed] A field lattice's travel resistance may stand stale
   when lattices reinstall without the population rebuilding, a lead from the
@@ -6255,10 +6283,10 @@ the model.
   seat and a visitor's body at a terminal cannot type into it. Let one rule
   sweep every player's step events (each event bound with its owner), as
   `$players` sweeps their bodies.
-- [low] The terminal console closes only on the backtick: Escape is the host's,
-  reserved for the pause menu ([play decisions](../decisions/play.md#the-game)).
-  When the pause menu lands (hub plan H4), decide whether opening it closes an
-  open terminal console, so Escape still leaves the console in one press.
+- [low] The terminal console closes only on the backtick: Escape opens the
+  menu ([play decisions](../decisions/play.md#the-game)), which the console's
+  controls do not offer. Decide whether Escape should also close an open console
+  in one press.
 - Cross-check the Triton's reports against several independent sources (SDL
   is one second opinion, never the specification), then rewrite the input
   reference's Triton section to cite them:

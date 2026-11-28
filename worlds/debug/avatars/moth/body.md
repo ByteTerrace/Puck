@@ -20,9 +20,9 @@ placed at her head the same way. A thick braid roots under the lock beside her
 right cheek as one smooth tapering root, then plaits as three twisted strands
 over her right collarbone to an ochre tie.
 
-Her journal rides a slim wrist panel on each bare forearm
-([contract.puck](contract.puck)'s `mothBodyWristMount` and `mothBodyPanelShape`),
-raised to read as the suits' panels are, and her mantle plays the suits' keyed
+Her menu rides a slim worn screen on each bare forearm
+([contract.puck](contract.puck)'s `mothBodyWristMount` and `mothBodyScreenShape`),
+raised to read as the suits' screens are, and her mantle plays the suits' keyed
 pull-up at her own joints.
 
 ## Wear her

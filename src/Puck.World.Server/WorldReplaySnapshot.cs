@@ -126,7 +126,7 @@ public abstract record WorldReplayEntry {
     /// <summary>A seat's switch from the identity the tape pinned to another, applied at the head of the tick it is recorded on.
     /// A fork records one for each seat its drive rebound to the live owned identity, so the fork's tape holds the identity
     /// the fork actually continues with and a re-drive switches at the same step the live fork did. The seat takes the
-    /// projection exactly, facts and records included, in a detached identity that saves nothing.</summary>
+    /// projection exactly, facts and records included, through the escrow's replay binding.</summary>
     /// <param name="Slot">The local seat's body index.</param>
     /// <param name="Profile">The projection the seat continues with.</param>
     public sealed record SeatIdentity(int Slot, WorldIdentityProjection Profile) : WorldReplayEntry;
@@ -659,7 +659,7 @@ public sealed partial class WorldReplaySnapshot {
     // Seats the one seat of a recorded switch at the population this tick holds, refusing by name a slot the re-drive has no
     // active local seat at (an authored seat count that shrank, a seat that left, a peer slot): the tape names slots, and a slot
     // the population does not hold would index past its entries.
-    // Seats a switch binds under one identity id share the escrow's one detached identity for that id, with every home
+    // Seats a switch binds under one identity id share the one identity the escrow's replay binding gives that id, with every home
     // adoption under it, as the live rebind gave them the catalog's one object: a write through either seat is read
     // through the other.
     private static void ApplySeatIdentity(WorldReplayEntry.SeatIdentity entry, WorldPopulation population, WorldServer server) {
@@ -673,7 +673,7 @@ public sealed partial class WorldReplaySnapshot {
 
         var profile = entry.Profile;
 
-        if (!server.TransferEscrow.TryBindDetached(detached: out var identity, reason: out var reason, taped: in profile)) {
+        if (!server.TransferEscrow.TryBindReplayed(bound: out var identity, reason: out var reason, taped: in profile)) {
             throw ReplayRefusal.SeatSwitchRefused.Raise(message: $"the recorded identity switch of body:{entry.Slot} to '{profile.Id}' could not bind its taped identity — {reason}");
         }
 

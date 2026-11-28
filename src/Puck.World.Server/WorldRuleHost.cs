@@ -489,22 +489,6 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
-    public Fact Read(WorldNetOperand operand) {
-        ArgumentNullException.ThrowIfNull(argument: operand);
-
-        var value = 0L;
-
-        if (Host.Population.Nets.TryPanel(id: operand.PlacementId, panel: out var panel)) {
-            value = operand.Reading switch {
-                WorldNetReading.Deflection => panel.Net.MaxDeflection.Value,
-                WorldNetReading.Awake => (panel.Net.Awake ? 1L : 0L),
-                WorldNetReading.Holders => panel.Holders,
-                _ => panel.Pushers,
-            };
-        }
-        return Fact.Finite(kind: operand.ValueKind, value: value);
-    }
-    /// <inheritdoc/>
     /// <remarks>The store read is the identity's as it stands: a record a firing earlier in this pass committed is
     /// already installed (<see cref="Committed"/>), as the version a schedule names for it says.</remarks>
     public Fact Read(IdentityRecordOperand operand) {
@@ -531,6 +515,22 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
 
         return Fact.Finite(kind: CellKind.Int, value: (member ? 1L : 0L));
+    }
+    /// <inheritdoc/>
+    public Fact Read(WorldNetOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        var value = 0L;
+
+        if (Host.Population.Nets.TryPanel(id: operand.PlacementId, panel: out var panel)) {
+            value = operand.Reading switch {
+                WorldNetReading.Deflection => panel.Net.MaxDeflection.Value,
+                WorldNetReading.Awake => (panel.Net.Awake ? 1L : 0L),
+                WorldNetReading.Holders => panel.Holders,
+                _ => panel.Pushers,
+            };
+        }
+        return Fact.Finite(kind: operand.ValueKind, value: value);
     }
     /// <inheritdoc/>
     public Fact Read(EngagedOperand operand) {

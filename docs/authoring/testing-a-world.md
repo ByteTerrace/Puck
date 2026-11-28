@@ -374,7 +374,11 @@ collide with a row the world declares. A value read from a `Fixed` or `Bool` row
 is recorded in a witness row of that kind, `expect$<line>$fixed` or
 `expect$<line>$bool`, and listed the same way. Text equality and inequality also
 read literal strings or another Text row; their values are recorded in
-`expect$<line>$text` and printed as quoted strings. The generated world is named
+`expect$<line>$text` and printed as quoted strings. A read of a channel whose
+spelling decides its kind, a net's reading (`net(panel, awake)`) or a body's
+kinematic witness (`kinematics(body, 0, stepUps)`), is recorded under its parts
+joined by `$` (`net$panel$awake`, `kinematics$body$0$stepUps`); other channel
+reads (`fact(...)`, `bodyPosition(...)`) are not recorded. The generated world is named
 `<source stem>~<test slug>`.
 
 A row's kind is read from the composed state, so a row the source takes from its
