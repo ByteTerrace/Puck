@@ -247,8 +247,12 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 - **The sheet prices what the evaluator runs.** A rule a due list judges by
   change is priced for a tick at rest plus one change (`RuleResponse.Of`, read
   off the judgement walk a schedule is built from); a line judged in place (a
-  group's, a search judge's, an interaction, a decision, a `maxFirings` sweep)
-  for every binding; a sweep of this tick's events (`RuleIteration.BindsEvents`: a contacts or input-events
+  group's, a search judge's, an interaction, a decision) for every binding. A
+  `maxFirings` sweep is due by change: the bindings its cap leaves stay due for
+  the next tick (`RuleEvaluator`'s `Defer`, which touches their latch entries as
+  an in-place sweep does), so it is priced by change, every binding judged only
+  while one tick's firings can pass the cap. A channel read for the body bound
+  to `$each` rests and moves by that body (`WorldRuleHost.DeriveChannels`). A sweep of this tick's events (`RuleIteration.BindsEvents`: a contacts or input-events
   sweep) binds nothing at rest and is priced at one binding. A Level line whose firing closes its own gate
   (`RuleResponse.ClosesItself`: a literal the written literal fails, or `cell != source` with `cell = source` over
   one plain cell or one local) fires nothing at rest; the tested cell may be a host fact an `IFactSettingEffect`

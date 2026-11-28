@@ -687,6 +687,8 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
                 if ((rule.MaxFirings > 0) && (poolFirings >= rule.MaxFirings)) {
                     latch.Touch(binding: poolBinding, state: bindings);
+                    // The bindings the cap left are judged on a later tick, so a due list visits the rule again.
+                    m_anyRerun = true;
                     continue;
                 }
                 bindingsSpan[rule.PoolBindingSlot] = handle;
@@ -720,6 +722,8 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             // the tick that reaches it instead of being closed by the sweep's end.
             if ((rule.MaxFirings > 0) && (firings >= rule.MaxFirings)) {
                 latch.Touch(binding: eachBinding, state: bindings);
+                // The bindings the cap left are judged on a later tick, so a due list visits the rule again.
+                m_anyRerun = true;
                 continue;
             }
             m_host.BoundEachKey = key;

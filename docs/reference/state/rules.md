@@ -345,9 +345,13 @@ rule "read-batch" {
 Once that many bindings have fired (a refused firing counts too) the sweep
 stops for this tick. Every binding after it keeps its latch exactly as it
 stood, as if the sweep hadn't reached it: an open edge stays held, and a Level
-binding fires on a later tick that reaches it. The work sheet prices the rule's
-firings, and the writes it counts against an exclusive cell, at `maxFirings`
-instead of at the row's capacity; checks are still priced for every binding.
+binding fires on a later tick that reaches it. The due list keeps exactly the
+bindings the bound left due, so the next tick judges them and whatever else
+moved, never the whole sweep again. The work sheet prices the rule's firings,
+and the writes it counts against an exclusive cell, at `maxFirings` instead of
+at the row's capacity; its checks are priced by change, or for every binding
+when one tick's firings can pass the bound and leave bindings waiting
+([Visit only the rules that are due](analysis.md#visit-only-the-rules-that-are-due)).
 
 The bound is enforced, so it's honest whatever the gate does. When the gate
 already admits at most that many bindings (a batch window over an ordinal row

@@ -780,10 +780,11 @@ internal sealed class RuleDueList {
     }
 
     private static Visit Classify(RuleEvaluator evaluator, CompiledRule rule, RuleSchedule schedule) {
+        // A sweep bounded by maxFirings is visited by change too: the bindings its cap leaves stay due
+        // (RuleEvaluator's Defer), so it judges the bindings left and those something moved.
         if (
             schedule.Volatile ||
             !schedule.IterationVersioned ||
-            (rule.MaxFirings > 0) ||
             (rule.Zones is { References.Count: > 0, PerBinding: false })
         ) {
             return Visit.Always;

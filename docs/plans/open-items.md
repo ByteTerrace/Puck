@@ -5966,20 +5966,27 @@ shell, each usable alone, each named for what it does.
     tick.
   - Klondike's and FreeCell's deal, gather, draw and recycle loops, priced at every station at once, and Klondike's seven
     reveals, whose gate (`count(column) == 0`) a transfer into that column closes but no proof reads.
-  - Sweeps bounded by `maxFirings`, judged in full every tick (`RuleDueList.Classify`): the four `chess-ai-relocate-*`
-    lines, `chess-station-hover-*`, `chess-ai-request` and `chess-input-move`, 384 bindings each in the gallery. A due
-    list that carries the positions a capped sweep left unvisited would price them by change.
-  - Input channels read for the body a sweep binds (`$channel:each:*`) have no version, so every line reading one is
-    judged every tick at every player (the learn panels' wheels, the menu, every interact Edge), and the chairs' presses
-    (`game-station-near`/`-far`) read a literal seat's channel shared by every station's binding. Per-binding channel
-    versions (`WorldRuleHost.ScheduleFact`) would make them due when that player's input moves.
+  - Sweeps bounded by `maxFirings` (the four `chess-ai-relocate-*` lines, `chess-station-hover-*`, `chess-ai-request`
+    and `chess-input-move`, 384 bindings each in the gallery) are due by change and keep the bindings their cap left
+    due, but one change opens a station's 32 pieces against a cap of one, so the sheet still charges every binding a
+    check. A proof that at most one binding's gate holds (the pieces' cells are distinct) would price them at the
+    bindings one change opens.
+  - The sheet's total is every line's price at once: a tick at rest plus one change for each line, so one tick is
+    charged a change at every one of its lines. That is neither a bound nor what one tick can do. A bound from the
+    inputs one tick can change would charge each per-station line once for each player who can act on that tick (a
+    rough reading of the gallery's lines, scaling each "one change opens n of M" line to `min(M, 12n)`, gives about 63 ms
+    on the RTX 2060 instead of 11 ms), and the exclusive lines' state machines (`klondikeStage[$each]`, Go's phases) can
+    all be passed through in one tick in pass order, so a single-cell analysis proves no exclusion there. Admitting the
+    gallery and the debug world under the measured figures needs a decision on what the budget bounds (an expectation,
+    or a true per-tick bound with each player's inputs counted), since no sound proof within today's model brings them
+    under 8.33 ms on the RTX 2060.
   - The debug world adds Go (about 11 ms on the RTX 2060: the play doors, report, evaluate and score lines are single
     heavy firings over 361 cells, and the scoring flood), the quest share (`lanternTrail-share`, a firing at each of
-    twelve recipients) and the granary's influence lines, which read moving facts.
-- [high] A rule group's lines are priced at one pass (`WorldRuleWorkBudget.Lines` passes each line once, in place),
-  but a fixpoint group runs up to its `maxPasses` in one tick: Go's `stabilize goFlood maxPasses(goPoints + 2)` can run
-  363 passes of its two flood lines on the tick scoring opens, which the sheet charges as one. The sheet under-prices
-  that tick; a group's lines should be charged its pass ceiling, and a group whose trigger rests charged nothing at rest.
+    twelve recipients) and the granary's influence lines, which read moving facts. Go's board kernels are per cell:
+    `boardCombine` reads, combines and writes every cell through the arena's door one at a time
+    (`ArenaTransforms.TryBoardCombine`), where the board's value planes (`StateArena.TryReadBoardPlanes`) would combine
+    a 361-cell board in six words; and its scoring floods one step a tick for up to `goPoints + 2` ticks
+    (`stabilize goFlood`), where a reach operation over the planes would answer in one firing.
 - [low] A rule sweeping per-seat private piles is refused at compile: `RuleCompiler.RequireTransformControlAudience`
   pairs every candidate a live end can select with every other read, so `transfer(from: hand[$each], to: …)` over a
   family whose members each admit only their own seat reads seat 1's hand into seat 2's audience on paper, though a

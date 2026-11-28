@@ -28,6 +28,9 @@ public sealed partial class WorldRuleHost {
     // One group's roster, by the group's place in the watched list: its version moves when the live document's row
     // for the group is another row.
     private const int GroupSource = 13;
+    // A body's channels as its body integrated them: its version moves when a watched channel of the body reads
+    // another value, a change of occupancy included (a body no human occupies reads every channel as zero).
+    private const int ChannelSource = 14;
 
     // The facts versioned by the value they answer: a read that names no binding (a literal seat, a compiled census)
     // and answers from host state alone, so its value moves only where the host's state does. Each is read again
@@ -287,12 +290,17 @@ public sealed partial class WorldRuleHost {
         }
 
         switch (payload) {
-            // A seat's channel, its pointer and its place at a board are read for a literal seat: from the image and
-            // ray its body integrated, its application set and its body's position. The watch derives one value with
-            // no binding in place, so a channel read for the body a sweep binds to $each has no version here and
-            // stays volatile.
+            // A channel read for the body a sweep binds to $each moves by that body (DeriveChannels). Any other
+            // dynamic reference resolves through state and stays volatile.
+            case ChannelOperand channel when TryBodyScope(body: channel.Body, scope: out var channelScope) && (channelScope == FactRead.EachBody):
+                WatchChannel(ordinal: channel.ChannelOrdinal);
+                facts.Add(item: new FactRead(Body: FactRead.EachBody, Source: ChannelSource));
+
+                return true;
             case ChannelOperand { Body.Kind: not CompiledBodyRefKind.Literal }:
                 return false;
+            // A seat's channel, its pointer and its place at a board are read for a literal seat: from the image and
+            // ray its body integrated, its application set and its body's position, each versioned by its value.
             case ChannelOperand or PointerOperand or BoardSeatOperand:
                 facts.Add(item: new FactRead(Body: WatchValue(fact: bodyOperand, readsInput: true, spelling: bodyOperand.Describe), Source: ValueSource));
 
@@ -497,6 +505,10 @@ public sealed partial class WorldRuleHost {
                 version = m_producerVersions[body];
 
                 return true;
+            case ChannelSource when (((uint)body) < ((uint)m_channelVersions.Length)):
+                version = m_channelVersions[body];
+
+                return true;
             case IdentitySource when (((uint)body) < ((uint)m_identityVersions.Length)):
                 version = m_identityVersions[body];
 
@@ -542,6 +554,7 @@ public sealed partial class WorldRuleHost {
         ProducerSource => "producer",
         IdentitySource => "identity",
         GroupSource => "group",
+        ChannelSource => "channels",
         _ => $"source {source}",
     });
 
@@ -606,6 +619,9 @@ public sealed partial class WorldRuleHost {
         if (inputsStale || m_factsStale || arenaMoved) {
             m_seenValueMoves = Arena.MoveSequence;
             DeriveValues(arenaMoved: arenaMoved, bodies: m_factsStale, inputs: inputsStale);
+        }
+        if (inputsStale || m_factsStale) {
+            DeriveChannels();
         }
         if (m_watchIdentities && (m_factsStale || (m_identityCommits != m_seenIdentityCommits))) {
             DeriveIdentities();
@@ -770,6 +786,87 @@ public sealed partial class WorldRuleHost {
                 seen[index] = now;
                 versions[index]++;
                 m_factMoves.Add(item: new FactRead(Body: index, Source: GroupSource));
+            }
+        }
+    }
+    // The channel ordinals a schedule reads for the body bound to $each, and per body the values they read when the
+    // versions were last derived, in that ordinal order. Only a human-occupied body reads a channel as anything but
+    // zero, so a body no human occupies keeps no values (null) and stands for all zeros.
+    private readonly List<int> m_channelOrdinals = [];
+    private FixedQ4816[]?[] m_seenChannels = [];
+    private ulong[] m_channelVersions = [];
+
+    private void WatchChannel(int ordinal) {
+        if (m_channelOrdinals.Contains(item: ordinal)) {
+            return;
+        }
+        m_channelOrdinals.Add(item: ordinal);
+        // A new ordinal widens what each body is compared on: what was seen is forgotten and every version moves, so
+        // no capture taken before can match.
+        Array.Clear(array: m_seenChannels);
+        for (var index = 0; (index < m_channelVersions.Length); index++) {
+            m_channelVersions[index]++;
+        }
+        m_factMovesAll = true;
+    }
+    // Compares each body's watched channels with what they read at the last derivation, as Read(ChannelOperand)
+    // answers them, and moves the version of each body whose values differ.
+    private void DeriveChannels() {
+        if (m_channelOrdinals.Count == 0) {
+            return;
+        }
+
+        var population = Host.Population;
+        var capacity = population.Capacity;
+
+        if (m_seenChannels.Length != capacity) {
+            Array.Resize(array: ref m_seenChannels, newSize: capacity);
+            Array.Resize(array: ref m_channelVersions, newSize: capacity);
+            m_factMovesAll = true;
+        }
+
+        // A read the host makes to version a fact is not a read the evaluation in flight made of the seat's input.
+        var observing = Host.Input.SuspendObservation();
+
+        try {
+            SeeChannels(capacity: capacity);
+        } finally {
+            Host.Input.ResumeObservation(observing: observing);
+        }
+    }
+    private void SeeChannels(int capacity) {
+        var population = Host.Population;
+
+        for (var index = 0; (index < capacity); index++) {
+            var seen = m_seenChannels[index];
+
+            if (!population.IsHumanOccupied(bodyIndex: index)) {
+                if (seen is not null) {
+                    m_seenChannels[index] = null;
+                    if (Array.Exists(array: seen, match: static value => (value != FixedQ4816.Zero))) {
+                        m_channelVersions[index]++;
+                        m_factMoves.Add(item: new FactRead(Body: index, Source: ChannelSource));
+                    }
+                }
+
+                continue;
+            }
+
+            // A body newly occupied stood for all zeros, which its new values start as, so it moves only when it reads
+            // something else.
+            seen ??= m_seenChannels[index] = new FixedQ4816[m_channelOrdinals.Count];
+
+            var moved = false;
+
+            for (var position = 0; (position < seen.Length); position++) {
+                var now = ReadChannelValue(bodyIndex: index, ordinal: m_channelOrdinals[position]);
+
+                moved |= (now != seen[position]);
+                seen[position] = now;
+            }
+            if (moved) {
+                m_channelVersions[index]++;
+                m_factMoves.Add(item: new FactRead(Body: index, Source: ChannelSource));
             }
         }
     }

@@ -117,6 +117,8 @@ public sealed partial class RuleEvaluator {
         list.SnapshotLive(index: index, live: m_dueLive);
         latch.BeginSweep();
 
+        var cap = new FiringCap(limit: list.Rules[index].MaxFirings);
+
         foreach (var body in m_dueLive) {
             if (!full && !list.IsFull(index: index) && !list.IsBodyDue(body: body, index: index)) {
                 continue;
@@ -127,7 +129,13 @@ public sealed partial class RuleEvaluator {
 
                 continue;
             }
-            applied |= SweepBinding(binding: body, full: full, index: index, key: key, list: list, stepTicks: stepTicks);
+            if (cap.Spent) {
+                Defer(binding: body, index: index, key: key, list: list);
+
+                continue;
+            }
+            applied |= SweepBinding(binding: body, full: full, index: index, key: key, list: list, stepTicks: stepTicks, outcome: out var outcome);
+            cap.Count(outcome: outcome);
         }
 
         m_host.BoundEachKey = default;
@@ -176,7 +184,7 @@ public sealed partial class RuleEvaluator {
     // judged under its key. A verdict that must be judged again keeps the binding due; a binding a partial sweep
     // could not evaluate is closed exactly as a full sweep's end closes it; and a firing's moves are drained at once,
     // so a binding later in the order that the firing reaches is judged this tick.
-    private bool SweepBinding(RuleDueList list, int index, int binding, CellKey key, bool full, ulong stepTicks, int member = -1) {
+    private bool SweepBinding(RuleDueList list, int index, int binding, CellKey key, bool full, ulong stepTicks, out RuleOutcome outcome, int member = -1) {
         var state = list.States[index];
         var latch = list.Latch;
         var bound = SweepLatchKey(key: key, member: member, rule: list.Rules[index]);
@@ -191,7 +199,7 @@ public sealed partial class RuleEvaluator {
 
         m_minWake = ulong.MaxValue;
 
-        var outcome = EvaluateOnce(
+        outcome = EvaluateOnce(
             applied: out var moved,
             binding: bound,
             latch: latch,
@@ -214,6 +222,26 @@ public sealed partial class RuleEvaluator {
         }
 
         return moved;
+    }
+    // A sweep's firing ceiling (CompiledRule.MaxFirings): the evaluations that did not answer idle, counted in the order
+    // the sweep judges its bindings, as an in-place sweep counts them. A limit of zero never spends.
+    private struct FiringCap(int limit) {
+        private int m_spent;
+
+        public readonly bool Spent => ((limit > 0) && (m_spent >= limit));
+
+        public void Count(RuleOutcome outcome) {
+            if (outcome != RuleOutcome.Idle) {
+                m_spent++;
+            }
+        }
+    }
+    // A binding a capped sweep reached after its firings were spent: left as it stands, its latch entry kept as an
+    // in-place sweep keeps it, and due on the next tick, when the sweep reaches it again. The due list remembers it
+    // exactly, so the cap spreads the bindings over ticks instead of judging every binding every tick.
+    private void Defer(RuleDueList list, int index, int binding, CellKey key, int member = -1) {
+        list.Latch.Touch(binding: SweepLatchKey(key: key, member: member, rule: list.Rules[index]), state: list.States[index]);
+        list.MarkBindingNext(binding: binding, index: index);
     }
     // One visit of a keyed row's sweep the list holds per key. Due in full (a cell every binding reads, the swept
     // row's structure or a deadline moved, or its list was just built), it snapshots the row's keys and judges each
@@ -252,6 +280,8 @@ public sealed partial class RuleEvaluator {
         var applied = false;
         var every = full;
 
+        var cap = new FiringCap(limit: list.Rules[index].MaxFirings);
+
         latch.BeginSweep();
         for (var position = 0; (position < count); position++) {
             every |= list.IsFull(index: index);
@@ -261,7 +291,16 @@ public sealed partial class RuleEvaluator {
                     break;
                 }
             }
-            applied |= SweepBinding(binding: position, full: full, index: index, key: keys[position], list: list, member: ((members is null) ? -1 : members[position]), stepTicks: stepTicks);
+
+            var member = ((members is null) ? -1 : members[position]);
+
+            if (cap.Spent) {
+                Defer(binding: position, index: index, key: keys[position], list: list, member: member);
+
+                continue;
+            }
+            applied |= SweepBinding(binding: position, full: full, index: index, key: keys[position], list: list, member: member, outcome: out var outcome, stepTicks: stepTicks);
+            cap.Count(outcome: outcome);
         }
 
         m_host.BoundEachKey = default;

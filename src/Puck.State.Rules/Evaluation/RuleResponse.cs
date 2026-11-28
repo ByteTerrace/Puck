@@ -81,11 +81,10 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             );
         }
 
-        // The lines a due list visits every tick in full (RuleDueList.Classify): a sweep bounded by maxFirings, one
-        // over a live row selection, and one whose key set no version names.
+        // The lines a due list visits every tick in full (RuleDueList.Classify): one over a live row selection, and one
+        // whose key set no version names.
         if (
             inPlace ||
-            (rule.MaxFirings > 0) ||
             (rule.Zones is { References.Count: > 0, PerBinding: false }) ||
             (rule.PoolForEach is not null) ||
             rule.ForEachZones ||
@@ -188,7 +187,16 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         // firing changed nothing and settles it.
         var echo = ((latching == RuleLatching.Settles) ? 2L : 1L);
         var judged = Math.Min(val1: multiplier, val2: BinaryIntegerFunctions.AddSaturating(left: judgedAtRest, right: (shared ? multiplier : Math.Min(val1: opened, val2: multiplier))));
-        var fired = Math.Min(val1: firings, val2: BinaryIntegerFunctions.AddSaturating(left: firedAtRest, right: BinaryIntegerFunctions.MultiplySaturating(left: opened, right: echo)));
+        var demand = BinaryIntegerFunctions.AddSaturating(left: firedAtRest, right: BinaryIntegerFunctions.MultiplySaturating(left: opened, right: echo));
+        var fired = Math.Min(val1: firings, val2: demand);
+        // A maxFirings sweep keeps the bindings its cap left due for the next tick (RuleEvaluator's Defer). While a
+        // tick's firings fit under the cap nothing is left; once they can pass it the bindings left pile up, so every
+        // binding may be judged.
+        var backlog = ((rule.MaxFirings > 0) && (demand > rule.MaxFirings));
+
+        if (backlog) {
+            judged = multiplier;
+        }
         var rest = ((judgedAtRest == 0L)
             ? "not visited at rest"
             : ((moving is not null) ? $"judged every tick ({moving})" : "judged every tick (a Level gate that holds fires again)"));
@@ -203,7 +211,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
             Fired: fired,
             Judged: judged,
             Latching: latching,
-            Why: $"{rest}; {fire}; one change opens {opened} of {multiplier} binding(s)"
+            Why: $"{rest}; {fire}; one change opens {opened} of {multiplier} binding(s){(backlog ? $"; maxFirings={rule.MaxFirings} can leave bindings due, so every binding is judged" : string.Empty)}"
         ) { PinsByMember = ((rule.ForEachFamily is not null) && !shared && (deadline is null) && (judgedAtRest == 0L) && (firedAtRest == 0L) && (opened <= members.Capacity)) };
     }
     /// <summary>Returns whether a rule's gate provably never holds on the host its context describes: a host that

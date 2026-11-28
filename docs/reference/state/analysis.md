@@ -142,9 +142,8 @@ check units are `Setup + Multiplier × Check`, and its firing units are
 `maxFirings` when that is smaller, since the evaluator ends a sweep once that
 many bindings have fired
 ([Bound how many bindings fire](rules.md#bound-how-many-bindings-fire)). A
-search judge's rules, a group's rules, an interaction, a decision, a sweep
-bounded by `maxFirings`, and a sweep over a set no version names (a pool, a
-zone table) are judged in place.
+search judge's rules, a group's rules, an interaction, a decision, and a sweep
+over a set no version names (a pool, a zone table) are judged in place.
 
 A sweep of **this tick's events** (`RuleIteration.BindsEvents`: in Puck.World
 `forEach: contacts(<surface>)` and `forEach: inputEvents(<owner>)`) binds
@@ -167,10 +166,11 @@ same judgement the due list's schedule is built from and charges the line
   cell and no event-like host fact changes. A binding is judged at rest only
   when its judgement reads something that moves with time: `$tick` outside a
   deadline, a row carrying a value-over-time trait, or a host fact that does
-  not rest (`RuleCompileContext.FactRests`). In Puck.World a pose, a distance,
-  a pointer and a channel move; a region's occupants, a body's fact bits and
+  not rest (`RuleCompileContext.FactRests`). In Puck.World a pose, a distance
+  and a pointer move; a region's occupants, a body's channels, fact bits and
   producer stand-down, an input event, a beat, and the population and
-  quiescence counts rest (`WorldFactsCompileContext.Rests`). A line that reads
+  quiescence counts rest (`WorldFactsCompileContext.Rests`): a channel moves
+  only when its player's input does, which is a change. A line that reads
   only rows and facts at rest is not visited, and is charged nothing at rest.
 - **What fires at rest** depends on what stops a binding that fired from firing
   again. A Level gate that holds fires every tick, so a Level line is charged
@@ -571,7 +571,8 @@ schedule names:
   expiry, a switch or a restore; the music clock's current beat, bar,
   beat in bar or phase error as a version that moves when the value does, so a
   beat read moves on the beat's edge; and a fact that names no binding and
-  answers from host state alone (a literal seat's `$channel:`, `$pointer:` or
+  answers from host state alone (a literal seat's `$channel:` (the channels of
+  the body bound to `$each` move by that body instead), `$pointer:` or
   `board(engaged|pointer|side, ...)`, the `physics(quiescent)` census and the
   population count) as a version that moves when the value it answers does:
   the host reads each one again wherever its state may have moved, which is
@@ -694,14 +695,27 @@ is also due when a row or fact its firing schedule names moves. Interactions hav
 due list after the groups. A distance interaction follows its carriers' positions,
 and a region interaction follows the event feed's occupancy for its placement.
 Both follow carrier membership and pool instance lifetimes. When due, each visits
-pairs in its original order. Decisions, rules with live rows or a `maxFirings`,
-and sweeps over a set no version names are due every tick. A
+pairs in its original order. Decisions, rules with live rows, and sweeps over
+a set no version names are due every tick. A
 `forEach: region(placement)` sweep is due in full when the region's occupants
 change, and a `forEach: $players` sweep for the body that joined or left the
 players; otherwise either is due for the occupant or player whose own fact or
 cell moved, as a body sweep is (`RuleIteration.BindsBodies`). A channel read
-for the body bound to `$each` has no version, so a rule that reads one is
-volatile and judged every tick over its set.
+for the body bound to `$each` moves by that body: the host keeps, per
+human-occupied body, the values of every channel a schedule reads that way and
+moves the body's version when one differs (`WorldRuleHost.DeriveChannels`), so
+a menu, a wheel or an interact edge is judged for the player whose input moved.
+
+A sweep bounded by `maxFirings` is due by change like any other sweep. Once
+its firings are spent, every binding the visit reaches after that point keeps
+its latch entry and stays due for the next tick (`RuleEvaluator`'s `Defer`),
+so the due list holds exactly the bindings the cap left and the cap spreads
+the work over ticks, where judging the whole sweep every tick would repeat
+every binding's check. Because a binding left off the list answers idle, a
+visit of the due bindings counts the same firings, in the same order, as an
+in-place sweep. The sheet prices such a line by change too, but while one
+tick's firings at rest plus one change can pass the cap, the bindings left can
+pile up, so it charges every binding a check.
 
 A keyed sweep is due **per binding**. A schedule records how the judgement
 reaches each row it reads (`RowReach`): the cell under the key bound to
