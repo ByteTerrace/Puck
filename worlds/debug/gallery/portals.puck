@@ -1,13 +1,15 @@
-// Level 3's portals: twelve doors against the galleries' outer walls, each with the panel that points it at any world of
-// the debug world set's library (../portal-library.puck), standing where gallery/layout.puck's `galleryPortalBays` puts
-// them. Each is the standard's portal module (../../standard/portal.puck) and its panel the standard's control panel
-// (../../standard/panel.puck): walk up to a panel, press the context button (E, or the pad's RB), tap a world on its list,
-// and the portal beside it leads there, for everyone, since the panel's choice is world state its door reads. The gallery
-// imports this file, so the gallery booted alone (gallery-root.puck) and the debug world both stand them; the panels'
-// terminals join the display stations' in the gallery's one `terminalPlay` (gallery.puck's `shapeStation`).
+// Level 3's portals: twelve doors against the galleries' outer walls, standing where gallery/layout.puck's
+// `galleryPortalBays` puts them and wired as ../portal-library.puck wires them. Each is the standard's portal module
+// (../../standard/portal.puck). The gallery wires none, so each is a mirror: its glass shows the gallery reflected, and
+// walking in steps you back out, turned about. Once an artist wires the gallery's library, each portal with a library
+// stands the standard's control panel (../../standard/panel.puck): walk up to a panel, press the context button (E, or
+// the pad's RB), tap a world on its list, and the portal beside it leads there, for everyone, since the panel's choice is
+// world state its door reads. The gallery imports this file, so the gallery booted alone (gallery-root.puck) and the
+// debug world both stand them; the panels' terminals join the display stations' in the gallery's one `terminalPlay`
+// (gallery.puck's `shapeStation`).
 //
-// The library's worlds are this document's references and destinations, declared once here for every portal of the
-// building that leads to one (the painting wing and the lab wing hang fixed portals onto its entries).
+// The library's worlds are this document's references and destinations: a world starts no destination its library does
+// not name.
 
 import "../../standard/portal"
 import "../../standard/panel"
@@ -28,6 +30,7 @@ placements {
 
 state {
   world {
+    portalState(portals: galleryPortals)
     panelState(panels: galleryPanels)
   }
 }

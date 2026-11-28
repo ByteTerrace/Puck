@@ -78,6 +78,35 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
+        MoveInPlace(
+            border: border,
+            counterpart: counterpart,
+            counterpartFrame: in counterpartFrame,
+            members: members,
+            source: source,
+            sourceFrame: in sourceFrame,
+            transferId: transferId
+        );
+    }
+    // A door on its self route (WorldFaceRoutes.SelfDestination), or one whose destination cannot be reached, which falls
+    // back to it: the traveller steps back out of the same face, turned about, into the room it left, at once at the
+    // scan that found the crossing. The pair is the face and itself, so it maps world up onto itself and keeps the
+    // traveller's size by construction.
+    private void ApplySelfCrossing(WorldInstance source, in WorldFaceFrame frame, string border, int seat) => MoveInPlace(
+        border: border,
+        counterpart: border,
+        counterpartFrame: in frame,
+        members: [seat],
+        source: source,
+        sourceFrame: in frame,
+        transferId: 0UL
+    );
+    // Moves members through a pair whose two faces stand in the source world, keeping each body's index, and turns the
+    // view of each seat routed to a moved body by the pair's turn.
+    private void MoveInPlace(WorldInstance source, ulong transferId, string border, string? counterpart, in WorldFaceFrame sourceFrame, in WorldFaceFrame counterpartFrame, int[] members) {
+        var sourceName = source.Name;
+        var destinationFrame = counterpartFrame;
+        var entryFrame = sourceFrame;
         var refusals = new List<(int Slot, string Reason)>();
         var crossed = source.Server.ExecuteAuthorityOperation(operation: () => {
             var moved = new List<(int Slot, WorldBodyTransferState State, FixedVector3 Position, FixedQ4816 Scale)>(capacity: members.Length);
@@ -85,9 +114,9 @@ public sealed partial class WorldInstanceHost {
             foreach (var slot in members) {
                 if (!source.Server.TryApplyInPlaceCrossing(
                     crossing: new WorldInPlaceCrossing(
-                        Destination: counterpartFrame,
+                        Destination: destinationFrame,
                         Slot: slot,
-                        Source: sourceFrame
+                        Source: entryFrame
                     ),
                     reason: out var refusal
                 )) {

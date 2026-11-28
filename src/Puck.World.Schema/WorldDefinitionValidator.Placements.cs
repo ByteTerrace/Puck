@@ -910,8 +910,14 @@ public static partial class WorldDefinitionValidator {
                 source: source.Source
             );
 
+            // A routed face may stand on its self route before the authority first reads its cell (an unconnected door,
+            // or one whose boot route is its fallback): that route names no destinations row, and its counterpart is
+            // the face itself.
+            var selfTemplate = ((source.Routes is not null) && WorldFaceRouting.IsSelf(face: source));
+
             if (source.Source is null) {
                 errors.Add(item: $"{facePath}.source is required.");
+            } else if (selfTemplate) {
             } else if (source.Source is WorldScreenSource.Session session) {
                 ValidateSessionSource(
                     session: session,
@@ -932,12 +938,14 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (source.Portal is { } portal) {
-                ValidatePortal(
-                    destinationNames: destinationNames,
-                    errors: errors,
-                    path: $"{facePath}.portal",
-                    portal: portal
-                );
+                if (!selfTemplate) {
+                    ValidatePortal(
+                        destinationNames: destinationNames,
+                        errors: errors,
+                        path: $"{facePath}.portal",
+                        portal: portal
+                    );
+                }
                 if (portal.Open is WorldPlacementResponseCondition.StateCondition open) {
                     ValidateStateCondition(condition: open, definition: definition, entryPath: $"{facePath}.portal.open", errors: errors);
                 } else if (portal.Open is not null) {
@@ -1020,21 +1028,26 @@ public static partial class WorldDefinitionValidator {
         ) is CellKind.Text) {
             errors.Add(item: $"{path}.state '{routes.State}' is a Text row; a route is chosen by a number.");
         }
-        if (routes.Entries is not { Count: > 0 } entries) {
-            errors.Add(item: $"{path}.entries must name at least one route.");
+        if (routes.Entries is not { } entries) {
+            errors.Add(item: $"{path}.entries is required (an empty list leaves the door on its fallback).");
 
             return;
+        }
+        if (routes.Closes && (routes.Fallback is not null)) {
+            errors.Add(item: $"{path}.closes is refused beside {path}.fallback — a door that names no route either closes or takes one fallback.");
         }
         if (entries.Count > WorldFaceRoutes.MaxEntries) {
             errors.Add(item: $"{path}.entries holds {entries.Count} routes; a face carries at most {WorldFaceRoutes.MaxEntries}.");
         }
 
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+        // The authored fallback is judged as one more entry, at its route's place after the entries.
+        var judged = ((routes.Fallback is { } fallback) ? entries.Append(element: fallback).ToList() : entries.ToList());
 
-        for (var index = 0; (index < entries.Count); index++) {
-            var entryPath = $"{path}.entries[{index}]";
+        for (var index = 0; (index < judged.Count); index++) {
+            var entryPath = ((index < entries.Count) ? $"{path}.entries[{index}]" : $"{path}.fallback");
 
-            if (entries[index] is not { Destination: { Length: > 0 } destination }) {
+            if (judged[index] is not { Destination: { Length: > 0 } destination }) {
                 errors.Add(item: $"{entryPath}.destination is required.");
 
                 continue;
@@ -1047,7 +1060,7 @@ public static partial class WorldDefinitionValidator {
 
             if (routed.Portal is { } portal) {
                 ValidatePortal(destinationNames: destinationNames, errors: errors, path: entryPath, portal: portal);
-            } else if (entries[index].Counterpart is not null) {
+            } else if (judged[index].Counterpart is not null) {
                 errors.Add(item: $"{entryPath}.counterpart is authored but the face carries no portal to land through it.");
             }
             if (routed.Source is WorldScreenSource.Session session) {
@@ -1056,7 +1069,7 @@ public static partial class WorldDefinitionValidator {
                 if (face.Portal is not null) {
                     RequireDeclaredListing(declaredSet: destinationNames, errors: errors, rowNoun: "destinations row", subject: $"{entryPath}.destination '{destination}'", value: destination);
                 }
-                if (entries[index].Fallback is not null) {
+                if (judged[index].Fallback is not null) {
                     errors.Add(item: $"{entryPath}.fallback is authored but the face's source is no session to show it.");
                 }
             }

@@ -314,9 +314,8 @@ design language (the ochre elbow, cream and teal buttons, the chosen row lit),
 and the panel points it at any entry of a library of destinations, as a shape
 station browses its catalog. The library is authored data (a world's own list
 of worlds, places and the faces a traveller steps out of), any portal can show
-any entry, and a world authors its own library (the debug world set's is
-`worlds/debug/portal-library.puck`). Level 3's portals start on the showcase
-worlds and the labs. The panel is the standard's control panel
+any entry, and a world authors its own library. The panel lists the library and,
+last, MIRROR. The panel is the standard's control panel
 (`worlds/standard/panel.puck`), and it is the panel a lift's car calls use too:
 its choice is a cell its importer reads, whether that importer routes a door or
 calls a car.
@@ -335,8 +334,91 @@ between ticks, and records the route beside the door's closure; the crossing it
 mints, the session the window observes and the counterpart a presentation maps
 the window through all follow that record (`WorldFaceRouting`), so the glass
 never shows one world while the door leads to another, and no presentation
-reads the cell itself. A cell that names no route closes the door, as an unmet
-`open` does.
+reads the cell itself.
+
+**A portal wired to nothing is a mirror (the owner's rulings).** The owner's
+words: portals "lead back to self when not connected to anything, just like a
+mirror basically", and the renderer handles it efficiently. A routed door whose
+cell names no entry takes its fallback route, which is the door itself by
+default (`WorldFaceRoutes.SelfDestination`); a world may author another route or
+`closes` instead. The glass shows the door's own world reflected through it, and
+walking in steps the traveller back out of the same door, turned about, into the
+room they left (an in-place crossing through the face and itself). A destination
+the authority cannot resolve, cannot start or that refuses the door falls back
+to the mirror too, for the window and the crossing alike, so a door is never a
+wall, a dead end or a fall. The mirror is cheap by construction: its session
+onto its own world shares that world's one image (`WorldImageClasses`: no second
+stream), the presentation draws it as one more view of the world's own residency
+(no second residency or composition), at the share of the screen its glass
+covers and not at all while it is unseen (`WorldPortalVisibility`), and its
+reflection is the ordinary window fit from the eye mirrored across the glass,
+sampled with its window reversed, so no handedness reaches the renderer.
+
+**A world wires only what it names (the owner's rulings).** The owner's words:
+"We haven't connected the modular gallery to worlds yet, at least not
+intentionally. Please ensure the module is updated so that artists can wire up
+properly." Wiring is explicit and in two places a world owns: its library (one
+list of `portalEntry` rows, whose references and destinations the module
+derives) and each portal's starting entry, or none for a mirror. A world starts
+no destination its library does not name. The gallery wires nothing, so its
+portals are mirrors and the gallery booted alone starts only itself; the debug
+world wires its showcase worlds and labs as a consumer of the module
+(`worlds/debug/destinations.puck`), not as something the gallery bakes in.
+
+**A library is one list (the owner's ruling).** The owner asked: "Why two lists?
+Are they effectively a single list?" An entry is either one destination or a
+federated portal group, which expands to the group's current members in the
+place the world authored it, so a world mixes "the garden", "my hub's
+federation group" and "the lab" in one list, in its own order. The panel shows
+the flattened list. A member that joins appears in every member portal's list;
+a member that leaves disappears from it, and a portal pointed at it falls back
+to the mirror. Designed below and not yet built.
+
+**The way home travels with the traveller (the owner's rulings).** The owner:
+"Return portals might not exist in a target world, or they might point somewhere
+else." On crossing, the traveller carries an origin record (the world, the door
+and the arrival they left from), so a destination needs no portal that names its
+caller. A portal there that points at the origin returns normally; one that
+points elsewhere leads where it points (A to B to C is legitimate chaining); and
+the traveller can always go home through an authored return affordance (a menu
+or companion "return to where I came from", or a standard return point the
+module provides), which lands them back out of the origin door. The record is a
+bounded stack: return goes one hop back, and "all the way home" goes to the
+bottom. A missing or refused origin (that world is offline or gone) falls back
+to the traveller's home world's arrival, and never strands them. Until that is
+built, a destination's way back is the frame it authors; the gallery reaches no
+destination, so none of them names it.
+
+Designed, not built (the engine lacks each piece named here):
+
+- **The carried origin.** A `WorldOriginRecord` (instance or remote world
+  identity, door border `<placement>/<face>`, the arrival frame, the destination
+  row the door used) pushed onto the traveller's mobility identity at commit
+  (`WorldInstanceHost.CompleteCommittedTransfer`), bounded in depth, carried in
+  the custody record so it crosses authorities and checkpoints (it is replayed
+  state, rule 4), and popped by a return. Missing: a field on the mobility
+  identity and its codec, and a transfer whose destination is an existing named
+  instance with no destinations row of the returning world
+  (`TransferDestination.Existing` exists for party splits; the reservation and
+  admission doors assume a resolved row).
+- **The return affordance.** A route kind `$origin` beside `$self`: a door or a
+  verb (`portal.return [all]`) whose crossing reads the traveller's record and
+  whose window shows the mirror (the image would be viewer-dependent, and a
+  window shows one image to every viewer until per-viewer windows exist).
+- **The federated portal group.** A hub world owns a membership row (one row a
+  member: its world identity, its arrival face, its title and note); each
+  member joins by the standard agreement with the hub (`agreement.puck`: the
+  member offers, the hub grants, the membership stands while both do) and
+  follows the hub's membership row (`WorldStateFollow`), so membership is
+  mutually agreed and every member reads the same list. A library entry
+  `portalGroup(hub, group)` names it; at runtime the routes' entries after it
+  are the followed members, so a join or a leave reaches every member portal at
+  the tick the follow adopts it, and a door whose route named a member that left
+  takes its fallback. Missing: routes whose entries come from a row rather than
+  the document (today `WorldFaceRoutes.Entries` is document data, compiled once
+  per revision), and destinations minted at runtime for a member's world
+  (references to remote owner-named worlds exist, `WorldReference.Owner`/`World`;
+  minting a destination row from a followed value does not).
 
 ## Creatures and scale
 

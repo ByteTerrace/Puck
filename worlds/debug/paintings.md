@@ -23,8 +23,8 @@ Every painting is the standard's portal module
 and the lab wing's doors are the same module standing free
 ([gallery.md](gallery.md#the-portals)): a row of paintings.puck's
 `wallPaintings` names where it hangs, its frame (the look's rings round the
-canvas) and where it leads, an entry of the gallery's portal library
-([portal-library.puck](portal-library.puck)) or, for the pair across the room,
+canvas) and where it leads, an entry of the debug world's destinations
+([destinations.puck](destinations.puck)) or, for the pair across the room,
 this world itself. A painting leads to one world for good, so it stands no
 panel. The floor and ceiling paintings lie flat, so each is a creation of its
 own wearing the module's face.

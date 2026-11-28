@@ -21,13 +21,13 @@ public sealed partial class WorldInstanceHost {
             reason: reason
         );
     }
-    // A drain-time refusal against an adjacency border, routed back to that border's own authored treatment. Portal
-    // furniture has no such treatment: a refused portal crossing leaves the traveler standing where it was, and the
-    // occupancy latch already stops the same door firing again.
-    // A portal crossing its destination refused for good holds each member it sent from the face it walked into, until
-    // the member stands clear of the face (ScanPortalFace). A portal transfer's border is "<placement>/<face>"; an
-    // adjacency's carries its counterpart, and a verb's transfer has no source frame.
-    private void HoldRefusedPortalCrossing(in PendingTransfer transfer, IReadOnlyList<int> members) {
+    // A drain-time refusal against an adjacency border, routed back to that border's own authored treatment.
+    // A portal crossing its destination refused for good, or could not start, falls back to the door's self route: each
+    // member it sent steps back out of the face it walked into, turned about, into the room it left (a door is never a
+    // wall). The member is held from the face (PortalOccupancy.Refuse) until it stands clear of it, and while it is held
+    // the face is a mirror for it without asking the destination again (ScanPortalFace). A portal transfer's border is "<placement>/<face>"; an adjacency's carries its counterpart, and a
+    // verb's transfer has no source frame.
+    private void ReturnRefusedPortalCrossing(in PendingTransfer transfer, IReadOnlyList<int> members) {
         if (
             (transfer.AdjacencyCounterpart is not null) ||
             (transfer.SourceFrame is null) ||
@@ -47,6 +47,18 @@ public sealed partial class WorldInstanceHost {
         foreach (var slot in members) {
             instance.PortalOccupancy.Refuse(faceName: faceName, placementId: placementId, seat: slot);
         }
+
+        var frame = transfer.SourceFrame.Value;
+
+        MoveInPlace(
+            border: transfer.Border,
+            counterpart: transfer.Border,
+            counterpartFrame: in frame,
+            members: [.. members],
+            source: instance,
+            sourceFrame: in frame,
+            transferId: transfer.TransferId
+        );
     }
     private void CloseAdjacencyAfterRefusal(in PendingTransfer transfer, string reason) {
         if (
@@ -513,11 +525,15 @@ public sealed partial class WorldInstanceHost {
 
             // A body this face's destination refused for good asks again only once it has stood a body's radius clear of
             // the face, so one walk into the glass is one attempt however often its origin crosses the region's edge.
+            // Until then the face is a mirror for it: an entry steps it back out of the face, never through the frame.
+            var mirrored = false;
+
             if (occupancy.IsRefused(placementId: placement.Id, faceName: faceName, seat: seat)) {
                 if (bounds.Grow(margin: body.BroadphaseRadius).Contains(point: to)) {
-                    continue;
+                    mirrored = true;
+                } else {
+                    occupancy.Release(placementId: placement.Id, faceName: faceName, seat: seat);
                 }
-                occupancy.Release(placementId: placement.Id, faceName: faceName, seat: seat);
             }
             if (!WorldFaceAperture.Box.Reaches(bounds: in bounds, from: in from, to: in to)) {
                 if (occupancy.Holds(seat: seat)) {
@@ -545,7 +561,7 @@ public sealed partial class WorldInstanceHost {
             if (!fired) {
                 continue;
             }
-            if ((portal.Gate is { } gate) && !gate.Admits(arena: server.Arena, bodyIndex: seat, definition: server.Configuration, engineTick: server.CompletedEngineTicks, tick: server.CompletedTick)) {
+            if (!mirrored && (portal.Gate is { } gate) && !gate.Admits(arena: server.Arena, bodyIndex: seat, definition: server.Configuration, engineTick: server.CompletedEngineTicks, tick: server.CompletedTick)) {
                 if (server.Output.HasNarrationSink) {
                     server.Output.Narrate(
                         channel: "world.portal",
@@ -577,7 +593,8 @@ public sealed partial class WorldInstanceHost {
                 Frame: crossing.Frame,
                 SeamU: crossing.SeamU,
                 SeamV: crossing.SeamV,
-                Claim: claim
+                Claim: claim,
+                Mirrored: mirrored
             );
         }
     }
@@ -908,7 +925,7 @@ public sealed partial class WorldInstanceHost {
     // ScanInstancePortals' own remarks on why every hit in one scan is gathered before any of them resolves. Claim
     // carries the crossing parameter and the face's own identity, which is what decides a seat's ONE winner when its
     // step crosses several faces.
-    private readonly record struct PortalEdgeHit(WorldPlacement Placement, WorldPlacementFace Face, WorldPlacementPortal Portal, int Seat, WorldFaceFrame Frame, FixedQ4816 SeamU, FixedQ4816 SeamV, WorldFaceCrossingClaim Claim);
+    private readonly record struct PortalEdgeHit(WorldPlacement Placement, WorldPlacementFace Face, WorldPlacementPortal Portal, int Seat, WorldFaceFrame Frame, FixedQ4816 SeamU, FixedQ4816 SeamV, WorldFaceCrossingClaim Claim, bool Mirrored = false);
     // The key includes the source door's complete mapping identity. Doors sharing a destination and scope therefore
     // retain their own arrival frames without relying on the document model's one-portal-per-face rule.
     private readonly record struct CoalescedPortalGroupKey(string DestinationName, string ScopeKey, string SourcePlacementId, string SourceFace, WorldPortalArrival Arrival, string? Counterpart);

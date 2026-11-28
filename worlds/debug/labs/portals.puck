@@ -33,29 +33,16 @@ labWayBack(id: "portals", at: [0, 0, 8], yaw: 0)
 labFloor(halfX: 12, halfZ: 12)
 labText()
 
-// The library: where the portal may lead, as the debug world set's portal library names them (../portal-library.puck),
-// each document named from this directory.
+// The library: where the portal may lead, each a `portalEntry` (../../standard/portal.puck) whose document is named from
+// this directory. The last entry names a world that does not exist, so choosing it shows the fallback: the portal
+// cannot reach it, and stands a mirror instead, for its glass and its crossing alike.
 let labLibrary = [
-  {
-    destination: "garden", document: "../garden", counterpart: "arrival/glass", fallback: "#FF9A4D"
-    title: "THE GARDEN", note: "A sunset plot beyond the glass. Walk or jump in; the frame behind you leads back."
-  }
-  {
-    destination: "night", document: "../night", counterpart: "arrival/glass", fallback: "#070B16"
-    title: "THE NIGHT FIELD", note: "A snowfield under the stars. Step in; turn round to come back."
-  }
-  {
-    destination: "city", document: "../city", counterpart: "arrival/glass", fallback: "#E8C48A"
-    title: "THE CITY", note: "A town on a river bend, its market, terraces, works and quay."
-  }
-  {
-    destination: "lab-shapes", document: "shapes", counterpart: "arrival/glass", fallback: "#8C8A86"
-    title: "SHAPE LAB", note: "One display station holding the whole catalog."
-  }
-  {
-    destination: "lab-light", document: "light", counterpart: "arrival/glass", fallback: "#8C8A86"
-    title: "LIGHT LAB", note: "A room a subject: occluders, a dark room of bulbs, stained glass, the magic barrier, haze."
-  }
+  portalEntry(destination: "garden", document: "../garden", fallback: "#FF9A4D", title: "THE GARDEN", note: "A sunset plot beyond the glass. Walk or jump in; the frame behind you leads back.")
+  portalEntry(destination: "night", document: "../night", fallback: "#070B16", title: "THE NIGHT FIELD", note: "A snowfield under the stars. Step in; turn round to come back.")
+  portalEntry(destination: "city", document: "../city", fallback: "#E8C48A", title: "THE CITY", note: "A town on a river bend, its market, terraces, works and quay.")
+  portalEntry(destination: "lab-shapes", document: "shapes", fallback: "#8C8A86", title: "SHAPE LAB", note: "One display station holding the whole catalog.")
+  portalEntry(destination: "lab-light", document: "light", fallback: "#8C8A86", title: "LIGHT LAB", note: "A room a subject: occluders, a dark room of bulbs, stained glass, the magic barrier, haze.")
+  portalEntry(destination: "nowhere", document: "nowhere", title: "NOWHERE", note: "A world that does not exist: the portal cannot reach it and falls back to the mirror.")
 ]
 
 // The one portal: freestanding at the floor's middle, its glass facing +z toward the way back, its panel at its right.
@@ -116,6 +103,7 @@ placements {
 
 state {
   world {
+    portalState(portals: labPortals)
     panelState(panels: labPanels)
   }
 }

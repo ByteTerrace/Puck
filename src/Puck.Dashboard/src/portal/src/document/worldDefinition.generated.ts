@@ -8462,13 +8462,21 @@ export type WorldFaceRoutes = {
    */
   state: string;
   /**
-   * The routes, chosen by their 0-based place in this list. At least one, at most MaxEntries; each names a different destination.
+   * The routes, chosen by their 0-based place in this list. At most MaxEntries; each names a different destination. None leaves the face on its fallback for good: an unconnected door.
    */
   entries: (WorldFaceRoute | null)[];
   /**
    * The cell inside State, or null for its slot cell.
    */
   key?: string | null;
+  /**
+   * The route a cell naming no entry takes, or null for the face itself, a mirror (SelfDestination).
+   */
+  fallback?: WorldFaceRoute | null;
+  /**
+   * Whether a cell naming no entry closes the door instead of taking a fallback route. Refused beside Fallback.
+   */
+  closes?: boolean;
 };
 
 export type WorldFarProduct = {
