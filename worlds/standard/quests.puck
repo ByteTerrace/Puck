@@ -83,7 +83,7 @@ template questChain(id, parts, group, requires = []) {
   state {
     world {
       // The body index of the seat sharing the chain this tick, or -1.
-      table $"{id}Share" {
+      table $"{id}Share" capacity(1) {
         from = -1
       }
       // Per recipient body: the body that shared the chain with it, the part it joined, and the slot of the sharer's
@@ -114,10 +114,8 @@ template questChain(id, parts, group, requires = []) {
     )
     local held = maximum(indexed, p => (p.index == joinPart) ? identityFind(each, quests, quest, p.quest, status) : 0)
     local shareSlot = identityFree(cell, $"{id}Share", from, questShares)
-    when ($"{id}Share".from >= 0 and
-      bodyIndex(each) != $"{id}Share".from and
-      sharerPart >= 0 and
-      inGroup(each, group) == 1)
+    // The gate reads only what moves with a share, so the store reads above run when a share fires, not every tick.
+    when $"{id}Share".from >= 0 and bodyIndex(each) != $"{id}Share".from and inGroup(each, group) == 1
     mode: Level
     for (partQuest, k) in questIds {
       if joinPart == k and held == 0 {
@@ -131,15 +129,18 @@ template questChain(id, parts, group, requires = []) {
         ])
       }
     }
-    claimIdentityRecord(key: $"{id}Share".from, pool: "questShares", fields: [
-      { field: "chain", text: id }
-      { field: "recipient", identityOf: $each }
-      { field: "part", expression: (joinPart >= 0) ? joinPart : 0 }
-      {
-        field: "outcome"
-        expression: (joinPart < 0) ? shareUnqualified : ((held == questDone) ? shareCompleted : shareAccepted)
-      }
-    ])
+    // A sharer that follows no part of the chain has nothing to share.
+    if sharerPart >= 0 {
+      claimIdentityRecord(key: $"{id}Share".from, pool: "questShares", fields: [
+        { field: "chain", text: id }
+        { field: "recipient", identityOf: $each }
+        { field: "part", expression: (joinPart >= 0) ? joinPart : 0 }
+        {
+          field: "outcome"
+          expression: (joinPart < 0) ? shareUnqualified : ((held == questDone) ? shareCompleted : shareAccepted)
+        }
+      ])
+    }
     if joinPart >= 0 and held != questDone {
       $"{id}SharedBy"[$each] = $"{id}Share".from
       $"{id}SharedPart"[$each] = joinPart
