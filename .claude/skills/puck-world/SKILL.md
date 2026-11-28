@@ -1283,3 +1283,11 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 | `gaming-bricks`, `rom-forge` | Emulators behind engaged screens; cartridges. |
 | `maths-usage` | Fixed-point primitives on simulation value paths. |
 | `verification` | The landing bar, the private CLI copy, GPU grants and flake-versus-failure. |
+
+## Screen admission refusals
+
+Same-world mirrors use authored Session admission too; they do not bypass disclosure.
+The authority's `WorldInstanceHost.SettleScreenSessions` retains a refusal until its source or
+document dependencies change. `WorldScreenBinder.ResolveSession` remembers the authority token,
+source and refusal so presentation logs it once. `WorldFederationWork.SessionRefusals` counts
+actual refused observation requests through the existing `world.counters` federation source.

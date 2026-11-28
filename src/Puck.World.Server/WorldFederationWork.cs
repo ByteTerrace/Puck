@@ -25,10 +25,12 @@ public static class WorldFederationWork {
     /// <summary>Gets the kind counting values a delayed follow replaced in flight because its leader wrote more often
     /// inside one delay than the line holds.</summary>
     public static WorkKind FollowDelayOverflows { get; } = new(name: "world.federation.follow-delay-overflows", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the ledger a host's authorities count into. Declared after the kinds, which it reads as it is
-    /// created.</summary>
+    /// <summary>Gets the kind counting refused observation requests, including initial admission and re-admission.</summary>
+    public static WorkKind SessionRefusals { get; } = new(name: "world.federation.session-refusals", unit: "count", workClass: WorkClass.Pacing);
+
+    /// <summary>Gets the ledger a host's authorities count into.</summary>
     public static WorkCounterSet Process { get; } = new(
-        kinds: [FollowReads, FollowAdoptions, FollowDelayed, FollowDelayOverflows],
+        kinds: [FollowReads, FollowAdoptions, FollowDelayed, FollowDelayOverflows, SessionRefusals],
         name: SourceName
     );
 }

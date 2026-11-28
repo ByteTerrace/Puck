@@ -79,8 +79,8 @@ public sealed class WorldObservationSession {
     /// destination's attention is at most this, and at most what the declaring world's own attention passes on.</summary>
     public WorldAttention Attention { get; internal set; } = WorldAttention.Watched;
 
-    // Set once a destination that ended the session refused another: the observer's picture is withdrawn.
-    internal bool ReadmissionRefused { get; set; }
+    // A refusal remains settled until the destination definition changes.
+    internal WorldDefinition? RefusedDefinition { get; set; }
     // Whether the last settle forwarded input through this screen, so a stop sends one cancellation boundary.
     internal bool WasForwarding { get; set; }
     internal WorldPortalInputProducer? Input { get; set; }
@@ -178,10 +178,7 @@ public sealed partial class WorldInstanceHost {
         : null;
     // A value-only state write publishes a new definition every tick. Observation declarations depend only on
     // these immutable sections, including the effective face catalog (which changes when a bound face changes).
-    private static bool SameSessionDeclarations(WorldDefinition before, WorldDefinition after) =>
-        (ReferenceEquals(objA: before.Screens, objB: after.Screens) &&
-        ReferenceEquals(objA: WorldFaceCatalog.For(definition: before).Rows, objB: WorldFaceCatalog.For(definition: after).Rows) &&
-        ReferenceEquals(objA: before.Render.Sky?.Layers, objB: after.Render.Sky?.Layers));
+
 
     // How many observations deep each running instance is seen, as of the sessions open now (ScreenDepths), and the queue its
     // walk takes; both reused, so a steady step allocates nothing.
@@ -327,6 +324,7 @@ public sealed partial class WorldInstanceHost {
             if (owner.Server.TryObserveAsSession(refusal: out var selfRefusal, sink: session.Mirror, sourceAuthority: owner.Server.AuthorityIdentity) is { } own) {
                 session.Observation = own;
             } else {
+                session.RefusedDefinition = owner.Server.Configuration;
                 session.Refusal = $"its own world refuses a session: {selfRefusal}";
             }
 
@@ -367,6 +365,7 @@ public sealed partial class WorldInstanceHost {
             return session;
         }
 
+        session.RefusedDefinition = target.Server.Configuration;
         session.Refusal = $"destination '{source.Destination}' refuses a session: {refusal}";
         NarrateScreenSession(text: $"[world.screen: {owner.Name} session {site} refused ({session.Refusal})]");
 
@@ -616,7 +615,7 @@ public sealed partial class WorldInstanceHost {
         var closed = (closures?.Revision ?? owned.Closures);
         var changed = false;
 
-        if ((owned.Reconciled is null) || (closed != owned.Closures) || !SameSessionDeclarations(after: definition, before: owned.Reconciled)) {
+        if ((!ReferenceEquals(definition, owned.Reconciled)) || (closed != owned.Closures)) {
             var selves = new Dictionary<WorldObservationSite, WorldScreenSource.Session>();
             var declared = DeclaredSessions(closures: closures, definition: definition, selves: selves);
 
@@ -632,6 +631,11 @@ public sealed partial class WorldInstanceHost {
                     comparisonType: StringComparison.Ordinal
                 )
                 ) {
+                    CloseScreenSession(session: owned.Rows[screen]);
+                    _ = owned.Rows.Remove(key: screen);
+                    changed = true;
+                } else if (owned.Rows[screen].Refusal is not null &&
+                    (!ReferenceEquals(definition, owned.Reconciled) || source != owned.Rows[screen].Source)) {
                     CloseScreenSession(session: owned.Rows[screen]);
                     _ = owned.Rows.Remove(key: screen);
                     changed = true;
@@ -662,9 +666,6 @@ public sealed partial class WorldInstanceHost {
             // A deferred open leaves the reconciliation owed, so the next settle opens it.
             owned = (deferred ? null : definition, closed, owned.Rows);
             m_screenSessions[instance.Name] = owned;
-        } else if (!ReferenceEquals(objA: definition, objB: owned.Reconciled)) {
-            owned = (definition, closed, owned.Rows);
-            m_screenSessions[instance.Name] = owned;
         }
 
         // A destination that ended a session (a rebuild ends every one) is asked once to admit the observer again,
@@ -674,8 +675,7 @@ public sealed partial class WorldInstanceHost {
             var session = owned.Rows.Values[index];
 
             if (
-                (session.Observation is not { Ended: true } ended) ||
-                session.ReadmissionRefused ||
+                (session.Observation is not { Ended: true } && session.Refusal is null) ||
                 (session.InstanceName is not { } name) ||
                 !m_instances.TryGetValue(
                 key: name,
@@ -685,7 +685,9 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
-            ended.Dispose();
+            if (session.Refusal is not null && ReferenceEquals(session.RefusedDefinition, destination.Server.Configuration)) { continue; }
+            session.Observation?.Dispose();
+            session.RefusedDefinition = destination.Server.Configuration;
 
             if (destination.Server.TryObserveAsSession(
                 refusal: out var refusal,
@@ -693,10 +695,12 @@ public sealed partial class WorldInstanceHost {
                 sourceAuthority: instance.Server.AuthorityIdentity
             ) is { } observation) {
                 session.Observation = observation;
+                session.Refusal = null;
+                changed = true;
                 session.Input = null;
                 NarrateScreenSession(text: $"[world.screen: {instance.Name} session {screen} -> destination '{session.Source.Destination}' ended its session — observing again as {observation.Session.Describe()}]");
             } else {
-                session.ReadmissionRefused = true;
+                changed = true;
                 session.Refusal = refusal;
                 NarrateScreenSession(text: $"[world.screen: {instance.Name} session {screen} -> destination '{session.Source.Destination}' ended its session and refuses another ({refusal}) — its picture is withdrawn]");
             }

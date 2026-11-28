@@ -66,6 +66,7 @@ public sealed partial class WorldServer {
             return AttachSessionObservation(session: session, sink: sink, sourceAuthority: sourceAuthority, tier: tier);
         });
 
+        if (observation is null) { WorldFederationWork.Process.Add(kind: WorldFederationWork.SessionRefusals, amount: 1L); }
         refusal = reason;
 
         return observation;

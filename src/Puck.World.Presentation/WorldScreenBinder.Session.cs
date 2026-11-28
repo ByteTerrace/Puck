@@ -220,12 +220,15 @@ public sealed partial class WorldScreenBinder {
             (hosted.InstanceName is not { } instanceName)
         ) {
             slot.DeclaredFault = (hosted.Refusal ?? $"destination '{session.Destination}' is not observed");
+            if (slot.RefusedSession is { } refused && ReferenceEquals(refused.Token, hosted.Token) && refused.Source == session && refused.Refusal == hosted.Refusal) { return null; }
+            slot.RefusedSession = (hosted.Token, session, hosted.Refusal);
 
             Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} refused ({slot.DeclaredFault})]");
 
             return null;
         }
 
+        slot.RefusedSession = null;
         var effectiveCamera = ResolveEffectiveCameraName(
             destinationDefinition: hosted.Mirror.Definition,
             requested: session.CameraName,

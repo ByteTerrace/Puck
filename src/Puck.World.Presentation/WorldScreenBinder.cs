@@ -436,7 +436,9 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
             source: source
         );
 
-        Console.Error.WriteLine(value: $"[world.screen: {outcome.Message}]");
+        if (outcome.Ok || source is not WorldScreenSource.Session || slot.RefusedSession is null) {
+            Console.Error.WriteLine(value: $"[world.screen: {outcome.Message}]");
+        }
     }
     // A probe source's feed exists from here on, as a declared probe's does from boot.
     private (bool Ok, string Message) ApplyProbeSource(int index, WorldScreenSource.Probe probe) {
@@ -711,6 +713,8 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         public WorldScreenSource? DeclaredSource { get; set; }
         public required int Index { get; init; }
         public SessionFeed? Session { get; set; }
+        // ResolveSession logs a refusal once per authority token, source and cause; an admitted observation clears it.
+        public (object Token, WorldScreenSource.Session Source, string? Refusal)? RefusedSession { get; set; }
         // The live decal-text source (declared row or a live source change) — no producer, no handle: the decal tier
         // reads it back through TextSourceAt instead of the source table.
         public WorldScreenSource.Text? Text { get; set; }
