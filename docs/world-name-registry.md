@@ -881,9 +881,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].name` | Camera | Declares |  | `WorldCamera.Name` |
 | `cameras[].rig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `cameras[].rig.operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][anchor].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `cameras[].rig.operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `cameras[].rig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `cameras[].rig.operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `cameras[].rig.operations[][lookAt].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `cameras[].rig.operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `cameras[].rig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `cameras[].rig.operations[][orbit].yaw.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -1516,6 +1534,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -1568,6 +1587,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -1603,6 +1623,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -2106,6 +2127,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2158,6 +2180,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2193,6 +2216,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -2696,6 +2720,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2748,6 +2773,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2783,6 +2809,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -3133,9 +3160,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `host.backendRow` | State | Names | Read | `WorldHostDefaults.BackendRow` |
 | `views.seatRig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.seatRig.operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][anchor].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.seatRig.operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `views.seatRig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.seatRig.operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatRig.operations[][lookAt].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.seatRig.operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `views.seatRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.seatRig.operations[][orbit].yaw.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -3198,11 +3243,32 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.seatRig.operations[][clearance].obstructedTargetSkin.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.seatRig.operations[][clearance].obstructedTargetSkin{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.seatRig.operations[][clearance].closeTargetOffset` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetOffset` |
+| `views.seatControl.headingFrame` | State | Binding | Binding | `WorldSeatViewControl.HeadingFrame` |
+| `views.seatControl.headingFrame.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.seatControl.headingFrame{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.cameraRig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.cameraRig.operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][anchor].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.cameraRig.operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `views.cameraRig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.cameraRig.operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.cameraRig.operations[][lookAt].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.cameraRig.operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `views.cameraRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.cameraRig.operations[][orbit].yaw.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -3270,9 +3336,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.graphs[].parameters{*}{*}{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.programs[].operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.programs[].operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.programs[].operations[][anchor].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.programs[].operations[][anchor].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][anchor].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][anchor].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.programs[].operations[][anchor].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][anchor].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][anchor].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.programs[].operations[][anchor].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][anchor].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.programs[].operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `views.programs[].operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.programs[].operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].x` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.X` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].x.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].x{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].y` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Y` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].y.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].y{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].z` | State | Binding | Binding | `WorldCameraSubject.BoundPoint.Z` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].z.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `views.programs[].operations[][lookAt].subject[boundPoint].z{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.programs[].operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `views.programs[].operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.programs[].operations[][orbit].yaw.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -3974,6 +4058,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `rules[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `rules[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -4026,6 +4111,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `rules[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `rules[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -4061,6 +4147,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `rules[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `rules[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -4582,6 +4669,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.options[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.options[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `rules[].decision.options[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `rules[].decision.options[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -4634,6 +4722,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.options[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.options[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `rules[].decision.options[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `rules[].decision.options[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -4669,6 +4758,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.options[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.options[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `rules[].decision.options[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -5213,6 +5303,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.onNoChoice[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `rules[].decision.onNoChoice[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `rules[].decision.onNoChoice[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -5265,6 +5356,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.onNoChoice[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -5300,6 +5392,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `rules[].decision.onNoChoice[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -5786,6 +5879,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][claimIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `interactions.interactions[].effects[][claimIdentityPair].key` | State | Key | Read | `WorldEffect.ClaimIdentityPair.Key` |
 | `interactions.interactions[].effects[][claimIdentityPair].left` | State | Expression | Read | `WorldEffect.ClaimIdentityPair.Left` |
 | `interactions.interactions[].effects[][claimIdentityPair].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -5838,6 +5932,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][claimIdentityPair].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][claimIdentityPair].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `interactions.interactions[].effects[][setIdentityRecord].key` | State | Key | Read | `WorldEffect.SetIdentityRecord.Key` |
 | `interactions.interactions[].effects[][setIdentityRecord].slot` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Slot` |
 | `interactions.interactions[].effects[][setIdentityRecord].slot{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -5873,6 +5968,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][setIdentityRecord].fields[].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityRecord].fields[].identityOf` | State | Key | Read | `WorldIdentityRecordValue.IdentityOf` |
 | `interactions.interactions[].effects[][setIdentityRecord].generation` | State | Expression | Read | `WorldEffect.SetIdentityRecord.Generation` |
 | `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `interactions.interactions[].effects[][setIdentityRecord].generation{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -6268,6 +6364,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bodyMotionPrograms[].target[navigated].domain` | `BodyTargetSource.Navigated.Domain` | a navigation domain |
 | `bodyMotionPrograms[].target[navigated].register` | `BodyTargetSource.Navigated.Register` | a target register name |
 | `bodyMotionPrograms[].target[navigated].profile` | `BodyTargetSource.Navigated.Profile` | a navigation profile name |
+| `bodyMotionPrograms[].face.active` | `BodyFaceSlots.Active` | a per-body slot name |
+| `bodyMotionPrograms[].face.x` | `BodyFaceSlots.X` | a per-body slot name |
+| `bodyMotionPrograms[].face.z` | `BodyFaceSlots.Z` | a per-body slot name |
 | `kits.rows[].name` | `WorldKit.Name` | a kit name |
 | `kits.rows[].bodyMotionProgram` | `WorldKit.BodyMotionProgram` | a body motion program name |
 | `kits.rows[].motion.speed.held.channel` | `WorldSpeedHeld.Channel` | logical input channels |
@@ -7763,8 +7862,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].mount.board.channel` | `WorldMountBoard.Channel` | logical input channels |
 | `kits.rows[].mount.camera` | `WorldMount.Camera` | a camera program name |
 | `kits.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
-| `kits.assignment.select.bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
-| `kits.assignment.select.cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
+| `kits.assignment.select[].name` | `WorldRowSelector.Name` | a row selector's name |
+| `kits.assignment.select[].bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
+| `kits.assignment.select[].cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
 | `defaultSeatKit` | `WorldDefinition.DefaultSeatKitRaw` | a kit in the composed world |
 | `addons[].name` | `WorldAddonRow.Name` | an addon name |
 | `addons[].modulePath` | `WorldAddonRow.ModulePath` | a path or document locator |
@@ -7959,8 +8059,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
-| `looks.assignment.select.bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
-| `looks.assignment.select.cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
+| `looks.assignment.select[].name` | `WorldRowSelector.Name` | a row selector's name |
+| `looks.assignment.select[].bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
+| `looks.assignment.select[].cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
 | `hud.defaults.cursor.visible[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `hud.defaults.cursor.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `hud.defaults.visible[state].text` | `OverlayPredicate.State.Text` | literal text |

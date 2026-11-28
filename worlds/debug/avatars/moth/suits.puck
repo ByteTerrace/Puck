@@ -10,7 +10,11 @@ import "../../../standard/styles"
 import "../../../standard/mirror"
 import "../../../standard/rig"
 import "../../../standard/occlusion"
+import "../../../standard/wrist-panel"
+import "../../menagerie"
 import "head"
+// Her wrist panel's mount and glass slots are her contract's (`mothWristMount`, `mothWornScreen`).
+import "contract"
 
 // What an importer binds: the creations its looks wear.
 exports {
@@ -66,7 +70,9 @@ let bootCyan = 25 // #1F9BAE the heel lenses' idle pilot light
 let bootGlow = 26 // #D8FDFF the heel lenses' pale cores
 let pistonSteel = 27 // satin steel piston cylinders
 let torsoSuit = 28 // segmented charcoal fabric between the chest and belt
-// Slots 6 (cyan), 29 and 30 (lavender) are free.
+let journalScreenLeft = mothMechSuit.wornScreen.screens.left // the left journal panel's glass, whose paints are the journal's interface
+let journalScreenRight = mothMechSuit.wornScreen.screens.right // the right journal panel's glass
+// Slot 6 (cyan) is free.
 
 // Wear is a faint floor on a pristine suit: its coverage stays under the primer's threshold except at the tightest
 // edges, where pale primer shows first, then the dark alloy.
@@ -238,6 +244,7 @@ template mothLimbs(side, isRight) {
       swing("cling", [-1, 0, 0], -2.2, mirrorX(isRight, [-0.295, 1.4515, 0])) with { wave: "constant" }
       // A mantle throws both arms up over the ledge as the pull starts, then drops them as she comes over it.
       swing("mantle", [-1, 0, 0], -2.5, mirrorX(isRight, [-0.295, 1.4515, 0])) with { wave: "linear" }
+      for s in wristPanelSwings("upper", mothWristMount, side, isRight) { s }
     ]
   }
 
@@ -356,6 +363,7 @@ template mothLimbs(side, isRight) {
         0.05,
         mirrorX(isRight, [-0.336, 1.2201, -0.004])
       ) with { wave: "linear" }
+      for s in wristPanelSwings("fore", mothWristMount, side, isRight) { s }
     ]
   }
 
@@ -392,6 +400,14 @@ template mothLimbs(side, isRight) {
     parent: $"forearm-{side}"
     rounding: 0.003
   }
+
+  wristPanel(
+    mount: mothWristMount,
+    side: side,
+    isRight: isRight,
+    ids: [2000 + isRight * 68, 2001 + isRight * 68, 2002 + isRight * 68],
+    materials: { bezel: charcoal, flap: violet, screen: bySide(isRight, journalScreenLeft, journalScreenRight) }
+  )
 
   shape Capsule $"elbowRod-{side}" {
     id: 156 + isRight * 68
@@ -2680,20 +2696,9 @@ prototypes {
             }
           ]
         }
-        {
-          color: lavenderPlate
-          toonSelect: mothStyles
-          roughness: 0.32
-          specular: 0.08
-          coat: 0.3
-        }
-        {
-          color: lavenderPlate
-          toonSelect: mothStyles
-          roughness: 0.34
-          specular: 0.08
-          coat: 0.28
-        }
+        // The journal panels' glass (the wrist panel's), lettered with the journal's interface and lit as a flap opens.
+        wristPanelGlass("left", menagerieKinds)
+        wristPanelGlass("right", menagerieKinds)
       ]
       shape Superellipsoid "pelvis" {
         id: 1
@@ -3138,6 +3143,8 @@ prototypes {
           blendOutSeconds: 0
           when ["always"]
         }
+        // Her wrist panel's arm raise and flaps.
+        for driver in wristPanelDrivers { driver }
         // Her pace in metres per second, the X every gait curve reads.
         {
           name: "pace"

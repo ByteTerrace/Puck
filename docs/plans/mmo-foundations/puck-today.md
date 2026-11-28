@@ -161,7 +161,7 @@ because the profile is foreign **[opened]**
 
 `WorldIdentity.TryAdopt` writes every carried fact through `TrySetFact`, as the
 identity's own owner, skipping a home-scoped one, and records the first refusal
-**[opened]** (`src/Puck.World.Schema/WorldIdentity.Records.cs:194-200`):
+**[opened]** (`src/Puck.World.Schema/WorldIdentity.Records.cs:228-234`):
 
 ```csharp
         foreach (var cell in (carried.Facts?.Cells ?? [])) {
@@ -681,7 +681,7 @@ No federation codec, reservation member or admission path carries a group
 membership claim: a search for `membership` over the federation codec, the
 peer host, the admission door and the escrow finds only unrelated comments
 **[opened]**. The resolver says group scope resolves against local seats only
-**[opened]** (`src/Puck.World.Schema/WorldSessionResolver.cs:671-673`):
+**[opened]** (`src/Puck.World.Schema/WorldSessionResolver.cs:652-654`):
 
 ```csharp
     /// <param name="sourceDefinition">The cohort's own world document — group membership resolves against its
@@ -903,7 +903,7 @@ and `TryAdopt` mints from it (`:577`) **[opened]**. Nothing restores the
 resolver's map. But **[opened]**:
 
 - A continuation's generation id is narration only, never re-verified
-  (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:2546-2548`):
+  (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:2522-2524`):
 
   ```csharp
     /// <param name="FrozenGenerationId">The resolver-issued generation id the resolve produced — carried purely for

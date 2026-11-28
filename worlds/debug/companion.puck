@@ -6,6 +6,8 @@ import "../standard/inputs"
 import "../standard/companion"
 import "../standard/player/player"
 import "avatars/moth/contract"
+import "../standard/lockon"
+import "../standard/marks"
 import "shapes"
 
 let companionBody = (galleryPopulation - 1)
@@ -40,15 +42,19 @@ companionDesign(
   population: (galleryPopulation + 2 + boardRoomBodies + cardBodies),
   interests: companionAttractions
 )
-// The player module owns the companion slot: it arrives at the Moth's companion offset (avatars/moth/contract.puck).
-playerCompanion(avatar: mothAvatar, owner: 0, slot: companionBody)
+// The player module owns the companion slot: it arrives at the Moth's companion offset (avatars/moth/contract.puck)
+// and wears whichever kind of her menagerie is active (avatars/moth/moth.puck's menagerie).
+playerCompanion(avatar: mothAvatar, owner: 0, slot: companionBody, menagerie: true)
 // The garden's obelisk teaches the Moth's companion sight (garden.puck); here it reaches farther once she carries it.
 companionSight(owner: 0)
+// It flies to whatever she locks onto, and to her group's pings (targeting.puck).
+companionLock(owner: 0)
+companionMarks(owner: 0, capacity: seatPopulation)
 
 state {
   world [
     // The cue edges the gallery's sounds are heard at: the guide's spoken arrival and the lift's door.
-    { name: "companionCue", kind: "Int", cells: [{ key: "guide", value: -1 }, { key: "door", value: 1 }] }
+    { name: "companionCue", kind: "Int", cells [{ key: "guide", value: -1 }, { key: "door", value: 1 }] }
   ]
 }
 

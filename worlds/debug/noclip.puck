@@ -13,7 +13,7 @@ import "../standard/kits"
 // keeps in step with both; a craft (../standard/ship.puck's register, on the launch field's ship) is form 4 whatever the
 // other two hold, and 5 while its `space` register says nothing pulls it, as craft-form.puck has it on the moon, so a
 // ship crossing the sky seam either way keeps the form it flew in. The look assignment reads the same register, and
-// both replace the player module's selection by the suit register alone (../standard/player/player.puck). The garden
+// both refine the player module's `form` selectors by name (../standard/player/player.puck). The garden
 // and the night field import neither: noclip is the debug world's, and a crossing lands her with her suit's kit there.
 
 import "../standard/ship"
@@ -51,34 +51,40 @@ state {
 
 looks {
   assignment {
-    select {
-      bodyState: "form"
-      cases [
-        { value: 0, row: "moth-pilot" }
-        { value: 2, row: "moth-pilot" }
-        { value: 6, row: "moth-scout" }
-        { value: 7, row: "moth-scout" }
-        { value: 4, row: "ship" }
-        { value: 5, row: "ship" }
-      ]
-    }
+    select [
+      {
+        name: "form"
+        bodyState: "form"
+        cases [
+          { value: 0, row: "moth-pilot" }
+          { value: 2, row: "moth-pilot" }
+          { value: 6, row: "moth-scout" }
+          { value: 7, row: "moth-scout" }
+          { value: 4, row: "ship" }
+          { value: 5, row: "ship" }
+        ]
+      }
+    ]
   }
 }
 
 kits {
   assignment {
-    select {
-      bodyState: "form"
-      cases [
-        { value: 0, row: "pilot" }
-        { value: 2, row: "noclip" }
-        { value: 3, row: "noclip" }
-        { value: 6, row: "scout" }
-        { value: 7, row: "noclip" }
-        { value: 4, row: "ship" }
-        { value: 5, row: "ship-space" }
-      ]
-    }
+    select [
+      {
+        name: "form"
+        bodyState: "form"
+        cases [
+          { value: 0, row: "pilot" }
+          { value: 2, row: "noclip" }
+          { value: 3, row: "noclip" }
+          { value: 6, row: "scout" }
+          { value: 7, row: "noclip" }
+          { value: 4, row: "ship" }
+          { value: 5, row: "ship-space" }
+        ]
+      }
+    ]
   }
   rows [
     // Free flight with nothing to collide as: no collider, so the contact field never solves her, and overlap with every

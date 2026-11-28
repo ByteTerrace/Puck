@@ -49,6 +49,29 @@ pinned driver ([addons/companion.wat](addons/companion.wat)) flies the body.
 `companionUnlock` and `companionSight` keep what it learns on its owner's
 identity. The debug world's faerie is one (`../debug/companion.puck`).
 
+[journal.puck](journal.puck) is the journal, which is also the menu: `journalPlay(kinds)` opens it on the journal key,
+chooses a pause or an action read each tick, turns its pages (the menagerie first) and swaps the active companion.
+[wrist-panel.puck](wrist-panel.puck) is the panel that wears it on a forearm: an avatar or a suit names a mount and
+its palette slots, and the panel brings its geometry, flap, screen, the arm's raise and the camera's focus.
+[menagerie.puck](menagerie.puck) is the companions a character keeps, one active at a time: `menagerie(kinds,
+granted)` keeps them on body registers saved as the character's facts and records, and dresses a companion
+(`companion(menagerie: true)`) as the active kind. The debug world set's Moth wears all three
+(`../debug/avatars/moth/moth.puck`), and its lab is `../debug/labs/journal.puck`.
+
+[lockon.puck](lockon.puck) is lock-on targeting: `lockOn(targets)` declares what
+can be targeted (the `lockable` row), the lock and cycle keys, the rules that pick
+a target with the engine's target query (`target(…)`), and a seat framing that
+holds the camera behind the body facing its target while the seat moves in its
+body's heading. The standard walker faces the target through its `faceAt`
+counters ([motion.puck](motion.puck)), so a sideways push strafes round it.
+`companionLock(owner)` sends that owner's companion to the locked target.
+[marks.puck](marks.puck) is players' marks: `playerMarks(place)` gives a ping the
+group sees and a placed mark kept in the character's `marks` crossing pool
+([identity.puck](identity.puck)), read back with `record(…)` into rows only the
+group reads (`audience: "public"` lets everyone), and `companionMarks(owner)`
+flies the companion to the group's pings. The debug world expands both in
+`../debug/targeting.puck`.
+
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
 
@@ -148,7 +171,7 @@ World settings (light, air, floor, gravity, bodies, spawn points) are never a pl
 `hook`, the register an avatar's rig animates it by), so a form's action list is all `playerKit` reads:
 `sprintAction`, `jumpAction` (air jumps on one shared `jumps` counter), `dashAction`, `mantleAction`, `climbAction`,
 `jetpackAction`, `swimAction`, `lockAction` and `strafeAction`. Each action keys its programs by its own channel
-(`jump`, `run`, `dash`, `flight`, `climb`, `mantle`, `lock`), so no two replace each other.
+(`jump`, `run`, `dash`, `flight`, `climb`, `mantle`), so no two replace each other.
 
 - `mantleAction` pulls a body up over any ledge it is driven into, holdable or not, through the engine's `mantle`
   effect: in the air the moment it meets the face, on the ground while `run` is held. It is forgiving in reach and
@@ -158,8 +181,8 @@ World settings (light, air, floor, gravity, bodies, spawn points) are never a pl
   stamina on the ground and fall rows through `restore`. [The climbing plan](../../docs/plans/climbing.md) holds the
   design and the open work.
 - `jetpackAction` is flight mode on the `flight` press: thrust, hover and boost, spending `flightFuel`.
-- `lockAction` and `strafeAction` are the slots a targeting context fills: the lock flips the `locked` register its
-  rules and camera read, and strafe holds the shaping rows a locked body moves under.
+- `lockAction` and `strafeAction` name what the lock-on context (`lockon.puck`'s `lockOn`) runs: its rules keep the
+  `lockOn` row, and the walk program faces a locked body at its target through the `faceAt` counters (`motion.puck`).
 
 The Moth is the debug world's avatar ([`../debug/avatars/moth/`](../debug/avatars/moth/contract.puck)), with two suits;
 the plain walker (`walker.puck`) is a one-form avatar on the same module.
@@ -180,6 +203,14 @@ resting page (the `on-foot` overlay) every refinement builds on. `walker.puck` i
 walks, runs, jumps and falls, seated through the player module (`player(...)`, one form, no suits). It imports the
 standard and refines it, so a world imports it in the standard's place; an author's own avatar replaces it with a
 contract of its own (the debug world's Moth, [`../debug/avatars/moth/`](../debug/avatars/moth/contract.puck)).
+
+`character.puck` names the identity template every character an account mints starts as, `identity.puck`, whose
+record pools hold what a character keeps: the journal's notes, tags and links, its marks, items and quests.
+`quests.puck` is a library a world imports to give quests: `questStart`, `questAdvance` and `questSetAsideNow` splice
+into a rule over the players, and `questChain` declares a chain of parts, each open to a character who finished the one
+before it, and the share that offers the chain to a group's members, each joining at the farthest part it qualifies
+for, with the sharer's journal recording who accepted, completed or did not qualify. The debug world's lantern trail is
+the worked chain ([`../debug/lantern-trail.puck`](../debug/lantern-trail.puck)).
 
 `motion.puck` authors the standard's body motion programs: `walk`, which every avatar that walks imports, so a
 correction to it reaches them all. An avatar's speeds, holds, turn and actions stay in its own kit; a

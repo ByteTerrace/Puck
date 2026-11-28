@@ -100,7 +100,37 @@ public sealed record WorldGroup(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Tags = null,
     long Revision = 0,
     int NextJoinOrdinal = 0
-);
+) {
+    /// <summary>Returns whether a local principal holds a membership row in a roster: the one membership test grants,
+    /// session resolution, mutation composition and rules share.</summary>
+    /// <param name="members">The roster.</param>
+    /// <param name="principal">The local principal.</param>
+    /// <returns><see langword="true"/> when a <see cref="MemberRefKind.Local"/> row names <paramref name="principal"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="members"/> is <see langword="null"/>.</exception>
+    public static bool HoldsLocal(IReadOnlyList<WorldGroupMember> members, Principal principal) {
+        ArgumentNullException.ThrowIfNull(argument: members);
+        foreach (var member in members) {
+            if ((member.Ref.Kind == MemberRefKind.Local) && (member.Ref.Principal == principal)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    /// <summary>Returns the group a list holds under an id.</summary>
+    /// <param name="groups">The groups.</param>
+    /// <param name="id">The group id.</param>
+    /// <returns>The group, or <see langword="null"/> when none carries <paramref name="id"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="groups"/> is <see langword="null"/>.</exception>
+    public static WorldGroup? Find(IReadOnlyList<WorldGroup> groups, string id) {
+        ArgumentNullException.ThrowIfNull(argument: groups);
+        foreach (var group in groups) {
+            if ((group is not null) && string.Equals(a: group.Id.Value, b: id, comparisonType: StringComparison.Ordinal)) {
+                return group;
+            }
+        }
+        return null;
+    }
+}
 /// <summary>Which flavor of subject an <see cref="OwnershipSubject"/> addresses. Only <see cref="Group"/> is admitted
 /// today — item/instance subjects are consumed by later lanes, which add their own case here rather than reusing or
 /// widening this one.</summary>

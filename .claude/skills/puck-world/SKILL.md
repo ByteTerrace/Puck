@@ -151,7 +151,11 @@ cell (`WorldPlacementInhabit.Pool`, which `WorldPopulation.ReconcileInhabitCount
 reads as a count of zero while it is zero), so a game shown or put away is one
 write through the pool's door (`holodeckShow`), one body is asked for or
 released through its own (`holodeckSet`), and a body is posed once it exists
-(`holodeckStands`), its pose mark folding in the pool's showing (`holodeckMark`). A
+(`holodeckStands`), its pose mark folding in the pool's showing (`holodeckMark`). Every
+admission starts its body's producer state from `BodyProducerState.Fresh`
+(`WorldPopulation.SeedInhabitantProducer`, `ActivateSimulated`): a checkpoint
+carries only active slots, so anything an admission kept from its slot's
+earlier occupant would differ after a restore and break `--reproduce`. A
 materialized body takes the population's highest free slot, so a pool never
 renumbers a fixed-count inhabitant; a world that numbers bodies below a deck
 from it keeps that deck at a fixed count (`patienceStationCards(holodeck:

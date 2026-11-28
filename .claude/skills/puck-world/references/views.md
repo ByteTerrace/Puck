@@ -152,7 +152,10 @@ climbs. `Body` resolves the stick, and camera-framed channel rows, against the
 body's authoritative heading (`WorldClient.ComposeMoveFrame`), as held free look
 does: under a hold row with `forward: Surface` forward climbs and sideways
 traverses wherever the camera stands. The standard's `chaseCamera` authors
-`Body`.
+`Body`. `seatControl.headingFrame` (a literal or a `state.<row>[.<key>]` binding,
+`$body` reading the seat's body) does the same while it reads nonzero: the
+standard's lock-on binds it to `state.lockOn.$body`, so a locked body that the
+walker keeps facing its target strafes round it whichever way the camera looks.
 
 `seatControl.yawReference` is `World` for standard camera-relative movement or
 `Body` for an explicitly body-relative camera. A mapped arrival turns a followed seat's
@@ -413,10 +416,10 @@ never a new engine type. `version` is `puck.camera.program.v1`
 
 | op | does |
 |---|---|
-| `anchor` | sets the current SUBJECT and re-seeds the eye at it. At most one, and it must lead. Subject is `reference` (the pose the caller hands in), `placement` (a stamped placement transform, position only), or `worldPoint`. |
+| `anchor` | sets the current SUBJECT and re-seeds the eye at it. At most one, and it must lead. Subject is `reference` (the pose the caller hands in), `placement` (a stamped placement transform, position only), `worldPoint`, or `boundPoint` (each axis a literal or a `state.<row>[.<key>]` binding read as presented each frame, `$body` reading the framed body; the lock framing aims at one, `worlds/standard/lockon.puck`). |
 | `offset` | places the eye at `value` from the subject — in the subject's own axes unless `worldAxes`. `spreadPullback` widens it by the group spread (only meaningful when the caller's reference is a `group` anchor). |
 | `lookAt` | aims. `subject: null` looks along the current subject's forward at `focusDistance`; a subject aims at its pose plus `targetOffset`. |
-| `orbit` | places the eye by orbiting the subject at `distance`/`yaw`/`pitch` about `pivotOffset`. At most one. On `views.seatRig`, and every program it selects or blends, the seat's live look adds to yaw/pitch; everywhere else the authored angles render unchanged. |
+| `orbit` | places the eye by orbiting the subject at `distance`/`yaw`/`pitch` about `pivotOffset`. At most one. On `views.seatRig`, and every program it selects or blends, the seat's live look adds to yaw/pitch unless the orbit says `look: false`; everywhere else the authored angles render unchanged. |
 | `clearance` | reports how a seat's chase eye keeps clear of the room and the body it frames; the seat places the eye (see "The clearance operation" above). Every parameter bindable. At most one. |
 | `path` | sets the current SUBJECT to a point sampled from a named `curves` row (see documents.md) by arc-length `fraction` (bindable), facing the curve's own tangent, and re-seeds the eye there. `anchor`'s subject-seeding role; at most one, and it must lead (refused together with `anchor`). No `rate` field — a constant-rate dolly binds `fraction` to a `state` row carrying the `advance` trait. |
 | `clampPitch` | bounds the pitch a later `orbit` resolves with, live delta included. At most one, and it must precede the orbit. |

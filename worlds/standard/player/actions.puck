@@ -17,7 +17,7 @@
 //
 // A suit or an avatar's own body lists the actions it grants with their tuning (player.puck's suit contract), so a
 // body's kit is the list read through `playerKit`. The channels the actions key their programs by are the standard's
-// (../inputs.puck): `jump`, `run`, `dash`, `flight`, `climb`, `mantle` and `lock`.
+// (../inputs.puck): `jump`, `run`, `dash`, `flight`, `climb` and `mantle`; the lock-on context declares `lock`.
 
 import "../kits"
 
@@ -366,59 +366,22 @@ function swimAction(equilibriumOffset = 1.2, settleRate = 2, speed = null) = noA
   holds [swimHold(equilibriumOffset: equilibriumOffset, settleRate: settleRate, speed: speed)]
 }
 
-// Lock: the `lock` press switches the body's `locked` register on and off, counted and flipped on the next tick as the
-// jetpack's press is. It is the slot a targeting context fills: what is locked onto, how the camera frames it and how
-// a lock cycles are that context's rules and camera programs, which read `locked` (the hook) and write the target
-// register they keep. With strafe beside it, a locked body faces where it faces and moves sideways.
+// Lock: focusing a target. Its programs are the lock-on context's (../lockon.puck's `lockOn`): the `lock` press, the
+// target query, the cycle, the camera framing and the companion, all world rules over every player, which keep the
+// `lockOn` row the hook names. A form that lists it is one the lock-on context may lock; a form that does not, the
+// context leaves alone.
 function lockAction() = noAction with {
   name: "lock"
-  registers [flagRegister("locked"), { name: "lockPress", kind: "Counter", initial: 0 }]
-  actions {
-    lock {
-      onPress {
-        latchSeconds: 0
-        effects [
-          setState(state: lockPress, value: 1)
-        ]
-      }
-      onFact: concat(
-        map(["Grounded", "Airborne"], fact => {
-          fact: fact
-          mode: "Level"
-          gate: all(predicates: [
-            compareState(state: lockPress, comparison: Greater, value: 0)
-            compareState(state: locked, comparison: Equal, value: 0)
-          ])
-          effects [
-            setState(state: locked, value: 1)
-            setState(state: lockPress, value: 0)
-          ]
-        }),
-        map(["Grounded", "Airborne"], fact => {
-          fact: fact
-          mode: "Level"
-          gate: all(predicates: [
-            compareState(state: lockPress, comparison: Greater, value: 0)
-            compareState(state: locked, comparison: Equal, value: 1)
-          ])
-          effects [
-            setState(state: locked, value: 0)
-            setState(state: lockPress, value: 0)
-          ]
-        })
-      )
-    }
-  }
-  hook: "locked"
+  hook: "lockOn"
 }
 
-// Strafe: the shaping rows a locked body moves under, ahead of the kit's own, so the stick moves it sideways and back
-// while it keeps facing its target. The slot a targeting context fills with its rows: a shaping row gates on facts and
-// held channels, not on a register such as `locked`, and turns at a positive `turnScale`, so a row that holds a body's
-// facing while a lock is on is that context's to author against what a shaping gate can read.
+// Strafe: moving round a locked target. The walk program faces a body at the point its `faceAt` counters name
+// (../motion.puck), which the lock keeps on its target, so a sideways push circles it; `shaping` adds rows ahead of the
+// kit's own for a form that wants another feel while it strafes.
 function strafeAction(shaping = []) = noAction with {
   name: "strafe"
   shaping: shaping
+  hook: "faceAt"
 }
 
 // The stamina wheel on screen: a gauge low on the view that shows only while the wheel is not full, filled from the

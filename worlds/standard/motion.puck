@@ -4,7 +4,20 @@
 // the debug world's, ../debug/avatars/moth/); a world refines a program by declaring a row of the same name in its
 // own body, and an avatar's speeds, holds and turn stay in its own kit.
 
+//
+// A walker faces where its intent asks, unless a rule turns it to face a point: while `faceAt` reads 1 it faces the
+// world point (`faceAtX`, `faceAtZ`) whatever it is pushed toward, so it can sidestep and backpedal about that point (a
+// lock-on's target, lockon.puck; a speaker it is talking to). The rule writes the three body counters with
+// `setBodyState`; the program only reads them.
 template walkMotion() {
+  state {
+    body [
+      { name: "faceAt", kind: "Counter", initial: 0, envelope { $type: "set", values [0, 1] } }
+      { name: "faceAtX", kind: "Counter", initial: 0 }
+      { name: "faceAtZ", kind: "Counter", initial: 0 }
+    ]
+  }
+
   bodyMotionPrograms [
     {
       kind: Motion
@@ -23,6 +36,11 @@ template walkMotion() {
       planarTarget {
         backward: 0.7
         strafe: 0.85
+      }
+      face {
+        active: "faceAt"
+        x: "faceAtX"
+        z: "faceAtZ"
       }
       version: "puck.body.program.v1"
     }

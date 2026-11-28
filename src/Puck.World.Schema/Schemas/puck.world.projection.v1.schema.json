@@ -4381,6 +4381,11 @@
                 "Camera": "The camera\u0027s yaw, as on the ground: the direction pushed on screen is laid onto the face, so orbiting the camera changes which push climbs.",
                 "Body": "The body\u0027s own heading: forward, back and sideways stay the body\u0027s on the face wherever the camera orbits. Under a hold row that faces its body into the face, forward climbs and sideways traverses."
               }
+            },
+            "headingFrame": {
+              "$ref": "#/$defs/BindableScalar",
+              "description": "A literal or state.\u003Crow\u003E[.\u003Ckey\u003E] binding (a $body key reads the seat\u0027s body) that, while it reads nonzero, resolves the seat\u0027s movement in its body\u0027s heading and lets no travel turn that heading, as a held face under Body does: a body the rules keep facing a locked target then strafes round it whichever way the camera looks. null never does.",
+              "default": null
             }
           },
           "required": [
@@ -13354,6 +13359,33 @@
       "additionalProperties": false,
       "title": "WorldCameraSubjectWorldPoint"
     },
+    "WorldCameraSubjectBoundPoint": {
+      "description": "A world-space point whose axes are each a literal or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding, read from the state mirror every frame as presented (eased between ticks), so a program aims at something the rules place: a locked target, a point between two bodies. A $body key reads the body the program frames.",
+      "properties": {
+        "$type": {
+          "const": "boundPoint"
+        },
+        "x": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The x axis, in metres."
+        },
+        "y": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The y axis, in metres."
+        },
+        "z": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The z axis, in metres."
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "additionalProperties": false,
+      "title": "WorldCameraSubjectBoundPoint"
+    },
     "WorldCameraSubject": {
       "description": "The subject an Anchor/LookAt op resolves against \u2014 the closed \u0022what a camera program can key off\u0022 vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table \u2014 a placement\u0027s pose is its rest pose (Puck.World.Client.WorldAnchorPoses.TryRestPlacement), the document-only branch of the resolver a placeable camera\u0027s own anchor and a speaker read live.",
       "type": "object",
@@ -13369,6 +13401,9 @@
         },
         {
           "$ref": "#/$defs/WorldCameraSubjectWorldPoint"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraSubjectBoundPoint"
         }
       ],
       "title": "WorldCameraSubject"
@@ -13449,6 +13484,9 @@
         },
         {
           "$ref": "#/$defs/WorldCameraSubjectWorldPoint"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraSubjectBoundPoint"
         }
       ],
       "title": "WorldCameraSubject"
@@ -13513,6 +13551,14 @@
         "pivotOffset": {
           "$ref": "#/$defs/DocumentVector3",
           "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
+          "default": null
+        },
+        "look": {
+          "description": "Whether a seat\u0027s live look turns this orbit, adding to its yaw and pitch. False holds the orbit at its authored angles while the seat looks around, for a framing the rules aim (a lock-on that keeps the eye behind the body, facing its target).",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "opcode": {
@@ -16212,12 +16258,16 @@
       "title": "WorldRowSelectorCase"
     },
     "WorldRowSelector": {
-      "description": "A per-body row selector inside a WorldRowAssignment: each body\u0027s own value of a state.body counter picks the row the case for that value names. A body whose register holds a value no case names keeps the row the assignment\u0027s sequence gives it. The register is body state, so the choice is the body\u0027s and goes where the body goes: a kit action or a rule\u0027s setBodyState moves the row, a replay moves it at the same tick, a checkpoint restores it with the register, and a crossing to another world carries the register with the body (a destination declaring the same register under the same kind selects by the carried value). The look assignment\u0027s selector changes only what a body wears; the kit assignment\u0027s selector changes how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.",
+      "description": "A per-body row selector inside a WorldRowAssignment: each body\u0027s own value of a state.body counter picks the row the case for that value names. A body whose register holds a value no case of any selector names keeps the row the assignment\u0027s sequence gives it. The register is body state, so the choice is the body\u0027s and goes where the body goes: a kit action or a rule\u0027s setBodyState moves the row, a replay moves it at the same tick, a checkpoint restores it with the register, and a crossing to another world carries the register with the body (a destination declaring the same register under the same kind selects by the carried value). The look assignment\u0027s selectors change only what a body wears; the kit assignment\u0027s selectors change how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
+        "name": {
+          "description": "The selector\u0027s name, unique within its assignment: the key a document importing another refines or drops this selector by.",
+          "type": "string"
+        },
         "bodyState": {
           "description": "The state.body counter whose value selects.",
           "type": "string"
@@ -16231,11 +16281,21 @@
         }
       },
       "required": [
+        "name",
         "bodyState",
         "cases"
       ],
       "additionalProperties": false,
       "title": "WorldRowSelector"
+    },
+    "WorldRowSelectorList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldRowSelector"
+      }
     },
     "DocumentIdentifierList": {
       "type": "array",
@@ -16245,7 +16305,7 @@
       }
     },
     "WorldRowAssignment": {
-      "description": "The row-to-entity assignment declaration \u2014 nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry\u0027s fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own state.body register maps to a row, and follows that register as the simulation writes it.",
+      "description": "The row-to-entity assignment declaration \u2014 nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry\u0027s fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own state.body registers map to a row, and follows them as the simulation writes them: its selectors are read in order, and the first whose register holds a value one of its cases names picks the row (Match\u0060\u00601). Selectors are rows keyed by name, so a document that imports another refines one of its selectors by name and adds selectors of its own beside it.",
       "type": "object",
       "properties": {
         "sequence": {
@@ -16253,8 +16313,8 @@
           "description": "The sequence that selects a row."
         },
         "select": {
-          "$ref": "#/$defs/WorldRowSelector",
-          "description": "The per-body selector, or null for the sequence alone.",
+          "$ref": "#/$defs/WorldRowSelectorList",
+          "description": "The per-body selectors in the order they are read, or null for the sequence alone.",
           "default": null
         },
         "rows": {
@@ -20536,7 +20596,7 @@
       "title": "WorldEffectSetIdentityFact"
     },
     "WorldIdentityRecordValue": {
-      "description": "One field an identity record effect writes: exactly one of a numeric literal (stored as the field\u0027s own kind: an integer, a fixed-point value, or a flag of 0 or 1), an integer expression evaluated when the effect fires, or a text literal.",
+      "description": "One field an identity record effect writes: exactly one of a numeric literal (stored as the field\u0027s own kind: an integer, a fixed-point value, or a flag of 0 or 1), a numeric expression evaluated in fixed point when the effect fires (a Fixed field keeps its fraction, an Int field refuses a value with one, a flag reads nonzero as 1), a text literal, or the id of the identity another body drives under (a text field), read when the effect fires.",
       "type": [
         "object",
         "null"
@@ -20556,7 +20616,7 @@
         },
         "expression": {
           "$ref": "#/$defs/ExpressionProgramNonNullable2",
-          "description": "The integer expression.",
+          "description": "The numeric expression.",
           "default": null
         },
         "text": {
@@ -20565,6 +20625,11 @@
             "string",
             "null"
           ],
+          "default": null
+        },
+        "identityOf": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body whose identity\u0027s id the field holds \u2014 an index, a $cell: indirection, or a bound key; a body driving under no identity refuses the firing.",
           "default": null
         }
       },

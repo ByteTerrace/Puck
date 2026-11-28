@@ -206,6 +206,32 @@
         "additionalProperties": false,
         "default": null,
         "title": "BodyPlanarTarget"
+      },
+      "face": {
+        "description": "The body-state counters SnapYawToPlanarIntent faces a world point from while their active counter reads nonzero (a lock-on\u0027s target), or null.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "active": {
+            "type": "string"
+          },
+          "x": {
+            "type": "string"
+          },
+          "z": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "active",
+          "x",
+          "z"
+        ],
+        "additionalProperties": false,
+        "default": null,
+        "title": "BodyFaceSlots"
       }
     },
     "required": [

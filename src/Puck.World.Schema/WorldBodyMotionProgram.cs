@@ -55,13 +55,16 @@ public sealed record ActionStateSlot(
 /// <param name="Target">The single source supplying the program's target, when it uses target-aware operations.</param>
 /// <param name="PlanarTarget">The parameters of <see cref="BodyMotionOp.ComputePlanarTargetVelocity"/>, or
 /// <see langword="null"/> for a target at the full move speed in every direction.</param>
+/// <param name="Face">The body-state counters <see cref="BodyMotionOp.SnapYawToPlanarIntent"/> faces a world point from
+/// while their active counter reads nonzero (a lock-on's target), or <see langword="null"/>.</param>
 public sealed record BodyMotionProgram(
     [property: DocumentText("a body motion program name")] string Name,
     [property: DocumentText("a schema or program version")] string Version,
     BodyProgramKind? Kind,
     IReadOnlyList<BodyMotionOp> Operations,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BodyTargetSource? Target = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BodyPlanarTarget? PlanarTarget = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BodyPlanarTarget? PlanarTarget = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BodyFaceSlots? Face = null
 ) {
     /// <summary>The supported body-motion instruction-set version.</summary>
     public const string CurrentVersion = CompiledBodyMotionProgram.SupportedVersion;
@@ -96,7 +99,8 @@ public static class BodyMotionProgramFactory {
                     Backward: FixedQ4816.FromDouble(value: planarTarget.Backward),
                     Strafe: FixedQ4816.FromDouble(value: planarTarget.Strafe)
                 )
-                : null)
+                : null),
+            face: program.Face
         );
     }
 }

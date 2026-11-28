@@ -2978,13 +2978,19 @@ coefficient, so bodies at rest never micro-bounce. See the
 
 ### Kit and look selected by a body's register
 
-`kits.assignment` and `looks.assignment` each take an optional `select`
-(`WorldRowSelector`): `bodyState` names a `state.body` Counter, and `cases`
-maps a whole-number register value to a kit or look row
-(`{ value: 0, row: "pilot" }`). A body whose register holds a value a case
-names wears that look, or runs that kit, outranking the sequence and, for a
-local seat, the seat kit; a value no case names (a fraction included) keeps
-what the sequence gives it. A register is declared document-wide, so every
+`kits.assignment` and `looks.assignment` each take an optional `select`, a list
+of selectors (`WorldRowSelector`) keyed by `name`: `bodyState` names a
+`state.body` Counter, and `cases` maps a whole-number register value to a kit or
+look row (`{ value: 0, row: "pilot" }`). The selectors are read in order
+(`WorldRowSelector.Match`), and the first whose register holds a value one of its
+cases names picks the look the body wears, or the kit it runs, outranking the
+sequence and, for a local seat, the seat kit; a body no selector picks for (a
+fraction included) keeps what the sequence gives it. Because selectors are keyed
+rows, a document importing another refines one of its selectors by name (the
+debug world's `noclip.puck` refines `suit.puck`'s `form` selector to read its
+`form` register) and adds its own beside them (the Moth's menagerie dresses a
+companion by its `companionKind` register, `worlds/standard/menagerie.puck`).
+The validator also refuses a selector with no name or a repeated one. A register is declared document-wide, so every
 body holds it at its `initial`, props and pieces included: a case naming the
 `initial` value would select every body, so a selector names only the values that
 deviate (the debug world's `suit` is born 1 and selects only 0, `pilot`); a body

@@ -98,17 +98,25 @@ public static class WorldSpawnPointDefaults {
 /// population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The
 /// kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is
 /// presentation-only (it selects the appearance row). A <see cref="Select"/> overrides the sequence for each body whose
-/// own <c>state.body</c> register maps to a row, and follows that register as the simulation writes it.</summary>
+/// own <c>state.body</c> registers map to a row, and follows them as the simulation writes them: its selectors are read
+/// in order, and the first whose register holds a value one of its cases names picks the row
+/// (<see cref="WorldRowSelector.Match"/>). Selectors are rows keyed by name, so a document that imports another refines
+/// one of its selectors by name and adds selectors of its own beside it.</summary>
 /// <param name="Sequence">The sequence that selects a row.</param>
 /// <param name="Rows">An authored row-name view whose entries may be literals or Text state-cell references, or empty
 /// to select from every declared row in declaration order.</param>
-/// <param name="Select">The per-body selector, or <see langword="null"/> for the sequence alone.</param>
+/// <param name="Select">The per-body selectors in the order they are read, or <see langword="null"/> for the sequence
+/// alone.</param>
 public sealed record WorldRowAssignment(
     WorldSequence Sequence,
     IReadOnlyList<DocumentIdentifier> Rows,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldRowSelector? Select = null
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRowSelector>? Select = null
 ) {
     private readonly IReadOnlyList<DocumentIdentifier> m_rows = (Rows ?? []);
+
+    /// <summary>Gets the selectors in the order they are read: <see cref="Select"/>, or none.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<WorldRowSelector> Selectors => (Select ?? []);
 
     /// <summary>Gets the inert assignment policy — the index sequence (row 0 of whatever it selects) over every
     /// declared row in declaration order.</summary>

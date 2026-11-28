@@ -16,11 +16,17 @@
 import "../../../standard/player/player"
 import "../../../standard/player/actions"
 
-// Each suit's wrist panel sits on the outer face of its gauntlet (suits.puck's `bracer-<side>`), riding the forearm.
-let mothWrist = wristPanel(
-  left: wristPoint("forearm-left", [-0.517, 0.995, 0], [-1, 0, 0]),
-  right: wristPoint("forearm-right", [0.517, 0.995, 0], [1, 0, 0])
-)
+// Where her journal's wrist panel (../../../standard/wrist-panel.puck) mounts on each suit, in the left side's frame: on
+// each forearm, the middle of its gauntlet's outer face (suits.puck's `bracer-<side>`), raised about her shoulder and
+// elbow; its glass is palette slots 29 (left) and 30 (right). The panel's shape, flap, screen, raise and camera focus
+// are the panel module's. Her own body carries no panel yet: its form's slot is empty, ready for one.
+let mothWristMount = {
+  part: "forearm"
+  at [-0.513, 0.995, 0]
+  shoulder [-0.295, 1.4515, 0]
+  elbow [-0.336, 1.2201, -0.004]
+}
+let mothWornScreen = wornScreenMount(mount: mothWristMount, screens: { left: 29, right: 30 })
 
 // The suits' chase camera offsets: a waist pivot, close targets at her head (fade) and just below it (cutaway, which
 // keeps her solid), and a first-person eye in her face.
@@ -59,7 +65,7 @@ let mothMechSuit = playerForm(
   value: 1,
   speed: 5,
   camera: mothSuitCamera,
-  wrist: mothWrist,
+  wornScreen: mothWornScreen,
   actions: [
     sprintAction()
     jumpAction(speed: 5.1, airJumps: 1, when: [notFlying])
@@ -82,7 +88,7 @@ let mothScoutSuit = playerForm(
   value: 2,
   speed: 5.5,
   camera: mothSuitCamera,
-  wrist: mothWrist,
+  wornScreen: mothWornScreen,
   actions: [
     sprintAction()
     jumpAction(speed: 6)

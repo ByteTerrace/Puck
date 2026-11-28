@@ -12,17 +12,42 @@ import "../../../standard/inputs"
 import "../../../standard/rig"
 import "body"
 import "suits"
+import "../../../standard/journal"
+import "../../../standard/menagerie"
+import "../../menagerie"
 
 // What an importer binds: the cell her body's hold pose reads, which a world's rules write to have her hold the
 // handheld (devices.puck's brick).
 exports {
   reads [pilotHold]
   actions [pilotHold]
+  // The wrist panel's raise, which the player's camera focus reads (player.puck's `wristPanelFocus`).
+  bindings [journalRaiseLeft, journalRaiseRight]
 }
 
 
-// Each form's look. Lane 1 is the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full
-// burn as she flies. Lane 2 is flight mode itself, the heel and nozzle glows it lights. Lane 3 is the heel jets' flame
+// Her journal, worn on her wrist (../../../standard/journal.puck, ../../../standard/wrist-panel.puck), and the companions she
+// keeps in its menagerie (../../menagerie.puck): every character of the set starts with Mintstitch and Tangerine. The
+// panel mounts on her forearms (suits.puck's `mothWristMount`).
+journalPlay(kinds: menagerieKinds)
+menagerie(kinds: menagerieKinds, granted: [1, 2])
+menagerieCreatures()
+
+// The font her journal's screen letters in.
+text {
+  defaultFont: "inter"
+  fonts [
+    {
+      name: "inter"
+      source: "../../fonts/inter-regular.ttf"
+      hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
+      codePointRanges ["U+0020-U+007E"]
+    }
+  ]
+}
+
+// Each form's look. Lane 0 is her journal's glass, lit as its arm rises (both suits wear the wrist panel). Lane 1 is
+// the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is flight mode itself, the heel and nozzle glows it lights. Lane 3 is the heel jets' flame
 // under the air jump. The scout suit grants no jetpack and no air jump, so only its dash lights its pods.
 looks [
     {
@@ -30,11 +55,8 @@ looks [
         gaitAmplitude: 0
         replayFrames: false
         secondsPerFrame: 0
-        // Lane 1 is the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as she
-        // flies. Lane 2 is flight mode itself, the heel and nozzle glows it lights. Lane 3 is the
-        // boot jets' flame under the air jump.
         lanes [
-          0
+          maximum(journalRaiseLeft[$body], journalRaiseRight[$body])
           maximum(bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body]), dashPose[$body])
           maximum(bodyState($body, flightFuel) / 1000, dashPose[$body])
           bootBoost[$body]
@@ -52,7 +74,7 @@ looks [
         gaitAmplitude: 0
         replayFrames: false
         secondsPerFrame: 0
-        lanes [0, dashPose[$body], dashPose[$body], 0]
+        lanes [maximum(journalRaiseLeft[$body], journalRaiseRight[$body]), dashPose[$body], dashPose[$body], 0]
         poses {
           blink: "state.blink.$body"
         }

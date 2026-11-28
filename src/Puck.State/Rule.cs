@@ -251,10 +251,10 @@ public static class RuleCapacity {
     public const int MaxTransactionEffects = 256;
     /// <summary>The maximum statically derived rule work admitted for one simulation tick — sized against the
     /// tick's own budget at a consumer's shipped 30 Hz cadence (a 33.3 ms tick), not chosen independent of it. The
-    /// rule sweep is one of several passes a tick pays for; reserving a fifth of the tick (~6.7 ms) as its
-    /// worst-case share and pricing one work unit at ~1.6 ns — a plausible cost for the fixed-point compare, read,
-    /// or write every rule/effect cost is built from — yields this ceiling. It bounds what an author may express
+    /// rule sweep is one of several passes a tick pays for; reserving about 7 ms of the tick (a little over a fifth)
+    /// as its worst-case share and pricing one work unit at ~1.6 ns — a plausible cost for the fixed-point compare,
+    /// read, or write every rule/effect cost is built from — yields this ceiling. It bounds what an author may express
     /// and never what a shipped world already does: the highest shipped sheet, the debug world's, sits under it. The
     /// search jobs draw on the same ceiling, so a world's rules and the dearest search's minimum share it.</summary>
-    public const long MaxWorkUnitsPerTick = 4_200_000L;
+    public const long MaxWorkUnitsPerTick = 4_400_000L;
 }

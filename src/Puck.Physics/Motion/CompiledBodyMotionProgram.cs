@@ -11,6 +11,18 @@ namespace Puck.Physics.Motion;
 /// <param name="Strafe">The fraction of the move speed travel across the heading reaches, in <c>[0, 1]</c>.</param>
 /// <param name="Backward">The fraction of the move speed travel against the heading reaches, in <c>[0, 1]</c>.</param>
 public readonly record struct FixedPlanarTarget(FixedQ4816 Strafe, FixedQ4816 Backward);
+/// <summary>The body-state counters <see cref="BodyMotionOp.SnapYawToPlanarIntent"/> faces from: while the counter
+/// <see cref="Active"/> reads nonzero the body faces the world point (<see cref="X"/>, <see cref="Z"/>) on its plane,
+/// whatever its intent asks, so a body locked onto a target keeps facing it while it moves sideways. The host's rules
+/// write the counters; the program only reads them.</summary>
+/// <param name="Active">The counter that turns the facing on while it reads nonzero.</param>
+/// <param name="X">The counter holding the faced point's world x, in metres.</param>
+/// <param name="Z">The counter holding the faced point's world z, in metres.</param>
+public sealed record BodyFaceSlots(
+    [property: DocumentText("a per-body slot name")] string Active,
+    [property: DocumentText("a per-body slot name")] string X,
+    [property: DocumentText("a per-body slot name")] string Z
+);
 
 /// <summary>Declares the register and operation profile a compiled program uses.</summary>
 [JsonConverter(typeof(StrictEnumConverter<BodyProgramKind>))]
@@ -65,14 +77,19 @@ public sealed class CompiledBodyMotionProgram {
 
     private readonly HashSet<BodyMotionOp> m_operations;
 
-    private CompiledBodyMotionProgram(string name, BodyProgramKind kind, BodyProgramAdmission admissionMask, BodyMotionOp[][] phases, HashSet<BodyMotionOp> operations, FixedPlanarTarget? planarTarget) {
+    private CompiledBodyMotionProgram(string name, BodyProgramKind kind, BodyProgramAdmission admissionMask, BodyMotionOp[][] phases, HashSet<BodyMotionOp> operations, FixedPlanarTarget? planarTarget, BodyFaceSlots? face) {
         Name = name;
         Kind = kind;
         AdmissionMask = admissionMask;
         Phases = phases;
         m_operations = operations;
         PlanarTarget = planarTarget;
+        Face = face;
     }
+
+    /// <summary>Gets the body-state counters <see cref="BodyMotionOp.SnapYawToPlanarIntent"/> faces from, or
+    /// <see langword="null"/> when the body faces only its intent.</summary>
+    public BodyFaceSlots? Face { get; }
 
     /// <summary>Gets the register admission mask for <see cref="Kind"/>.</summary>
     public BodyProgramAdmission AdmissionMask { get; }
@@ -166,7 +183,9 @@ public sealed class CompiledBodyMotionProgram {
     /// against.</param>
     /// <returns>The compiled program.</returns>
     /// <exception cref="BodyMotionProgramException">The declared shape is refused.</exception>
-    public static CompiledBodyMotionProgram Compile(string? name, string? version, BodyProgramKind? kind, IReadOnlyList<BodyMotionOp>? operations, FixedPlanarTarget? planarTarget = null) {
+    /// <param name="face">The body-state counters <see cref="BodyMotionOp.SnapYawToPlanarIntent"/> faces from, or
+    /// <see langword="null"/>. Refused unless the program selects that op.</param>
+    public static CompiledBodyMotionProgram Compile(string? name, string? version, BodyProgramKind? kind, IReadOnlyList<BodyMotionOp>? operations, FixedPlanarTarget? planarTarget = null, BodyFaceSlots? face = null) {
         if (string.IsNullOrWhiteSpace(value: name)) {
             throw Refuse(
                 detail: "name is required",
@@ -249,6 +268,13 @@ public sealed class CompiledBodyMotionProgram {
                 refusal: BodyMotionProgramRefusal.ParameterUnknown
             );
         }
+        if ((face is not null) && !seen.Contains(item: BodyMotionOp.SnapYawToPlanarIntent)) {
+            throw Refuse(
+                detail: $"face names the counters '{BodyMotionOp.SnapYawToPlanarIntent}' faces from, and the program does not select it",
+                name: name,
+                refusal: BodyMotionProgramRefusal.ParameterUnknown
+            );
+        }
         // ShapeVelocity converges velocity on the target a compute operation resolves; without one, every row would
         // shape toward rest and the body could never move.
         if (
@@ -285,7 +311,8 @@ public sealed class CompiledBodyMotionProgram {
             name: name,
             operations: seen,
             phases: phases,
-            planarTarget: planarTarget
+            planarTarget: planarTarget,
+            face: face
         );
     }
     /// <summary>Reports whether this program selects an operation.</summary>

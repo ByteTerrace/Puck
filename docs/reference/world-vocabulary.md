@@ -380,7 +380,7 @@ shape Type ["name"] { … }
 | `name` | header | name | — | `name` | — | The shape's name, which a sibling's `parent` reads it by; an authored JSON null has no header spelling and prints as a property. |
 | `id:` | property | number | — | `id` | `$index` | The shape's stable identity inside its document. |
 | `blend:` | property | name | — | `blend` | `"Union"` | How the shape combines with what is already there. |
-| `smooth:` | property | fixed | — | `smooth` | `0` | The blend's smoothing radius. |
+| `smooth:` | property | value | — | `smooth` | `0` | The blend's smoothing radius, in metres; a binding reference in its place follows its cell, and each write rebakes the groups the shape sits in. |
 | `group:` | property | number | — | `group` | `0` | The pooled blend group the shape bakes in. |
 | `material:` | property | number | — | `material` | `0` | The palette slot the shape is painted from. |
 | `position:` | property | value | — | `position` | `[0, 0, 0]` | The shape's position in its creation's frame, in metres; a binding reference in its place never elides. |

@@ -5,12 +5,6 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
-    // The principal that owns a body's consent: a local seat below the seat count, the population's peer identity above
-    // it. Its authored pool ceilings bound what untrusted contributors may pull the body away from its own submission.
-    private Principal OccupantPrincipal(int bodyIndex) => ((bodyIndex < Host.Population.LocalSeatCount)
-        ? Principal.Seat(slot: bodyIndex)
-        : Host.Population.PeerPrincipal(index: bodyIndex)
-    );
     // Resets one seat's per-tick contribution accumulator (the two sums and the contributed held image) — called only
     // when it was actually touched this tick, so an uncontended body's fold phase never pays for a clear it does not
     // need. No ceiling accumulator to clear: the ceiling is durable grant-table state the seat authored, never a
@@ -80,7 +74,7 @@ public sealed partial class WorldTick {
                 // when the seat authored none; StageContribution already refused every untrusted delta in that case,
                 // so an empty vector can only be reached with a trusted-only (unpooled) contribution set.
                 var ceilings = Host.GrantTable.PoolCeilings(
-                    seat: OccupantPrincipal(bodyIndex: seat),
+                    seat: Host.Population.OccupantPrincipal(index: seat),
                     subject: GrantSubject.Body(index: seat)
                 );
 
@@ -293,7 +287,7 @@ public sealed partial class WorldTick {
         // trusted addon's own declared Reach is the whole gate; there is no seat consent for it to consult.
         var ceilings = ((!isConsoleOrSeat && !isAddon)
             ? Host.GrantTable.PoolCeilings(
-                seat: OccupantPrincipal(bodyIndex: bodyIndex),
+                seat: Host.Population.OccupantPrincipal(index: bodyIndex),
                 subject: subject
             )
             : default

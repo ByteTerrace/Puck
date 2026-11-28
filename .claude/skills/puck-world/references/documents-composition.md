@@ -76,8 +76,9 @@ subject names them:
   a placement face's own `WorldPlacementPortal` facet falls back to when it
   authors no `Travel`; a null section resolves every facet to `Body`. A door
   fires when a body's origin passes through its glass, within the opening
-  (`WorldFaceAperture.Box`'s slab is `[-Depth, 0]` behind the glass, entered
-  only from the front), never on a band in front of it; while a body stands in
+  (`WorldFaceAperture.Box`'s slab is `[-Depth, 0]` behind the glass, the face's
+  own depth floored at the contact skin and deepened by the tested segment's own
+  travel, entered only from the front), never on a band in front of it; while a body stands in
   the opening, pushes out of the door from this world's geometry behind the
   glass are taken back (`WorldPortalHoleContactField`), so a door on the ground
   drops a body that walks onto it

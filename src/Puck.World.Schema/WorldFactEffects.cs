@@ -494,7 +494,7 @@ public sealed class WorldBodyStateEffect : WorldFactEffect, IValueSourcedEffect,
 
         if ((Slot < 0) || (Slot >= (bodyState.Count + identityState.Count))) { return 0L; }
         var name = ((Slot < bodyState.Count) ? bodyState[Slot].Name : identityState[(Slot - bodyState.Count)].Name);
-        var kit = (definition.Assignment.Select?.BodyState == name);
+        var kit = Names(selectors: definition.Assignment.Selectors, name: name);
         var catalog = WorldInputCatalog.For(definition: definition);
         var selects = kit;
 
@@ -503,14 +503,25 @@ public sealed class WorldBodyStateEffect : WorldFactEffect, IValueSourcedEffect,
         }
         var cost = (selects ? (2L * (catalog.Selectors.Length + 1L)) : 0L);
 
-        if (kit || (definition.Population.Scale == name) || (definition.LookAssignment.Select?.BodyState == name)) {
-            // The commit resyncs the written body alone (WorldPopulation.SyncBodyCells): its size, and for each selector
-            // one walk of its cases and of the row table the matching case names.
-            cost += ((1L + SelectCost(rows: definition.Kits.Count, select: definition.Assignment.Select)) + SelectCost(rows: definition.Looks.Count, select: definition.LookAssignment.Select));
+        if (kit || (definition.Population.Scale == name) || Names(selectors: definition.LookAssignment.Selectors, name: name)) {
+            // The commit resyncs the written body alone (WorldPopulation.SyncBodyCells): its size, and for each
+            // assignment a walk of every selector's cases and of the row table the matching case names.
+            cost += ((1L + SelectCost(rows: definition.Kits.Count, selectors: definition.Assignment.Selectors)) + SelectCost(rows: definition.Looks.Count, selectors: definition.LookAssignment.Selectors));
         }
         return cost;
 
-        static long SelectCost(WorldRowSelector? select, int rows) => ((select is null) ? 0L : (((long)select.Cases.Count) + rows));
+        static bool Names(IReadOnlyList<WorldRowSelector> selectors, string name) {
+            foreach (var selector in selectors) {
+                if (selector.BodyState == name) { return true; }
+            }
+            return false;
+        }
+        static long SelectCost(IReadOnlyList<WorldRowSelector> selectors, int rows) {
+            var cases = 0L;
+
+            foreach (var selector in selectors) { cases += selector.Cases.Count; }
+            return ((selectors.Count == 0) ? 0L : (cases + rows));
+        }
     }
 }
 /// <summary>Writes one fact on the identity a world-addressed body drives under — the body's lane cell and the

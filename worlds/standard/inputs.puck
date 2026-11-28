@@ -17,8 +17,6 @@ channels [
   // on the body's state, so nothing binds them.
   { composition: true, name: "climb", shape: Binary }
   { composition: true, name: "mantle", shape: Binary }
-  // Pressed, it switches a lock on and off (player/actions.puck's `lockAction`), which a targeting context fills.
-  { composition: true, name: "lock", shape: Binary }
   // Pressed, it steps a player to the next suit their avatar owns (player/player.puck).
   { composition: true, name: "suit", shape: Binary }
   {
@@ -117,4 +115,9 @@ channels [
     shape: Relative
     relative { unit: "notches", sensitivity: 1, maximumPerStep: 8 }
   }
+  // The journal worn on the wrist (journal.puck): a press opens it and the next closes it; while it is open the step
+  // keys move the mark on its page and the page keys turn its pages.
+  { composition: true, name: "journal", shape: Binary }
+  { composition: true, name: "journalStep", shape: Bipolar }
+  { composition: true, name: "journalPage", shape: Bipolar }
 ]
