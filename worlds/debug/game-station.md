@@ -100,8 +100,8 @@ Worlds that stand stations:
   `--world worlds/debug/game-station-root.puck`: seat 1 starts at the near chair
   (spawn `hero`) and seat 2 at the far chair (spawn `rival`).
 - The gallery's board game room on level 2 ([`gallery/games.puck`](gallery/games.puck))
-  plans twelve stations in two rows of six, `a1` to `a6` on the south gallery
-  and `b1` to `b6` out in the projecting wing
+  plans twelve stations, six along each gallery like the portals and the toybox,
+  `a1` to `a6` on the south gallery and `b1` to `b6` on the north
   ([`gallery/layout.puck`](gallery/layout.puck)'s `galleryGameStations`). The
   gallery booted alone (`gallery-root.puck`) stands all twelve, places 0 to 11
   in that order, each holding its own games and its cards as a holodeck pool.
@@ -198,10 +198,10 @@ the same sheet live, and `--spent` what it spent):
 
 | | Sheet (work units a tick, at rest plus one change) |
 |---|---|
-| One station (game-station-root, the board games lab) | 417,552 |
-| Twelve stations playing themselves (the stress lab) | 1,404,013 |
-| The debug world with its one station | 4,292,342 |
-| The gallery booted alone with twelve stations | 3,201,686 |
+| One station (game-station-root, the board games lab) | 420,003 |
+| Twelve stations playing themselves (the stress lab) | 1,408,576 |
+| The debug world with its one station | 4,275,583 |
+| The gallery booted alone with twelve stations | 3,185,449 |
 
 The tick admits the rules a quarter of its period on the slowest device the world authors (`WorldRuleTimePricing`;
 `world.budget.rules` prints each device's time). Every station plays one set of rules, so a station past the first adds what every

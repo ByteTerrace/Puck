@@ -5968,12 +5968,12 @@ shell, each usable alone, each named for what it does.
 - [medium] The game stations' set prices a firing at every station for a line whose firing does not provably close its
   own gate (`RuleResponse.Prove`): `chess-play-revert-codes`, `patience-pick`, `chess-station-save`,
   `chess-station-pick-near`/`-far` and `chess-put` cost 37 to 65 thousand each in the gallery booted alone, which stands
-  all twelve at 3.20 million (`puck compile worlds/debug/gallery-root.puck --validate --budget 40`). Each waits on a cell
+  all twelve at 3.19 million (`puck compile worlds/debug/gallery-root.puck --validate --budget 40`). Each waits on a cell
   it does not write (a put-down's revert, a press's edge, a settle), so its gate holds while it waits; a gate that closes
   on its own write (a request it clears, a mirror it copies) prices one station's firing. The chairs' presses
   (`game-station-near`/`-far`) read seat channels for literal seats, unversioned for a sweep, so they are judged every
   tick at every station; per-binding channel versions would make them due only when that station's seat input moves.
-  The debug world stands one station at 4.29 million: more there needs room (`go-sync-mark` and `go-sync-keep`, one
+  The debug world stands one station at 4.28 million, 6.84 ms of its 8.33 ms on the RTX 4070: more there needs room (`go-sync-mark` and `go-sync-keep`, one
   `goSync` pulse opening all 361 stones; `reversi-read-discs`; `go-play-1`/`-2`; `terminal-console-key-1`..`4`).
 - [low] A rule sweeping per-seat private piles is refused at compile: `RuleCompiler.RequireTransformControlAudience`
   pairs every candidate a live end can select with every other read, so `transfer(from: hand[$each], to: …)` over a

@@ -486,21 +486,23 @@ let toyboxScreen = 20
 // Where a station stands in the building's frame, on its tile.
 function toyboxAt(s) = [bayX(s.bay), galleryFloor[toyboxLevel], tileZ(s.row)]
 
-// The board game room (the owner's ruling): level 2's south gallery and the wing projecting over the forecourt, holding
-// twelve game stations (../game-stations.puck), each one table that plays every game of the set's catalog on a holodeck
-// board. They stand in two rows of six, one station to an arcade bay from bay 5 to bay 10: the front row on the south
-// gallery's fourth tile row, its far chairs a tile short of the arcade's piers, and the back row out in the wing, its
-// near chairs a tile and a half short of the wing's south wall, so every chair keeps 2 m of aisle behind it. Each
-// station's near chair faces north (+z) across its glass and its far chair south. A station's id is its row and column
-// (`a1` to `a6` the front row west to east, `b1` to `b6` the back), which names its table, board and bodies; the
-// console and the stations' rows name it by its place in the list, 0 to 11 in that order.
+// The board game room (the owner's ruling): twelve game stations (../game-stations.puck) on level 2, each one table that
+// plays every game of the set's catalog on a holodeck board, laid out as the toybox's machines (level 1) and the portals
+// (level 3) are: six along the south gallery and six along the north, one to an arcade bay in the portals' bays, each
+// row mirrored about the nave so a north station stands across the void from its south twin. A row stands on its
+// gallery's tile row two in from its arcade's piers, so the chair on the balcony side keeps 1.6 m to the edge and the
+// one on the wall side 2.9 m to the wall. A station stands with no yaw (the standard's game station: its topologies are
+// world-axis-aligned), so its near chair, the menu's, is at its -z edge: on the south gallery the wall's side, the player
+// facing the void, and on the north gallery the balcony's. A station's id is its gallery and column (`a1` to `a6` south
+// west to east, `b1` to `b6` north), which names its table, board and bodies; the console and the stations' rows name it
+// by its place in the list, 0 to 11 in that order.
 let gameStationLevel = wingLevel
-let galleryGameBays = range(5, 11)
+let galleryGameBays = galleryPortalBayList
 let galleryGameRows = [
-  { name: "a", z: tileZ(3) }
-  { name: "b", z: tileZ(-1) }
+  { name: "a", z: tileZ((arcadeRowSouth - 2)) }
+  { name: "b", z: tileZ((arcadeRowNorth + 2)) }
 ]
-// Every station in the world's frame, front row then back, each west to east. A station's creation's floor lies 0.5 m
+// Every station in the world's frame, south row then north, each west to east. A station's creation's floor lies 0.5 m
 // under its origin (the standard's gameStationFloor), so it stands on level 2.
 let galleryGameStations = flatMap(galleryGameRows, row => map(range(0, length(galleryGameBays)), n => {
   id: $"{row.name}{n + 1}"
