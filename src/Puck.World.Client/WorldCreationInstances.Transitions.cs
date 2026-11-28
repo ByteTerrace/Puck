@@ -17,17 +17,11 @@ namespace Puck.World.Client;
 // its next pack writes over whatever its pieces left in its slots. A form named again stops lingering through the same
 // door (the reconcile calls it for the form a body wears), so a switch back mid-effect draws the form whole at once.
 public sealed partial class WorldCreationInstances {
-    // A form's play: its effect, whether it arrives, its seed, when it began on the pool's form clock, the sweep's
-    // extent along its direction in creation units, and its pieces when it plays in pieces.
+    // A form's play (WorldFormPlay, on the pool's form clock), its pool index, and its pieces when it plays in pieces.
     private sealed class FormPlay {
-        public required WorldFormEffect Effect;
-        public required bool Arriving;
-        public required uint Seed;
-        public required double Start;
-        public float Low;
-        public float High;
+        public required WorldFormPlay Play;
+        public required int Index;
         public WorldFormPieces? Pieces;
-        public int Index;
     }
 
     // The pool's form clock (presentation seconds the packs advanced), the form each body was last seen drawn in, each
@@ -85,7 +79,10 @@ public sealed partial class WorldCreationInstances {
             if (drawn is null) { continue; }
             if (m_formDrawn.TryGetValue(key: body, value: out var before) && !ReferenceEquals(objA: before, objB: drawn)) {
                 if (drawn.Look?.Transition?.ArriveFrom(look: before.Look?.Name.Value) is { } arrive) { BeginPlay(live: drawn, index: drawnIndex, effect: arrive, arriving: true, transforms: transforms, rootSlot: (slotBase + RootSlotOffset(index: drawnIndex))); }
-                if (before.FormLingers && (before.Look?.Transition?.LeaveTo(look: drawn.Look?.Name.Value) is { } leave) && (IndexOf(live: before) is var beforeIndex and >= 0)) {
+                // The form drawn before is one the body still keeps while it lingers.
+                var beforeIndex = m_bodyForms[body].Find(match: index => ReferenceEquals(objA: m_pool[index], objB: before));
+
+                if (before.FormLingers && (before.Look?.Transition?.LeaveTo(look: drawn.Look?.Name.Value) is { } leave) && ReferenceEquals(objA: m_pool[beforeIndex], objB: before)) {
                     BeginPlay(live: before, index: beforeIndex, effect: leave, arriving: false, transforms: transforms, rootSlot: (slotBase + RootSlotOffset(index: beforeIndex)));
                 }
             }
@@ -105,7 +102,7 @@ public sealed partial class WorldCreationInstances {
                 continue;
             }
 
-            var elapsed = (float)(m_formClock - play.Start - Math.Max(val1: play.Effect.Delay, val2: 0f));
+            var elapsed = play.Play.Elapsed(clock: m_formClock);
             var rootSlot = (slotBase + RootSlotOffset(index: play.Index));
             var root = transforms[rootSlot];
 
@@ -113,9 +110,8 @@ public sealed partial class WorldCreationInstances {
                 pieces.Step(bands: m_bandScratch, deltaSeconds: deltaSeconds, elapsed: elapsed, field: client.StaticField, firstSlot: rootSlot, moved: moved, root: in root, table: transforms);
                 if (elapsed > pieces.Length) { m_formEnded.Add(item: live); }
             } else {
-                m_bandScratch.Add(item: WorldFormEffects.Band(effect: play.Effect, arriving: play.Arriving, seed: play.Seed, firstSlot: rootSlot, slotCount: SlotsAt(index: play.Index),
-                    origin: root.Position, rotation: root.Orientation, low: (play.Low * root.Scale), high: (play.High * root.Scale), elapsed: elapsed, parted: false));
-                if (elapsed > (play.Effect.TotalSeconds - Math.Max(val1: play.Effect.Delay, val2: 0f))) { m_formEnded.Add(item: live); }
+                m_bandScratch.Add(item: play.Play.Band(clock: m_formClock, firstSlot: rootSlot, slotCount: SlotsAt(index: play.Index), origin: root.Position, rotation: root.Orientation, scale: root.Scale));
+                if (play.Play.Ended(clock: m_formClock)) { m_formEnded.Add(item: live); }
             }
         }
         foreach (var live in m_formEnded) {
@@ -131,15 +127,8 @@ public sealed partial class WorldCreationInstances {
     // centre measured from the shapes riding it as the form stands now (their composed poses, and the slots' poses in the
     // table the pool just wrote).
     private void BeginPlay(Registration live, int index, WorldFormEffect effect, bool arriving, DynamicTransform[] transforms, int rootSlot) {
-        var direction = WorldFormEffects.Direction(effect: effect);
-        var (low, high) = WorldFormEffects.Extent(direction: direction, document: live.Creation.EngineDocument);
         var play = new FormPlay {
-            Effect = effect,
-            Arriving = arriving,
-            Seed = WorldFormEffects.Seed(body: (live.BodyIndex ?? -1), creation: live.Creation.Hash, ordinal: m_formPlaysBegun++),
-            Start = m_formClock,
-            Low = low,
-            High = high,
+            Play = WorldFormEffects.Begin(arriving: arriving, body: (live.BodyIndex ?? -1), creation: live.Creation, effect: effect, ordinal: m_formPlaysBegun++, start: m_formClock),
             Index = index,
         };
 
@@ -182,16 +171,9 @@ public sealed partial class WorldCreationInstances {
                 centres[slot] = Vector3.Transform(value: (sums[slot] - slotPose.Position), rotation: Quaternion.Inverse(value: slotPose.Orientation));
                 outward[slot] = Vector3.Transform(value: (sums[slot] - rootPose.Position), rotation: inverseRoot);
             }
-            play.Pieces = new WorldFormPieces(effect: effect, arriving: arriving, seed: play.Seed, radii: radii, centres: centres, outward: outward);
+            play.Pieces = new WorldFormPieces(effect: effect, arriving: arriving, seed: play.Play.Seed, radii: radii, centres: centres, outward: outward);
         }
         m_formPlays[live] = play;
         WakeEntry(index: index);
-    }
-    // The pool index holding a registration, or -1.
-    private int IndexOf(Registration live) {
-        for (var index = 0; (index < m_poolCount); index++) {
-            if (ReferenceEquals(objA: m_pool[index], objB: live)) { return index; }
-        }
-        return -1;
     }
 }

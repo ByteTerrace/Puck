@@ -15,18 +15,12 @@ namespace Puck.World.Client;
 // that lays the remnants at its tail, and every change to the remnants goes through it and moves the copies' revision, so
 // the composition reads every copy again.
 public sealed partial class WorldRigidAssets {
-    // A copy's play: the body whose copy it plays on, or the remnant it plays on (whose copy goes when it ends), its
-    // effect, whether it arrives, its seed, when it began on the copies' clock and its sweep's extent along its direction in
-    // creation units.
+    // A copy's play (WorldFormPlay, on the copies' clock): the body whose copy it plays on, or the remnant it plays on,
+    // whose copy goes when it ends.
     private sealed class FormPlay {
+        public required WorldFormPlay Play;
         public int Body = -1;
         public SdfMeshInstance? Remnant;
-        public required WorldFormEffect Effect;
-        public required bool Arriving;
-        public required uint Seed;
-        public required double Start;
-        public float Low;
-        public float High;
     }
 
     private double m_formClock;
@@ -51,32 +45,19 @@ public sealed partial class WorldRigidAssets {
         foreach (var play in m_formPlays) {
             if ((play.Remnant ?? CopyOf(body: play.Body)) is not { FrameSlot: > 0 } copy) { continue; }
 
-            var root = copy.Transform;
-            var scale = copy.Scale;
-
-            bands.Add(item: WorldFormEffects.Band(effect: play.Effect, arriving: play.Arriving, seed: play.Seed, firstSlot: copy.FrameSlot, slotCount: 1, origin: root.Position,
-                rotation: root.Orientation, low: (play.Low * scale), high: (play.High * scale), elapsed: Elapsed(play: play), parted: false));
+            bands.Add(item: play.Play.Band(clock: m_formClock, firstSlot: copy.FrameSlot, slotCount: 1, origin: copy.Transform.Position, rotation: copy.Transform.Orientation, scale: copy.Scale));
         }
         m_formBands = [.. bands];
         m_formBandsSerial = m_formSerial;
         return m_formBands;
     }
-    // The seconds a play has run, its delay past.
-    private float Elapsed(FormPlay play) => (float)(m_formClock - play.Start - Math.Max(val1: play.Effect.Delay, val2: 0f));
 
-    // Begins a play on a body's copy or a remnant: its seed and its sweep's extent along its direction at rest.
+    // Begins a play on a body's copy or a remnant.
     private void BeginPlay(SdfMeshInstance? remnant, WorldPrototype creation, int body, WorldFormEffect effect, bool arriving) {
-        var (low, high) = WorldFormEffects.Extent(direction: WorldFormEffects.Direction(effect: effect), document: creation.EngineDocument);
-
         m_formPlays.Add(item: new FormPlay {
+            Play = WorldFormEffects.Begin(arriving: arriving, body: body, creation: creation, effect: effect, ordinal: m_formPlaysBegun++, start: m_formClock),
             Body = ((remnant is null) ? body : -1),
             Remnant = remnant,
-            Effect = effect,
-            Arriving = arriving,
-            Seed = WorldFormEffects.Seed(body: body, creation: creation.Hash, ordinal: m_formPlaysBegun++),
-            Start = m_formClock,
-            Low = low,
-            High = high,
         });
         m_formSerial++;
     }
@@ -110,7 +91,7 @@ public sealed partial class WorldRigidAssets {
         for (var index = (m_formPlays.Count - 1); (index >= 0); index--) {
             var play = m_formPlays[index];
 
-            if (Elapsed(play: play) <= (play.Effect.TotalSeconds - Math.Max(val1: play.Effect.Delay, val2: 0f))) { continue; }
+            if (!play.Play.Ended(clock: m_formClock)) { continue; }
             m_formPlays.RemoveAt(index: index);
             if (play.Remnant is { } remnant) { removed |= m_remnants.Remove(item: remnant); }
         }

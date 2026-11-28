@@ -179,11 +179,11 @@ public sealed partial class SdfWorldTables {
             record[SdfFrameSampled.BandSlotCountWord] = (uint)band.SlotCount;
             record[SdfFrameSampled.BandFlagsWord] = (((band.Side == SdfFormBandSide.Swept) ? SdfFrameSampled.BandSweptFlag : 0u) | (band.Parted ? SdfFrameSampled.BandPartedFlag : 0u));
             record[SdfFrameSampled.BandSeedWord] = band.Seed;
-            WriteFloats(record: record, at: SdfFrameSampled.BandOriginWord, x: band.Origin.X, y: band.Origin.Y, z: band.Origin.Z, w: band.Low);
-            WriteFloats(record: record, at: SdfFrameSampled.BandAxisWord, x: axis.X, y: axis.Y, z: axis.Z, w: Math.Max(val1: band.High, val2: band.Low));
-            WriteFloats(record: record, at: SdfFrameSampled.BandEdgeWord, x: band.EdgeLight.X, y: band.EdgeLight.Y, z: band.EdgeLight.Z, w: Math.Max(val1: band.EdgeWidth, val2: 0f));
-            WriteFloats(record: record, at: SdfFrameSampled.BandSweepWord, x: Math.Max(val1: band.Roughness, val2: 0f), y: Math.Max(val1: band.NoiseScale, val2: 0f), z: Math.Max(val1: band.Elapsed, val2: 0f), w: band.Seconds);
-            WriteFloats(record: record, at: SdfFrameSampled.BandMoteLightWord, x: band.MoteLight.X, y: band.MoteLight.Y, z: band.MoteLight.Z, w: Math.Max(val1: band.MoteSize, val2: 0f));
+            SdfProgram.WriteVector4(words: record, baseIndex: SdfFrameSampled.BandOriginWord, x: band.Origin.X, y: band.Origin.Y, z: band.Origin.Z, w: band.Low);
+            SdfProgram.WriteVector4(words: record, baseIndex: SdfFrameSampled.BandAxisWord, x: axis.X, y: axis.Y, z: axis.Z, w: Math.Max(val1: band.High, val2: band.Low));
+            SdfProgram.WriteVector4(words: record, baseIndex: SdfFrameSampled.BandEdgeWord, x: band.EdgeLight.X, y: band.EdgeLight.Y, z: band.EdgeLight.Z, w: Math.Max(val1: band.EdgeWidth, val2: 0f));
+            SdfProgram.WriteVector4(words: record, baseIndex: SdfFrameSampled.BandSweepWord, x: Math.Max(val1: band.Roughness, val2: 0f), y: Math.Max(val1: band.NoiseScale, val2: 0f), z: Math.Max(val1: band.Elapsed, val2: 0f), w: band.Seconds);
+            SdfProgram.WriteVector4(words: record, baseIndex: SdfFrameSampled.BandMoteLightWord, x: band.MoteLight.X, y: band.MoteLight.Y, z: band.MoteLight.Z, w: Math.Max(val1: band.MoteSize, val2: 0f));
             record[SdfFrameSampled.BandMoteWord] = (uint)moteCount;
             record[(SdfFrameSampled.BandMoteWord + 1)] = (uint)motes;
             record[(SdfFrameSampled.BandMoteWord + 2)] = BitConverter.SingleToUInt32Bits(value: Math.Max(val1: band.MoteSeconds, val2: 1e-3f));
@@ -193,12 +193,6 @@ public sealed partial class SdfWorldTables {
             motes += moteCount;
         }
         return (uint)motes;
-    }
-    private static void WriteFloats(Span<uint> record, int at, float x, float y, float z, float w) {
-        record[at] = BitConverter.SingleToUInt32Bits(value: x);
-        record[(at + 1)] = BitConverter.SingleToUInt32Bits(value: y);
-        record[(at + 2)] = BitConverter.SingleToUInt32Bits(value: z);
-        record[(at + 3)] = BitConverter.SingleToUInt32Bits(value: w);
     }
     // Names, for each form band the latest pack wrote, the staged draw rows riding its slots that its motes take surface
     // points from: up to SdfFrameSampled.BandRowCapacity of them, a group's drawn tier before its kept floor. Runs after

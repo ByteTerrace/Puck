@@ -134,6 +134,24 @@ public static class WorldFormEffects {
             MoteSwirl = effect.MoteSwirl,
         };
     }
+    /// <summary>Begins an effect's play on a creation: its seed and its sweep's extent along its direction at rest.</summary>
+    /// <param name="effect">The effect.</param>
+    /// <param name="arriving">Whether the form arrives or leaves.</param>
+    /// <param name="creation">The creation the form wears.</param>
+    /// <param name="body">The body's population index, or a negative value for none.</param>
+    /// <param name="ordinal">How many plays its player began before it.</param>
+    /// <param name="start">When it begins, on its player's clock, seconds.</param>
+    /// <returns>The play.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="effect"/> or <paramref name="creation"/> is
+    /// <see langword="null"/>.</exception>
+    public static WorldFormPlay Begin(WorldFormEffect effect, bool arriving, WorldPrototype creation, int body, long ordinal, double start) {
+        ArgumentNullException.ThrowIfNull(argument: effect);
+        ArgumentNullException.ThrowIfNull(argument: creation);
+
+        var (low, high) = Extent(direction: Direction(effect: effect), document: creation.EngineDocument);
+
+        return new WorldFormPlay(Effect: effect, Arriving: arriving, Seed: Seed(body: body, creation: creation.Hash, ordinal: ordinal), Start: start, Low: low, High: high);
+    }
     /// <summary>Returns the eased share of an assembling piece's flight: past one near the end, so the piece overshoots
     /// its place and settles back into it as it locks (a back ease, whose overshoot is about a tenth).</summary>
     /// <param name="share">The share of the flight elapsed, in [0, 1].</param>
@@ -145,4 +163,36 @@ public static class WorldFormEffects {
 
         return (1f + (((Overshoot + 1f) * s * s * s) + (Overshoot * s * s)));
     }
+}
+
+/// <summary>One play of a form effect on one form: the effect, which way it plays, its seed, when it began on its player's
+/// clock, and how far the form reaches along its sweep at rest, in creation units. The stamp pool and the rigid copies each
+/// hold one per playing form and read its band and its end from here.</summary>
+/// <param name="Effect">The effect.</param>
+/// <param name="Arriving">Whether the form arrives (it is built) or leaves (it dissolves).</param>
+/// <param name="Seed">The seed its draws are keyed on.</param>
+/// <param name="Start">When it began on its player's clock, seconds.</param>
+/// <param name="Low">The least distance along the sweep's direction from the creation's origin, creation units.</param>
+/// <param name="High">The greatest such distance, creation units.</param>
+public sealed record WorldFormPlay(WorldFormEffect Effect, bool Arriving, uint Seed, double Start, float Low, float High) {
+    /// <summary>Returns the seconds the play has run at a moment of its player's clock, its delay past; negative before it
+    /// starts.</summary>
+    /// <param name="clock">The player's clock, seconds.</param>
+    /// <returns>The seconds.</returns>
+    public float Elapsed(double clock) => (float)(clock - Start - Math.Max(val1: Effect.Delay, val2: 0f));
+    /// <summary>Returns whether a whole form's play has played at a moment: its sweep and its last motes' lives done.</summary>
+    /// <param name="clock">The player's clock, seconds.</param>
+    /// <returns><see langword="true"/> once it has played.</returns>
+    public bool Ended(double clock) => (Elapsed(clock: clock) > (Effect.TotalSeconds - Math.Max(val1: Effect.Delay, val2: 0f)));
+    /// <summary>Returns the band a whole form's play sweeps over its run at a moment, in the run's root frame.</summary>
+    /// <param name="clock">The player's clock, seconds.</param>
+    /// <param name="firstSlot">The run's first absolute slot.</param>
+    /// <param name="slotCount">The run's slot count.</param>
+    /// <param name="origin">The run's root position this frame.</param>
+    /// <param name="rotation">The run's root orientation this frame.</param>
+    /// <param name="scale">The run's scale, metres a creation unit.</param>
+    /// <returns>The band.</returns>
+    public SdfFormBand Band(double clock, int firstSlot, int slotCount, Vector3 origin, Quaternion rotation, float scale) =>
+        WorldFormEffects.Band(effect: Effect, arriving: Arriving, seed: Seed, firstSlot: firstSlot, slotCount: slotCount, origin: origin, rotation: rotation,
+            low: (Low * scale), high: (High * scale), elapsed: Elapsed(clock: clock), parted: false);
 }

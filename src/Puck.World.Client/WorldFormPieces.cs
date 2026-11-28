@@ -82,7 +82,7 @@ public sealed class WorldFormPieces {
         m_pieces = new Piece[radii.Length];
         for (var index = 0; (index < m_pieces.Length); index++) {
             var stream = Pcg32XshRr.Create(state: seed, stream: (ulong)index);
-            var random = Sphere(u: Unit(stream: ref stream), v: Unit(stream: ref stream));
+            var random = LowDiscrepancy.SphereAt(u: Unit(stream: ref stream), v: Unit(stream: ref stream));
             var away = ((outward[index].LengthSquared() > 1e-8f) ? Vector3.Normalize(value: outward[index]) : random);
             var level = new Vector3(x: away.X, y: 0f, z: away.Z);
 
@@ -90,7 +90,7 @@ public sealed class WorldFormPieces {
 
             var lift = Math.Clamp(value: effect.PieceLift, min: 0f, max: 1f);
             var heading = Vector3.Normalize(value: ((level * (1f - lift)) + (Vector3.UnitY * lift) + (random * 0.35f)));
-            var spinAxis = Sphere(u: Unit(stream: ref stream), v: Unit(stream: ref stream));
+            var spinAxis = LowDiscrepancy.SphereAt(u: Unit(stream: ref stream), v: Unit(stream: ref stream));
             var twistAngle = ((0.6f + (0.6f * Unit(stream: ref stream))) * MathF.PI * 0.5f);
 
             m_pieces[index] = new Piece {
@@ -245,13 +245,5 @@ public sealed class WorldFormPieces {
         };
     }
     // A uniform number in [0, 1) from the stream.
-    private static float Unit(ref Pcg32XshRr stream) => (stream.NextUInt32() * (1f / 4294967296f));
-    // A unit direction from two uniform numbers.
-    private static Vector3 Sphere(float u, float v) {
-        var z = ((2f * u) - 1f);
-        var r = MathF.Sqrt(x: MathF.Max(x: 0f, y: (1f - (z * z))));
-        var phi = (2f * MathF.PI * v);
-
-        return new Vector3(x: (r * MathF.Cos(x: phi)), y: (r * MathF.Sin(x: phi)), z: z);
-    }
+    private static float Unit(ref Pcg32XshRr stream) => (float)(double)stream.NextUnitFraction32();
 }
