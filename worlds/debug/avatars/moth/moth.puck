@@ -25,10 +25,9 @@ exports {
   bindings [journalRaiseLeft, journalRaiseRight]
 }
 
-
-// Her journal, worn on her wrist (../../../standard/journal.puck, ../../../standard/wrist-panel.puck), and the companions she
-// keeps in its menagerie (../../menagerie.puck): every character of the set starts with Mintstitch and Tangerine. The
-// panel mounts on her forearms (suits.puck's `mothWristMount`).
+// Her journal, worn on her wrist (../../../standard/journal.puck, ../../../standard/wrist-panel.puck), and the
+// companions she keeps in its menagerie (../../menagerie.puck): every character of the set starts with Mintstitch and
+// Tangerine. The panel mounts on both suits' forearms (contract.puck's `mothWristMount`); her own body has none yet.
 journalPlay(kinds: menagerieKinds)
 menagerie(kinds: menagerieKinds, granted: [1, 2])
 menagerieCreatures()
@@ -47,57 +46,58 @@ text {
 }
 
 // Each form's look. Lane 0 is her journal's glass, lit as its arm rises (both suits wear the wrist panel). Lane 1 is
-// the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is flight mode itself, the heel and nozzle glows it lights. Lane 3 is the heel jets' flame
-// under the air jump. The scout suit grants no jetpack and no air jump, so only its dash lights its pods.
+// the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is
+// flight mode itself, the heel and nozzle glows it lights. Lane 3 is the heel jets' flame under the air jump. The scout
+// suit grants no jetpack and no air jump, so only its dash lights its pods.
 looks [
-    {
-      motion {
-        gaitAmplitude: 0
-        replayFrames: false
-        secondsPerFrame: 0
-        lanes [
-          maximum(journalRaiseLeft[$body], journalRaiseRight[$body])
-          maximum(bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body]), dashPose[$body])
-          maximum(bodyState($body, flightFuel) / 1000, dashPose[$body])
-          bootBoost[$body]
-        ]
-        poses {
-          blink: "state.blink.$body"
-        }
+  {
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+      lanes [
+        maximum(journalRaiseLeft[$body], journalRaiseRight[$body])
+        maximum(bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body]), dashPose[$body])
+        maximum(bodyState($body, flightFuel) / 1000, dashPose[$body])
+        bootBoost[$body]
+      ]
+      poses {
+        blink: "state.blink.$body"
       }
-      name: "moth"
-      scale: 1
-      source: creation(prototypeId: moth)
     }
-    {
-      motion {
-        gaitAmplitude: 0
-        replayFrames: false
-        secondsPerFrame: 0
-        lanes [maximum(journalRaiseLeft[$body], journalRaiseRight[$body]), dashPose[$body], dashPose[$body], 0]
-        poses {
-          blink: "state.blink.$body"
-        }
+    name: "moth"
+    scale: 1
+    source: creation(prototypeId: moth)
+  }
+  {
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+      lanes [maximum(journalRaiseLeft[$body], journalRaiseRight[$body]), dashPose[$body], dashPose[$body], 0]
+      poses {
+        blink: "state.blink.$body"
       }
-      name: "moth-scout"
-      scale: 1
-      source: creation(prototypeId: `moth-scout`)
     }
-    {
-      motion {
-        gaitAmplitude: 0
-        replayFrames: false
-        secondsPerFrame: 0
-        // The first holding frame wins, so she keeps her eyes open while she holds the handheld.
-        poses {
-          hold: "state.pilotHold.$body"
-          blink: "state.blink.$body"
-        }
+    name: "moth-scout"
+    scale: 1
+    source: creation(prototypeId: `moth-scout`)
+  }
+  {
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+      // The first holding frame wins, so she keeps her eyes open while she holds the handheld.
+      poses {
+        hold: "state.pilotHold.$body"
+        blink: "state.blink.$body"
       }
-      name: "moth-pilot"
-      scale: 1
-      source: creation(prototypeId: `moth-pilot`)
     }
+    name: "moth-pilot"
+    scale: 1
+    source: creation(prototypeId: `moth-pilot`)
+  }
 ]
 
 // The rig's followers (her suits' drivers read them): the flight pose and wing deploy, the turn her hips trail, the

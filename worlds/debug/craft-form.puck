@@ -61,7 +61,8 @@ looks {
 // own gate and prices the rule by the registers that move.
 rule "craft-form" {
   local target = (
-    (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * ((bodyState(each, suit) == 2) ? 6 : bodyState(each, suit)))
+    (bodyState(each, craft) * (4 + bodyState(each, space))) +
+    ((1 - bodyState(each, craft)) * ((bodyState(each, suit) == 2) ? 6 : bodyState(each, suit)))
   )
   when bodyState(each, form) != target
   mode: Level

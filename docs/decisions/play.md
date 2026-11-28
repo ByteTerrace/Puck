@@ -604,6 +604,34 @@ deeper search than match, push, write, and undo give; the vertex-configuration
 grower and the long-permutation reduction operand are deferred with the games
 that wanted them.
 
+## A player, an avatar and the suits it wears
+
+The owner's ruling: the Moth stands for a player and their standard controls, the avatar varies by player choice, each
+player has their avatar, avatars regularly wear suits, and one avatar may own several. So a player is not a character
+document. The standard's player module (`worlds/standard/player/player.puck`) reads three contracts and nothing else:
+
+- **A form** is one way a body stands in the world: its kit and look rows, its capsule, its pace and step, the actions
+  it grants with their tuning, the camera's offsets on it, and for a suit its worn screen's mount and glass slots.
+- **A suit** is a form worn over the avatar's body, selected by the value of the body's `suit` register. What it grants
+  is its action list (thrusters a jetpack, gloves a climb), never a kit authored beside it.
+- **An avatar** is a body form, the suits it owns, the one it is born wearing and its companion's offset.
+
+The module authors the kits, the registers the actions use (once), the `form` selectors the worn-suit register drives,
+the suit switch, the chase camera, the play layout and the companion slot. Switching suits is a register write, so a
+rule, a replay, the console and a crossing switch it alike, and a world that reads more than the suit (noclip, a craft)
+refines the `form` selectors by name. An avatar or a suit authors no world setting: light, air, floor, gravity, bodies
+and spawn points are the world's (the debug world set's are `worlds/debug/stage.puck`).
+
+Every action is one value of one shape (`worlds/standard/player/actions.puck`: holds, shaping, held pace, programs
+keyed by the action's own channel, registers, a restore and the hook register its avatar animates it by), so a new
+action is a function, and an avatar reads only its hook. A context that runs an action as world rules (the lock-on
+context's lock and strafe) is named by an action that carries only its hook, never a second implementation.
+
+The mantle is an action, as sprint, jump and the jetpack are, and needs no grip: the engine's `mantle` effect proves a
+ledge ahead of the commanded direction and a landing past it with the same proof the climb's mantle passes, and hands
+the body on at the speed it was commanding, so a run carries over the edge. The anticipation and the pull are the
+avatar's pose over the action's `mantling` timer.
+
 ## Decided here
 
 `replay.verify` claims only what it ran; the Group wire tag and mutation

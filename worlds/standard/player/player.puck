@@ -78,7 +78,12 @@ function wornForm(avatar) = first(avatar.forms, f => (f.value == avatar.worn), a
 
 // What a form's kit holds, rests under and moves at, read from its actions.
 function formRestore(form) = first(form.actions, a => (a.restore != null), a => a.restore, null)
-function formSpeed(form) = first(form.actions, a => (a.speedHeld != null), a => { value: form.speed, held: a.speedHeld }, { value: form.speed })
+function formSpeed(form) = first(
+  form.actions,
+  a => (a.speedHeld != null),
+  a => { value: form.speed, held: a.speedHeld },
+  { value: form.speed }
+)
 function restoring(hold, restore) = ((restore == null) ? hold : (hold with { restore: restore }))
 
 // The kit a form wears: its capsule standing `height` tall from the ground on spheres of `radius`, the standard walk
@@ -195,7 +200,11 @@ template player(avatar, rig = "player-camera", wall = wallFraming(), focus = nul
       when channel(each, suit) >= 1 and fact(each, Airborne) == 0
       mode: Edge
       forEach: $players
-      setBodyState(key: $each, state: "suit", expression: (bodyState(each, suit) >= last) ? 0 : (bodyState(each, suit) + 1))
+      setBodyState(
+        key: $each,
+        state: "suit",
+        expression: (bodyState(each, suit) >= last) ? 0 : (bodyState(each, suit) + 1)
+      )
     }
   }
 
@@ -229,5 +238,12 @@ template player(avatar, rig = "player-camera", wall = wallFraming(), focus = nul
 // slot `slot`, arriving at the avatar's companion offset. The world supplies the slot, since it owns its population,
 // and its interests and senses through `companionDesign`; `menagerie` dresses it as the owner's active menagerie kind.
 template playerCompanion(avatar, owner, slot, attention = 4, lead = 3, menagerie = false) {
-  companion(owner: owner, slot: slot, position: avatar.companion, attention: attention, lead: lead, menagerie: menagerie)
+  companion(
+    owner: owner,
+    slot: slot,
+    position: avatar.companion,
+    attention: attention,
+    lead: lead,
+    menagerie: menagerie
+  )
 }

@@ -143,10 +143,16 @@ kits {
 // lands. The gate and the write read one local, so the work sheet sees that a firing closes its own gate and prices the
 // rule by the registers that move.
 rule "noclip-form" {
-  local target = (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * ((bodyState(
-      each,
-      suit
-    ) == 2) ? (6 + bodyState(each, noclip)) : (bodyState(each, suit) + 2 * bodyState(each, noclip))))
+  local target = (
+    (bodyState(each, craft) * (4 + bodyState(each, space))) +
+    (
+      (1 - bodyState(each, craft)) *
+      (
+        (bodyState(each, suit) == 2) ? (6 + bodyState(each, noclip)) :
+        (bodyState(each, suit) + 2 * bodyState(each, noclip))
+      )
+    )
+  )
   when bodyState(each, form) != target
   mode: Level
   forEach: $bodies

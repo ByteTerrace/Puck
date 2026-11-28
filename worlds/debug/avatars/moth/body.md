@@ -1,7 +1,7 @@
 # The Moth out of her suit
 
-[moth-pilot.puck](moth-pilot.puck) is the woman inside the Moth's suit: the
-1.68 m pilot of the [concept pack](../../../docs/game/art/moth-concept-pack/README.md)'s
+[body.puck](body.puck) is the woman inside the Moth's suit: the
+1.68 m pilot of the [concept pack](../../../../docs/game/art/moth-concept-pack/README.md)'s
 off-suit turnaround (sheet 04), a grounded, athletic working woman, never
 sexualized. She wears a charcoal work undersuit with full sleeves and a high
 collar, straight-cut work trousers, soft knee and elbow pads, a contact harness
@@ -12,7 +12,7 @@ sheet 06 at true scale. Sheet 04 draws gloves; whether she wears them is the
 owner's open look call (no ruling is recorded), taken in the Moth's pair
 session.
 
-Her head is the suited Moth's own: the [`moth-head`](moth-head.puck) library's
+Her head is the suited Moth's own: the [`head.puck`](head.puck) library's
 `mothHead` template at the same 0.68 scale (about 0.26 m crown to chin), placed
 so her eyes sit 1.527 m up, the suited eye line less sheet 05's 0.208 m
 footbed. Its mouth and lid paints and its blink frame (`mothBlinkPose`) are
@@ -22,8 +22,8 @@ over her right collarbone to an ochre tie.
 
 ## Wear her
 
-[`suit.puck`](../suit.puck) imports this file, and the debug world, the garden
-and the night field import `suit.puck`. A body whose `suit` register is 0 runs the
+Her avatar document ([moth.puck](moth.puck)) imports this file, and the player module
+wears it through her contract ([contract.puck](contract.puck)). A body whose `suit` register is 0 runs the
 `pilot` kit (a walker at the suit's 5 m/s, running at 10 with the run channel
 held, with one grounded jump of 3.7 m/s, which lifts her feet 0.56 m where the
 suit clears 1.1 m, and no flight mode, so fly does nothing for her and the
@@ -45,7 +45,7 @@ next frame. `world.reload` resets the register to 1.
 
 ## Inspect her
 
-The avatar studio ([debug.md](../debug.md#avatar-studio)) frames her like sheet 04:
+The avatar studio ([debug.md](../../debug.md#avatar-studio)) frames her like sheet 04:
 
 ```text
 body.stop 0
@@ -69,7 +69,7 @@ arms forward and in, bends her elbows and tips her head down, and the look's
 toward her eyes: its lower half between her palms, her fingers behind it and
 her thumbs on its face. At rest the handheld sits hidden inside her chest.
 
-The handheld is Wonderland's Humble Gaming Brick ([devices](../devices.md)),
+The handheld is Wonderland's Humble Gaming Brick ([devices](../../devices.md)),
 75 × 133 × 27.5 mm: a faithful simplified copy, since a look wears one creation.
 Its shell and battery bay are the device's atomic-orange acrylic glass, so its
 pale green board, processor, cartridge and two blue cells read through the
@@ -86,7 +86,7 @@ engaging it (E or the pad's RB beside it) sets her `pilotHold` cell through
 screen 0's `carry` puts the device's live picture on `brickPicture` in her
 hands. The engagement starts on a view of her holding it (the `brick-hold`
 camera, which the carry names), and the Frame control (`L`, or the pad's East with the left trigger held) goes
-to the picture alone and back ([devices](../devices.md)). Leaving puts it back on
+to the picture alone and back ([devices](../../devices.md)). Leaving puts it back on
 its rest and lowers her arms. In the suit, or at a quarter her size, she plays it where it
 stands. Setting the cell by hand holds the brick the same way, its live picture
 included:
@@ -130,5 +130,5 @@ shapes:
 dotnet <cli>/Puck.Cli.dll creation stats --world worlds/debug/debug.puck --prototype moth-pilot
 ```
 
-`moth-pilot.puck` is a fragment: it relies on the Moth basis's dynamics and
+`body.puck` is a fragment: it relies on the Moth basis's dynamics and
 curves, so validate it through a world that imports it, never alone.

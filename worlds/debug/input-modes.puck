@@ -34,12 +34,10 @@ inputModes {
       default: "suited"
       states [
         { name: "pilot", values ["0"], channels: concat(movement, controls) }
-        { name: "suited", values ["1"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
+        // Either suit (the mech suit, 1, and the scout suit, 6): the scout grants no flight, so its flight key does nothing.
+        { name: "suited", values ["1", "6"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
         { name: "pilot-noclip", values ["2"], channels: concat(movement, controls, ["rise"]) }
-        { name: "suited-noclip", values ["3"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
-        // The scout suit: a dash and no flight.
-        { name: "scout", values ["6"], channels: concat(movement, controls, ["dash"]) }
-        { name: "scout-noclip", values ["7"], channels: concat(movement, controls, ["rise", "dash"]) }
+        { name: "suited-noclip", values ["3", "7"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
         // A craft (the launch field's ship): a body no seat is, which flies on the movement and rise channels.
         { name: "craft", values ["4", "5"], channels: concat(movement, ["rise"]) }
       ]
@@ -57,10 +55,6 @@ inputModes {
         { from: "suited-noclip", to: "suited", keep: movement, conditionalKeep: flyingRise }
         { from: "pilot-noclip", to: "suited-noclip", keep: concat(movement, ["rise"]) }
         { from: "suited-noclip", to: "pilot-noclip", keep: concat(movement, ["rise"]) }
-        { from: "suited", to: "scout", keep: movement }
-        { from: "scout", to: "pilot", keep: movement }
-        { from: "scout", to: "scout-noclip", keep: movement }
-        { from: "scout-noclip", to: "scout", keep: movement }
       ]
     }
     {

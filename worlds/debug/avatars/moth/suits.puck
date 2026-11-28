@@ -70,8 +70,9 @@ let bootCyan = 25 // #1F9BAE the heel lenses' idle pilot light
 let bootGlow = 26 // #D8FDFF the heel lenses' pale cores
 let pistonSteel = 27 // satin steel piston cylinders
 let torsoSuit = 28 // segmented charcoal fabric between the chest and belt
-let journalScreenLeft = mothMechSuit.wornScreen.screens.left // the left journal panel's glass, whose paints are the journal's interface
-let journalScreenRight = mothMechSuit.wornScreen.screens.right // the right journal panel's glass
+// The journal panels' glass: their paints are the journal's interface (contract.puck's worn screen slots).
+let journalScreenLeft = mothMechSuit.wornScreen.screens.left
+let journalScreenRight = mothMechSuit.wornScreen.screens.right
 // Slot 6 (cyan) is free.
 
 // Wear is a faint floor on a pristine suit: its coverage stays under the primer's threshold except at the tightest

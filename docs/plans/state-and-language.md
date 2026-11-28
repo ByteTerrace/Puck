@@ -271,7 +271,7 @@ choice:
 overrides. Sites: the gallery map re-lists every text-run field to move six
 runs (`worlds/debug/shapes.puck` around `:410`, the `map(..., run => { … })`),
 the Moth's palette repeats the whole `weathering { }` block per plate slot
-(`worlds/debug/avatars/moth/suits.puck:1233` on, five times), the 13 near-identical
+(the palette of `suitPrototype` in `worlds/debug/avatars/moth/suits.puck`, five times), the 13 near-identical
 emboss runs in `shapes.puck`.
 
 - (a) `base with { member: value }`, an expression: a block after `with`,

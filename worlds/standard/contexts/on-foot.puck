@@ -12,8 +12,8 @@
 // The entry ids are the standard's action names, which the bar's icon row is keyed by (controls.puck's `barIcons`), so
 // another context's entry that names the same action wears the same icon.
 //
-// Jetpack flight is this context too: the `flight` channel switches flight mode (../player/actions.puck's `jetpackAction`), and
-// the rise channel climbs and sinks while it is on.
+// Jetpack flight is this context too: the `flight` channel switches flight mode (../player/actions.puck's
+// `jetpackAction`), and the rise channel climbs and sinks while it is on.
 
 function onFootControls() = {
   id: "on-foot"

@@ -242,7 +242,12 @@ function climbAction(speed = 2.2, cone = [60, 120], reach = 0.8, pull = 6, drive
               compareState(state: stamina, comparison: GreaterOrEqual, value: jumpCost)
             ])
             effects [
-              planarImpulse(bodyDirection: [0, 1, 0], speed: jumpSpeed, durationSeconds: jumpSeconds, useMoveDirection: true)
+              planarImpulse(
+                bodyDirection: [0, 1, 0],
+                speed: jumpSpeed,
+                durationSeconds: jumpSeconds,
+                useMoveDirection: true
+              )
               addState(state: stamina, value: -jumpCost)
             ]
           }
