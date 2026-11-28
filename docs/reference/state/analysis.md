@@ -151,8 +151,9 @@ A sweep of **this tick's events** (`RuleIteration.BindsEvents`: in Puck.World
 nothing on a tick with no event and one binding per event. Its multiplier is
 still the events one tick can carry, which is its worst case, but the line is
 charged one binding's check and firing and one snapshot unit of setup: the one
-event the sheet's "one change" is. A `maxFirings` bound or a host that judges
-the line in place keeps the capacity price.
+event the sheet's "one change" is. A `maxFirings` bound caps only the firings
+of the events that arrived, so it keeps that price; a host that judges the line
+in place keeps the capacity price.
 
 ### Price by change
 
@@ -177,17 +178,24 @@ same judgement the due list's schedule is built from and charges the line
   line over inputs at rest fires nothing at rest; over a moving input it can
   cross again, and is charged every binding. A Level rule whose firing closes
   its own gate fires nothing at rest, whatever moves, and so does one whose
-  firing settles (`RuleResponse.Settles`): every effect is a plain set and
-  nothing its values, keys or branches are computed from is a row it writes,
-  so a second firing writes what the first wrote and the evaluator takes the
-  binding as settled. Such a line is charged two firings for a change, the
-  second being the one that proves it settled.
+  firing settles (`RuleResponse.Settles`). The proof walks every path through
+  the firing's branches and savepoints: each path either closes the gate (as
+  below, over that path's steps alone) or writes only idempotent steps (a plain
+  set, or a `copyRow`, which reads its destination only to pass over cells that
+  already hold the copied value) to rows nothing the firing computes its values,
+  keys or branches from. A binding that took such a path reads the same values
+  next tick, takes the same path and writes what the first firing wrote, and
+  the evaluator takes the binding as settled. Such a line is charged two
+  firings for a change, the second being the one that proves it settled.
 - **A firing closes its own gate** (`RuleResponse.ClosesItself`) when the gate
-  is a comparison, or a conjunction with a comparison among its terms, of a
-  cell the binding itself names (a literal key, or `row[$each]`); the rule's
-  one write to that row is an unconditional set of that cell; and the value
-  written fails the comparison; a set inside a `transaction` with no refusal
-  branch counts as unconditional. `when state[$each] == 0` with
+  holds only while a comparison does (the gate itself, a term of a conjunction,
+  or every term of a disjunction) of a cell the binding itself names (a literal
+  key, or `row[$each]`); the rule's one write that can reach that cell is an
+  unconditional set of it (a write of another literal key of the same row
+  cannot reach it); and the value written fails the comparison; a set inside a
+  `transaction` with no refusal branch counts as unconditional. So
+  `when turn != saved.turn or started != saved.started` with both copies
+  written closes. `when state[$each] == 0` with
   `state[$each] = 1` is one, and so is
   `when at[$each] != goal[group[$each]]` with `at[$each] = goal[group[$each]]`.
   Such a binding fires once and stays closed until another line writes. The
@@ -217,7 +225,10 @@ same judgement the due list's schedule is built from and charges the line
 - **A gate that never holds** on the host fires nothing there
   (`RuleResponse.NeverHolds`): a host whose search ply is fixed answers the live
   ply, zero, so a gate that `search(ply) > 0` closes is a search judge's line,
-  priced with the search, and the tick charges only its checks.
+  priced with the search, and the tick charges only its checks. When that
+  comparison is a conjunct of the gate's top-level conjunction, the gate stops
+  there (`RuleResponse.ClosedPrefix`), so a check is charged only the conjuncts
+  up to it.
   A row read through a per-binding index, `goal[group[$each]]`, is shared too,
   but one of its cells is read only by the bindings that index it, so the line
   is charged every check and an even share of the firings: the multiplier
@@ -742,8 +753,11 @@ member's structure runs the next visit in full. The sheet multiplies the rule by
 every member's capacity and prices one change at one member's bindings. Two such
 lines whose gates pin one row's cell under `$member` to disjoint ranges
 (`patienceSyncScan[$member] == turn`) share one allowance, as literal pins do,
-when neither fires at rest and every read at rest reaches its binding through
-the member (`RuleResponse.PinsByMember`). A host fact read for the body bound to `$each` marks
+when neither fires at rest, no deadline wakes either and nothing either reads
+at rest is shared (`RuleResponse.PinsByMember`): a member's change opens that
+member, which only one of them fires at, and a change of the cell under one
+`$each` key opens one binding in each member, which each line reading it is
+already charged. A host fact read for the body bound to `$each` marks
 that body's binding the same way, and in a sweep whose keys are bodies it marks
 nothing for a body outside the set the sweep last bound: that body has no
 binding until the set itself moves, which reaches the sweep through the set's

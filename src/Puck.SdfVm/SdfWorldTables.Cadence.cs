@@ -149,7 +149,7 @@ public sealed partial class SdfWorldTables {
     public UInt128 LightMaskOf(SdfFrame frame, int view) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
-        return ((frame.Views.Count == 0) ? Every(count: frame.Lights.Count) : MasksOf(frame: frame, view: view).LightMask);
+        return ((frame.Views.Count == 0) ? Every(count: m_shadedLights.Count) : MasksOf(frame: frame, view: view).LightMask);
     }
     /// <summary>Returns the mask of the analytic occluders a view shades (<see cref="SdfLightSelection.SelectOccluders"/>),
     /// computed with its light mask once a frame for each view and shared by every pass block and signature that reads
@@ -176,9 +176,9 @@ public sealed partial class SdfWorldTables {
             SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.LightSelections);
             var camera = frame.Views[index].Camera;
 
-            inputs.LightMask = SdfLightSelection.Select(camera: in camera, exposure: exposure, far: frame.FarDistance, lights: frame.Lights);
+            inputs.LightMask = SdfLightSelection.Select(camera: in camera, exposure: exposure, far: frame.FarDistance, lights: m_shadedLights);
             inputs.OccluderMask = ((frame.Occluders.Count > 0)
-                ? SdfLightSelection.SelectOccluders(camera: in camera, exposure: exposure, far: frame.FarDistance, lightMask: inputs.LightMask, lights: frame.Lights, occluders: frame.Occluders)
+                ? SdfLightSelection.SelectOccluders(camera: in camera, exposure: exposure, far: frame.FarDistance, lightMask: inputs.LightMask, lights: m_shadedLights, occluders: frame.Occluders)
                 : UInt128.Zero);
             inputs.MaskFrame = frame;
             inputs.MaskEpoch = m_viewInputsEpoch;

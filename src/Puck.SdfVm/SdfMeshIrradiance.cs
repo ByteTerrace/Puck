@@ -867,7 +867,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         tables.SettleMeshIrradiance();
         Reserve(frame: frame, hold: tables.Lighting, tier: tier);
 
-        var parameters = Stage(bakePending: bakePending, frame: frame, tier: tier, write: m_write);
+        var parameters = Stage(bakePending: bakePending, frame: frame, lights: tables.Lights, tier: tier, write: m_write);
 
         // The views read the volume only through a bound table, which none is while a relayout replaces the feedback.
         return (tables.BindsMeshIrradiance ? parameters : (parameters with { Enabled = false }));
@@ -896,10 +896,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <param name="bakePending">Whether the mesh bake still owes opaque static meshes.</param>
     /// <param name="write">Receives the volume's probe slots, <see cref="SdfMeshIrradianceProbe.ProbeWords"/> words each,
     /// every level's after the finer level's, whenever a frame publishes a change to them.</param>
+    /// <param name="lights">The lights the volume traces and bounces: a residency's shaded lights
+    /// (<see cref="SdfWorldTables.Lights"/>, the frame's and its screens' face lights), or <see langword="null"/> for the
+    /// frame's own.</param>
     /// <returns>The parameters the views pass reads.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> or <paramref name="write"/> is
     /// <see langword="null"/>.</exception>
-    public SdfMeshIrradianceParameters Stage(SdfFrame frame, SdfIndirectTier tier, bool bakePending, Action<ReadOnlyMemory<uint>> write) {
+    public SdfMeshIrradianceParameters Stage(SdfFrame frame, SdfIndirectTier tier, bool bakePending, Action<ReadOnlyMemory<uint>> write, SdfLights? lights = null) {
         ArgumentNullException.ThrowIfNull(argument: frame);
         ArgumentNullException.ThrowIfNull(argument: write);
 
@@ -957,7 +960,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
             if (relaid) { ForgetPublication(); }
             if (ScenePendingDue(bakePending: bakePending, frame: frame)) { _ = RefreshScene(bakePending: bakePending, frame: frame); }
-            RefreshLighting(frame: frame, layout: layout);
+            RefreshLighting(frame: frame, layout: layout, lights: (lights ?? frame.Lights));
             Grant(budget: frame.IndirectBudget);
             if (!m_owed && m_nextLightCheck != 0 && Time.GetTimestamp() >= m_nextLightCheck) { Owe(); }
             m_camera = WindowCamera(frame: frame);
@@ -2111,22 +2114,26 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // (Lighting.SkyMatches), exactly under a converged frame or a grid.
     private readonly SdfLights m_captureLights = new();
 
-    private void RefreshLighting(SdfFrame frame, Layout layout) {
+    private void RefreshLighting(SdfFrame frame, Layout layout, SdfLights lights) {
         var grid = frame.IndirectLightingGrid;
 
         grid.Validate();
-        var captureLights = frame.Lights;
+        var captureLights = lights;
 
         if (grid.Enabled) {
-            m_captureLights.CopyFrom(source: frame.Lights);
-            for (var index = 0; (index < frame.Lights.Count); index++) { m_captureLights.Set(index: index, light: grid.Snap(light: frame.Lights[index])); }
+            m_captureLights.CopyFrom(source: lights);
+            for (var index = 0; (index < lights.Count); index++) { m_captureLights.Set(index: index, light: grid.Snap(light: lights[index])); }
             captureLights = m_captureLights;
         }
         // Every key is a 64-bit digest of every input bit it names: equal keys stand for unchanged lighting. The lights'
         // key leaves the scene's materials out, so it moves only for a light switched, dimmed or edited, a gain or a
         // source, which starts a lighting epoch (Lighting.Epoch); the local key adds the materials, so a recolour or a
-        // group bringing new materials moves it, and the jump it makes (Lighting.Jump), but not the epoch.
+        // group bringing new materials moves it, and the jump it makes (Lighting.Jump), but not the epoch. A traced face
+        // (SdfLightKind.Face) bounces nothing, so its place and index, which are all its visibility bits read, join the
+        // local key: a screen's face that comes, goes or moves owes the probes a relight for their bits without starting
+        // an epoch, as an emitting patch the scene lands does.
         var lit = Fnv1aHash.Create();
+        var faces = Fnv1aHash.Create();
         var gains = frame.IndirectGains;
 
         lit.AddBits(value: gains.Lights); lit.AddBits(value: gains.Emission); lit.AddBits(value: gains.Screens);
@@ -2139,13 +2146,20 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var records = captureLights.Records;
         var roles = MultisetDigest.Empty;
 
-        for (var index = 0; (index < frame.Lights.Count); index++) {
+        for (var index = 0; (index < captureLights.Count); index++) {
             var light = records[index];
 
             if (light.Kind == SdfLightKind.Directional && light.Weight > 0f) {
                 roles = roles.Add(((ulong)index << 1) | (light.CastsShadow ? 1UL : 0UL));
             }
-            if (light.IsTraced && (light.Kind != SdfLightKind.Directional)) { AddLight(hash: ref lit, index: index, light: in light); }
+            if (light.Kind == SdfLightKind.Face) {
+                if (light.IsTraced) {
+                    faces.Add(value: unchecked((uint)index));
+                    faces.AddBits(value: light.Direction.X); faces.AddBits(value: light.Direction.Y); faces.AddBits(value: light.Direction.Z);
+                }
+            } else if (light.IsTraced && (light.Kind != SdfLightKind.Directional)) {
+                AddLight(hash: ref lit, index: index, light: in light);
+            }
         }
 
         // Local cube reuse also copies visibility bits. A directional leaving its slot must clear its old bit.
@@ -2159,6 +2173,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // another emitter, or loses one, moves the local key as a recolour does.
         local.Add(value: (m_scene?.EmitterDigest ?? 0UL));
         local.AddBits(value: frame.Exposure.BrightestGain);
+        local.Add(value: faces.Value);
         var localKey = local.Value;
         var whole = Fnv1aHash.Create();
 
@@ -2166,7 +2181,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         whole.AddBits(value: grid.DirectionDegrees); whole.AddBits(value: grid.Radiance);
         whole.Add(value: (frame.ConvergesLighting ? 1U : 0U));
-        for (var index = 0; (index < frame.Lights.Count); index++) {
+        for (var index = 0; (index < captureLights.Count); index++) {
             var light = captureLights[index];
 
             if (light.Kind == SdfLightKind.Directional) { AddLight(hash: ref whole, index: index, light: in light); }
@@ -4391,12 +4406,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             points.Clear();
             var records = captureLights.Records;
 
-            for (var index = 0; (index < frame.Lights.Count); index++) {
+            for (var index = 0; (index < captureLights.Count); index++) {
                 var light = records[index];
 
                 if ((light.Kind == SdfLightKind.Directional) && (light.Weight > 0f)) {
                     lights.Add(item: light with { Direction = SdfLights.UnitDirection(direction: light.Direction) });
                     indices.Add(item: index);
+                } else if (light.IsTraced && (light.Kind == SdfLightKind.Face)) {
+                    // A face is traced for its visibility bits alone: no range, weight or bounce, so no hit is shaded by
+                    // it (Shade, sdfProbeShade) and its bit is the probe's view of its center (Relight).
+                    points.Add(item: new TracedLight(Bounce: 0f, Color: Vector3.Zero, Index: index, Position: light.Direction, Range: 0f, SpotAxis: Vector3.Zero, SpotOffset: 1f, Weight: 0f));
                 } else if (light.IsTraced) {
                     // Every traced light, a dark one included: its visibility bits are the geometry's (Relight), and its
                     // range, zero while it is dark, bounds only its bounce. A line is traced as a point at its midpoint

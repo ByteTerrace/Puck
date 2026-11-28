@@ -16,10 +16,6 @@
 bool screenSourceBound(uint screenIndex) {
     return (worldScreenMapping(screenIndex).state.x != 0.0);
 }
-// One past the highest screen whose source is bound this frame, or zero when none is.
-uint screenLightLoopBound() {
-    return passGroup.screenCount;
-}
 // The slot a screen material's hit shades through (sdfScreenSlot), or SdfNoScreenSlot for the plain sentinel or a screen
 // holding none this frame.
 uint sdfScreenSlotOfMaterial(int material) {

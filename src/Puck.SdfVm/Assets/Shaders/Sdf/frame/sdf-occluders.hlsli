@@ -1,6 +1,6 @@
 // The analytic occluders (sdfOccluders, SdfOccluder records generated from Puck.SignedDistance.SdfOccluder): a sphere,
 // capsule or box standing in for a creation, which takes away the share of a surface's ambient and indirect light its
-// covered hemisphere holds and casts a soft shadow toward a ranged light, a screen or an emitter face. A view walks the
+// covered hemisphere holds and casts a soft shadow toward a ranged light (a point, spot, line or face light). A view walks the
 // occluders of its mask (the pass block's occluderMask, SdfLightSelection), which a views tile narrows to those reaching
 // its hit points (sdfViewsTileLights) and glass to those reaching its wave's (sdfWaveLightMasks), by the set bits, as it
 // walks lights; a view whose mask is empty reads no record.
@@ -281,6 +281,8 @@ float sdfOccludersShadow(uint4 mask, float3 position, float3 target, float light
 
     float3 direction = (toLight / far);
     float lightSlope = (lightRadius / far);
+    // The widest penumbra half width any point of the segment takes, before an occluder's own Softness widens it.
+    float slopeWidth = (far * lightSlope);
     uint count = worldOccluderCount();
 
     [loop] for (uint word = 0u; (word < 4u); word++) {
@@ -297,6 +299,17 @@ float sdfOccludersShadow(uint4 mask, float3 position, float3 target, float light
             SdfOccluder occluder = sdfOccluders[index];
 
             if ((occluder.Shadow <= 0.0) || sdfOccluderOwns(occluder, frameSlot)) {
+                continue;
+            }
+
+            // The segment's least distance to the occluder's bounding sphere bounds its distance to the solid from below,
+            // and the half width is at most `widest`, so a segment that passes the sphere by that much or more sees the
+            // whole light past this occluder (its share is one) whatever the solid's own gap: the search is skipped.
+            float along = clamp(dot((occluder.Center - position), direction), 0.0, far);
+            float sphereGap = (length((position + (direction * along)) - occluder.Center) - sdfOccluderBound(occluder));
+            float widest = max(max(slopeWidth, (far * occluder.Softness)), 1.0e-4);
+
+            if (sphereGap >= widest) {
                 continue;
             }
 

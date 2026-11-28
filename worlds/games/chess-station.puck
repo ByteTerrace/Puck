@@ -189,6 +189,7 @@ template chessStationDisplayState(stations, look = gameStationLook) {
   row {
     name: "chessStationInks"
     kind: Text
+    capacity: 7
     cells [
       { key: "light", value: look.light }
       { key: "dark", value: look.dark }
@@ -468,7 +469,8 @@ template chessStationPlay(game, settleTicks, autoplay = false) {
     // On its side's turn, a pick lifts a piece of that side off a board at rest, lifts another in its place, puts the
     // lifted piece back on its own square, or sets it down on the cursor's square: the game's apply path relocates the
     // move (chess.puck's `chessAiOf` cells) and the settled board is judged against what the set-down saved
-    // (`chessPutDownOf`).
+    // (`chessPutDownOf`). The pick's edge holds for the one tick its press goes past half way, and a press needs a
+    // release first, so the gate never holds two ticks running and a crossing is each pick.
     rule $"chess-station-pick-{chair.name}" {
       local turn = chessTurn[$member]
       local cursor = chessStationCursorOf[$member][chair.name]
@@ -476,7 +478,7 @@ template chessStationPlay(game, settleTicks, autoplay = false) {
       local own = (chessBoard[$member][cursor] * (1 - 2 * turn)) > 0
       local ours = (turn == chair.turn) and (chessAiSide[$member] != turn) and (chessAiOf[$member].pending == 0) and (chessPutDownOf[$member].judging == 0)
       when search(ply) == 0 and gameStationGame[$member] == game and (gameStationEdgesOf[$member][chair.name] & pick) != 0
-      mode: Level
+      mode: Edge
       forEach: gameStationOf
       if picked < 0 {
         if own and ours and chessSettleHold[$member] == settleTicks {
@@ -618,8 +620,8 @@ template chessStationGlass(game) {
 
   // The rings: each square's shows, in order of precedence, a lifted piece's square, the near chair's cursor and the far
   // chair's while someone sits there, the last legal move's two squares, and otherwise the bare glass, as does every ring
-  // while chess is not shown. A ring is written only when what it shows changes, at most four a tick, so a cursor's step
-  // relights its two squares at once.
+  // while chess is not shown. A ring is written only when what it shows changes, and a station's rings are judged only
+  // when something they read at that station moves, so a cursor's step relights its two squares at once.
   rule "chess-station-rings" {
     local cell = chessStationCellNo[$each]
     local shown = gameStationGame[$member] == game
@@ -634,7 +636,6 @@ template chessStationGlass(game) {
     when search(ply) == 0 and chessStationRingCodeOf[$member][$each] != want
     mode: Level
     forEach: chessStationRingCodeOf
-    maxFirings: 4
     chessStationRingCodeOf[$member][$each] = want
     setState(state: chessStationRingInkOf[$member], key: $each, fromState: chessStationInks, fromKey: chessStationRingCodeOf[$member][$each])
   }

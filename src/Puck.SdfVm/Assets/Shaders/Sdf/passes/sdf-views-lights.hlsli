@@ -1,6 +1,8 @@
 // The views pass's light tiles: each 8x8 tile of the render extent narrows the view's light masks (sdfViewLightMasks: the
-// pass block's lightMask, SdfLightSelection, and every bound screen) to the lights and screens that can reach a surface
-// point the tile shades, and its light walks visit only those (sdfLightWalkStart). The tile's hit points are bounded by
+// pass block's lightMask, SdfLightSelection) to the lights that can reach a surface point the tile shades, and its light
+// walks visit only those (sdfLightWalkStart). Every kind is one record of the lights table, a screen's or an emitter
+// face's area light (SDF_LIGHT_FACE) as much as a point light, so one test and one probe answer cull them all and no
+// emitter class bypasses the culling. The tile's hit points are bounded by
 // two boxes, the hits nearer than the middle of the tile's depth range and the rest, so a tile across a silhouette bounds
 // the object and what lies behind it apart rather than the whole span between them.
 //
@@ -9,24 +11,25 @@
 // views kernels read them there (SDF_VIEWS_BINNED), so they hold no barrier and none of the tile's state. The filter pass
 // forms each pixel's surface point as the views stage does, from the same record.
 //
-// The invariant: a light, screen or occluder the tile leaves out adds nothing at any point either box holds. A point or
-// spot light's falloff is exactly zero at and past its range (sdfPointReach), and its cone exactly zero outside the
-// cone's angle; a screen lights only what lies in front of its face's plane, and nothing while its mean luminance is zero
-// (sdfLightResponse); and a point, spot or screen light fades to exactly zero where its light falls under the view's
-// cutoff (sdfLightCutoffFade), so one whose bound over a box stays under it adds nothing there. Every other kind (a
-// directional, a rim) reaches everything and is kept. An analytic occluder's ambient adds nothing at and past its Reach
+// The invariant: a light or occluder the tile leaves out adds nothing at any point either box holds. A point or spot
+// light's falloff is exactly zero at and past its range (sdfPointReach), and its cone exactly zero outside the cone's
+// angle; a face lights only what lies in front of its plane, and nothing while its mean luminance is zero
+// (sdfLightInputs, sdfFaceLight); and every ranged light fades to exactly zero where its light falls under the view's
+// cutoff (sdfLightCutoffFade), so one whose bound over a box stays under it adds nothing there (sdfLightReachesBox holds
+// each kind's bound). Every other kind (a directional, a rim) reaches everything and is kept. An analytic occluder's ambient adds nothing at and past its Reach
 // from its center, and its shadow nothing outside the hull of its grown bounding sphere and the light it falls from
-// (frame/sdf-occluders.hlsli), so the tile keeps, once its lights and screens stand, those whose sphere of reach meets a
-// box or whose shadow toward one of them can (sdfOccluderReachesWalk). The boxes hold every hit point of the tile exactly, the same point the light stage shades
+// (frame/sdf-occluders.hlsli), so the tile keeps, once its lights stand, those whose sphere of reach meets a box or whose
+// shadow toward one of them can (sdfOccluderReachesWalk). The boxes hold every hit point of the tile exactly, the same point the light stage shades
 // (the views stage passes the one it forms), so the only difference from walking the view's whole masks is the rounding
 // of a response within SdfLightReachMargin of where it falls to zero (sdfLightReachesBox).
 //
 // A tile also leaves out a light the irradiance volume traced (sdfLightTraces) that the probes about none of its shaded
 // pixels see: such a light's share of the probes is zero at every one of them (sdfViewsCellLightsSeen over the cells the
 // tile's pixels blend and sdfViewsPixelLightsSeen hold every light whose share can be above zero at a pixel), and a
-// traced point or spot light adds nothing where its share is zero
+// traced ranged light adds nothing where its share is zero
 // (SdfLightInputs.none, which the light phase's door answers by before it runs a program). So in a room the walk visits
-// the fixtures that light it, never those whose range crosses its walls and floors from the rooms beside it.
+// the fixtures, screens and emitter faces that light it, never those whose range crosses its walls and floors from the
+// rooms beside it.
 //
 // A binned view's filter pass also resolves the tile's traced lights' shares once for the tile (sdfViewsStoreTileShares):
 // each cell its pixels blend, its representative's share of each of the first SDF_SHADE_TILE_SHARED_LIGHTS traced lights
@@ -41,8 +44,8 @@
 #include "sdf-views-probes.hlsli"
 #include "sdf-views-filter.hlsli"
 
-#if SDF_SHADE_TILE_LIGHT_WORDS != 12
-#error A tile's light masks are the four words of a light mask, the four of a screen mask and the four of an occluder mask.
+#if SDF_SHADE_TILE_LIGHT_WORDS != 8
+#error A tile's light masks are the four words of a light mask and the four of an occluder mask.
 #endif
 #if (SDF_SHADE_TILE_SHARED_LIGHTS != 8) || ((SDF_VISIBILITY_GROUP_EDGE / SDF_VIEWS_PROBE_RATE) != 2) || (SDF_SHADE_TILE_SHARE_WORDS != (4 + (16 * (SDF_SHADE_TILE_SHARED_LIGHTS / 2))))
 #error A tile's shares are a light mask and four words for each of the four by four cells its pixels blend, which its 64 lanes store a word each.
@@ -71,8 +74,7 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
     uint word = sdfShadeTileLightsWord(p.viewIndex, sdfShadeTileOf(p.pixel));
 
     masks.lights = uint4(sdfShadeTiles[word], sdfShadeTiles[word + 1u], sdfShadeTiles[word + 2u], sdfShadeTiles[word + 3u]);
-    masks.screens = uint4(sdfShadeTiles[word + 4u], sdfShadeTiles[word + 5u], sdfShadeTiles[word + 6u], sdfShadeTiles[word + 7u]);
-    masks.occluders = uint4(sdfShadeTiles[word + 8u], sdfShadeTiles[word + 9u], sdfShadeTiles[word + 10u], sdfShadeTiles[word + 11u]);
+    masks.occluders = uint4(sdfShadeTiles[word + 4u], sdfShadeTiles[word + 5u], sdfShadeTiles[word + 6u], sdfShadeTiles[word + 7u]);
 #endif
     return masks;
 }
@@ -81,29 +83,12 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
 groupshared uint sdfViewsLightDepths[2];
 // The two boxes in ordered bits (puckOrderedFromFloat): the near hits' low corner and high corner, then the far hits'.
 groupshared uint sdfViewsLightBoxes[12];
-// The tile's light mask words, then its screen mask words, then its occluder mask words.
-groupshared uint sdfViewsLightTile[12];
+// The tile's light mask words, then its occluder mask words.
+groupshared uint sdfViewsLightTile[8];
 // The lights of the tile's mask the volume traced, and the traced lights the probes about some shaded pixel of the tile
 // see.
 groupshared uint sdfViewsLightTraced[SDF_MESH_IRRADIANCE_LIGHT_WORDS];
 groupshared uint sdfViewsLightSeen[SDF_MESH_IRRADIANCE_LIGHT_WORDS];
-
-// Whether a screen's face, at `origin` facing `facing`, can light any point of the box `low`..`high`: whether the box
-// has a point in front of its plane (the box's farthest reach along the facing, its centre's offset plus its half extent
-// projected on the facing's magnitudes) within its range, where its light reaches the view's cutoff
-// (sdfLightCutoffFade). A face of mean luminance `luminance` and weight `weight` (its area over pi) gives a point at most
-// luminance * weight / (d^2 + weight) (sdfLightResponse), its facing and window at most one.
-bool sdfViewsScreenFacesBox(float3 origin, float3 facing, float range, float luminance, float weight, float3 low, float3 high) {
-    float3 center = ((low + high) * 0.5);
-    float3 extent = ((high - low) * 0.5);
-    float3 offset = (center - origin);
-    float reach = (range * (1.0 + SdfLightReachMargin));
-    float nearest = sdfBoxDistanceSquared(origin, low, high);
-
-    return ((nearest <= (reach * reach))
-        && (((luminance * weight * passGroup.exposure) * (1.0 + SdfLightReachMargin)) > (SDF_LIGHT_RANGE_THRESHOLD * (nearest + weight)))
-        && ((dot(facing, offset) + dot(abs(facing), extent)) > (-SdfLightReachMargin * (length(offset) + length(extent)))));
-}
 
 #if defined(SDF_VIEWS_FILTER_PASS)
 // Stores the tile's traced-light shares into the shade bins (SDF_SHADE_TILE_SHARE_WORDS words at sdfShadeTileSharesWord),
@@ -198,7 +183,7 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
     if (lane < 12u) {
         sdfViewsLightBoxes[lane] = (((lane % 6u) < 3u) ? PuckOrderedHighest : PuckOrderedLowest);
     }
-    if (lane < 12u) {
+    if (lane < 8u) {
         sdfViewsLightTile[lane] = 0u;
     }
     if (lane < SDF_MESH_IRRADIANCE_LIGHT_WORDS) {
@@ -254,8 +239,8 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
             SdfLight light = sdfLights[index];
             bool keep = true;
 
-            if (sdfLightPositional(light.Kind)) {
-                float3 position = worldPointLightPosition(light);
+            if (sdfLightRanged(light.Kind)) {
+                float3 position = sdfLightPlace(light);
 
                 keep = ((nearHeld && sdfLightReachesBox(light, position, nearLow, nearHigh))
                     || (farHeld && sdfLightReachesBox(light, position, farLow, farHigh)));
@@ -267,59 +252,8 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
                 }
             }
         }
-
-        // A screen a lane, striding by the group's lanes: the walk's own bound, its luminance and its face (sdfLightNext's
-        // screen half). Whether its source is bound is the walk's to ask: a source binds without moving the lighting the
-        // filter pass stands on.
-        uint screens = sdfScreenLightCount();
-
-        [loop]
-        for (uint screen = lane; (screen < screens); screen += (SDF_VISIBILITY_GROUP_EDGE * SDF_VISIBILITY_GROUP_EDGE)) {
-            if (any(sdfScreenLights[screen].rgb > 0.0)) {
-                ScreenSurfaceData surface = worldScreenSurface(screen);
-                float3 origin = surface.origin.xyz;
-                float3 facing = normalize(cross(surface.right.xyz, surface.up.xyz));
-                float luminance = dot(sdfScreenLights[screen].rgb, PuckRec709Luminance);
-                // The face's area over pi, as the walk weighs it (sdfLightNext).
-                float weight = (((4.0 * surface.right.w) * surface.up.w) / SDF_PI);
-
-                if ((nearHeld && sdfViewsScreenFacesBox(origin, facing, surface.origin.w, luminance, weight, nearLow, nearHigh))
-                    || (farHeld && sdfViewsScreenFacesBox(origin, facing, surface.origin.w, luminance, weight, farLow, farHigh))) {
-                    InterlockedOr(sdfViewsLightTile[4u + (screen / 32u)], (1u << (screen % 32u)));
-                }
-            }
-        }
     }
     GroupMemoryBarrierWithGroupSync();
-
-    // An occluder a lane, striding by the group's lanes, once the tile's lights and screens stand: each of the view's whose
-    // ambient or whose shadow toward one of them can reach a box (sdfOccluderReachesWalk), elsewhere adding nothing.
-    if (nearHeld || farHeld) {
-        float3 nearLow = float3(puckFloatFromOrdered(sdfViewsLightBoxes[0]), puckFloatFromOrdered(sdfViewsLightBoxes[1]), puckFloatFromOrdered(sdfViewsLightBoxes[2]));
-        float3 nearHigh = float3(puckFloatFromOrdered(sdfViewsLightBoxes[3]), puckFloatFromOrdered(sdfViewsLightBoxes[4]), puckFloatFromOrdered(sdfViewsLightBoxes[5]));
-        float3 farLow = float3(puckFloatFromOrdered(sdfViewsLightBoxes[6]), puckFloatFromOrdered(sdfViewsLightBoxes[7]), puckFloatFromOrdered(sdfViewsLightBoxes[8]));
-        float3 farHigh = float3(puckFloatFromOrdered(sdfViewsLightBoxes[9]), puckFloatFromOrdered(sdfViewsLightBoxes[10]), puckFloatFromOrdered(sdfViewsLightBoxes[11]));
-        uint4 tileLights = uint4(sdfViewsLightTile[0], sdfViewsLightTile[1], sdfViewsLightTile[2], sdfViewsLightTile[3]);
-        uint4 tileScreens = uint4(sdfViewsLightTile[4], sdfViewsLightTile[5], sdfViewsLightTile[6], sdfViewsLightTile[7]);
-        uint occluders = worldOccluderCount();
-
-        [loop]
-        for (uint occluder = lane; (occluder < occluders); occluder += (SDF_VISIBILITY_GROUP_EDGE * SDF_VISIBILITY_GROUP_EDGE)) {
-            uint occluderWord = (occluder / 32u);
-            uint occluderBit = (1u << (occluder % 32u));
-
-            if ((sdfComponent(viewMasks.occluders, occluderWord) & occluderBit) == 0u) {
-                continue;
-            }
-
-            SdfOccluder record = sdfOccluders[occluder];
-
-            if ((nearHeld && sdfOccluderReachesWalk(record, tileLights, tileScreens, nearLow, nearHigh))
-                || (farHeld && sdfOccluderReachesWalk(record, tileLights, tileScreens, farLow, farHigh))) {
-                InterlockedOr(sdfViewsLightTile[8u + occluderWord], occluderBit);
-            }
-        }
-    }
 
     // The traced lights the tile kept, the same on every lane, so a tile that kept none (the open valley) reads no probe
     // record here. The tile's pixels blend the tile's own cells and the ring of cells about them, a cell a lane; a pixel
@@ -351,8 +285,40 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
     uint4 seenTraced = (traced & uint4(sdfViewsLightSeen[0], sdfViewsLightSeen[1], sdfViewsLightSeen[2], sdfViewsLightSeen[3]));
 
     masks.lights = (uint4(sdfViewsLightTile[0], sdfViewsLightTile[1], sdfViewsLightTile[2], sdfViewsLightTile[3]) & ~(traced & ~seenTraced));
-    masks.screens = uint4(sdfViewsLightTile[4], sdfViewsLightTile[5], sdfViewsLightTile[6], sdfViewsLightTile[7]);
-    masks.occluders = uint4(sdfViewsLightTile[8], sdfViewsLightTile[9], sdfViewsLightTile[10], sdfViewsLightTile[11]);
+    masks.occluders = uint4(0u, 0u, 0u, 0u);
+
+    // An occluder a lane, striding by the group's lanes, once the tile's walk stands (the probes' answer included, so an
+    // occluder kept only for its shadow toward a light no pixel's probes see is left out): each of the view's whose
+    // ambient or whose shadow toward one of the walk's lights can reach a box (sdfOccluderReachesWalk), elsewhere adding
+    // nothing. The view's occluder mask is the pass block's, uniform over the group, so a view with none holds no barrier.
+    if (any(viewMasks.occluders != 0u)) {
+        if (nearHeld || farHeld) {
+            float3 nearLow = float3(puckFloatFromOrdered(sdfViewsLightBoxes[0]), puckFloatFromOrdered(sdfViewsLightBoxes[1]), puckFloatFromOrdered(sdfViewsLightBoxes[2]));
+            float3 nearHigh = float3(puckFloatFromOrdered(sdfViewsLightBoxes[3]), puckFloatFromOrdered(sdfViewsLightBoxes[4]), puckFloatFromOrdered(sdfViewsLightBoxes[5]));
+            float3 farLow = float3(puckFloatFromOrdered(sdfViewsLightBoxes[6]), puckFloatFromOrdered(sdfViewsLightBoxes[7]), puckFloatFromOrdered(sdfViewsLightBoxes[8]));
+            float3 farHigh = float3(puckFloatFromOrdered(sdfViewsLightBoxes[9]), puckFloatFromOrdered(sdfViewsLightBoxes[10]), puckFloatFromOrdered(sdfViewsLightBoxes[11]));
+            uint occluders = worldOccluderCount();
+
+            [loop]
+            for (uint occluder = lane; (occluder < occluders); occluder += (SDF_VISIBILITY_GROUP_EDGE * SDF_VISIBILITY_GROUP_EDGE)) {
+                uint occluderWord = (occluder / 32u);
+                uint occluderBit = (1u << (occluder % 32u));
+
+                if ((sdfComponent(viewMasks.occluders, occluderWord) & occluderBit) == 0u) {
+                    continue;
+                }
+
+                SdfOccluder record = sdfOccluders[occluder];
+
+                if ((nearHeld && sdfOccluderReachesWalk(record, masks.lights, nearLow, nearHigh))
+                    || (farHeld && sdfOccluderReachesWalk(record, masks.lights, farLow, farHigh))) {
+                    InterlockedOr(sdfViewsLightTile[4u + occluderWord], occluderBit);
+                }
+            }
+        }
+        GroupMemoryBarrierWithGroupSync();
+        masks.occluders = uint4(sdfViewsLightTile[4], sdfViewsLightTile[5], sdfViewsLightTile[6], sdfViewsLightTile[7]);
+    }
 #if defined(SDF_VIEWS_FILTER_PASS)
     sdfViewsStoreTileShares(p, lane, seenTraced);
 #endif

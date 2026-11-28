@@ -737,9 +737,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     var lightMask = tables.LightMaskOf(frame: residency.Frame!, view: m_view.View);
 
                     m_shadePlan = (m_binned
-                        ? m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount, lightMask: lightMask)
+                        ? m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, tableLights: tables.Lights.Count, lightMask: lightMask)
                         : SdfShadeDispatch.For(previous: m_shadePlan, frame: residency.Frame!, width: recording.Width, height: recording.Height,
-                            screens: tables.PassValues.ScreenCount, lightMask: lightMask, glass: false, tier: residency.ShadeTier));
+                            tableLights: tables.Lights.Count, lightMask: lightMask, glass: false, tier: residency.ShadeTier));
                     m_decided.Selection = m_shade.RecordSelection(plan: m_shadePlan, residency: residency, slot: recording.Slot);
                     break;
                 }
@@ -750,7 +750,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     break;
                 }
             case SdfWorldPackage.Parts.ViewsBins: {
-                    var plan = m_owner.CommitShadePlan(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount,
+                    var plan = m_owner.CommitShadePlan(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, tableLights: tables.Lights.Count,
                         lightMask: tables.LightMaskOf(frame: residency.Frame!, view: m_view.View));
 
                     SdfFrameBlock.WriteShadeBins(block: recording.PassBlock, plan: plan);

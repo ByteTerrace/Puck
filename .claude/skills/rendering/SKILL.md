@@ -1104,24 +1104,33 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   its shared pose's box, and an overlay row that moves meets that view's scopes
   whole.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
-  light kind is a branch there and nowhere else. Views and glass visit lights
-  through one walk (`sdfLightWalkStart`, `sdfLightNext`) over two masks
-  (`SdfLightMasks`): the set bits of the light mask, then of the screen mask,
-  so a light a mask leaves out costs no iteration. Glass walks the view's
-  masks (`sdfViewLightMasks`); views walks each 8×8 tile's
+  light kind is a branch there and nowhere else. The lights table is the one
+  light list: the frame's lights, then a face light (`SdfLightKind.Face`) at
+  `SdfWorldTables.FaceLightBase` plus the slot for every resident screen slot,
+  a screen and an emitter face alike (`SdfWorldTables.Lights`, packed by
+  `PackFaceLights` after the screens' slots and ranges settle); the view masks
+  (`LightMaskOf`), the pass block's count and the irradiance volume's traced
+  lights all read that one `SdfLights`. No screen mask or second walk exists:
+  never add one. Views and glass visit lights through one walk
+  (`sdfLightWalkStart`, `sdfLightNext`) over the set bits of the light mask
+  (`SdfLightMasks`), so a light a mask leaves out costs no iteration. Glass
+  walks its wave's lights but no face light (`sdfWaveLightMasks`: a pane over a
+  screen stands inside the face's whole range); views walks each 8×8 tile's
   (`sdfViewsTileLights`, `passes/sdf-views-lights.hlsli`): the view's lights
-  whose range sphere (and spot cone) meets the boxes about the tile's hit
-  points and whose bound there reaches the view's cutoff (`sdfLightReachesBox`,
-  `frame/sdf-lights.hlsli`, which the probe lookup's slots also judge their
-  lights by), the non-black screens the boxes reach in front of, and of the lights
-  the volume traces (`sdfLightTraces`) only those the probes about some shaded
-  pixel of the tile see (`sdfViewsLightsSeen`). A mask
+  whose range sphere (and spot cone, or a face's half space in front of it)
+  meets the boxes about the tile's hit points and whose bound there reaches the
+  view's cutoff (`sdfLightReachesBox`, `frame/sdf-lights.hlsli`, which the probe
+  lookup's slots also judge their lights by; a face's bound reads its reduced
+  luminance through `sdfFaceLight`), and of the lights the volume traces
+  (`sdfLightTraces`: a static point, spot, line or face light) only those the
+  probes about some shaded pixel of the tile see (`sdfViewsLightsSeen`). A mask
   may leave out only a light that adds nothing at the points its lanes shade,
-  so a new light kind or reach (an authored falloff past `Param`, a screen
-  that lights behind its face) widens the tile test in the same change, or
-  tiles cut its light off. `SdfLightMasks` carries a third mask, the analytic
+  so a new light kind or reach (an authored falloff past `Param`, a face that
+  lights behind itself) widens the tile test in the same change, or tiles cut
+  its light off. `SdfLightMasks` carries a second mask, the analytic
   occluders (`SdfOccluder`, `frame/sdf-occluders.hlsli`), culled by the same
-  boxes once a tile's lights and screens stand (`sdfOccluderReachesWalk`): its
+  boxes once a tile's walk stands, the probes' answer included
+  (`sdfOccluderReachesWalk`): its
   ambient adds nothing at or past its `Reach` from its centre
   (`sdfOccludersAmbient` multiplies by `sdfOccluderWindow`), and its shadow,
   which reaches as far as its light does, nothing outside the hull of the light
@@ -1129,14 +1138,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   host's `SdfLightSelection.ShadowMaySee`). A new occluder term, or a wider
   penumbra in `sdfOccludersShadow`, widens those tests and the view selection in
   the same change. An occluder takes from the ambient, indirect and environment terms and
-  from a ranged light's, screen's or emitter face's visibility in
+  from a ranged light's visibility (a face's included) in
   `sdfLightInputs`, never from a directional's, and never from a body's own
-  surfaces (`SdfOccluder.OwnSlot` against the surface's frame slot). A binned
-  view's tile words hold the three masks (`SdfWorldPackage.ShadeTileLightWords`,
-  twelve). The probes' half rests on one rule the light
+  surfaces (`SdfOccluder.OwnSlot` against the surface's frame slot); a light
+  whose segment passes an occluder's bounding sphere by the widest penumbra or
+  more skips its gap search (`sdfOccludersShadow`). A binned
+  view's tile words hold the two masks (`SdfWorldPackage.ShadeTileLightWords`,
+  eight). The probes' half rests on one rule the light
   phase's door enforces: a traced light whose probe share is zero adds nothing,
   whatever the program (`SdfLightInputs.none` in the generated
-  `sdfShadeLightPhase`, which also answers for a point, spot or screen light
+  `sdfShadeLightPhase`, which also answers for a ranged light
   whose reach is zero, the view's cutoff included: `sdfLightCutoffFade`, the
   same rule `sdfLightReachesBox` bounds a tile's boxes by, so a change to one is
   a change to both), so a change that lets an unseen traced light add
@@ -1152,18 +1163,19 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   place of its slots' agreement and list (`sdfViewsLightVisibility`, through the
   slots' cells `sdfViewsProbesAt` records); a pixel that reads an extra, and a
   light past those, read the slots. A change to a slot's light words or to
-  which cells a pixel blends changes the tile's shares with it. The filter
-  pass tests no screen's binding, since a source binds without moving the
-  lighting it stands on; the walk asks. `SDF_VIEWS_OMIT_LIGHT_TILES` reads the
+  which cells a pixel blends changes the tile's shares with it. A face's
+  luminance reads zero for a slot that shows no bound source and is no emitter
+  face (`sdfFaceLight`, the state row), since a source binds without moving the
+  lighting a tile stands on. `SDF_VIEWS_OMIT_LIGHT_TILES` reads the
   tiles' saving. A slot reader issues all four slots' loads with no branch
   between them (`sdfViewsProbesAt` repeats an answering slot in a slot of no
   share): a branch on each slot's share ran the slots one after another wherever
   a wave's lanes blend different cells. The walk's cost is its visits', not its
   registers: a pass of its own at 128 registers walked as slowly as views does at
   168 ([frame budget](../../../docs/plans/frame-budget.md#where-the-time-goes)).
-  The walks count their visits (`gpu.lights.visited` on
-  `world.counters gpu pass sdf.world$views` and `$glass-shade`, through
-  `puckCountLights`). Glass, which has no tiles, walks the view's lights that
+  The walks count their visits (`gpu.lights.visited`, and the face lights among
+  them `gpu.lights.faces`, on `world.counters gpu pass sdf.world$views` and
+  `$glass-shade`, through `puckCountLights`). Glass, which has no tiles, walks the view's lights that
   reach the box about its wave's active lanes' points (`sdfWaveLightMasks`,
   joined across the wave with no barrier). Index a vector at run time only
   through `sdfComponent`. A line (tube) light (`SdfLightKind.Line`, a world's
@@ -1175,10 +1187,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the half segment, and the irradiance volume traces it as a point at its
   midpoint carrying its whole intensity (`SdfMeshIrradiance`'s capture), so a
   long tube is a chain of segments cut where walls or slabs close it off.
-  A bound screen is a light of its own (`SdfLightScreen`, walked by the screen
-  mask): its colour is its face's mean luminance, which
-  `passes/sdf-screen-emission.comp.hlsl` reduces from the picture on the GPU
-  with no readback, and it shades as a Lambertian face of its area
+  A bound screen is a light of its own, a face light of the lights table
+  (`SdfLight.Face`: centre, unit facing in `SpotAxis`, area over π in `Weight`,
+  range in `Param`, slot in `SpotOffset`): its colour is its face's mean
+  luminance, which `passes/sdf-screen-emission.comp.hlsl` reduces from the
+  picture on the GPU with no readback (`sdfFaceLight`), a static one is traced
+  by the irradiance volume for its visibility alone (no bounce; its place joins
+  the volume's local key, so a face coming or moving relights the probes'
+  bits without starting an epoch, and a slot a new screen claims reads the
+  previous holder's bits until they are relit), a carried one
+  (`SetScreenSurface`) is untraced, and it shades as a Lambertian face of its area
   (`E = L·A·cos / (d² + A/π)`) windowed to zero at its range, so a screen
   lights what stands before it with what it shows. A world wanting a screen's
   glow on its surroundings declares a `screens` row, never a point light beside

@@ -61,6 +61,11 @@ uint sdfScreenSlot(int identity) {
 
     return ((held == 0u) || (held > SDF_MAX_SCREEN_SURFACES)) ? SdfNoScreenSlot : (held - 1u);
 }
+// A screen slot's state row (ScreenMappingData.state) alone, which a face light reads (sdfFaceLight).
+static const uint WorldScreenStateRow = 6u;
+float4 worldScreenState(uint screenIndex) {
+    return screenMappings[((screenIndex * WorldScreenMappingRows) + WorldScreenStateRow)];
+}
 ScreenMappingData worldScreenMapping(uint screenIndex) {
     uint row = (screenIndex * WorldScreenMappingRows);
     ScreenMappingData data;
@@ -70,7 +75,7 @@ ScreenMappingData worldScreenMapping(uint screenIndex) {
     data.imageV = screenMappings[(row + 3u)];
     data.crop = screenMappings[(row + 4u)];
     data.sampleClamp = screenMappings[(row + 5u)];
-    data.state = screenMappings[(row + 6u)];
+    data.state = worldScreenState(screenIndex);
     data.treatment = screenMappings[(row + 7u)];
     data.treatmentShape = screenMappings[(row + 8u)];
     return data;

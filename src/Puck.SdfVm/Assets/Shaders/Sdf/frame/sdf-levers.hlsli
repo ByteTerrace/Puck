@@ -20,9 +20,6 @@ bool worldSoftShadowsDisabled() {
 bool worldAoDisabled() {
     return (passGroup.disableAmbientOcclusion != 0u);
 }
-bool worldScreenLightsDisabled() {
-    return (passGroup.disableScreenLights != 0u);
-}
 
 // Stylized curvature/NPR shading (render.lighting.curvature) — artistic, not physically-based, and inert until a
 // world authors a gain. The runtime gate is "any gain above zero", so the enrichment's divide hangs off this one predicate

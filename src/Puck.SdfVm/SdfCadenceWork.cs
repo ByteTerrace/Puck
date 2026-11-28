@@ -54,6 +54,12 @@ public static class SdfCadenceWork {
     /// <summary>The screens wanted resident that held no slot because more were wanted than the slots hold, summed over
     /// every settle.</summary>
     public static readonly WorkKind ScreensDegraded = new(name: "sdf.screens.degraded", unit: "screens", workClass: WorkClass.Pacing);
+    /// <summary>The face lights the lights table held (SdfWorldTables.Lights, one a resident screen slot), summed over
+    /// every pack.</summary>
+    public static readonly WorkKind FaceLights = new(name: "sdf.screens.face-lights", unit: "lights", workClass: WorkClass.Pacing);
+    /// <summary>The resident screen slots that took no face light because the lights table was full, summed over every
+    /// pack: each shows its picture but lights nothing.</summary>
+    public static readonly WorkKind FaceLightsDropped = new(name: "sdf.screens.face-lights-dropped", unit: "lights", workClass: WorkClass.Pacing);
     /// <summary>Gets the process's cadence and screen-slot counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.cadence", kinds: [Signatures, Forced, Resampled, Blocks, Fits, LightSelections, Scopes, ScopesMet, ScopesLit, ScopeUnbounded, ScopeCulls, ScopeChanges, ScopeTests, ScreenSlotClaims, ScreenSlotReleases, ScreensResident, ScreensDegraded]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.cadence", kinds: [Signatures, Forced, Resampled, Blocks, Fits, LightSelections, Scopes, ScopesMet, ScopesLit, ScopeUnbounded, ScopeCulls, ScopeChanges, ScopeTests, ScreenSlotClaims, ScreenSlotReleases, ScreensResident, ScreensDegraded, FaceLights, FaceLightsDropped]);
 }

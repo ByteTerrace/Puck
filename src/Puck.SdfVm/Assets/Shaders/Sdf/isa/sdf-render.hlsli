@@ -109,6 +109,7 @@
 #define SDF_LIGHT_POINT       2u
 #define SDF_LIGHT_OCCLUDER    3u
 #define SDF_LIGHT_LINE        4u
+#define SDF_LIGHT_FACE        5u
 
 // Puck.SignedDistance.SdfOccluderShape.
 #define SDF_OCCLUDER_SPHERE  0u
@@ -126,7 +127,7 @@
 #define SDF_VISIBILITY_GROUP_EDGE        8u
 #define SDF_SHADE_BINS                   2u
 #define SDF_SHADE_TILE_HEADER_WORDS      6u
-#define SDF_SHADE_TILE_LIGHT_WORDS       12u
+#define SDF_SHADE_TILE_LIGHT_WORDS       8u
 #define SDF_SHADE_TILE_SHARE_WORDS       68u
 #define SDF_SHADE_TILE_SHARED_LIGHTS     8u
 #define SDF_VIEWS_FILTER_WORDS           4u

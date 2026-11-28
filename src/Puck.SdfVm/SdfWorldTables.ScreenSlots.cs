@@ -156,6 +156,7 @@ public sealed partial class SdfWorldTables {
         SetScreenBound(bound: false, screenIndex: screen);
         if (BitWords.Contains(mask: m_screenEmitters, index: slot)) { WriteEmitterState(slot: slot, material: 0, emissive: 0f, face: SdfScreenFace.Opening); }
         m_screenEmitters &= ~BitWords.Bit(index: slot);
+        m_screenCarried &= ~BitWords.Bit(index: slot);
         m_screenMappings[slot] = null;
         m_screenFaces[slot] = default;
         m_screenTreatments[slot] = default;

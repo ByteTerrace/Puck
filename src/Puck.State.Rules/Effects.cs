@@ -453,8 +453,9 @@ public sealed class TransformStateEffect : RuleEffect {
     public override void CollectWrites(List<CellAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        // A live end writes whichever entry its index selects: every entry, conservatively.
-        if (FromRow is { } fromRow) {
+        // A live end writes whichever entry its index selects: every entry, conservatively. A copy reads its source end
+        // and writes only its destination.
+        if ((FromRow is { } fromRow) && (Arena is not ArenaTransform.CopyRow)) {
             fromRow.CollectRows(into: into, isSet: true);
         }
         if (ToRow is { } toRow) {

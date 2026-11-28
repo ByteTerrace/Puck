@@ -17,7 +17,9 @@ namespace Puck.SdfVm;
 /// <param name="ShadeDefaultFirst">The default program's first vector in the appearance allocation.</param>
 /// <param name="DebugOptions">What the debug view reads beside its mode.</param>
 /// <param name="Field">The field views the field pass and the composite read, all zero for none.</param>
-public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode, SdfViewExposures? Exposures = null, uint ShadeDefaultFirst = 0, DebugViewOptions DebugOptions = default, SdfFieldValues Field = default);
+/// <param name="Lights">The lights the tables packed (<see cref="SdfWorldTables.Lights"/>: the frame's lights and its
+/// screens' face lights), or <see langword="null"/> for the frame's own.</param>
+public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode, SdfViewExposures? Exposures = null, uint ShadeDefaultFirst = 0, DebugViewOptions DebugOptions = default, SdfFieldValues Field = default, SdfLights? Lights = null);
 /// <summary>
 /// Writes what one view's passes read of a frame into an <c>sdf.world</c> pass block: the world values, the view's camera,
 /// the frame's levers, its light count and shadow slots, and its curvature shading, each at the offset the generated
@@ -263,7 +265,7 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block: block, offset: DebugMode, value: ((uint)tables.DebugMode));
         WriteVector4(block: block, offset: DebugOptions, value: new Vector4(x: tables.DebugOptions.Tolerance, y: (tables.DebugOptions.Bodies ? 1f : 0f), z: tables.DebugOptions.Band, w: 0f));
         WriteIndirectControls(block: block, frame: frame);
-        var lights = frame.Lights;
+        var lights = (tables.Lights ?? frame.Lights);
         var curvature = lights.Curvature;
 
         WriteUInt32(block: block, offset: LightCount, value: ((uint)lights.Count));

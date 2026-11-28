@@ -1,9 +1,12 @@
 // The slot lights shading reads from the lights table (sdfLights, SdfLight records generated from
 // Puck.SignedDistance.SdfLight), the shadow handoffs fading a slot from one light to another, and a positional light's
-// current position.
+// current position. The table is the one light list: the frame's lights, then a face light (SDF_LIGHT_FACE) for every
+// resident screen slot, whose luminance the screens' emission pass reduces (sdfScreenLights, sdfFaceLight).
 #ifndef FRAME_SDF_LIGHTS_HLSLI
 #define FRAME_SDF_LIGHTS_HLSLI
+#include "Shared/luma.hlsli"
 #include "sdf-environment.hlsli"
+#include "sdf-screen-mapping.hlsli"
 #include "../field/sdf-component.hlsli"
 
 // Both the declared count and the actual bound buffer constrain a read.
@@ -22,15 +25,15 @@ uint worldShadowHandoffCount() {
     return min(passGroup.shadowFadeCount, min(count, (uint)SDF_SHADOW_FADE_CAPACITY));
 }
 
-// Whether a light reaches only the range about its position: a point or spot light (the sphere of its range) or a line
-// light (the capsule of its range about its segment). KEEP IN SYNC with SdfLight.IsRanged.
+// Whether a light reaches only the range about its position: a point or spot light or a face (the sphere of its range)
+// or a line light (the capsule of its range about its segment). KEEP IN SYNC with SdfLight.IsRanged.
 bool sdfLightRanged(uint kind) {
-    return ((kind == SDF_LIGHT_POINT) || (kind == SDF_LIGHT_LINE));
+    return ((kind == SDF_LIGHT_POINT) || (kind == SDF_LIGHT_LINE) || (kind == SDF_LIGHT_FACE));
 }
-// Whether a light sits at a position worldPointLightPosition reads: a ranged light. KEEP IN SYNC with
+// Whether a light's position may ride a dynamic transform (worldPointLightPosition): a point or a line. KEEP IN SYNC with
 // SdfLight.IsPositional.
 bool sdfLightPositional(uint kind) {
-    return sdfLightRanged(kind);
+    return ((kind == SDF_LIGHT_POINT) || (kind == SDF_LIGHT_LINE));
 }
 
 // A point or line light's current world-space position (a line's midpoint): the live dynamic transform its slot names (an anchored
@@ -48,6 +51,33 @@ float3 worldPointLightPosition(SdfLight light) {
 #else
     return light.Direction;
 #endif
+}
+// A ranged light's current position: a point's or a line's as worldPointLightPosition reads it, a face's center.
+float3 sdfLightPlace(SdfLight light) {
+    return (sdfLightPositional(light.Kind) ? worldPointLightPosition(light) : light.Direction);
+}
+// Whether the frame's screen lights are off (SdfFrame.DisableScreenLights), which every face light reads as dark.
+bool worldScreenLightsDisabled() {
+    return (passGroup.disableScreenLights != 0u);
+}
+// The screen slot a face light's luminance is read from (SdfLight.Face: SpotOffset, a whole number).
+uint sdfFaceSlot(SdfLight light) {
+    return (uint)light.SpotOffset;
+}
+// A face light's luminance in nits, the face's mean as the screens' emission pass reduced it (sdfScreenLights): zero while
+// screen lights are off, past the slots, and for a slot that shows no bound source and is no emitter face (the state
+// row's bound flag and face, SdfWorldTables.SetScreenBound and WriteEmitterState), since a source binds and unbinds
+// without moving the lighting a tile stands on, and the reduction keeps an unbound slot's last mean until it runs again.
+float3 sdfFaceLight(SdfLight light) {
+    uint slot = sdfFaceSlot(light);
+
+    if (worldScreenLightsDisabled() || (slot >= SDF_MAX_SCREEN_SURFACES)) {
+        return float3(0.0, 0.0, 0.0);
+    }
+
+    float4 state = worldScreenState(slot);
+
+    return (((state.x != 0.0) || (state.w == 2.0)) ? sdfScreenLights[slot].rgb : float3(0.0, 0.0, 0.0));
 }
 // The light that holds a shadow role (SdfLights.RoleLight): the stable slot passGroup.shadowRoles names for it, or -1 when
 // no slot holds it.
@@ -175,9 +205,25 @@ float sdfBoxDistanceSquared(float3 center, float3 low, float3 high) {
 // midpoint's less the half segment: every element of the segment lies at least that far from every point of the box, so
 // the line gives a point of it at most its weight times its length, under its window there, over that distance squared
 // (sdfLineReach), and it has no cone.
+//
+// A face light lights only what lies in front of its face's plane, and nothing while its luminance is zero
+// (sdfLightInputs): a face of luminance L and weight w (its area over pi) gives a point at most L * w / (d^2 + w), its
+// facing and window at most one. So it reaches the box where the box has a point in front of the plane (the box's
+// farthest reach along the facing, its centre's offset plus its half extent projected on the facing's magnitudes) within
+// its range, and that bound at the box's nearest point reaches the view's cutoff.
 bool sdfLightReachesBox(SdfLight light, float3 position, float3 low, float3 high) {
     float reach = (light.Param * (1.0 + SdfLightReachMargin));
     float nearest = sdfBoxDistanceSquared(position, low, high);
+
+    if (light.Kind == SDF_LIGHT_FACE) {
+        float luminance = dot(sdfFaceLight(light), PuckRec709Luminance);
+        float3 offset = (((low + high) * 0.5) - position);
+        float3 extent = ((high - low) * 0.5);
+
+        return ((nearest <= (reach * reach))
+            && (((luminance * light.Weight * passGroup.exposure) * (1.0 + SdfLightReachMargin)) > (SDF_LIGHT_RANGE_THRESHOLD * (nearest + light.Weight)))
+            && ((dot(light.SpotAxis, offset) + dot(abs(light.SpotAxis), extent)) > (-SdfLightReachMargin * (length(offset) + length(extent)))));
+    }
 
     if (light.Kind == SDF_LIGHT_LINE) {
         float gap = max((sqrt(nearest) - length(light.SpotAxis)), 0.0);

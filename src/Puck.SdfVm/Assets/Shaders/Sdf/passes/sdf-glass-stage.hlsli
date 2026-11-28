@@ -590,5 +590,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         sdfGlassPixel(id.xy);
     }
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
-    puckCountLights(sdfWorkLights);
+    puckCountLights(sdfWorkLights, sdfWorkFaceLights);
 }

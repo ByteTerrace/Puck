@@ -237,7 +237,7 @@ void sdfViewsProbesStoreSlot(SdfViewsProbeSlot slot, SdfMeshProbes probes, uint 
         if (reaches) {
             SdfLight record = sdfLights[light];
 
-            reaches = (!sdfLightRanged(record.Kind) || sdfLightReachesBox(record, worldPointLightPosition(record), low, high));
+            reaches = (!sdfLightRanged(record.Kind) || sdfLightReachesBox(record, sdfLightPlace(record), low, high));
         }
         if (!reaches) {
             someCorner &= ~bit;

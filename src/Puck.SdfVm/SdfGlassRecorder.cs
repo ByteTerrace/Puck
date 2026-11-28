@@ -94,7 +94,7 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
         BindPorts(recording: in recording, set: set, tables: tables);
         m_history.Bind(layout: SdfWorldInterfaces.GlassParameters.Layout, pass: m_context.Pass, recording: in recording, set: set, tables: tables);
         m_shadePlan = SdfShadeDispatch.For(previous: m_shadePlan, frame: frame, width: recording.Width, height: recording.Height,
-            screens: tables.PassValues.ScreenCount, lightMask: tables.LightMaskOf(frame: frame, view: index), glass: true, tier: residency.ShadeTier);
+            tableLights: tables.Lights.Count, lightMask: tables.LightMaskOf(frame: frame, view: index), glass: true, tier: residency.ShadeTier);
         var pipeline = m_shade.RecordPipeline(recording.Slot, residency, m_shadePlan, SdfKernel.Glass);
 
         recording.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, pipelineHandle: pipeline.Handle);

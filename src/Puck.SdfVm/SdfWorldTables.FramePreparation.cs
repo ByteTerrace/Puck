@@ -223,13 +223,15 @@ public sealed partial class SdfWorldTables {
     public SdfViewExposures? ViewExposures { get; set; }
     /// <summary>Gets what every pass block of the latest packed frame takes from the tables: the bound screens, the
     /// instance-mask width, the mesh draws (the bound of the mesh hit door, zero on a frame <see cref="ForceHitBound"/>
-    /// armed), the debug view mode, the views' exposures and the field views.</summary>
+    /// armed), the debug view mode, the views' exposures, the field views and the lights the residency shades
+    /// (<see cref="Lights"/>).</summary>
     public SdfPassValues PassValues => new(
         DebugMode: DebugMode,
         DebugOptions: DebugOptions,
         Exposures: ViewExposures,
         Field: m_fieldValues,
         InstanceMaskWordCount: InstanceMaskWordCount,
+        Lights: m_shadedLights,
         MeshDraws: (m_hitBoundForced ? 0u : MeshDrawCount),
         ScreenCount: BoundScreenCount(),
         ShadeDefaultFirst: m_shadeDefaultFirst
@@ -317,6 +319,7 @@ public sealed partial class SdfWorldTables {
         }
 
         PackScreenReaches(frame: frame);
+        PackFaceLights(frame: frame);
         BeginMotionStaging(frame: frame);
         CollectReaders(frame: frame);
         _ = PackDynamicTransforms(frame: frame);
