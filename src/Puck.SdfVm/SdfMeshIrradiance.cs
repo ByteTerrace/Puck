@@ -8,6 +8,7 @@ using Puck.Abstractions.Counting;
 using Puck.Abstractions.Memory;
 using Puck.Abstractions.Waiting;
 using Puck.Abstractions;
+using Puck.Hosting;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -155,7 +156,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// or null for the process's.</param>
     public SdfMeshIrradiance(IAllocator? allocator = null) {
         m_allocator = allocator;
-        m_levels = CreateLevels(allocator: (allocator ?? ProcessAllocator.Current), blocks: m_blocks);
+        m_levels = CreateLevels(allocator: (allocator ?? ProcessAllocator.Current), blocks: m_blocks, counters: Counters);
         m_cacheOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: MemoryBacking.NativeAllocator, memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-cache", read: CacheTableBytes);
         m_blockOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: MemoryBacking.NativeAllocator, memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-blocks", read: () => Interlocked.Read(location: ref m_blockBytes));
     }
@@ -354,6 +355,21 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <summary>Counts the bytes of the prefix each scene export packs on the host (the top level's nodes, its entries
     /// and one record an instance), which its upload sends whole.</summary>
     public static readonly WorkKind PrefixBytes = Registry.Declare(name: "sdf.mesh-gi.prefix-bytes", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Counts the entries of a frame's staging into the volume's gate that found it held by the volume's
+    /// background work or another reader, so the staging thread waited.</summary>
+    public static readonly WorkKind GateWaits = Registry.Declare(name: "sdf.mesh-gi.gate-waits", unit: "entries", workClass: WorkClass.Pacing);
+    /// <summary>Counts the cells the windows' refills read for whether their slots hold them.</summary>
+    public static readonly WorkKind RefillCells = Registry.Declare(name: "sdf.mesh-gi.refill-cells", unit: "cells", workClass: WorkClass.Pacing);
+    /// <summary>Counts the holds of the gate the refills' commits took.</summary>
+    public static readonly WorkKind RefillSteps = Registry.Declare(name: "sdf.mesh-gi.refill-steps", unit: "holds", workClass: WorkClass.Pacing);
+    /// <summary>Counts the table slots the probe caches' retention, growth and release visited.</summary>
+    public static readonly WorkKind CacheSlots = Registry.Declare(name: "sdf.mesh-gi.cache-slots", unit: "slots", workClass: WorkClass.Pacing);
+    /// <summary>Counts the holds of the gate the probe caches' retention, growth and release took.</summary>
+    public static readonly WorkKind CacheSteps = Registry.Declare(name: "sdf.mesh-gi.cache-steps", unit: "holds", workClass: WorkClass.Pacing);
+    /// <summary>Counts the probe cache tables a write allocated under the gate.</summary>
+    public static readonly WorkKind CacheTablesUnreserved = Registry.Declare(name: "sdf.mesh-gi.cache-tables-unreserved", unit: "tables", workClass: WorkClass.Pacing);
+    /// <summary>Counts the volume snapshots a relight sent the device whole.</summary>
+    public static readonly WorkKind WholeSnapshots = Registry.Declare(name: "sdf.mesh-gi.whole-snapshots", unit: "snapshots", workClass: WorkClass.Pacing);
     /// <summary>Gets the most top-level entries one scene build made since the peaks were last cleared.</summary>
     public static readonly WorkKind PeakEntries = Registry.DeclarePeak(name: "sdf.mesh-gi.peak.entries", unit: "entries", workClass: WorkClass.Pacing);
     /// <summary>Gets the most prefix bytes one scene export packed since the peaks were last cleared.</summary>
@@ -437,10 +453,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // once no hold that could read them is open (ProbeStorage).
     private readonly ReaderEpochs<Reclaimable> m_blocks = new();
 
-    private static Level[] CreateLevels(IAllocator allocator, ReaderEpochs<Reclaimable> blocks) {
+    private static Level[] CreateLevels(IAllocator allocator, ReaderEpochs<Reclaimable> blocks, WorkCounterSet counters) {
         var levels = new Level[SdfMeshIrradianceProbe.Levels];
 
-        for (var index = 0; (index < levels.Length); index++) { levels[index] = new Level(allocator: allocator, index: index, blocks: blocks); }
+        for (var index = 0; (index < levels.Length); index++) { levels[index] = new Level(allocator: allocator, index: index, blocks: blocks, counters: counters); }
         return levels;
     }
 
@@ -881,6 +897,20 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         if (gpu.FeedbackBuffer is { } feedback) { m_writeTables!.PublishMeshIrradiance(feedback: feedback); }
     }
+    // A frame staging's entry into the gate: at once when it is free; otherwise the wait is counted (GateWaits) and timed
+    // as the frame thread's lighting wait, so host.frames names a frame the volume's background work or another reader
+    // held.
+    private GateScope EnterStaging() {
+        if (!m_gate.TryEnter()) {
+            Counters.Count(kind: GateWaits);
+            using (HostFrameWork.Measure(HostFrameWorkPart.LightingWait)) { m_gate.Enter(); }
+        }
+        return new GateScope(gate: m_gate);
+    }
+    // A hold of the volume's gate that EnterStaging took, released once.
+    private readonly ref struct GateScope(Lock gate) {
+        public void Dispose() => gate.Exit();
+    }
     // The camera the window follows: the first view's. While another residency renders that view
     // (SdfViewSnapshot.Elsewhere: its seat is presented in another world, its camera in that world's coordinates) the
     // window holds where it stood, about where the seat left this world and will come back to it.
@@ -909,7 +939,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         RayQueries = frame.RayQueries;
         if (frame.Views.Count == 0) { return default; }
 
-        lock (m_gate) {
+        using (EnterStaging()) {
             if (m_gpuReattach) {
                 // A replaced device stops its jobs first. Let their coordinator unwind before resetting its allocations.
                 if ((m_worker is { IsCompleted: false }) || (m_gpuCameraSampleTask is { IsCompleted: false })) { return default; }
@@ -941,7 +971,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var layout = Layout.Of(tier: tier, bounces: frame.IndirectBounces, levels: frame.IndirectLevels, reach: MathF.Max(x: 1f, y: frame.FarDistance));
         bool drain;
 
-        lock (m_gate) {
+        using (EnterStaging()) {
             m_wrote = false;
             m_geometryWrote = false;
             var resizing = (!m_windowValid || (layout.Levels != m_layout.Levels));
@@ -1021,7 +1051,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         Task? draining = null;
 
-        lock (m_gate) {
+        using (EnterStaging()) {
             if (m_worker is { IsFaulted: true } faulted) {
                 m_worker = null;
                 ContainFault(part: "trace", exception: faulted.Exception!);
@@ -1046,7 +1076,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
         }
         if ((draining is not null) && !AwaitWorker(deadline: deadline, reason: in DrainWait, worker: draining)) { stage = SdfMeshConvergenceStage.Drain; }
-        lock (m_gate) {
+        using (EnterStaging()) {
             // A drain that stopped for a change of what it drew from leaves the frame's drain owed, which the next
             // frame starts afresh.
             if (drain && (stage == SdfMeshConvergenceStage.None) && (m_owed || (m_drained != DrainKey()))) { stage = SdfMeshConvergenceStage.Drain; }
@@ -1170,7 +1200,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Records where a converging frame's work stands, ending the convergence once it has landed, and returns the
     // published parameters.
     private SdfMeshIrradianceParameters Converging(SdfMeshConvergenceStage stage) {
-        lock (m_gate) { m_convergence = stage; }
+        using (EnterStaging()) { m_convergence = stage; }
         if (stage == SdfMeshConvergenceStage.None) { m_convergingSince = 0L; }
         return m_published;
     }
@@ -2373,6 +2403,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     }
 
                     level.Unwritten = unwritten;
+                    Counters.Add(amount: (((long)dims.X) * dims.Y * dims.Z), kind: RefillCells);
                 }
             }
 
@@ -2394,6 +2425,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     m_levels[level].Unwritten--;
                 }
 
+                Counters.Count(kind: RefillSteps);
                 m_refillOwed = false;
                 m_refillRunning = false;
 
@@ -3976,7 +4008,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // A table the cache stops publishing (Clear, Retain, Grow) is retired to the same epochs once its entries are released
     // or moved, and comes back as the cache's spare once no hold that could still read it is open, so the next table of
     // its size reuses its arrays instead of allocating them.
-    private sealed class ProbeCache(ReaderEpochs<Reclaimable> blocks, IAllocator allocator) {
+    private sealed class ProbeCache(ReaderEpochs<Reclaimable> blocks, IAllocator allocator, WorkCounterSet counters) {
         private const int InitialCapacity = (1 << 16);
 
         private Table? m_table;
@@ -4061,6 +4093,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             for (var slot = 0; (slot < keys.Length); slot++) {
                 if ((used[slot] != 0) && Inside(high: high, key: keys[slot], low: low)) { kept++; }
             }
+            // Three passes over the old table (count, copy, release), in one hold.
+            counters.Add(amount: (3L * keys.Length), kind: CacheSlots);
+            counters.Count(kind: CacheSteps);
 
             var capacity = InitialCapacity;
 
@@ -4133,6 +4168,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // Grows dense storage, and the hash table too once half full, before the write that needed it.
         private Table Grow(Table table) {
             var capacity = ((((table.Count + 1) * 2) > table.Capacity) ? (table.Capacity * 2) : table.Capacity);
+
+            counters.Count(kind: CacheTablesUnreserved);
+            counters.Add(amount: table.Capacity, kind: CacheSlots);
+            counters.Count(kind: CacheSteps);
             var grown = NewTable(capacity: capacity, entries: Math.Min(val1: (capacity / 2), val2: (table.Values.Capacity * 2)));
 
             CopyEntries(high: default, low: default, retain: false, source: table, target: grown);
@@ -4219,9 +4258,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // One level of the volume: its probes by cell, its window's first cell, the slots of its window still lacking a
     // measurement of their own cell, the slots composed since its last publication, and the window views read. Its
     // state is the volume's gate's, except the cache, which readers take through its published entries.
-    private sealed class Level(int index, ReaderEpochs<Reclaimable> blocks, IAllocator allocator) {
+    private sealed class Level(int index, ReaderEpochs<Reclaimable> blocks, IAllocator allocator, WorkCounterSet counters) {
         public int Index { get; } = index;
-        public ProbeCache Cache { get; } = new(allocator: allocator, blocks: blocks);
+        public ProbeCache Cache { get; } = new(allocator: allocator, blocks: blocks, counters: counters);
         public MarkedIndexSet Changed { get; } = new();
 
         public (int X, int Y, int Z) Low;

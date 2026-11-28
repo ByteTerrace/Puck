@@ -390,6 +390,7 @@ public sealed partial class SdfMeshIrradiance {
                 ArrayCapacity.EnsureScratch(ref m_gpuUpdateAt, 1);
                 volumeSnapshot = new OwnedBuffer<uint>(allocator: m_allocator, capacity: volumeWords);
                 volumeSnapshot.CopyFrom(source: m_volume.Words);
+                Counters.Count(kind: WholeSnapshots);
                 _ = Interlocked.Add(location1: ref m_blockBytes, value: (((long)volumeSnapshot.Capacity) * sizeof(uint)));
                 m_gpuUpdateAt[0] = 0;
                 updates = new(Words: m_gpuUpdateAt, Data: volumeSnapshot.Memory, Count: 1, Length: volumeWords);

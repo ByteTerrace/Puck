@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Abstractions.Waiting;
+using Puck.Hosting;
 using Puck.Hosting.Jobs;
 using Puck.SignedDistance;
 
@@ -297,8 +298,13 @@ public sealed partial class SdfMeshPathBake {
             var lane = m_measureLane!;
             var outcome = WaitOutcome.DeadlinePassed;
 
-            if (!lane.Ready) { SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.DemandJoinWaits); }
+            var waits = !lane.Ready;
+
+            if (waits) { SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.DemandJoinWaits); }
             try {
+                // A wait on the frame thread is its own part of host.frames, apart from the capture it holds up.
+                using var work = (waits ? HostFrameWork.Measure(HostFrameWorkPart.DemandWait) : default);
+
                 outcome = lane.Collect(deadline: WaitDeadline.Synchronous(), reason: in MeasureWait);
             } finally {
                 // A measure that threw is collected too: the lane is free, and the throw reaches the caller.
