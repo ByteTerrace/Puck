@@ -45,11 +45,11 @@ internal static class SdfMeshContour {
         var indices = new List<uint>();
 
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
-            positions[vertex] = new Vector3(x: contour.Positions[3 * vertex], y: contour.Positions[(3 * vertex) + 1], z: contour.Positions[(3 * vertex) + 2]);
-            normals[vertex] = new Vector3(x: contour.Normals[3 * vertex], y: contour.Normals[(3 * vertex) + 1], z: contour.Normals[(3 * vertex) + 2]);
+            positions[vertex] = new Vector3(x: contour.Positions.Span[3 * vertex], y: contour.Positions.Span[(3 * vertex) + 1], z: contour.Positions.Span[(3 * vertex) + 2]);
+            normals[vertex] = new Vector3(x: contour.Normals.Span[3 * vertex], y: contour.Normals.Span[(3 * vertex) + 1], z: contour.Normals.Span[(3 * vertex) + 2]);
         }
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
-            var (a, b, c, d) = ((uint)contour.Quads[4 * quad], (uint)contour.Quads[(4 * quad) + 1], (uint)contour.Quads[(4 * quad) + 2], (uint)contour.Quads[(4 * quad) + 3]);
+            var (a, b, c, d) = ((uint)contour.Quads.Span[4 * quad], (uint)contour.Quads.Span[(4 * quad) + 1], (uint)contour.Quads.Span[(4 * quad) + 2], (uint)contour.Quads.Span[(4 * quad) + 3]);
 
             indices.AddRange(collection: [a, b, c]);
             if (c != d) { indices.AddRange(collection: [a, c, d]); }

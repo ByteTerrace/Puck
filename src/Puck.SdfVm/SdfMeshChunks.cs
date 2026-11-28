@@ -106,10 +106,10 @@ public static class SdfMeshChunks {
             vertexCount += vertexCounts[part];
         }
 
-        var joinedPositions = new Vector3[vertexCount];
-        var joinedNormals = new Vector3[normals.IsEmpty ? 0 : vertexCount];
-        var joinedIndices = new uint[indices.Length];
-        var joinedMaterials = new uint[materials.Length];
+        var joinedPositions = RentedScope.Allocate<Vector3>(mesh.Products, vertexCount);
+        var joinedNormals = RentedScope.Allocate<Vector3>(mesh.Products, normals.IsEmpty ? 0 : vertexCount);
+        var joinedIndices = RentedScope.Allocate<uint>(mesh.Products, indices.Length);
+        var joinedMaterials = RentedScope.Allocate<uint>(mesh.Products, materials.Length);
         var chunks = new SdfMesh[parts];
         var localOf = scope.Buffer<int>(length: positions.Length);
         var sourceSites = mesh.Sites();
@@ -120,33 +120,33 @@ public static class SdfMeshChunks {
         var triangleBase = 0;
         for (var part = 0; part < parts; part++) {
             var binTriangles = (starts[(part + 1)] - starts[part]);
-            var localIndices = new uint[3 * binTriangles];
-            var localSites = new int[vertexCounts[part]];
+            var localIndices = RentedScope.Allocate<uint>(mesh.Products, 3 * binTriangles);
+            var localSites = RentedScope.Allocate<int>(mesh.Products, vertexCounts[part]);
             var count = 0;
             for (var at = 0; at < binTriangles; at++) {
                 var triangle = order[(starts[part] + at)];
-                if (joinedMaterials.Length > 0) { joinedMaterials[triangleBase + at] = materials[triangle]; }
+                if (joinedMaterials.Length > 0) { joinedMaterials.Span[triangleBase + at] = materials[triangle]; }
                 for (var corner = 0; corner < 3; corner++) {
                     var source = (int)indices[3 * triangle + corner];
                     if (seen[source] != part + 1) {
                         seen[source] = part + 1;
                         localOf[source] = count;
                         var vertex = vertexBase + count;
-                        ref var site = ref siteOf[sourceSites[source]];
+                        ref var site = ref siteOf[sourceSites.Span[source]];
                         if (site < vertexBase) { site = vertex; }
-                        localSites[count++] = site - vertexBase;
-                        joinedPositions[vertex] = positions[(int)source];
-                        if (joinedNormals.Length > 0) { joinedNormals[vertex] = normals[(int)source]; }
+                        localSites.Span[count++] = site - vertexBase;
+                        joinedPositions.Span[vertex] = positions[(int)source];
+                        if (joinedNormals.Length > 0) { joinedNormals.Span[vertex] = normals[(int)source]; }
                     }
-                    localIndices[3 * at + corner] = (uint)localOf[source];
-                    joinedIndices[3 * (triangleBase + at) + corner] = (uint)(vertexBase + localOf[source]);
+                    localIndices.Span[3 * at + corner] = (uint)localOf[source];
+                    joinedIndices.Span[3 * (triangleBase + at) + corner] = (uint)(vertexBase + localOf[source]);
                 }
             }
             chunks[part] = new SdfMesh(
-                joinedPositions.AsMemory(vertexBase, count), localIndices,
-                joinedNormals.Length == 0 ? default : joinedNormals.AsMemory(vertexBase, count),
-                joinedMaterials.Length == 0 ? default : joinedMaterials.AsMemory(triangleBase, binTriangles)) {
-                BakeCell = mesh.BakeCell, BakedSites = localSites,
+                joinedPositions.Slice(vertexBase, count), localIndices,
+                joinedNormals.Length == 0 ? default : joinedNormals.Slice(vertexBase, count),
+                joinedMaterials.Length == 0 ? default : joinedMaterials.Slice(triangleBase, binTriangles)) {
+                Products = mesh.Products?.Child(), BakeCell = mesh.BakeCell, BakedSites = localSites,
             };
             vertexBase += count;
             triangleBase += binTriangles;
@@ -158,9 +158,9 @@ public static class SdfMeshChunks {
         // clusters' order (SdfMeshCollapse), so the joined mesh is joined again from the chunks, keeping them views of its
         // attributes in order.
         for (var part = 0; (part < parts); part++) {
-            if ((chunks[part].VertexCount != vertexCounts[part]) || (chunks[part].Clusters is not null)) { return Join(chunks: chunks); }
+            if ((chunks[part].VertexCount != vertexCounts[part]) || (chunks[part].Clusters is not null)) { return Join(chunks: chunks, products: mesh.Products); }
         }
-        return new SdfMesh(joinedPositions, joinedIndices, joinedNormals, joinedMaterials) { BakeCell = mesh.BakeCell, Chunks = chunks };
+        return new SdfMesh(joinedPositions, joinedIndices, joinedNormals, joinedMaterials) { Products = mesh.Products, BakeCell = mesh.BakeCell, Chunks = chunks };
     }
 
     /// <summary>Joins chunks' merged surfaces for whole-group queries. Only chunks are stored and drawn; the joined
@@ -169,16 +169,17 @@ public static class SdfMeshChunks {
     /// own indices and levels, and a native copy keeps that sharing and drops the joined indices
     /// (<see cref="SdfMesh.StorageBytes"/>, <see cref="SdfMesh.Held.Indices"/>).</summary>
     /// <param name="chunks">The nonempty list of chunks, none of them skinned.</param>
+    /// <param name="products">The transient result's owner, or null for a managed result.</param>
     /// <returns>The whole-group mesh.</returns>
-    public static SdfMesh Join(IReadOnlyList<SdfMesh> chunks) {
+    public static SdfMesh Join(IReadOnlyList<SdfMesh> chunks, RentedScope? products = null) {
         ArgumentNullException.ThrowIfNull(chunks);
         if (chunks.Count == 0) { throw new ArgumentException(message: "A chunked mesh needs chunks.", paramName: nameof(chunks)); }
         var vertices = chunks.Sum(selector: static chunk => chunk.VertexCount);
         var triangles = chunks.Sum(selector: static chunk => chunk.TriangleCount);
-        var positions = new Vector3[vertices];
-        var normals = new Vector3[(chunks[0].HasNormals ? vertices : 0)];
-        var indices = new uint[(3 * triangles)];
-        var materials = new uint[(chunks[0].HasTriangleMaterials ? triangles : 0)];
+        var positions = RentedScope.Allocate<Vector3>(products, vertices);
+        var normals = RentedScope.Allocate<Vector3>(products, chunks[0].HasNormals ? vertices : 0);
+        var indices = RentedScope.Allocate<uint>(products, 3 * triangles);
+        var materials = RentedScope.Allocate<uint>(products, chunks[0].HasTriangleMaterials ? triangles : 0);
         var chunkIndices = new ReadOnlyMemory<uint>[chunks.Count];
         var vertex = 0;
         var triangle = 0;
@@ -188,10 +189,10 @@ public static class SdfMeshChunks {
             using var held = chunk.Hold();
             var own = held.Indices.Span;
 
-            held.Positions.Span.CopyTo(destination: positions.AsSpan(start: vertex));
-            if (normals.Length != 0) { held.Normals.Span.CopyTo(destination: normals.AsSpan(start: vertex)); }
-            if (materials.Length != 0) { held.TriangleMaterials.Span.CopyTo(destination: materials.AsSpan(start: triangle)); }
-            for (var index = 0; (index < own.Length); index++) { indices[((3 * triangle) + index)] = (own[index] + ((uint)vertex)); }
+            held.Positions.Span.CopyTo(destination: positions.Span.Slice(start: vertex));
+            if (normals.Length != 0) { held.Normals.Span.CopyTo(destination: normals.Span.Slice(start: vertex)); }
+            if (materials.Length != 0) { held.TriangleMaterials.Span.CopyTo(destination: materials.Span.Slice(start: triangle)); }
+            for (var index = 0; (index < own.Length); index++) { indices.Span[((3 * triangle) + index)] = (own[index] + ((uint)vertex)); }
             // A joined chunk keeps its own index array; a managed chunk's planes are arrays its hold never lets go.
             chunkIndices[at] = held.Indices;
             vertex += chunk.VertexCount;
@@ -205,10 +206,11 @@ public static class SdfMeshChunks {
             var chunk = chunks[index];
 
             views[index] = new SdfMesh(
-                positions: positions.AsMemory(start: vertex, length: chunk.VertexCount),
+                positions: positions.Slice(start: vertex, length: chunk.VertexCount),
                 indices: chunkIndices[index],
-                normals: ((normals.Length == 0) ? default : normals.AsMemory(start: vertex, length: chunk.VertexCount)),
-                triangleMaterials: ((materials.Length == 0) ? default : materials.AsMemory(start: triangle, length: chunk.TriangleCount))) {
+                normals: ((normals.Length == 0) ? default : normals.Slice(start: vertex, length: chunk.VertexCount)),
+                triangleMaterials: ((materials.Length == 0) ? default : materials.Slice(start: triangle, length: chunk.TriangleCount))) {
+                Products = products,
                 BakeCell = chunk.BakeCell,
                 Clusters = chunk.Clusters,
                 Levels = chunk.Levels,
@@ -217,6 +219,6 @@ public static class SdfMeshChunks {
             triangle += chunk.TriangleCount;
         }
 
-        return new SdfMesh(positions: positions, indices: indices, normals: normals, triangleMaterials: materials) { BakeCell = chunks[0].BakeCell, Chunks = views };
+        return new SdfMesh(positions: positions, indices: indices, normals: normals, triangleMaterials: materials) { Products = products, BakeCell = chunks[0].BakeCell, Chunks = views };
     }
 }

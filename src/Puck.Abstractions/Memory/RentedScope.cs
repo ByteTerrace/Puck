@@ -19,6 +19,40 @@ public sealed class RentedScope(IAllocationObserver? owner = null, IAllocator? a
     /// <summary>Gets the native allocator the scope was given, or null when its buffers and lists use the process's.</summary>
     public IAllocator? Allocator => allocator;
 
+    /// <summary>Allocates a counted plane in a scope, or a managed plane when no scope owns the result.</summary>
+    /// <typeparam name="T">The reference-free element.</typeparam>
+    /// <param name="scope">The result's owner, or null for a managed result.</param>
+    /// <param name="length">The logical element count.</param>
+    /// <returns>Exactly the requested elements; scoped storage ends with the scope.</returns>
+    public static Memory<T> Allocate<T>(RentedScope? scope, int length) where T : unmanaged =>
+        length == 0 ? Memory<T>.Empty : (scope is null ? new T[length] : scope.Buffer<T>(length, clear: true).Memory);
+
+    /// <summary>Copies a counted plane into its result owner's storage.</summary>
+    /// <typeparam name="T">The reference-free element.</typeparam>
+    /// <param name="scope">The result's owner, or null for a managed result.</param>
+    /// <param name="values">The elements to copy, in order.</param>
+    /// <returns>The copy, valid until its scope ends.</returns>
+    public static Memory<T> Copy<T>(RentedScope? scope, ReadOnlySpan<T> values) where T : unmanaged {
+        var memory = Allocate<T>(scope, values.Length);
+        values.CopyTo(memory.Span);
+        return memory;
+    }
+
+    /// <summary>Returns whether a nonempty memory view depends on a memory manager's explicit lifetime.</summary>
+    /// <typeparam name="T">The element.</typeparam>
+    /// <param name="memory">The view.</param>
+    /// <returns>False for an empty or array-backed view; true for any other memory manager.</returns>
+    public static bool RequiresOwner<T>(ReadOnlyMemory<T> memory) =>
+        !memory.IsEmpty && !System.Runtime.InteropServices.MemoryMarshal.TryGetArray(memory, out _);
+
+    /// <summary>Creates an independently writable child scope, released with this scope.</summary>
+    /// <returns>The child, charged to the same owner. Create children before handing them to parallel workers.</returns>
+    public RentedScope Child() {
+        var child = new RentedScope(owner, allocator);
+        m_leases.Add(child);
+        return child;
+    }
+
     /// <summary>Rents an array of at least <paramref name="minimumLength"/> elements that the scope returns when disposed.</summary>
     /// <typeparam name="T">The element.</typeparam>
     /// <param name="minimumLength">The fewest elements the array holds; it may hold more, and the caller reads only the

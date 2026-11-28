@@ -71,6 +71,8 @@ public sealed partial class SdfMeshPathBake {
             group.Final = null;
             group.Contour = null;
             group.Cut = null;
+            group.ReleaseContourProducts();
+            group.ReleaseMeshProducts();
             group.Creases = null;
             group.Projection = null;
             group.PeakFloor = Math.Max(val1: group.PeakFloor, val2: floor);

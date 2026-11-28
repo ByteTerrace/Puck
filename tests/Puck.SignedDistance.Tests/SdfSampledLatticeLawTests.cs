@@ -35,7 +35,7 @@ public sealed class SdfSampledLatticeLawTests {
     // A round of the lattice's points as positions, copied out before the lattice's next round rewrites its block.
     private static Vector3[] Xyz(ReadOnlyMemory<Vector4> points) => [.. points.ToArray().Select(selector: static point => new Vector3(x: point.X, y: point.Y, z: point.Z))];
     private static Vector3 Position(SdfContour contour, int vertex) =>
-        new(x: contour.Positions[(3 * vertex)], y: contour.Positions[((3 * vertex) + 1)], z: contour.Positions[((3 * vertex) + 2)]);
+        new(x: contour.Positions.Span[(3 * vertex)], y: contour.Positions.Span[((3 * vertex) + 1)], z: contour.Positions.Span[((3 * vertex) + 2)]);
     // The bake kernel's gradient (sdf-mesh-bake.comp.hlsl): four tetrahedral taps a sixty-fourth of a cell out, summed
     // into the field's derivative.
     private static Vector3 Gradient(Func<Vector3, float> field, Vector3 point) {
@@ -106,7 +106,7 @@ public sealed class SdfSampledLatticeLawTests {
         var triangles = new List<(int A, int B, int C)>();
 
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
-            var (a, b, c, d) = (contour.Quads[(4 * quad)], contour.Quads[((4 * quad) + 1)], contour.Quads[((4 * quad) + 2)], contour.Quads[((4 * quad) + 3)]);
+            var (a, b, c, d) = (contour.Quads.Span[(4 * quad)], contour.Quads.Span[((4 * quad) + 1)], contour.Quads.Span[((4 * quad) + 2)], contour.Quads.Span[((4 * quad) + 3)]);
 
             triangles.Add(item: (a, b, c));
             if (c != d) {
@@ -139,7 +139,7 @@ public sealed class SdfSampledLatticeLawTests {
         var contour = Bake(refine: true);
 
         for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
-            var point = new Vector3(x: contour.Positions[(3 * vertex)], y: contour.Positions[((3 * vertex) + 1)], z: contour.Positions[((3 * vertex) + 2)]);
+            var point = new Vector3(x: contour.Positions.Span[(3 * vertex)], y: contour.Positions.Span[((3 * vertex) + 1)], z: contour.Positions.Span[((3 * vertex) + 2)]);
 
             Assert.True(condition: (MathF.Abs(Field(point: point)) <= (0.5f * Cell)), userMessage: $"vertex {vertex} at {point} lies {Field(point: point)} from the field");
         }
@@ -175,12 +175,12 @@ public sealed class SdfSampledLatticeLawTests {
             var outward = Vector3.Zero;
 
             for (var corner = 0; (corner < 4); corner++) {
-                var vertex = contour.Quads[((4 * quad) + corner)];
+                var vertex = contour.Quads.Span[((4 * quad) + corner)];
 
-                outward += new Vector3(x: contour.Normals[(3 * vertex)], y: contour.Normals[((3 * vertex) + 1)], z: contour.Normals[((3 * vertex) + 2)]);
+                outward += new Vector3(x: contour.Normals.Span[(3 * vertex)], y: contour.Normals.Span[((3 * vertex) + 1)], z: contour.Normals.Span[((3 * vertex) + 2)]);
             }
 
-            var (a, b, c, d) = (Position(contour: contour, vertex: contour.Quads[(4 * quad)]), Position(contour: contour, vertex: contour.Quads[((4 * quad) + 1)]), Position(contour: contour, vertex: contour.Quads[((4 * quad) + 2)]), Position(contour: contour, vertex: contour.Quads[((4 * quad) + 3)]));
+            var (a, b, c, d) = (Position(contour: contour, vertex: contour.Quads.Span[(4 * quad)]), Position(contour: contour, vertex: contour.Quads.Span[((4 * quad) + 1)]), Position(contour: contour, vertex: contour.Quads.Span[((4 * quad) + 2)]), Position(contour: contour, vertex: contour.Quads.Span[((4 * quad) + 3)]));
 
             inward += ((Vector3.Dot(vector1: Vector3.Cross(vector1: (b - a), vector2: (c - a)), vector2: outward) < 0f) ? 1 : 0);
             inward += ((Vector3.Dot(vector1: Vector3.Cross(vector1: (c - a), vector2: (d - a)), vector2: outward) < 0f) ? 1 : 0);
@@ -441,7 +441,7 @@ public sealed class SdfSampledLatticeLawTests {
     }
 
     private static Vector3 NormalOf(SdfContour contour, int vertex) =>
-        new(x: contour.Normals[(3 * vertex)], y: contour.Normals[((3 * vertex) + 1)], z: contour.Normals[((3 * vertex) + 2)]);
+        new(x: contour.Normals.Span[(3 * vertex)], y: contour.Normals.Span[((3 * vertex) + 1)], z: contour.Normals.Span[((3 * vertex) + 2)]);
 
     // The connected pieces of a contour's triangles.
     private static int Pieces(SdfContour contour) {

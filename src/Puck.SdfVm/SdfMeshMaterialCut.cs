@@ -123,7 +123,7 @@ internal sealed class SdfMeshMaterialCut : IDisposable {
             var points = into.GetSpan();
 
             for (var quad = 0; (quad < contour.QuadCount); quad++) {
-                var corners = contour.Quads.AsSpan(length: 4, start: (4 * quad));
+                var corners = contour.Quads.Span.Slice(length: 4, start: (4 * quad));
 
                 for (var quarter = 0; (quarter < 4); quarter++) {
                     var at = Quarters[quarter];
@@ -215,11 +215,13 @@ internal sealed class SdfMeshMaterialCut : IDisposable {
 
     /// <summary>Builds the mesh once every round is answered: each quad by the quarter rule, or cut along its boundary
     /// where its vertices disagree.</summary>
+    /// <param name="products">The transient planes' owner, or null for managed planes. A scoped mesh remains readable
+    /// only until this owner is disposed; publication copies it before then.</param>
     /// <returns>The mesh, in the frame the contour is in; <see langword="null"/> for a contour with no quad.</returns>
     /// <exception cref="InvalidOperationException">The mesh grows past <see cref="MaxTrianglesPerQuad"/> triangles or
     /// <see cref="MaxVerticesPerQuad"/> added vertices for each contour quad. The contour bounds the lists, so a cut that
     /// does not end fails its group by name instead of taking the process.</exception>
-    public SdfMesh? Build() {
+    public SdfMesh? Build(RentedScope? products = null) {
         var contour = m_contour;
 
         if (contour.QuadCount == 0) { return null; }
@@ -341,7 +343,7 @@ internal sealed class SdfMeshMaterialCut : IDisposable {
         Span<int> triangle = stackalloc int[3];
 
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
-            var corners = contour.Quads.AsSpan(length: 4, start: (4 * quad));
+            var corners = contour.Quads.Span.Slice(length: 4, start: (4 * quad));
 
             if (Mixed(quad: quad)) {
                 for (var half = 0; (half < Halves(quad: quad)); half++) {
@@ -433,7 +435,7 @@ internal sealed class SdfMeshMaterialCut : IDisposable {
             }
         }
 
-        return new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: triangleMaterials.ToArray()) { BakedSites = sites.ToArray() };
+        return new SdfMesh(indices: RentedScope.Copy<uint>(products, indices.GetSpan()), normals: RentedScope.Copy<Vector3>(products, normals.GetSpan()), positions: RentedScope.Copy<Vector3>(products, positions.GetSpan()), triangleMaterials: RentedScope.Copy<uint>(products, triangleMaterials.GetSpan())) { Products = products, BakedSites = RentedScope.Copy<int>(products, sites.GetSpan()) };
     }
 
     // Where a searched edge's boundary lies, as a fraction of the way from its lower site: an interval still touching an
@@ -454,18 +456,18 @@ internal sealed class SdfMeshMaterialCut : IDisposable {
 
         return (0.5f * (from + to));
     }
-    private bool OnCrease(int site) => ((site < m_contour.Features.Length) && m_contour.Features[site]);
+    private bool OnCrease(int site) => ((site < m_contour.Features.Length) && m_contour.Features.Span[site]);
     // Whether a quad's vertices report more than one material.
     private bool Mixed(int quad) {
-        var corners = m_contour.Quads.AsSpan(length: 4, start: (4 * quad));
+        var corners = m_contour.Quads.Span.Slice(length: 4, start: (4 * quad));
         var material = m_vertices[corners[0]];
 
         return ((m_vertices[corners[1]] != material) || (m_vertices[corners[2]] != material) || (m_vertices[corners[3]] != material));
     }
     // The triangles a quad meshes as: two along its first diagonal, or one where its last two vertices are one.
-    private int Halves(int quad) => ((m_contour.Quads[((4 * quad) + 2)] == m_contour.Quads[((4 * quad) + 3)]) ? 1 : 2);
+    private int Halves(int quad) => ((m_contour.Quads.Span[((4 * quad) + 2)] == m_contour.Quads.Span[((4 * quad) + 3)]) ? 1 : 2);
     private void Half(int quad, int half, Span<int> triangle) {
-        var corners = m_contour.Quads.AsSpan(length: 4, start: (4 * quad));
+        var corners = m_contour.Quads.Span.Slice(length: 4, start: (4 * quad));
 
         triangle[0] = corners[0];
         triangle[1] = corners[(1 + half)];

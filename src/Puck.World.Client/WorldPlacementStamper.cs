@@ -368,12 +368,7 @@ public static partial class WorldPlacementStamper {
     // exactly two triangles that run it in opposite directions, and the volume they enclose is not zero. Triangles
     // reversed as a whole (a negative volume) are flipped. Null for an open, nonmanifold or inconsistently wound mesh.
     private static uint[]? ClosedOutward(IReadOnlyList<uint> indices, Vector3[] positions) {
-        var canonical = new int[positions.Length];
-        var first = new Dictionary<Vector3, int>();
-
-        for (var vertex = 0; (vertex < positions.Length); vertex++) {
-            canonical[vertex] = (first.TryGetValue(key: positions[vertex], value: out var seen) ? seen : (first[positions[vertex]] = vertex));
-        }
+        var canonical = SdfMesh.WeldSites(positions);
 
         var edges = new Dictionary<(int From, int To), int>();
         var volume = 0.0;

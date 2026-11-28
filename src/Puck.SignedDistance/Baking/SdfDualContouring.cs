@@ -11,29 +11,29 @@ namespace Puck.SignedDistance.Baking;
 /// counter-clockwise seen from outside.
 /// </summary>
 internal sealed class SdfSurface {
-    public required float[] Normals { get; init; }
-    public required float[] Positions { get; init; }
+    public required Memory<float> Normals { get; init; }
+    public required Memory<float> Positions { get; init; }
     public int QuadCount => (Quads.Length / 4);
-    public required int[] Quads { get; init; }
+    public required Memory<int> Quads { get; init; }
     // Per quad, the lattice corner at the outside end of the sign-changing edge the quad crosses: the field there is
     // nearest the surface the edge crosses, so its winning shape is that surface's, where the inside end of a shell thinner
     // than a cell can lie in the shape beneath.
-    public required int[] QuadCorners { get; init; }
+    public required Memory<int> QuadCorners { get; init; }
     // Per quad, the lattice edge it crosses as a signed axis (SdfContourFacing): the direction from the edge's inside
     // sample to its outside one, which every triangle of the quad faces along.
-    public required sbyte[] QuadAxes { get; init; }
+    public required Memory<sbyte> QuadAxes { get; init; }
     // Per vertex, three components: the way the lattice says its patch faces (SdfContourFacing.Patch), a merged vertex's
     // the sum of its fine vertices'.
-    public required float[] Patches { get; init; }
+    public required Memory<float> Patches { get; init; }
     // Per vertex, whether it lies on a crease or corner of the surface (Place's feature): empty where no vertex does.
-    public bool[] Features { get; init; } = [];
+    public Memory<bool> Features { get; init; }
     // Per vertex, whether its crossings' tangent planes drew it away from their mean (Place), as to a crease or to the
     // point the planes of a face rounded within its cell share, or it merges a refined cell's fine vertices, which
     // interpolate that cell's coarse corners (Merge): a place no crossing pins to the surface. Empty where none is.
-    public bool[] Solved { get; init; } = [];
+    public Memory<bool> Solved { get; init; }
     // Per vertex, whether it lies inside its cell beside a curved convex crease past it (Place's `beside`): cut off the
     // crease, it may lie inside the solid, and its quads turn across the crease. Empty where none does.
-    public bool[] Beside { get; init; } = [];
+    public Memory<bool> Beside { get; init; }
     public int VertexCount => (Positions.Length / 3);
 }
 /// <summary>The sampled lattice a surface is contoured from (<see cref="SdfDualContouring"/>): cells along each axis, each
@@ -167,7 +167,7 @@ internal static class SdfDualContouring {
         }
     }
 
-    public static SdfSurface Extract<TLattice>(TLattice grid) where TLattice : ISdfContourLattice {
+    public static SdfSurface Extract<TLattice>(TLattice grid, RentedScope? products = null) where TLattice : ISdfContourLattice {
         var cellsX = grid.CellsX;
         var cellsY = grid.CellsY;
         var cellsZ = grid.CellsZ;
@@ -266,17 +266,17 @@ internal static class SdfDualContouring {
             return ((PatchCount[maskOfCell[index]] == 1) ? vertexOfPatch[(index * MaximumPatches)] : -1);
         });
 
-        var (quads, quadCorners, quadAxes) = Connect(grid: grid, maskOfCell: maskOfCell, vertexOfPatch: vertexOfPatch);
+        var (quads, quadCorners, quadAxes) = Connect(products: products, grid: grid, maskOfCell: maskOfCell, vertexOfPatch: vertexOfPatch);
 
-        Settle(anchors: anchors.GetSpan(), axes: quadAxes, besides: besides.GetSpan(), features: features.GetSpan(), patches: patches.GetSpan(), positions: positions.GetSpan(), quads: quads, solveds: solveds.GetSpan());
+        Settle(anchors: anchors.GetSpan(), axes: quadAxes.Span, besides: besides.GetSpan(), features: features.GetSpan(), patches: patches.GetSpan(), positions: positions.GetSpan(), quads: quads.Span, solveds: solveds.GetSpan());
 
         return new SdfSurface {
-            Beside = besides.ToArray(),
-            Features = features.ToArray(),
-            Solved = solveds.ToArray(),
-            Normals = Narrowed(values: normals.GetSpan()),
-            Patches = Narrowed(values: patches.GetSpan()),
-            Positions = Narrowed(values: positions.GetSpan()),
+            Beside = RentedScope.Copy<bool>(products, besides.GetSpan()),
+            Features = RentedScope.Copy<bool>(products, features.GetSpan()),
+            Solved = RentedScope.Copy<bool>(products, solveds.GetSpan()),
+            Normals = Narrowed(products: products, values: normals.GetSpan()),
+            Patches = Narrowed(products: products, values: patches.GetSpan()),
+            Positions = Narrowed(products: products, values: positions.GetSpan()),
             QuadAxes = quadAxes,
             QuadCorners = quadCorners,
             Quads = quads,
@@ -293,7 +293,7 @@ internal static class SdfDualContouring {
     /// is a triangle, listed with its last vertex twice. The mesh has no crack where the resolution changes, since every
     /// fine edge on a whole cell's face reads the samples that cell's corners interpolate.
     /// </summary>
-    public static SdfSurface ExtractRefined<TLattice>(TLattice grid) where TLattice : ISdfRefinedContourLattice {
+    public static SdfSurface ExtractRefined<TLattice>(TLattice grid, RentedScope? products = null) where TLattice : ISdfRefinedContourLattice {
         var factor = grid.Refinement;
         int[] cells = [grid.CellsX, grid.CellsY, grid.CellsZ];
         int[] coarse = [(cells[0] / factor), (cells[1] / factor), (cells[2] / factor)];
@@ -695,9 +695,9 @@ internal static class SdfDualContouring {
 
         // A piece whose merged vertex the settle had to return holds what one vertex cannot: the merge runs again with
         // those pieces split at their creases (SplitAtCreases).
-        var surface = Merge(anchors: anchors, besides: besides, block: Block, patches: patches, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadAxes: quadAxes, quadCorners: quadCorners, quads: quads, solveds: solveds, planeData: planeData, planeStarts: planeStarts, planeEnds: planeEnds, returned: out var returned, unheld: null);
+        var surface = Merge(products: products, anchors: anchors, besides: besides, block: Block, patches: patches, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadAxes: quadAxes, quadCorners: quadCorners, quads: quads, solveds: solveds, planeData: planeData, planeStarts: planeStarts, planeEnds: planeEnds, returned: out var returned, unheld: null);
 
-        return ((returned is null) ? surface : Merge(anchors: anchors, besides: besides, block: Block, patches: patches, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadAxes: quadAxes, quadCorners: quadCorners, quads: quads, solveds: solveds, planeData: planeData, planeStarts: planeStarts, planeEnds: planeEnds, returned: out _, unheld: returned));
+        return ((returned is null) ? surface : Merge(products: products, anchors: anchors, besides: besides, block: Block, patches: patches, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadAxes: quadAxes, quadCorners: quadCorners, quads: quads, solveds: solveds, planeData: planeData, planeStarts: planeStarts, planeEnds: planeEnds, returned: out _, unheld: returned));
     }
     // The point of a merged piece every one of its fine vertices' tangent planes `planes` (world space, nx, ny, nz, d
     // each) passes through, within MergedResidual of a fine cell root mean square, solved toward the piece's mean along the
@@ -779,7 +779,7 @@ internal static class SdfDualContouring {
     // `unheld` names by their roots (fine vertex indices) split at their creases first (SplitAtCreases), which gives
     // their fine vertices new owners in `owners`; `returned` names, the same way, every piece whose merged vertex the
     // settle returned, or is null where it returned none.
-    private static SdfSurface Merge<TLattice>(TLattice grid, OwnedBuffer<double> positions, OwnedBuffer<double> normals, OwnedBuffer<double> anchors, OwnedBuffer<double> patches, OwnedBuffer<bool> features, OwnedBuffer<bool> solveds, OwnedBuffer<int> owners, OwnedBuffer<int> quads, OwnedBuffer<int> quadCorners, OwnedBuffer<sbyte> quadAxes, OwnedBuffer<double> planeData, OwnedBuffer<int> planeStarts, OwnedBuffer<int> planeEnds, OwnedBuffer<bool> besides, OwnedBuffer<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> cellVertex, Func<int, (int X, int Y, int Z, int Size)> block, IReadOnlySet<int>? unheld, out HashSet<int>? returned) where TLattice : ISdfRefinedContourLattice {
+    private static SdfSurface Merge<TLattice>(TLattice grid, RentedScope? products, OwnedBuffer<double> positions, OwnedBuffer<double> normals, OwnedBuffer<double> anchors, OwnedBuffer<double> patches, OwnedBuffer<bool> features, OwnedBuffer<bool> solveds, OwnedBuffer<int> owners, OwnedBuffer<int> quads, OwnedBuffer<int> quadCorners, OwnedBuffer<sbyte> quadAxes, OwnedBuffer<double> planeData, OwnedBuffer<int> planeStarts, OwnedBuffer<int> planeEnds, OwnedBuffer<bool> besides, OwnedBuffer<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> cellVertex, Func<int, (int X, int Y, int Z, int Size)> block, IReadOnlySet<int>? unheld, out HashSet<int>? returned) where TLattice : ISdfRefinedContourLattice {
         var vertexCount = owners.Length;
         var faces = SplitAtCreases(block: block, grid: grid, owners: owners, planeData: planeData, planeEnds: planeEnds, planeStarts: planeStarts, positions: positions, quads: quads, unheld: unheld);
 
@@ -809,9 +809,9 @@ internal static class SdfDualContouring {
         var pieces = scope.Buffer<Piece>(length: mergedCount);
         var mergedPositions = scope.Buffer<double>(length: (3 * mergedCount));
         var mergedNormals = scope.Buffer<double>(length: (3 * mergedCount));
-        var mergedFeatures = new bool[mergedCount];
-        var mergedSolved = new bool[mergedCount];
-        var mergedBesides = new bool[mergedCount];
+        var mergedFeatures = RentedScope.Allocate<bool>(products, mergedCount);
+        var mergedSolved = RentedScope.Allocate<bool>(products, mergedCount);
+        var mergedBesides = RentedScope.Allocate<bool>(products, mergedCount);
         // Per merged vertex, where Settle returns it: an unowned vertex's own crossings' mean, a piece's fine vertices'
         // mean of theirs.
         var mergedAnchors = scope.Buffer<double>(length: (3 * mergedCount));
@@ -831,9 +831,9 @@ internal static class SdfDualContouring {
                     mergedAnchors[((3 * merged) + axis)] = anchors[((3 * root) + axis)];
                     mergedPatches[((3 * merged) + axis)] = patches[((3 * root) + axis)];
                 }
-                mergedFeatures[merged] = ((owners[root] < 0) && features[root]);
-                mergedSolved[merged] = ((owners[root] < 0) && solveds[root]);
-                mergedBesides[merged] = ((owners[root] < 0) && besides[root]);
+                mergedFeatures.Span[merged] = ((owners[root] < 0) && features[root]);
+                mergedSolved.Span[merged] = ((owners[root] < 0) && solveds[root]);
+                mergedBesides.Span[merged] = ((owners[root] < 0) && besides[root]);
                 merged++;
             }
             remap[vertex] = remap[root];
@@ -913,12 +913,12 @@ internal static class SdfDualContouring {
                     mergedHandoffs.Add(item: (index, ((bx - origin.X) / unit.X), ((by - origin.Y) / unit.Y), ((bz - origin.Z) / unit.Z)));
                 }
                 feature = inside;
-                mergedBesides[index] = besideCrease;
+                mergedBesides.Span[index] = besideCrease;
             }
             (x, y, z) = (feature ?? (x, y, z));
             // A face split off a crease lies on that face alone, whatever crease its fine vertices touched.
-            mergedFeatures[index] = (!faces.Splits(owner: owners[root]) && ((feature is not null) ? piece.Feature : ((piece.Count == 1) && features[root])));
-            mergedSolved[index] = true;
+            mergedFeatures.Span[index] = (!faces.Splits(owner: owners[root]) && ((feature is not null) ? piece.Feature : ((piece.Count == 1) && features[root])));
+            mergedSolved.Span[index] = true;
 
             mergedPositions[at] = x;
             mergedPositions[(at + 1)] = y;
@@ -939,7 +939,7 @@ internal static class SdfDualContouring {
             }
         }
 
-        HandOff(besides: mergedBesides, features: mergedFeatures, grid: grid, handoffs: mergedHandoffs.GetSpan(), positions: mergedPositions.GetSpan(), solveds: mergedSolved, target: (x, y, z) => {
+        HandOff(besides: mergedBesides.Span, features: mergedFeatures.Span, grid: grid, handoffs: mergedHandoffs.GetSpan(), positions: mergedPositions.GetSpan(), solveds: mergedSolved.Span, target: (x, y, z) => {
             var vertex = cellVertex(x, y, z);
 
             return ((vertex < 0) ? -1 : remap[vertex]);
@@ -970,27 +970,27 @@ internal static class SdfDualContouring {
             if (Collapse(quad: quad, distinct: distinct) > 0) { keptQuads++; }
         }
 
-        var mergedQuads = new int[(4 * keptQuads)];
-        var mergedCorners = new int[keptQuads];
-        var mergedAxes = new sbyte[keptQuads];
+        var mergedQuads = RentedScope.Allocate<int>(products, 4 * keptQuads);
+        var mergedCorners = RentedScope.Allocate<int>(products, keptQuads);
+        var mergedAxes = RentedScope.Allocate<sbyte>(products, keptQuads);
 
         keptQuads = 0;
         for (var quad = 0; (quad < quadCorners.Length); quad++) {
             var count = Collapse(quad: quad, distinct: distinct);
 
             if (count == 0) { continue; }
-            mergedQuads[(4 * keptQuads)] = distinct[0];
-            mergedQuads[((4 * keptQuads) + 1)] = distinct[1];
-            mergedQuads[((4 * keptQuads) + 2)] = distinct[2];
-            mergedQuads[((4 * keptQuads) + 3)] = distinct[((count == 4) ? 3 : 2)];
-            mergedCorners[keptQuads] = quadCorners[quad];
-            mergedAxes[keptQuads] = quadAxes[quad];
+            mergedQuads.Span[(4 * keptQuads)] = distinct[0];
+            mergedQuads.Span[((4 * keptQuads) + 1)] = distinct[1];
+            mergedQuads.Span[((4 * keptQuads) + 2)] = distinct[2];
+            mergedQuads.Span[((4 * keptQuads) + 3)] = distinct[((count == 4) ? 3 : 2)];
+            mergedCorners.Span[keptQuads] = quadCorners[quad];
+            mergedAxes.Span[keptQuads] = quadAxes[quad];
             keptQuads++;
         }
 
         using var settled = new OwnedBuffer<int>(allocator: grid.Allocator, observer: grid.Workspace);
 
-        Settle(anchors: mergedAnchors.GetSpan(), axes: mergedAxes, besides: mergedBesides, features: mergedFeatures, patches: mergedPatches.GetSpan(), positions: mergedPositions.GetSpan(), quads: mergedQuads, returned: settled, solveds: mergedSolved);
+        Settle(anchors: mergedAnchors.GetSpan(), axes: mergedAxes.Span, besides: mergedBesides.Span, features: mergedFeatures.Span, patches: mergedPatches.GetSpan(), positions: mergedPositions.GetSpan(), quads: mergedQuads.Span, returned: settled, solveds: mergedSolved.Span);
         returned = null;
         foreach (var vertex in settled.GetSpan()) {
             if (pieces[vertex].Count > 1) { (returned ??= []).Add(item: pieces[vertex].Root); }
@@ -1000,9 +1000,9 @@ internal static class SdfDualContouring {
             Features = mergedFeatures,
             Beside = mergedBesides,
             Solved = mergedSolved,
-            Normals = Narrowed(values: mergedNormals.GetSpan()),
-            Patches = Narrowed(values: mergedPatches.GetSpan()),
-            Positions = Narrowed(values: mergedPositions.GetSpan()),
+            Normals = Narrowed(products: products, values: mergedNormals.GetSpan()),
+            Patches = Narrowed(products: products, values: mergedPatches.GetSpan()),
+            Positions = Narrowed(products: products, values: mergedPositions.GetSpan()),
             QuadAxes = mergedAxes,
             QuadCorners = mergedCorners,
             Quads = mergedQuads,
@@ -1162,10 +1162,10 @@ internal static class SdfDualContouring {
         }
     }
     // The values rounded to single precision, in an array of exactly their count.
-    private static float[] Narrowed(ReadOnlySpan<double> values) {
-        var narrowed = new float[values.Length];
+    private static Memory<float> Narrowed(ReadOnlySpan<double> values, RentedScope? products) {
+        var narrowed = RentedScope.Allocate<float>(products, values.Length);
 
-        for (var index = 0; (index < values.Length); index++) { narrowed[index] = ((float)values[index]); }
+        for (var index = 0; (index < values.Length); index++) { narrowed.Span[index] = ((float)values[index]); }
         return narrowed;
     }
     // One merged vertex's piece, while Merge gathers it: its fine vertices' count and summed positions, crossings' means,
@@ -1886,7 +1886,7 @@ internal static class SdfDualContouring {
     // edge along axis a are visited counter-clockwise about +a, which faces +a; the quad is reversed when the edge runs
     // from outside to inside, so every quad faces out of the surface. Each cell lends the vertex of the patch the edge
     // belongs to.
-    private static (int[] Quads, int[] QuadCorners, sbyte[] QuadAxes) Connect<TLattice>(TLattice grid, OwnedBuffer<byte> maskOfCell, OwnedBuffer<int> vertexOfPatch) where TLattice : ISdfContourLattice {
+    private static (Memory<int> Quads, Memory<int> QuadCorners, Memory<sbyte> QuadAxes) Connect<TLattice>(TLattice grid, RentedScope? products, OwnedBuffer<byte> maskOfCell, OwnedBuffer<int> vertexOfPatch) where TLattice : ISdfContourLattice {
         Span<int> cells = [grid.CellsX, grid.CellsY, grid.CellsZ];
         using var quads = new OwnedBuffer<int>(allocator: grid.Allocator, observer: grid.Workspace);
         using var quadCorners = new OwnedBuffer<int>(allocator: grid.Allocator, observer: grid.Workspace);
@@ -1956,6 +1956,6 @@ internal static class SdfDualContouring {
             }
         }
 
-        return (quads.ToArray(), quadCorners.ToArray(), quadAxes.ToArray());
+        return (RentedScope.Copy<int>(products, quads.GetSpan()), RentedScope.Copy<int>(products, quadCorners.GetSpan()), RentedScope.Copy<sbyte>(products, quadAxes.GetSpan()));
     }
 }

@@ -498,7 +498,7 @@ public static class SdfMeshAudit {
 
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
             vertexErrors[vertex] = Off(field: field, flagged: flagged, cell: cell, point: positions[vertex], threshold: threshold);
-            if ((vertexErrors[vertex] > threshold) && (welded[vertex] == vertex)) {
+            if ((vertexErrors[vertex] > threshold) && (welded.Span[vertex] == vertex)) {
                 defects.Add(item: (SdfMeshDefectClass.OffSurfaceVertex, positions[vertex]));
             }
         }
@@ -754,7 +754,7 @@ public static class SdfMeshAudit {
     // shading check compares a corner against the gradient at its triangle's centroid, which the surface's curvature over
     // half a cell turns as far as relief does; measured at the vertex, a smooth bake's normal is the field's gradient, so
     // what is left is relief under the cell, such as a field whose rounding the bake's gradient taps read.
-    private static float[] Rough(SdfFieldEvaluator field, ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals, int[] welded, float cell, SdfMeshAuditOptions options, List<Sample> flagged) {
+    private static float[] Rough(SdfFieldEvaluator field, ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals, ReadOnlyMemory<int> welded, float cell, SdfMeshAuditOptions options, List<Sample> flagged) {
         var errors = new float[(normals.IsEmpty ? 0 : positions.Length)];
 
         if (normals.IsEmpty) { return errors; }
@@ -763,7 +763,7 @@ public static class SdfMeshAudit {
         var creased = new bool[positions.Length];
 
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
-            var root = welded[vertex];
+            var root = welded.Span[vertex];
 
             if ((root != vertex) && !(Vector3.Dot(vector1: Unit(normal: normals[vertex]), vector2: Unit(normal: normals[root])) >= CopyAgreement)) {
                 creased[root] = true;
@@ -775,7 +775,7 @@ public static class SdfMeshAudit {
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
             var normal = Unit(normal: normals[vertex]);
 
-            if ((welded[vertex] != vertex) || creased[vertex] || (normal == Vector3.Zero)) { continue; }
+            if ((welded.Span[vertex] != vertex) || creased[vertex] || (normal == Vector3.Zero)) { continue; }
 
             var slope = Slope(field: field, point: positions[vertex], step: step);
             var length = slope.Length();
@@ -836,13 +836,13 @@ public static class SdfMeshAudit {
     // Each vertex's first vertex at the same position: the contour splits a vertex at creases and material boundaries
     // into copies that share it.
     // Every welded edge, ordered by its first appearance, with the triangles that hold it.
-    private static Dictionary<(int First, int Second), Held> Edges(ReadOnlySpan<uint> indices, int[] welded) {
+    private static Dictionary<(int First, int Second), Held> Edges(ReadOnlySpan<uint> indices, ReadOnlyMemory<int> welded) {
         var edges = new Dictionary<(int First, int Second), Held>();
 
         for (var triangle = 0; (triangle < (indices.Length / 3)); triangle++) {
             for (var corner = 0; (corner < 3); corner++) {
-                var a = welded[((int)indices[((3 * triangle) + corner)])];
-                var b = welded[((int)indices[((3 * triangle) + ((corner + 1) % 3))])];
+                var a = welded.Span[((int)indices[((3 * triangle) + corner)])];
+                var b = welded.Span[((int)indices[((3 * triangle) + ((corner + 1) % 3))])];
 
                 if (a == b) { continue; }
 

@@ -13,9 +13,16 @@ namespace Puck.SdfVm;
 /// carries each vertex's normal and each triangle's palette entry, and, for a group whose shapes ride slots of their own,
 /// each vertex's member (<see cref="Members"/>). The mesh pass rasterizes it.</remarks>
 public sealed partial record SdfMesh {
+    // Transient stage planes share one explicit owner until their last consumer has copied the published mesh.
+    internal Puck.Abstractions.Memory.RentedScope? Products { get; init; }
     // A cut or merge can pass its weld to the next bake stage. Published meshes need only their planes.
-    internal int[]? BakedSites { get; init; }
-    internal int[] Sites() => BakedSites ?? SdfMeshWeld.Sites(m_positions.Span);
+    internal ReadOnlyMemory<int>? BakedSites { get; init; }
+    /// <summary>Numbers exact positions by the first vertex at each position, in vertex order.</summary>
+    /// <param name="positions">The positions to weld.</param>
+    /// <returns>One canonical vertex index per position.</returns>
+    public static int[] WeldSites(ReadOnlySpan<Vector3> positions) => SdfMeshWeld.Sites(positions);
+
+    internal ReadOnlyMemory<int> Sites() => BakedSites ?? SdfMeshWeld.Sites(m_positions.Span);
 
     /// <summary>The actual contour lattice spacing in object space; zero for an authored triangle mesh.</summary>
     public Vector3 BakeCell { get; init; }
