@@ -22,16 +22,17 @@ public static partial class SdfWorldPackage {
     /// face's ray parameter, its draw plus one (zero where no glass face lies before the opaque hit) and its triangle,
     /// in the mesh target's format.</summary>
     public const string GlassVisibility = "glassVisibility";
-    /// <summary>The glass tiles as a pass reads them: the header (the tiles listed), the occupancy mask of the render
-    /// grid's 8 by 8 tiles, the tile list and each listed tile's sky filter, <c>frame/sdf-glass-tiles.hlsli</c> owning
-    /// the layout. The glass raster marks and lists every tile it writes sums in, the glass shading pass shades only the
-    /// listed tiles, takes back the mark of a tile that shows no glass, and writes the sky filter of every pixel of a
-    /// tile it keeps marked; the sky, the resolve and the composite read the glass image and the sky filter only where
-    /// the mask marks the pixel's tile, and the lit image views wrote everywhere else. A reader binds them only in a frame
-    /// whose glass passes ran (<c>SdfWorldPasses.GlassSeen</c>), the tables' dummy otherwise, which holds no tile.</summary>
+    /// <summary>The glass tiles as the sky, the resolve and the composite read them: the header (the tiles listed), the
+    /// marked and shown masks of the render grid's 8 by 8 tiles, the tile list and each shown tile's sky filter,
+    /// <c>frame/sdf-glass-tiles.hlsli</c> owning the layout. The glass raster marks every tile it writes sums in, the glass
+    /// tiles pass lists the marked tiles in tile order, and the glass shading pass shades only the listed tiles, shows each
+    /// where some pixel needs glass and writes the sky filter of every pixel of a tile it shows; the readers take the glass
+    /// image and the sky filter only where the shown mask holds the pixel's tile, and the lit image views wrote everywhere
+    /// else. A reader binds them only in a frame whose glass passes ran (<c>SdfWorldPasses.GlassSeen</c>), the tables'
+    /// dummy otherwise, which holds no tile.</summary>
     public const string GlassTiles = "sdfGlassTiles";
-    /// <summary>The glass tiles as the glass clear, the glass raster and the glass shading pass write them
-    /// (<see cref="GlassTiles"/>).</summary>
+    /// <summary>The glass tiles as the glass clear, the glass raster, the glass tiles pass and the glass shading pass write
+    /// them (<see cref="GlassTiles"/>).</summary>
     public const string GlassTilesWritten = "sdfGlassTilesRW";
     /// <summary>The glass shading pass's indirect dispatch arguments as the glass tiles pass writes them: a record of
     /// three group counts for each job of the pass's plan, a job of tiles past the listed count dispatching nothing.</summary>
@@ -40,7 +41,7 @@ public static partial class SdfWorldPackage {
     /// jobs it records, which the glass tiles pass writes the arguments of and the shading pass dispatches.</summary>
     public const string GlassJobs = "glassJobs";
     /// <summary>The glass image as the sky, the resolve and the composite read it: the lit image with every pixel of a
-    /// tile the glass tiles mark shaded through the glass, written only in those tiles (<see cref="GlassTiles"/>).</summary>
+    /// tile the glass tiles show shaded through the glass, written only in those tiles (<see cref="GlassTiles"/>).</summary>
     public const string GlassLitImage = "glassLit";
     /// <summary>The words one render-extent pixel holds in the glass sums: the sums, the layer list's
     /// <see cref="GlassLayers"/> 64-bit entries, the material key and the nearest exit. Even, so every pixel's layer list
@@ -52,10 +53,10 @@ public static partial class SdfWorldPackage {
     /// <summary>The words of the glass tiles' header, before the mask: the count of tiles listed, then spare words.
     /// <c>SdfIsaHlsl</c> generates it as <c>SDF_GLASS_TILE_HEADER_WORDS</c>.</summary>
     public const uint GlassTileHeaderWords = 4;
-    /// <summary>The words the glass tiles hold for each tile of their capacity: a word of the mask's region (of which the
+    /// <summary>The words the glass tiles hold for each tile of their capacity: a word of each mask's region (of which the
     /// mask uses one bit), its list entry and its pixels' sky filter. <c>SdfIsaHlsl</c> generates it as
     /// <c>SDF_GLASS_TILE_WORDS</c>.</summary>
-    public const uint GlassTileWords = (2 + GlassTilePixels);
+    public const uint GlassTileWords = (3 + GlassTilePixels);
     /// <summary>The front faces a pixel's layer list holds: the nearest that many visible glass entries, ordered by
     /// distance whatever order they rasterized in, each of which the glass shading pass shades as an interface of its
     /// own. Every glass face still absorbs through the sums however many lie along the ray. <c>SdfIsaHlsl</c> generates
@@ -85,12 +86,12 @@ public static partial class SdfWorldPackage {
 
         return ((words > GlassTileHeaderWords) ? ((words - GlassTileHeaderWords) / GlassTileWords) : 0UL);
     }
-    /// <summary>Returns the words from a glass tiles buffer's start through its mask, for a buffer of
-    /// <paramref name="capacity"/> tiles: what the glass clear zeroes so the raster marks and lists from nothing (the twin of
-    /// <c>sdfGlassTileMaskEnd</c> in <c>frame/sdf-glass-tiles.hlsli</c>).</summary>
+    /// <summary>Returns the words the glass clear zeroes in a glass tiles buffer of <paramref name="capacity"/> tiles, so the
+    /// raster marks from nothing and no tile shows before the shading pass says so: the header and the used words of both
+    /// masks (the twin of <c>sdfGlassTileClearWords</c> in <c>frame/sdf-glass-tiles.hlsli</c>).</summary>
     /// <param name="capacity">The tiles the buffer lays out (<see cref="GlassTileCapacity"/>).</param>
-    /// <returns>The header's words and the mask's.</returns>
-    public static ulong GlassTileMaskEnd(ulong capacity) => (GlassTileHeaderWords + ((capacity + 31UL) / 32UL));
+    /// <returns>The words, which the clear's second step dispatches an invocation each for.</returns>
+    public static ulong GlassTileClearWords(ulong capacity) => (GlassTileHeaderWords + (2UL * ((capacity + 31UL) / 32UL)));
 
     /// <summary>The glass passes' interface: the common frame values, the lit image views wrote (sampled), the glass
     /// visibility target (sampled), the visibility records and the glass sums it reads, the reactivity it raises at a
@@ -113,7 +114,6 @@ public static partial class SdfWorldPackage {
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: Output, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: GlassProbeHistory),
             Written(element: ShaderValueType.Uint, name: GlassProbeHistoryWritten),
-            Read(element: ShaderValueType.Uint, name: GlassTiles),
             Written(element: ShaderValueType.Uint, name: GlassTilesWritten),
             Written(element: ShaderValueType.Uint, name: GlassSumsClearWritten),
             Written(element: ShaderValueType.Uint, name: GlassArgumentsWritten),
@@ -125,15 +125,15 @@ public static partial class SdfWorldPackage {
     /// <summary>Returns a fragment with the glass contract added after its views pass, for a view of a program that
     /// holds a glass shape (<c>SdfProgram.HasGlass</c>); a view of any other program runs the fragment as it stands and
     /// pays nothing. Four passes follow views, each costing the tiles the glass covers rather than the image:
-    /// <see cref="Parts.GlassClear"/> zeroes the sums of the tiles the preceding raster listed and the tiles' mask;
+    /// <see cref="Parts.GlassClear"/> zeroes the sums of the tiles the preceding frame listed and the tiles' masks;
     /// <see cref="Parts.Glass"/> rasterizes the glass draws, every face accumulating its signed ray distance into the sums
     /// where it lies before the opaque hit, the nearest front face winning the glass target through a depth of its own,
-    /// and every tile it writes in marked and listed in the glass tiles; <see cref="Parts.GlassTiles"/> writes the
-    /// shading pass's indirect arguments from the listed count; and <see cref="Parts.GlassShade"/> shades each listed
-    /// tile's pixels into the glass image: the opaque image sampled along the refracted ray and absorbed over the
-    /// distance through the glass, the sky reflected by Fresnel, the lights' highlights, frosted by the material's
-    /// roughness. The sky, a temporal view's resolve and a native view's composite read the glass image and the glass
-    /// tiles' sky filter where the tiles mark a pixel's tile and the lit image views wrote elsewhere, so no pass copies
+    /// and every tile it writes in marked in the glass tiles; <see cref="Parts.GlassTiles"/> lists the marked tiles in
+    /// tile order and writes the shading pass's indirect arguments from their count; and <see cref="Parts.GlassShade"/>
+    /// shades each listed tile's pixels into the glass image: the opaque image sampled along the refracted ray and
+    /// absorbed over the distance through the glass, the sky reflected by Fresnel, the lights' highlights, frosted by the
+    /// material's roughness. The sky, a temporal view's resolve and a native view's composite read the glass image and
+    /// the glass tiles' sky filter where the tiles show a pixel's tile and the lit image views wrote elsewhere, so no pass copies
     /// the image; a temporal view's resolve reads the reactivity the glass pass raised. The sums' and the tiles' versions
     /// declare their predecessors preserved: the clear and the raster record on one signature and one input (the
     /// geometry's, and the visibility records), so a raster never accumulates onto a clear it did not see.</summary>
@@ -193,7 +193,8 @@ public static partial class SdfWorldPackage {
                     OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.FragmentWrite, RenderGraphPortAccess.FragmentWrite],
                     Outputs: [new ResourceReference(Name: Parts.GlassTarget), new ResourceReference(Name: Parts.GlassDepth), new ResourceReference(Name: Parts.GlassSums), new ResourceReference(Name: Parts.GlassTilesMarked)]
                 ));
-                passes.Add(item: Pass(inputs: [Parts.GlassTilesMarked], name: Parts.GlassTiles, outputs: [Parts.GlassArguments]) with { Members = GlassMembers });
+                // The tiles pass compacts the marked mask into the list in place, a version preserving the marks.
+                passes.Add(item: Pass(name: Parts.GlassTiles, outputs: [Parts.GlassTilesListed, Parts.GlassArguments]) with { Members = GlassMembers });
                 var shade = Pass(
                     inputs: [lit, Parts.Visibility, Parts.GlassTarget, Parts.GlassSums],
                     name: Parts.GlassShade,
@@ -218,7 +219,7 @@ public static partial class SdfWorldPackage {
             }
 
             // A pass after the glass that reads the lit image views wrote reads the glass image and the tiles beside it,
-            // selecting the glass where the tiles mark a pixel's tile; a resolved composite reads the resolve's lit image,
+            // selecting the glass where the tiles show a pixel's tile; a resolved composite reads the resolve's lit image,
             // which already holds the glass, and the tiles alone for the sky filter.
             var readsLit = pass.Inputs.Any(predicate: input => (input.Name == lit));
             var renamed = pass with {
@@ -266,6 +267,14 @@ public static partial class SdfWorldPackage {
                     Count: tileCount,
                     From: Parts.GlassTilesMarked,
                     Kind: ShaderPipelineResourceKind.Buffer,
+                    Name: Parts.GlassTilesListed,
+                    PreservesPredecessor: true,
+                    StrideBytes: sizeof(uint)
+                ),
+                new ShaderPipelineResource(
+                    Count: tileCount,
+                    From: Parts.GlassTilesListed,
+                    Kind: ShaderPipelineResourceKind.Buffer,
                     Name: Parts.GlassTilesShaded,
                     PreservesPredecessor: true,
                     StrideBytes: sizeof(uint)
@@ -289,14 +298,14 @@ public static partial class SdfWorldPackage {
     }
 
     public static partial class Parts {
-        /// <summary>The pass zeroing the sums of the tiles the preceding glass raster listed, and the glass tiles' mask,
-        /// ahead of the glass raster pass.</summary>
+        /// <summary>The pass zeroing the sums of the tiles the preceding frame listed, and the glass tiles' masks, ahead of
+        /// the glass raster pass.</summary>
         public const string GlassClear = "glass-clear";
         /// <summary>The glass raster pass: the frame's glass draws into the glass target, the glass sums and the glass
-        /// tiles.</summary>
+        /// tiles' marked mask.</summary>
         public const string Glass = "glass";
-        /// <summary>The glass tiles pass: the glass shading pass's indirect arguments from the tiles the raster
-        /// listed.</summary>
+        /// <summary>The glass tiles pass: the marked tiles listed in tile order, and the glass shading pass's indirect
+        /// arguments from their count.</summary>
         public const string GlassTiles = "glass-tiles";
         /// <summary>The glass shading pass: each listed tile's pixels shaded over the opaque image behind them into the
         /// glass image.</summary>
@@ -312,16 +321,18 @@ public static partial class SdfWorldPackage {
         /// <summary>The glass sums as the raster pass leaves them: each pixel's signed distance sum and face count
         /// (<see cref="SdfWorldPackage.GlassSumsWritten"/>).</summary>
         public const string GlassSums = "glassSums";
-        /// <summary>The glass tiles as the clear leaves them: no tile marked or listed.</summary>
+        /// <summary>The glass tiles as the clear leaves them: no tile marked, listed or shown.</summary>
         public const string GlassTilesCleared = "glassTilesCleared";
-        /// <summary>The glass tiles as the raster pass leaves them: every tile it wrote sums in marked and listed.</summary>
+        /// <summary>The glass tiles as the raster pass leaves them: every tile it wrote sums in marked.</summary>
         public const string GlassTilesMarked = "glassTilesMarked";
-        /// <summary>The glass tiles as the glass shading pass leaves them: the tiles that show glass marked, with their
-        /// pixels' sky filter, which the passes after it read (<see cref="SdfWorldPackage.GlassTiles"/>).</summary>
+        /// <summary>The glass tiles as the glass tiles pass leaves them: every marked tile listed, in tile order.</summary>
+        public const string GlassTilesListed = "glassTilesListed";
+        /// <summary>The glass tiles as the glass shading pass leaves them: the listed tiles that show glass shown, with
+        /// their pixels' sky filter, which the passes after it read (<see cref="SdfWorldPackage.GlassTiles"/>).</summary>
         public const string GlassTilesShaded = "glassTilesShaded";
         /// <summary>The glass shading pass's indirect dispatch arguments.</summary>
         public const string GlassArguments = "glassArguments";
-        /// <summary>The glass image: the lit image with the pixels of each tile the glass tiles mark shaded through the
+        /// <summary>The glass image: the lit image with the pixels of each tile the glass tiles show shaded through the
         /// glass, written only in those tiles.</summary>
         public const string GlassLit = "glassLit";
         /// <summary>The reactivity with each glass pixel's raised where its refracted sample comes from elsewhere on

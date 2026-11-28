@@ -22,7 +22,7 @@
 #include "../shade/sdf-transport.hlsli"
 #include "../frame/sdf-glass-tiles.hlsli"
 
-// The render grid's color at a render pixel: the glass image where the glass tiles mark the pixel's tile, the lit image
+// The render grid's color at a render pixel: the glass image where the glass tiles show the pixel's tile, the lit image
 // views wrote everywhere else (frame/sdf-glass-tiles.hlsli). A view with no glass this frame binds the tables' dummy at
 // the tiles, which marks none.
 float4 sdfSkyPassRenderLit(uint2 pixel) {

@@ -190,7 +190,7 @@ SdfResolveSample sdfResolveSampleLoad(int2 position, uint2 render) {
     SdfVisibility visibility = sdfLoadVisibility(record);
     SdfResolveSample sample;
 
-    // The glass image where the glass tiles mark the sample's tile, the color views wrote everywhere else.
+    // The glass image where the glass tiles show the sample's tile, the color views wrote everywhere else.
     sample.color = (sdfGlassTileShows(sdfGlassTiles, pixel, render) ? glassLit.Load(int3(pixel, 0)) : currentColor.Load(int3(pixel, 0)));
     sample.luma = sdfToYCoCg(sample.color.rgb).x;
     sample.reactive = reactivity[sdfReactivityIndex(pixel, 0u, render)];

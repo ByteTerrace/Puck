@@ -1,8 +1,8 @@
-// The glass shading pass shades the glass after views and before sky and resolve, a group for each tile the glass raster
-// listed (frame/sdf-glass-tiles.hlsli, CSMain): it writes the glass image and the sky filter for every pixel of a tile
-// where some pixel has a front face before its opaque hit or a ray that starts inside a solid, the lit image's own texel
-// for every other pixel of that tile, and gives back the mark of a tile where none has; the passes after it read the glass
-// image where the tiles mark a pixel's tile and the lit image views wrote everywhere else. The pass shades up to SDF_GLASS_LAYERS
+// The glass shading pass shades the glass after views and before sky and resolve, a group for each tile the glass tiles
+// pass listed, in tile order (frame/sdf-glass-tiles.hlsli, CSMain): it shows a tile where some pixel has a front face
+// before its opaque hit or a ray that starts inside a solid and writes the glass image and the sky filter for every pixel
+// of it, the lit image's own texel for a pixel with neither, and leaves any other tile unshown; the passes after it read the glass
+// image where the tiles show a pixel's tile and the lit image views wrote everywhere else. The pass shades up to SDF_GLASS_LAYERS
 // interfaces: the nearest front face (the glass target's) and the next nearest after it in the sums' layer list
 // (sdfGlassNextLayer), nearest first, so the order the faces rasterized in never shows. Each interface is shaded alike (one
 // loop body, never a copy):
@@ -73,6 +73,17 @@
 #include "../isa/sdf-shade.hlsli"
 #include "../shade/sdf-transport.hlsli"
 #include "sdf-probe-history.hlsli"
+
+// The pass's detail rows (SdfGlassRecorder.WorkDetails, in its order), each counted as steps where the event happens so
+// no count stays live through the shading: the tiles the list dispatched a group for and those that show glass (CSMain),
+// then the irradiance gathers, the near interface's served by the glass probe history and taken, and those of the later
+// interfaces and of a medium the ray starts in, which take one every time.
+static const uint SdfGlassTilesListedDetail = 0u;
+static const uint SdfGlassTilesShownDetail = 1u;
+static const uint SdfGlassNearReusedDetail = 2u;
+static const uint SdfGlassNearGatheredDetail = 3u;
+static const uint SdfGlassFarGatheredDetail = 4u;
+static const uint SdfGlassMediumGatheredDetail = 5u;
 
 // The frost's taps and the most render pixels their disc spans.
 static const uint GlassFrostTaps = 8u;
@@ -264,8 +275,11 @@ SdfMeshProbes sdfGlassNearProbes(uint2 pixel, float3 surfacePoint, float3 normal
             sdfProbeHistoryCarry(sdfGlassProbeHistory, sdfGlassProbeHistoryRW, entry, previous);
             writes = false;
         }
+        puckCountDetail(SdfGlassNearReusedDetail, 1u, 0u, 0u, 0u, 0u);
         return sdfProbeHistoryLoad(sdfGlassProbeHistory, previous);
     }
+
+    puckCountDetail(SdfGlassNearGatheredDetail, 1u, 0u, 0u, 0u, 0u);
 
     bool complete;
     bool windowBound;
@@ -290,7 +304,9 @@ float3 sdfGlassTransmission(SdfMaterialData material, float3 opticalDepth, float
 // Whether a pixel's shading differs from the lit image views wrote: a glass front face lies before its opaque hit in a
 // view that composes the final picture or shows the shading's cost, or its ray starts inside glass. A tile none of whose
 // pixels does keeps neither the glass image nor the sky filter, and the passes after it read the lit image there.
-bool sdfGlassPixelNeeds(uint2 pixel, uint2 extent) {
+// `gathers` says whether the pixel shades a near glass face in the final picture, so its near interface gathers the
+// probes and may keep its cell's entry of the glass probe history.
+bool sdfGlassPixelNeeds(uint2 pixel, uint2 extent, out bool gathers) {
     float4 front = glassVisibility.Load(int3(pixel, 0));
     SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, extent));
     float opaque = (sdfVisibilityHit(visibility) ? visibility.t : worldFarDistance(worldView()));
@@ -298,13 +314,15 @@ bool sdfGlassPixelNeeds(uint2 pixel, uint2 extent) {
     bool final = sdfDebugComposesFinal(passGroup.debugMode);
     bool diagnostic = ((passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_COST) || (passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_TIER));
 
+    gathers = (shows && final);
     return ((shows && (final || diagnostic)) || (final && (sdfGlassWindingAt(sdfGlassSumWord(pixel, extent)) > 0)));
 }
 
-// Shades one pixel of a tile the glass tiles keep marked: the glass image and the pixel's sky filter word at its place in
-// the tile (frame/sdf-glass-tiles.hlsli), both written for every pixel, the lit image and a filter that passes the sky as
-// it is for a pixel that shows no glass.
-void sdfGlassPixel(uint2 pixel, uint tile, uint place, uint capacity) {
+// Shades one pixel of a tile the glass tiles show: the glass image and the pixel's sky filter word at its place in the
+// tile (frame/sdf-glass-tiles.hlsli), both written for every pixel, the lit image and a filter that passes the sky as it is
+// for a pixel that shows no glass. `writesCell` says the pixel writes its cell's entry of the glass probe history: the
+// cell's chosen glass pixel (CSMain), or, in a cell with none, its first pixel, which writes that it keeps no gather.
+void sdfGlassPixel(uint2 pixel, bool writesCell) {
     uint2 extent = passGroup.imageExtent;
     // The pass works in nits and stores at the view's light scale, as the views pass does.
     float storedScale = sdfStoredLightScale(passGroup.debugMode, passGroup.lightScale);
@@ -334,11 +352,11 @@ void sdfGlassPixel(uint2 pixel, uint tile, uint place, uint capacity) {
     // passes (frame/sdf-glass-sky-filter.hlsli); the coverage below carries the filter's luminance.
     float skyBehind = (1.0 - color.a);
     float3 skyFilter = float3(1.0, 1.0, 1.0);
-    // The glass probe history: whether this render keeps it, reads the preceding render's, and whether this pixel, its
-    // cell's first, still owes the cell's entry.
+    // The glass probe history: whether this render keeps it, reads the preceding render's, and whether this pixel still
+    // owes its cell's entry.
     bool keepsProbes = sdfProbeHistoryKeeps(sdfGlassProbeHistoryRW, 0u);
     bool readsProbes = sdfProbeHistoryReads(sdfGlassProbeHistory, keepsProbes, extent, 0u);
-    bool writesProbes = (keepsProbes && all((pixel % SDF_VIEWS_PROBE_RATE) == 0u));
+    bool writesProbes = (keepsProbes && writesCell);
     float3 origin = view.position.xyz;
     float3 rayDirection = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(extent)));
     float insideDistance = 0.0;
@@ -473,6 +491,7 @@ void sdfGlassPixel(uint2 pixel, uint tile, uint place, uint capacity) {
                 probes = sdfGlassNearProbes(pixel, surfacePoint, normal, abs(dot(rayDirection, normal)), (footprint * t), readsProbes, writesProbes);
             } else {
                 probes = sdfMeshProbesAt(surfacePoint, normal);
+                puckCountDetail(SdfGlassFarGatheredDetail, 1u, 0u, 0u, 0u, 0u);
             }
             float3 highlights;
             float incoming;
@@ -574,6 +593,7 @@ void sdfGlassPixel(uint2 pixel, uint tile, uint place, uint capacity) {
             float start = worldSurfaceNearDistance(view) / dot(rayDirection, view.forward.xyz);
             float3 scatterPoint = origin + rayDirection * (start + 0.5 * insideDistance);
             SdfMeshProbes probes = sdfMeshProbesAt(scatterPoint, normal);
+            puckCountDetail(SdfGlassMediumGatheredDetail, 1u, 0u, 0u, 0u, 0u);
             float3 highlights, radiance, indirect, rim;
             float incoming, attenuation;
             float3 received = sdfGlassReceived(insideMaterial, scatterPoint, normal, rayDirection, probes,
@@ -586,9 +606,15 @@ void sdfGlassPixel(uint2 pixel, uint tile, uint place, uint capacity) {
         reactive = 1.0;
         sdfWorkSteps++;
     }
-    sdfGlassTilesRW[sdfGlassTileFilterWord(capacity, tile, place)] = ((glass || (insideDistance > 0.0)) ? sdfGlassSkyFilterPack(skyFilter) : 0u);
+    // The filter's word is found again from the pixel here, so nothing of the tile stays live through the shading above.
+    uint tileWords;
+    uint tileStride;
 
-    // A cell whose first pixel shows no glass face keeps no gather.
+    sdfGlassTilesRW.GetDimensions(tileWords, tileStride);
+    sdfGlassTilesRW[sdfGlassTileFilterWord(sdfGlassTileCapacity(tileWords), sdfGlassTileOf(pixel, extent), sdfGlassTilePlace(pixel))] =
+        ((glass || (insideDistance > 0.0)) ? sdfGlassSkyFilterPack(skyFilter) : 0u);
+
+    // A cell none of whose pixels gathered at a glass face keeps no gather.
     if (writesProbes) {
         sdfProbeHistoryStore(sdfGlassProbeHistoryRW, sdfProbeHistoryEntry((pixel / SDF_VIEWS_PROBE_RATE), 0u), false, float3(0.0, 0.0, 0.0), 0u, 0u, sdfMeshProbesNone());
     }
@@ -601,13 +627,30 @@ void sdfGlassPixel(uint2 pixel, uint tile, uint place, uint capacity) {
     sdfWorkTexels = 1u;
 }
 
-// Whether any pixel of the group's tile needs its shading (sdfGlassPixelNeeds).
-groupshared uint sdfGlassTileNeeded;
+// The probe cells of one tile, which lie wholly inside it.
+#define SDF_GLASS_TILE_CELL_EDGE (SDF_GLASS_TILE_EDGE / SDF_VIEWS_PROBE_RATE)
+#define SDF_GLASS_TILE_CELLS (SDF_GLASS_TILE_CELL_EDGE * SDF_GLASS_TILE_CELL_EDGE)
 
-// A group a listed tile: the pushed index is the job's first entry in the glass tiles' list, and the job's indirect
-// arguments dispatch a group for each listed entry from it (passes/sdf-glass-tiles.comp.hlsl), so no group shades a tile
-// the raster wrote nothing in. A tile none of whose pixels needs its shading gives its mark back and writes nothing; one
-// that does keeps it, setting it again if an earlier recording over the same raster gave it back.
+// Whether any pixel of the group's tile needs its shading (sdfGlassPixelNeeds), and for each probe cell of the tile the
+// key of the pixel that writes its entry of the glass probe history (sdfGlassCellKey), all ones for a cell with none.
+groupshared uint sdfGlassTileNeeded;
+groupshared uint sdfGlassCellWriter[SDF_GLASS_TILE_CELLS];
+
+// The key that chooses a cell's writer among its pixels that gather at a near glass face: the nearest the cell's centre,
+// then the first in the tile, so the entry's receiver lies where the most of the cell's pixels find it within reach and a
+// cell that shows glass anywhere keeps a gather (a cell whose first pixel shows none once kept none, and every glass pixel
+// in it gathered every frame).
+uint sdfGlassCellKey(uint2 pixel, uint place) {
+    uint2 inCell = (pixel % SDF_VIEWS_PROBE_RATE);
+    uint2 offCentre = (uint2)abs((int2(inCell) * 2) - int(SDF_VIEWS_PROBE_RATE - 1u));
+
+    return (((offCentre.x + offCentre.y) << 8u) | place);
+}
+
+// A group a listed tile, the list in tile order: the pushed index is the job's first entry in the glass tiles' list, and
+// the job's indirect arguments dispatch a group for each listed entry from it (passes/sdf-glass-tiles.comp.hlsl), so no
+// group shades a tile the raster wrote nothing in. The group's answer sets or clears the tile's shown bit every recording:
+// a tile none of whose pixels needs its shading writes nothing more, and the readers read the lit image there.
 [numthreads(8, 8, 1)]
 void CSMain(uint3 group : SV_GroupID, uint place : SV_GroupIndex) {
     uint2 extent = passGroup.imageExtent;
@@ -626,35 +669,48 @@ void CSMain(uint3 group : SV_GroupID, uint place : SV_GroupIndex) {
 
     uint2 pixel = sdfGlassTilePixel(tile, place, extent);
     bool covered = all(pixel < extent);
+    uint2 inTile = (pixel % SDF_GLASS_TILE_EDGE);
+    uint cell = (((inTile.y / SDF_VIEWS_PROBE_RATE) * SDF_GLASS_TILE_CELL_EDGE) + (inTile.x / SDF_VIEWS_PROBE_RATE));
+    bool gathers = false;
 
     if (place == 0u) {
         sdfGlassTileNeeded = 0u;
     }
+    if (place < SDF_GLASS_TILE_CELLS) {
+        sdfGlassCellWriter[place] = 0xFFFFFFFFu;
+    }
     GroupMemoryBarrierWithGroupSync();
-    if (covered && sdfGlassPixelNeeds(pixel, extent)) {
+    if (covered && sdfGlassPixelNeeds(pixel, extent, gathers)) {
         sdfGlassTileNeeded = 1u;
+    }
+    if (covered && gathers) {
+        InterlockedMin(sdfGlassCellWriter[cell], sdfGlassCellKey(pixel, place));
     }
     GroupMemoryBarrierWithGroupSync();
 
-    // The mark follows this recording's answer either way: a recording made again over a standing raster may need a tile
-    // an earlier one gave back.
     bool needed = (sdfGlassTileNeeded != 0u);
 
     if (place == 0u) {
         uint bit = (1u << (tile & 31u));
 
         if (needed) {
-            InterlockedOr(sdfGlassTilesRW[sdfGlassTileMaskWord(tile)], bit);
+            InterlockedOr(sdfGlassTilesRW[sdfGlassTileShownWord(capacity, tile)], bit);
         } else {
-            InterlockedAnd(sdfGlassTilesRW[sdfGlassTileMaskWord(tile)], ~bit);
+            InterlockedAnd(sdfGlassTilesRW[sdfGlassTileShownWord(capacity, tile)], ~bit);
         }
     }
+    puckCountDetail(SdfGlassTilesListedDetail, ((place == 0u) ? 1u : 0u), 0u, 0u, 0u, 0u);
     if (!needed) {
         return;
     }
+
+    uint writer = sdfGlassCellWriter[cell];
+    bool writesCell = ((writer != 0xFFFFFFFFu) ? ((writer & 0xFFu) == place) : all((pixel % SDF_VIEWS_PROBE_RATE) == 0u));
+
     if (covered) {
-        sdfGlassPixel(pixel, tile, place, capacity);
+        sdfGlassPixel(pixel, writesCell);
     }
+    puckCountDetail(SdfGlassTilesShownDetail, ((place == 0u) ? 1u : 0u), 0u, 0u, 0u, 0u);
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
     puckCountLights(sdfWorkLights, sdfWorkFaceLights);
     puckCountShading(sdfWorkShadeOperations, sdfWorkEnvironmentLookups);

@@ -63,9 +63,9 @@ coverage is below one) → `sdf-composite.comp` (the sky's runs in their authore
 order, the lit image over them by its coverage, the atmosphere's in-scatter and
 the bounded media, into the output). A view of a program with a glass shape runs
 `sdf-glass-tiles.comp` (the glass clear, zeroing the sums of the tiles the last
-raster listed), `sdf-mesh-glass.frag` (the glass draws into the glass target and
-the glass sums, listing each tile they touch), `sdf-glass-tiles.comp` again (the
-shading pass's indirect arguments) and `sdf-glass.comp` (a group a listed tile,
+frame listed), `sdf-mesh-glass.frag` (the glass draws into the glass target and
+the glass sums, marking each tile they touch), `sdf-glass-tiles.comp` again (the
+marked tiles listed in tile order, and the shading pass's indirect arguments) and `sdf-glass.comp` (a group a listed tile,
 shading the glass image) between views and the sky
 (`SdfWorldPackage.WithGlass`). The surface and views kernels call no
 field query. The region copies are the

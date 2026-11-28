@@ -66,6 +66,11 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
         m_shade.Release(releases: m_owner.ShadeReleases);
         LeaveView();
     }
+    // The pass's detail rows (passes/sdf-glass-stage.hlsli, CSMain), each counted as steps: the tiles the list dispatched a
+    // group for and those of them that show glass, then the irradiance gathers of the shading, the near interface's served
+    // by the glass probe history and taken, the later interfaces' and a starting medium's.
+    public IReadOnlyList<string> WorkDetails(in FrameContext context) => ShadeDetails;
+    private static readonly string[] ShadeDetails = ["tiles-listed", "tiles-shown", "near-gathers-reused", "near-gathers", "far-gathers", "medium-gathers"];
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) =>
         m_owner.SignatureOf(instance: m_context.Instance, part: SdfWorldPackage.Parts.GlassShade, temporal: m_temporal, context: in context, reads: reads);
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
@@ -138,7 +143,6 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
         tables.WriteInterfaceBuffer(buffer: ((m_temporal ? recording.Outputs[1].Buffer : null) ?? tables.DummyBuffer), layout: layout, member: SdfWorldPackage.ReactivityWritten, set: set);
         tables.WriteInterfaceBuffer(buffer: recording.Outputs[m_tilesOutput].Buffer!, layout: layout, member: SdfWorldPackage.GlassTilesWritten, set: set);
         // The members only the glass tiles' upkeep reads or writes.
-        tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: SdfWorldPackage.GlassTiles, set: set);
         tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: SdfWorldPackage.GlassSumsClearWritten, set: set);
         tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: SdfWorldPackage.GlassArgumentsWritten, set: set);
         m_history.Forget(slot: slot);

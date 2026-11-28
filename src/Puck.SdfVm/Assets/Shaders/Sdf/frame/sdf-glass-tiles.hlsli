@@ -1,25 +1,27 @@
 // The glass tiles (SdfWorldPackage.GlassTiles): the 8 by 8 tiles of the render grid the glass raster wrote sums in this
-// frame, and the sky filter of every pixel of a tile that shows glass. The buffer's words:
+// frame, the ones of them that show glass, and the sky filter of every pixel of a tile that does. The buffer's words:
 // - [0, SDF_GLASS_TILE_HEADER_WORDS): the header, word 0 the tiles listed;
-// - then `capacity` words for the occupancy mask, one bit a tile from the low bit of the first word (the first
-//   ceil(capacity / 32) words hold it);
-// - then `capacity` words for the tile list, each listed tile once, in the order the raster first touched it;
+// - then `capacity` words for the marked mask, one bit a tile the raster wrote sums in, from the low bit of the first
+//   word (the first ceil(capacity / 32) words hold it);
+// - then `capacity` words for the shown mask, laid out alike: the listed tiles the shading pass found glass in;
+// - then `capacity` words for the tile list, each marked tile once, in increasing tile order (the glass tiles pass
+//   compacts the marked mask, passes/sdf-glass-tiles.comp.hlsl), so the shading pass's groups walk the screen in
+//   raster order and the groups running together share what neighbouring pixels read;
 // - then SDF_GLASS_TILE_PIXELS words a tile for the sky filter, tile-major, a pixel's word at its place in its tile
 //   (frame/sdf-glass-sky-filter.hlsli).
 // `capacity` comes from the bound buffer's length (sdfGlassTileCapacity, the twin of SdfWorldPackage.GlassTileCapacity),
-// so the layout is the allocation's whatever extent records into it, a list a raster left reads the same next frame, and
+// so the layout is the allocation's whatever extent records into it, a list a frame left reads the same next frame, and
 // the tables' dummy, which a reader binds in a frame whose glass passes did not run, holds no tile.
 // A tile is numbered row-major over the render grid's tiles at the recording's extent (sdfGlassTileOf); the glass sums
 // lie tile by tile at the same numbers (frame/sdf-glass.hlsli), so a tile's sums are one contiguous run.
 // Invariants the passes keep, each at one door:
-// - every glass sums word outside the listed tiles is zero (the clear zeroes the listed tiles' sums before the raster,
-//   passes/sdf-glass-tiles.comp.hlsl, and the raster lists a tile before it accumulates into it, sdfGlassMarkTile);
-// - a tile is listed at most once a frame (the mask's atomic OR returns whether this fragment set the bit);
-// - after the shading pass, a tile is marked only if the glass image and the sky filter hold every pixel of it
-//   (passes/sdf-glass-stage.hlsli marks every listed tile it shades and writes both for every pixel of it, and takes back
-//   the mark of a listed tile none of whose pixels shows glass; no tile outside the list is marked once the clear has
-//   run), so a reader that finds a tile marked reads the glass image there and the lit image views wrote everywhere else
-//   (sdfGlassTileShows).
+// - every glass sums word outside the listed tiles is zero (the clear zeroes the listed tiles' sums before the raster;
+//   the raster marks a tile before it accumulates into it, sdfGlassMarkTile; the tiles pass lists every marked tile, and
+//   only the raster and the clear write the marked mask);
+// - after the shading pass, a tile is shown only if the glass image and the sky filter hold every pixel of it (the
+//   shading pass sets or clears the shown bit of every listed tile by its own group's answer and writes both for every
+//   pixel of a tile it shows, passes/sdf-glass-stage.hlsli, and the clear leaves no tile shown), so a reader that finds a
+//   tile shown reads the glass image there and the lit image views wrote everywhere else (sdfGlassTileShows).
 #ifndef FRAME_SDF_GLASS_TILES_HLSLI
 #define FRAME_SDF_GLASS_TILES_HLSLI
 #include "../isa/sdf-render.hlsli"
@@ -35,10 +37,6 @@ uint sdfGlassTileCapacity(uint words) {
 uint sdfGlassTilesAcross(uint2 extent) {
     return ((extent.x + (SDF_GLASS_TILE_EDGE - 1u)) / SDF_GLASS_TILE_EDGE);
 }
-// The tiles of a render grid of `extent` pixels.
-uint sdfGlassTilesOf(uint2 extent) {
-    return (sdfGlassTilesAcross(extent) * ((extent.y + (SDF_GLASS_TILE_EDGE - 1u)) / SDF_GLASS_TILE_EDGE));
-}
 // The number of the tile holding a render pixel.
 uint sdfGlassTileOf(uint2 pixel, uint2 extent) {
     return (((pixel.y / SDF_GLASS_TILE_EDGE) * sdfGlassTilesAcross(extent)) + (pixel.x / SDF_GLASS_TILE_EDGE));
@@ -53,22 +51,35 @@ uint2 sdfGlassTilePixel(uint tile, uint place, uint2 extent) {
 
     return ((uint2((tile % across), (tile / across)) * SDF_GLASS_TILE_EDGE) + uint2((place % SDF_GLASS_TILE_EDGE), (place / SDF_GLASS_TILE_EDGE)));
 }
-// The words of each region, for a buffer of `capacity` tiles.
-uint sdfGlassTileMaskWord(uint tile) {
+// The words each mask uses for a buffer of `capacity` tiles.
+uint sdfGlassTileMaskWords(uint capacity) {
+    return ((capacity + 31u) / 32u);
+}
+// The word of each region holding a tile's bit or entry, for a buffer of `capacity` tiles.
+uint sdfGlassTileMarkedWord(uint tile) {
     return (SDF_GLASS_TILE_HEADER_WORDS + (tile >> 5u));
 }
+uint sdfGlassTileShownWord(uint capacity, uint tile) {
+    return ((SDF_GLASS_TILE_HEADER_WORDS + capacity) + (tile >> 5u));
+}
 uint sdfGlassTileListWord(uint capacity, uint entry) {
-    return ((SDF_GLASS_TILE_HEADER_WORDS + capacity) + entry);
+    return ((SDF_GLASS_TILE_HEADER_WORDS + (2u * capacity)) + entry);
 }
 uint sdfGlassTileFilterWord(uint capacity, uint tile, uint place) {
-    return (((SDF_GLASS_TILE_HEADER_WORDS + (2u * capacity)) + (tile * SDF_GLASS_TILE_PIXELS)) + place);
+    return (((SDF_GLASS_TILE_HEADER_WORDS + (3u * capacity)) + (tile * SDF_GLASS_TILE_PIXELS)) + place);
 }
-// The words the mask occupies, from the header's first word: what the clear zeroes with the count.
-uint sdfGlassTileMaskEnd(uint capacity) {
-    return (SDF_GLASS_TILE_HEADER_WORDS + ((capacity + 31u) / 32u));
+// The words the clear zeroes, numbered from zero (SdfWorldPackage.GlassTileClearWords): the header, then the used words of
+// the marked mask, then those of the shown mask; the buffer's word for each.
+uint sdfGlassTileClearWords(uint capacity) {
+    return (SDF_GLASS_TILE_HEADER_WORDS + (2u * sdfGlassTileMaskWords(capacity)));
+}
+uint sdfGlassTileClearWord(uint capacity, uint index) {
+    uint marked = (SDF_GLASS_TILE_HEADER_WORDS + sdfGlassTileMaskWords(capacity));
+
+    return ((index < marked) ? index : ((SDF_GLASS_TILE_HEADER_WORDS + capacity) + (index - marked)));
 }
 
-// Whether the glass tiles mark the tile of a render pixel: the glass image and the sky filter hold that pixel. False for a
+// Whether the glass tiles show the tile of a render pixel: the glass image and the sky filter hold that pixel. False for a
 // pixel past the buffer's capacity, which the tables' dummy is for every pixel.
 bool sdfGlassTileShows(StructuredBuffer<uint> tiles, uint2 pixel, uint2 extent) {
     uint words;
@@ -79,9 +90,9 @@ bool sdfGlassTileShows(StructuredBuffer<uint> tiles, uint2 pixel, uint2 extent) 
     uint capacity = sdfGlassTileCapacity(words);
     uint tile = sdfGlassTileOf(pixel, extent);
 
-    return ((tile < capacity) && (((tiles[sdfGlassTileMaskWord(tile)] >> (tile & 31u)) & 1u) != 0u));
+    return ((tile < capacity) && (((tiles[sdfGlassTileShownWord(capacity, tile)] >> (tile & 31u)) & 1u) != 0u));
 }
-// The sky filter word of a render pixel whose tile the glass tiles mark (sdfGlassTileShows), or zero for any other.
+// The sky filter word of a render pixel whose tile the glass tiles show (sdfGlassTileShows), or zero for any other.
 uint sdfGlassTileFilter(StructuredBuffer<uint> tiles, uint2 pixel, uint2 extent) {
     if (!sdfGlassTileShows(tiles, pixel, extent)) {
         return 0u;

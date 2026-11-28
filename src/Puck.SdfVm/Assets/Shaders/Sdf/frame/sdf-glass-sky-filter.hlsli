@@ -1,4 +1,4 @@
-// The glass's sky filter, one word a render pixel of each tile the glass tiles mark (frame/sdf-glass-tiles.hlsli): how
+// The glass's sky filter, one word a render pixel of each tile the glass tiles show (frame/sdf-glass-tiles.hlsli): how
 // the glass a pixel shows tints the sky behind it. The lit image's coverage carries only the luminance of the share of
 // the sky behind the glass that it passes, the RGB share's (`filter`) luminance, so the composite, which puts the sky in
 // the rest, multiplies its sky share by the filter's chroma (sdfGlassSkyTint: the filter over its luminance) and shows the

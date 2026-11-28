@@ -48,8 +48,8 @@ public sealed partial class SdfPassPlanLawTests {
             Assert.Equal(expected: [RenderGraphPortAccess.FragmentSampled], actual: raster.InputAccesses);
             Assert.Equal(expected: [SdfWorldPackage.Parts.GlassTarget, SdfWorldPackage.Parts.GlassDepth, SdfWorldPackage.Parts.GlassSums, SdfWorldPackage.Parts.GlassTilesMarked], actual: raster.Outputs.Select(selector: static output => output.Name));
             Assert.Equal(expected: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.FragmentWrite, RenderGraphPortAccess.FragmentWrite], actual: raster.OutputAccesses);
-            Assert.Equal(expected: [SdfWorldPackage.Parts.GlassTilesMarked], actual: tiles.Inputs.Select(selector: static input => input.Name));
-            Assert.Equal(expected: [SdfWorldPackage.Parts.GlassArguments], actual: tiles.Outputs.Select(selector: static output => output.Name));
+            Assert.Empty(collection: tiles.Inputs);
+            Assert.Equal(expected: [SdfWorldPackage.Parts.GlassTilesListed, SdfWorldPackage.Parts.GlassArguments], actual: tiles.Outputs.Select(selector: static output => output.Name));
             Assert.Equal(expected: [lit, SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.GlassTarget, SdfWorldPackage.Parts.GlassSums, SdfWorldPackage.Parts.GlassProbeHistory], actual: shade.Inputs.Select(selector: static input => input.Name));
             Assert.Equal(
                 expected: (temporal
@@ -92,8 +92,9 @@ public sealed partial class SdfPassPlanLawTests {
             Assert.All(collection: cleared.Count!, action: static term => Assert.Equal(expected: (SdfWorldPackage.GlassTilePixels * SdfWorldPackage.GlassSumWords), actual: ((uint)term.Elements)));
             Assert.Equal(expected: SdfWorldPackage.Parts.GlassTilesCleared, actual: marked.From);
             Assert.True(condition: marked.PreservesPredecessor);
-            Assert.Equal(expected: SdfWorldPackage.Parts.GlassTilesMarked, actual: shaded.From);
+            Assert.Equal(expected: SdfWorldPackage.Parts.GlassTilesListed, actual: shaded.From);
             Assert.True(condition: shaded.PreservesPredecessor);
+            Assert.Equal(expected: SdfWorldPackage.Parts.GlassTilesMarked, actual: glassed.Resources.Single(predicate: static resource => (resource.Name == SdfWorldPackage.Parts.GlassTilesListed)).From);
             Assert.True(condition: glassed.Resources.Single(predicate: static resource => (resource.Name == SdfWorldPackage.Parts.GlassTilesCleared)).Retained);
             Assert.Equal(expected: glassed.Resources.Single(predicate: static resource => (resource.Name == SdfWorldPackage.Parts.MeshTarget)) with { Name = SdfWorldPackage.Parts.GlassTarget }, actual: glassed.Resources.Single(predicate: static resource => (resource.Name == SdfWorldPackage.Parts.GlassTarget)));
             Assert.Equal(expected: glassed.Resources.Single(predicate: static resource => (resource.Name == SdfWorldPackage.Parts.MeshDepth)) with { Name = SdfWorldPackage.Parts.GlassDepth }, actual: glassed.Resources.Single(predicate: static resource => (resource.Name == SdfWorldPackage.Parts.GlassDepth)));

@@ -86,7 +86,7 @@ public static partial class SdfWorldPackage {
             Written(element: ShaderValueType.Uint, name: MoteLightWritten),
             Read(element: ShaderValueType.Uint, name: FieldColors),
             // The glass image and the glass tiles (GlassTiles): every view's sky and a native view's composite read the
-            // glass image where the tiles mark a pixel's tile, and the composite tints the sky behind glass by the tiles'
+            // glass image where the tiles show a pixel's tile, and the composite tints the sky behind glass by the tiles'
             // sky filter; a view with no glass this frame binds a filler and the tables' dummy, which holds no tile.
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: GlassLitImage, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: GlassTiles),

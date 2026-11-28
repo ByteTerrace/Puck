@@ -855,7 +855,7 @@ program with a glass shape (`SdfProgram.HasGlass`) inserts `glass-clear` →
 `glass` (graphics, the glass draws alone) → `glass-tiles` → `glass-shade` after
 `views` (`SdfWorldPackage.WithGlass`), each costing the 8 by 8 tiles the glass
 raster wrote in, and every later reader of the lit image reads `glassLit` where
-the glass tiles mark a pixel's tile (`frame/sdf-glass-tiles.hlsli`). A view of a frame that runs authored programs inserts
+the glass tiles show a pixel's tile (`frame/sdf-glass-tiles.hlsli`). A view of a frame that runs authored programs inserts
 `views-filter` → `views-bins` before `views`, which then shades in bins
 (`SdfWorldPackage.WithBins`, [authored shading](references/authored-shading.md#the-three-views-and-glass-kernels)). The surface and
 views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
@@ -1527,30 +1527,38 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   nearer than the glass are left out, `sdfGlassReadsBehind`). The lit image's
   coverage carries only the luminance of what the glass passes, so the sky the
   composite puts behind glass is tinted by the glass's sky filter
-  (`frame/sdf-glass-sky-filter.hlsli`), a word a pixel of each marked tile in
+  (`frame/sdf-glass-sky-filter.hlsli`), a word a pixel of each shown tile in
   the glass tiles.
   **The glass costs the tiles it covers.** The glass tiles
-  (`SdfWorldPackage.GlassTiles`, `frame/sdf-glass-tiles.hlsli`) hold a count, an
-  occupancy mask of the render grid's 8 by 8 tiles, a tile list and each tile's
-  sky filter; the sums lie tile by tile (`sdfGlassSumWord`). The raster lists a
-  tile, once, before it writes a sums word there (`sdfGlassMarkTile`); `glass-tiles`
-  writes one indirect argument record a job of the committed glass plan
-  (`SdfWorldPasses.CommitShadePlan` and `ShadePlanOf` with `glass`, `SdfShadeDispatch.RecordIndirect`);
-  `glass-shade` runs a group a listed tile, keeps the mark of a tile where some
-  pixel needs glass (`sdfGlassPixelNeeds`) and writes the glass image and the
-  filter for all of its pixels, and gives back the mark of any other; and
-  `glass-clear` (`SdfGlassTilesRecorder`, `passes/sdf-glass-tiles.comp.hlsl`)
-  zeroes only the sums of the tiles the last raster listed, then the count and
-  mask. Two invariants hold it, each at one door: every sums word outside the
-  listed tiles is zero (the clear, and the raster's mark before any write; the
-  host clears a buffer pair whole until a submitted recording has), and a marked
-  tile's pixels all hold the glass image and the filter (the shading pass). The
+  (`SdfWorldPackage.GlassTiles`, `frame/sdf-glass-tiles.hlsli`) hold a count, a
+  marked and a shown mask of the render grid's 8 by 8 tiles, a tile list and
+  each tile's sky filter; the sums lie tile by tile (`sdfGlassSumWord`). The
+  raster marks a tile before it writes a sums word there (`sdfGlassMarkTile`);
+  `glass-tiles` compacts the marked mask into the list in increasing tile order
+  and writes one indirect argument record a job of the committed glass plan
+  (`SdfWorldPasses.CommitShadePlan` and `ShadePlanOf` with `glass`,
+  `SdfShadeDispatch.RecordIndirect`). Keep the list in tile order: `glass-shade`'s
+  groups then walk the screen as a full-grid dispatch did, and the groups running
+  together share the probes, triangles and image lines neighbouring pixels read;
+  a list in the order the raster first touched each tile scatters the running
+  groups over the screen. `glass-shade` runs a group a listed tile, shows a
+  tile where some pixel needs glass (`sdfGlassPixelNeeds`) and writes the glass
+  image and the filter for all of its pixels, and clears the shown bit of any
+  other; it writes each probe cell's glass probe history entry from the cell's
+  most central glass pixel (`sdfGlassCellKey`). `glass-clear`
+  (`SdfGlassTilesRecorder`, `passes/sdf-glass-tiles.comp.hlsl`) zeroes only the
+  sums of the tiles the last tiles pass listed, then the count and both masks.
+  Two invariants hold it, each at one door: every sums word outside the listed
+  tiles is zero (the clear; the raster's mark before any write; only the raster
+  and the clear write the marked mask; the host clears a buffer pair whole until
+  a submitted recording has), and a shown tile's pixels all hold the glass image
+  and the filter (the shading pass). The
   clear reads the raster's one input (the visibility records), so the two stand
   or record together. The sky, the resolve and a native composite read `glassLit`
-  and the filter only where `sdfGlassTileShows` marks the pixel's tile
+  and the filter only where `sdfGlassTileShows` holds the pixel's tile
   (`sdfSkyPassRenderLit`, the resolve's sample load, `sdfCompositeGlassTint`);
   their recorders bind the glass image and tiles only while `GlassSeen` holds
-  this frame, a filler and the tables' dummy otherwise, which marks no tile,
+  this frame, a filler and the tables' dummy otherwise, which shows no tile,
   since a frame that skips the glass passes leaves an earlier frame's tiles. A
   new reader of a glass product downstream of the glass passes keeps that rule,
   and a new reader of the lit image after views selects through the tiles the
@@ -1562,8 +1570,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `DrewNothing` from the shading pass. The sums, the tiles and the glass target
   are never read on such a frame, so a new reader of any must not run on one.
   `world.counters gpu pass sdf.world$glass-shade counter texels` counts the
-  pixels of the tiles it shaded, and `$glass-clear` the pixels whose sums it
-  zeroed. A timing window keeps a skipped pass's last samples: toggle
+  pixels of the tiles it shaded, `$glass-tiles` the pixels of the tiles it
+  listed, and `$glass-clear` the pixels whose sums it zeroed; `glass-shade`'s
+  detail rows (`SdfGlassRecorder.WorkDetails`) count the tiles listed and shown
+  and its irradiance gathers by kind (the near interface's reused from the history
+  and taken, the far interfaces', a starting medium's), which say what one glass
+  pixel costs. A timing window keeps a skipped pass's last samples: toggle
   `world.gpu-timing off` and `on` before reading the glass passes at a stop.
 - **A flow moves shading, never geometry, and never reads a clock.** A palette
   slot's `flow` (`SdfFlow`, material rows 27 to 30) runs `sdfApplyFlow`
