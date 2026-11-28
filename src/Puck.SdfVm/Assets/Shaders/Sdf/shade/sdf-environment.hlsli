@@ -239,13 +239,16 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     float4 sampleClamp = mapping.sampleClamp;
     // A window whose frustum was fitted to the part of the glass its viewer sees renders that part alone
     // (SdfWorldPackage.ScreenWindows): its image spans the window's rectangle of the source, so the point, its
-    // footprint and the clamp are carried into it. The unit rectangle leaves them as they are.
+    // footprint and the clamp are carried into it. A window whose left lies past its right is a mirror's: its image runs
+    // the other way across, so the same map turns the point about. The unit rectangle leaves them as they are.
     float4 window = passGroup.screenWindows[screenIndex];
-    if ((window.z > window.x) && (window.w > window.y)) {
+    if ((window.z != window.x) && (window.w > window.y)) {
         float2 span = (window.zw - window.xy);
+        float2 low = ((sampleClamp.xy - window.xy) / span);
+        float2 high = ((sampleClamp.zw - window.xy) / span);
         source = ((source - window.xy) / span);
-        footprint = (footprint / span);
-        sampleClamp = float4(max(((sampleClamp.xy - window.xy) / span), 0.0), min(((sampleClamp.zw - window.xy) / span), 1.0));
+        footprint = (footprint / abs(span));
+        sampleClamp = float4(max(min(low, high), 0.0), min(max(low, high), 1.0));
     }
     float2 sourceSize;
     float3 sampled = sampleScreenSource(screenIndex, clamp(source, sampleClamp.xy, sampleClamp.zw), footprint, sourceSize).rgb;

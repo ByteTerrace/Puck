@@ -25,14 +25,15 @@ public static class WorldWindowFrustumFit {
 
     // The two face frames a window screen's apertures are: the local face that claims the screen index, and the
     // counterpart its portal facet names in the destination, on the route the window's session observes when the face
-    // carries routes.
-    private static bool TryResolveFrames(WorldDefinition local, WorldDefinition destination, int screenIndex, string? observed, out WorldFaceFrame source, out WorldFaceFrame counterpart, out WorldScreenSource? counterpartGlass) {
+    // carries routes. On the self route the counterpart is the face itself and the window reflects (`reflects`).
+    private static bool TryResolveFrames(WorldDefinition local, WorldDefinition destination, int screenIndex, string? observed, out WorldFaceFrame source, out WorldFaceFrame counterpart, out WorldScreenSource? counterpartGlass, out bool reflects) {
         ArgumentNullException.ThrowIfNull(argument: local);
         ArgumentNullException.ThrowIfNull(argument: destination);
 
         source = default;
         counterpart = default;
         counterpartGlass = null;
+        reflects = false;
 
         if (!WorldFaceCatalog.For(definition: local).TryFindScreen(
             row: out var row,
@@ -53,6 +54,15 @@ public static class WorldWindowFrustumFit {
 
         if ((face is not null) && (observed is not null)) {
             face = WorldFaceRouting.To(destination: observed, face: face);
+        }
+
+        if (WorldFaceRouting.IsSelf(face: face)) {
+            source = row.Frame;
+            counterpart = row.Frame;
+            counterpartGlass = row.Source;
+            reflects = true;
+
+            return true;
         }
 
         if (
@@ -158,10 +168,32 @@ public static class WorldWindowFrustumFit {
 
             var window = WorldPortalVisibility.Window(camera: in seen, glass: row);
 
+            if (apertures.Reflects) {
+                return FitMirror(apertures: apertures, eye: seen.Position, screen: row, window: window);
+            }
+
             return (TryFitFromApertures(apertures: apertures, camera: out var camera, eye: seen.Position, screen: row, window: window)
                 ? new WorldWindowFit(Camera: camera, Window: window)
                 : null);
         };
+    }
+    // A mirror's fit: the reflection of the world through the glass's plane, rendered with a proper camera. Reflecting
+    // through the plane is the face's self pair (a half turn about the glass's up, WorldFrameIsometry.MapVector with the
+    // face as both its frames) after a mirror across the plane through the glass's centre that holds its up and normal,
+    // so the reflected image at a glass point is the self pair's image at that point mirrored across the glass, seen from
+    // the eye mirrored the same way. The fit therefore runs the ordinary window fit from the mirrored eye over the
+    // mirrored part of the glass, and hands back the part's window reversed across (left past right), which a screen
+    // samples mirrored (SdfWorldPackage.ScreenWindows): no handedness reaches the renderer, so winding and culling stand
+    // as they are, and the view is one more view of the world's own residency at the share of the screen the glass covers.
+    private static WorldWindowFit? FitMirror(ResolvedApertures apertures, Vector3 eye, WorldScreen screen, Vector4 window) {
+        var glass = Glass(screen: screen);
+        var across = Vector3.Normalize(value: glass.Right);
+        var mirroredEye = (eye - (across * (2f * Vector3.Dot(vector1: (eye - glass.Origin), vector2: across))));
+        var mirroredWindow = new Vector4(x: (1f - window.Z), y: window.Y, z: (1f - window.X), w: window.W);
+
+        return (TryFitFromApertures(apertures: apertures, camera: out var camera, eye: mirroredEye, screen: screen, window: mirroredWindow)
+            ? new WorldWindowFit(Camera: camera, Window: new Vector4(x: window.Z, y: window.Y, z: window.X, w: window.W))
+            : null);
     }
     // Fits a window screen's camera against an eye: the local face the screen shows on and its counterpart in the
     // destination, and the part of the glass its row draws (Glass) that the window names (WorldPortalVisibility.Window).
@@ -252,7 +284,7 @@ public static class WorldWindowFrustumFit {
 
     // A window screen's two face frames as TryResolveFrames resolves them, and everything it reads to do so: the local
     // document's face catalog and placements, the destination's face catalog, and the screen index.
-    private sealed record ResolvedApertures(WorldFaceCatalog LocalCatalog, IReadOnlyList<WorldPlacement> LocalPlacements, WorldFaceCatalog DestinationCatalog, int ScreenIndex, bool Resolved, WorldFaceFrame Source, WorldFaceFrame Counterpart, WorldScreenSource? CounterpartGlass) {
+    private sealed record ResolvedApertures(WorldFaceCatalog LocalCatalog, IReadOnlyList<WorldPlacement> LocalPlacements, WorldFaceCatalog DestinationCatalog, int ScreenIndex, bool Resolved, WorldFaceFrame Source, WorldFaceFrame Counterpart, WorldScreenSource? CounterpartGlass, bool Reflects) {
         public bool Matches(WorldDefinition local, WorldDefinition destination, int screenIndex) => (
             (ScreenIndex == screenIndex) &&
             ReferenceEquals(objA: LocalPlacements, objB: local.Placements) &&
@@ -266,6 +298,7 @@ public static class WorldWindowFrustumFit {
                 destination: destination,
                 local: local,
                 observed: observed,
+                reflects: out var reflects,
                 screenIndex: screenIndex,
                 source: out var source
             );
@@ -276,6 +309,7 @@ public static class WorldWindowFrustumFit {
                 DestinationCatalog: WorldFaceCatalog.For(definition: destination),
                 LocalCatalog: WorldFaceCatalog.For(definition: local),
                 LocalPlacements: local.Placements,
+                Reflects: reflects,
                 Resolved: resolved,
                 ScreenIndex: screenIndex,
                 Source: source
