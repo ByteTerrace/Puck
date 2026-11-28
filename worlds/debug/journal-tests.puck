@@ -1,0 +1,138 @@
+// The journal worn on the wrist (../standard/journal.puck) and its menagerie (../standard/menagerie.puck), each
+// scenario booted in the journal's lab: `puck test worlds/debug/journal-tests.puck --jobs 1 --reproduce`. Body 0 is the
+// Moth (seat 1) and body 7 her companion. The rows read here are the journal's aims, which the rig and the camera ease
+// toward; the aims are simulation state, so each claim is exact.
+
+schema: "puck.world.definition.v1"
+basis: "labs/journal"
+documentId: "journal"
+
+test "she starts keeping Mintstitch and Tangerine, with Mintstitch active and worn by her companion" {
+  when {
+    ticks 30
+  }
+  expect {
+    bodyState(body, 0, menagerieKeeps1) == 1
+    bodyState(body, 0, menagerieKeeps2) == 1
+    bodyState(body, 0, companionActive) == 1
+    bodyState(body, 7, companionKind) == 1
+    journalOpen[0] == 0
+  }
+}
+
+test "opened standing still, the journal takes the pause read on her left forearm" {
+  when {
+    ticks 30
+    seat1: body.press journal 1 0.2 0
+    ticks 15
+  }
+  expect {
+    journalOpen[0] == 1
+    bodyState(body, 0, journal) == 1
+    journalRaiseLeft[0] == 1
+    journalFlapLeft[0] == 1
+    journalRaiseRight[0] == 0
+    journalFlapRight[0] == 0
+    journalFocus[0] == 1
+  }
+}
+
+test "opened while walking, the journal takes the action read, and the walk goes on" {
+  when {
+    ticks 30
+    seat1: body.press forward 1 2 0
+    ticks 10
+    seat1: body.press journal 1 0.2 0
+    ticks 15
+  }
+  expect {
+    journalOpen[0] == 1
+    journalRaiseLeft[0] == 0.55
+    journalFocus[0] == 0.35
+    (absolute(bodyPosition(body, 0, x)) + absolute(bodyPosition(body, 0, z))) > 0.5
+  }
+}
+
+test "a second press of the journal key closes it, and cancel closes it too" {
+  when {
+    ticks 30
+    seat1: body.press journal 1 0.2 0
+    ticks 15
+    seat1: body.press journal 1 0.2 0
+    ticks 15
+    seat1: body.press journal 1 0.2 0
+    ticks 15
+    seat1: body.press cancel 1 0.2 0
+    ticks 15
+  }
+  expect {
+    journalOpen[0] == 0
+    bodyState(body, 0, journal) == 0
+    journalRaiseLeft[0] == 0
+    journalFocus[0] == 0
+  }
+}
+
+test "on the menagerie page a step down and a pick swap the active companion to Tangerine" {
+  when {
+    ticks 30
+    seat1: body.press journal 1 0.2 0
+    ticks 15
+    seat1: body.press journalStep -1 0.2 0
+    ticks 15
+    seat1: body.press confirm 1 0.2 0
+    ticks 15
+  }
+  expect {
+    journalMark[0] == 2
+    bodyState(body, 0, companionActive) == 2
+    bodyState(body, 7, companionKind) == 2
+  }
+}
+
+// The control for the swap: the same pick with the journal closed changes nothing.
+test "a pick with the journal closed swaps nothing" {
+  when {
+    ticks 30
+    seat1: body.press journalStep -1 0.2 0
+    ticks 15
+    seat1: body.press confirm 1 0.2 0
+    ticks 15
+  }
+  expect {
+    journalMark[0] == 1
+    bodyState(body, 0, companionActive) == 1
+    bodyState(body, 7, companionKind) == 1
+  }
+}
+
+test "the page keys turn the pages round, back from the menagerie to the notes" {
+  when {
+    ticks 30
+    seat1: body.press journal 1 0.2 0
+    ticks 15
+    seat1: body.press journalPage -1 0.2 0
+    ticks 15
+  }
+  expect {
+    journalPage[0] == 3
+  }
+}
+
+test "asked for her right forearm, the journal opens there and the left stays shut" {
+  when {
+    ticks 30
+    seat1: world.state.cell.set journalHandAsk 0 1
+    ticks 5
+    seat1: body.press journal 1 0.2 0
+    ticks 15
+  }
+  expect {
+    bodyState(body, 0, journalHand) == 1
+    journalRaiseRight[0] == 1
+    journalFlapRight[0] == 1
+    journalRaiseLeft[0] == 0
+    journalFlapLeft[0] == 0
+    journalSide[0] == 1
+  }
+}

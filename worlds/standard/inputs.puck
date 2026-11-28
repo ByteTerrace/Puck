@@ -101,4 +101,9 @@ channels [
   // A tap or a click on a pointer surface (a placement's pointer facet, a Simulation screen): the press a surface's rules
   // read beside where the pointer lands, pointer(<seat>|any, <surface>, press, tap). A touchscreen's contact presses it.
   { composition: true, name: "tap", shape: Binary }
+  // The journal worn on the wrist (journal.puck): a press opens it and the next closes it; while it is open the step
+  // keys move the mark on its page and the page keys turn its pages.
+  { composition: true, name: "journal", shape: Binary }
+  { composition: true, name: "journalStep", shape: Bipolar }
+  { composition: true, name: "journalPage", shape: Bipolar }
 ]

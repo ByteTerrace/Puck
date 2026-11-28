@@ -14,7 +14,8 @@
 //             are laid out. A world on the account's host writes them through the character it binds; no projection
 //             carries them to another host.
 //   crossing  travels with the character into every world it enters: marks it leaves, items it carries, quests it
-//             follows. A visited world writes them on the travelling copy, and the account adopts them on return.
+//             follows, the companions of its menagerie. A visited world writes them on the travelling copy, and the
+//             account adopts them on return.
 //
 // Facts are integers under each writing package's namespace (`<package>$<fact>`), so a world writes only its own; its
 // rules spell the fact bare. A template may also list under identity.homeScoped the facts and pools only the player's
@@ -34,6 +35,7 @@ identity {
     { pool: marks, class: Crossing }
     { pool: items, class: Crossing }
     { pool: quests, class: Crossing }
+    { pool: menagerie, class: Crossing }
   ]
 }
 
@@ -79,7 +81,15 @@ state {
   pool tags of Tag capacity(64)
   pairPool noteTags record Join left notes right tags maxLive 1024
   pairPool noteLinks record Join left notes right notes maxLive 1024
+  // A companion the character keeps in its menagerie (menagerie.puck): which kind it is, by the kind's number, and the
+  // name the player gave it, empty for the kind's own.
+  record Companion {
+    kind: Int bounds(0..255) = 0
+    name: Text = ""
+  }
+
   pool marks of Mark capacity(256)
   pool items of Item capacity(128)
   pool quests of Quest capacity(64)
+  pool menagerie of Companion capacity(64)
 }

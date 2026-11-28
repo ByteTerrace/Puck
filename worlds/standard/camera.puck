@@ -59,6 +59,20 @@ function wallFraming(distance = 5.4, pitch = -0.12, pivotOffset = [0, 1.8, 0], f
   damping: damping
 }
 
+// A chase camera's framing of something a body holds before it to read (a panel on its wrist, a map in its hands), for
+// `chaseCamera(focus:)`: `distance` metres of boom at `pitch` radians of elevation about `pivotOffset` in the body's
+// frame, whose x leans toward the body's left; the same framing mirrored leans toward its right. The camera eases
+// toward it by the `weight` row (keyed by body: 0 the ordinary framing, 1 this one) and leans to the side the `side`
+// row names (0 left, 1 right), both rows the body's own (the journal's `journalFocus` and `journalSide`), each eased by
+// the rows' own dynamics.
+function focusFraming(weight, side, distance = 1.9, pitch = 0.45, pivotOffset = [0.3, 1.35, 0.1]) = {
+  weight: weight
+  side: side
+  distance: distance
+  pitch: pitch
+  pivotOffset: pivotOffset
+}
+
 // The shared look feel and the `camera-boom` response a chase rig eases on.
 template cameraResponse() {
   export binding `camera-boom`
@@ -110,20 +124,27 @@ template cameraFeel() {
 // the room allows it; first person hides the body inside `hideRadius` and eases in over `transitionSeconds`. Automatic
 // first person, when enabled, enters after the room behind the head stays under `autoEntryDistance` for
 // `autoEntrySeconds` and leaves once it stays over `autoExitDistance` for `autoExitSeconds`. `clearance` is the
-// preference row's starting value: 0 fade, 1 cutaway.
+// preference row's starting value: 0 fade, 1 cutaway. `focus` (`focusFraming(...)`) adds a framing the camera eases
+// toward while the body reads something it holds, leaning to that thing's side.
 template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0], cutawayCloseTarget = [0, 1.55, 0], eyePoint = [
   0, 1.75, 0.22
-], distance = 4.2, pitch = 0.3, fieldOfView = 0.96, minPitch = -0.5, maxPitch = 1.2, yawReference = "World", clearance = 0, fadeMaxRise = 0.35, cutawayMaxRise = 1.1, eyeRadius = 0.3, surfaceSkin = 0.1, closeTargetStart = 0.6, closeTargetFull = 0.2, fadeStart = 1.25, fadeEnd = 0.45, minimumBoom = 0.35, nearMargin = 0.05, retractionSkin = 0.05, obstructedTargetSkin = 1.1, hideRadius = 0.45, transitionSeconds = 0.5, autoFirstPerson = false, autoEntryDistance = 0.85, autoEntrySeconds = 0.2, autoExitDistance = 1.35, autoExitSeconds = 0.15, wall = null, faceFrame = "Body", seats = 4, capacity = 16) {
+], distance = 4.2, pitch = 0.3, fieldOfView = 0.96, minPitch = -0.5, maxPitch = 1.2, yawReference = "World", clearance = 0, fadeMaxRise = 0.35, cutawayMaxRise = 1.1, eyeRadius = 0.3, surfaceSkin = 0.1, closeTargetStart = 0.6, closeTargetFull = 0.2, fadeStart = 1.25, fadeEnd = 0.45, minimumBoom = 0.35, nearMargin = 0.05, retractionSkin = 0.05, obstructedTargetSkin = 1.1, hideRadius = 0.45, transitionSeconds = 0.5, autoFirstPerson = false, autoEntryDistance = 0.85, autoEntrySeconds = 0.2, autoExitDistance = 1.35, autoExitSeconds = 0.15, wall = null, focus = null, faceFrame = "Body", seats = 4, capacity = 16) {
   cameraResponse()
 
   // The framings each clearance case resolves: the ground framing alone, or the ground and the wall framing a blend
-  // mixes.
-  let framings = ((wall == null)
-    ? [{ suffix: "", distance: distance, pitch: pitch, pivotOffset: pivotOffset }]
-    : [
-      { suffix: "-ground", distance: distance, pitch: pitch, pivotOffset: pivotOffset }
-      { suffix: "-wall", distance: wall.distance, pitch: wall.pitch, pivotOffset: wall.pivotOffset }
-    ])
+  // mixes, and with a focus its framing leaning to either side.
+  let plain = ((wall == null) ? (focus == null) : false)
+  let focusSides = ((focus == null) ? [] : [{ suffix: "-focus-left", lean: 1 }, { suffix: "-focus-right", lean: -1 }])
+  let framings = concat(
+    [{ suffix: (plain ? "" : "-ground"), distance: distance, pitch: pitch, pivotOffset: pivotOffset }],
+    ((wall == null) ? [] : [{ suffix: "-wall", distance: wall.distance, pitch: wall.pitch, pivotOffset: wall.pivotOffset }]),
+    map(focusSides, side => {
+      suffix: side.suffix
+      distance: focus.distance
+      pitch: focus.pitch
+      pivotOffset [(focus.pivotOffset[0] * side.lean), focus.pivotOffset[1], focus.pivotOffset[2]]
+    })
+  )
   let cases = [
     {
       suffix: "fade"
@@ -239,7 +260,8 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0
     }
 
     // The two cases the seat rig selects between: one orbit, look, lens, ease and first-person eye per framing, and
-    // the clearance each trades the room by. With a wall framing a case is the blend of its two framings.
+    // the clearance each trades the room by. With a wall framing a case stands on the blend of its ground and wall
+    // framings, and with a focus it blends what it stands on with its focus, whose two sides blend by the side row.
     programs: concat(
       flatMap(cases, case => map(framings, framing => {
         name: $"{rig}-{case.suffix}{framing.suffix}"
@@ -270,12 +292,34 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0
       ((wall == null)
         ? []
         : map(cases, case => {
-          name: $"{rig}-{case.suffix}"
+          name: ((focus == null) ? $"{rig}-{case.suffix}" : $"{rig}-{case.suffix}-stand")
           version: "puck.camera.program.v1"
           operations [
             blend(a: $"{rig}-{case.suffix}-ground", b: $"{rig}-{case.suffix}-wall", weight: "state.cameraOnWall.$body")
           ]
-        }))
+        })),
+      ((focus == null)
+        ? []
+        : flatMap(cases, case => [
+          {
+            name: $"{rig}-{case.suffix}-focus"
+            version: "puck.camera.program.v1"
+            operations [
+              blend(a: $"{rig}-{case.suffix}-focus-left", b: $"{rig}-{case.suffix}-focus-right", weight: $"state.{focus.side}.$body")
+            ]
+          }
+          {
+            name: $"{rig}-{case.suffix}"
+            version: "puck.camera.program.v1"
+            operations [
+              blend(
+                a: ((wall == null) ? $"{rig}-{case.suffix}-ground" : $"{rig}-{case.suffix}-stand"),
+                b: $"{rig}-{case.suffix}-focus",
+                weight: $"state.{focus.weight}.$body"
+              )
+            ]
+          }
+        ]))
     )
   }
 }

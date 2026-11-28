@@ -14274,7 +14274,7 @@ export type WorldRouteStepRest = {
 };
 
 /**
- * The row-to-entity assignment declaration — nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own state.body register maps to a row, and follows that register as the simulation writes it.
+ * The row-to-entity assignment declaration — nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own state.body registers map to a row, and follows them as the simulation writes them: its selectors are read in order, and the first whose register holds a value one of its cases names picks the row (Match``1). Selectors are rows keyed by name, so a document that imports another refines one of its selectors by name and adds selectors of its own beside it.
  */
 export type WorldRowAssignment = {
   /**
@@ -14282,9 +14282,9 @@ export type WorldRowAssignment = {
    */
   sequence: WorldSequence;
   /**
-   * The per-body selector, or null for the sequence alone.
+   * The per-body selectors in the order they are read, or null for the sequence alone.
    */
-  select?: WorldRowSelector | null;
+  select?: WorldRowSelectorList | null;
   /**
    * Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
@@ -14292,9 +14292,13 @@ export type WorldRowAssignment = {
 };
 
 /**
- * A per-body row selector inside a WorldRowAssignment: each body's own value of a state.body counter picks the row the case for that value names. A body whose register holds a value no case names keeps the row the assignment's sequence gives it. The register is body state, so the choice is the body's and goes where the body goes: a kit action or a rule's setBodyState moves the row, a replay moves it at the same tick, a checkpoint restores it with the register, and a crossing to another world carries the register with the body (a destination declaring the same register under the same kind selects by the carried value). The look assignment's selector changes only what a body wears; the kit assignment's selector changes how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.
+ * A per-body row selector inside a WorldRowAssignment: each body's own value of a state.body counter picks the row the case for that value names. A body whose register holds a value no case of any selector names keeps the row the assignment's sequence gives it. The register is body state, so the choice is the body's and goes where the body goes: a kit action or a rule's setBodyState moves the row, a replay moves it at the same tick, a checkpoint restores it with the register, and a crossing to another world carries the register with the body (a destination declaring the same register under the same kind selects by the carried value). The look assignment's selectors change only what a body wears; the kit assignment's selectors change how it moves and what it collides as, so a collider change is its own authored mapping and a look never changes a kit.
  */
 export type WorldRowSelector = {
+  /**
+   * The selector's name, unique within its assignment: the key a document importing another refines or drops this selector by.
+   */
+  name: string;
   /**
    * The state.body counter whose value selects.
    */
@@ -14318,6 +14322,8 @@ export type WorldRowSelectorCase = {
    */
   row: string;
 };
+
+export type WorldRowSelectorList = (WorldRowSelector | null)[];
 
 export type WorldRule = {
   /**

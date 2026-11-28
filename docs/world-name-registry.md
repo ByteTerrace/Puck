@@ -7738,8 +7738,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].mount.board.channel` | `WorldMountBoard.Channel` | logical input channels |
 | `kits.rows[].mount.camera` | `WorldMount.Camera` | a camera program name |
 | `kits.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
-| `kits.assignment.select.bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
-| `kits.assignment.select.cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
+| `kits.assignment.select[].name` | `WorldRowSelector.Name` | a row selector's name |
+| `kits.assignment.select[].bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
+| `kits.assignment.select[].cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
 | `defaultSeatKit` | `WorldDefinition.DefaultSeatKitRaw` | a kit in the composed world |
 | `addons[].name` | `WorldAddonRow.Name` | an addon name |
 | `addons[].modulePath` | `WorldAddonRow.ModulePath` | a path or document locator |
@@ -7934,8 +7935,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
-| `looks.assignment.select.bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
-| `looks.assignment.select.cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
+| `looks.assignment.select[].name` | `WorldRowSelector.Name` | a row selector's name |
+| `looks.assignment.select[].bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
+| `looks.assignment.select[].cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
 | `hud.defaults.cursor.visible[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `hud.defaults.cursor.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `hud.defaults.visible[state].text` | `OverlayPredicate.State.Text` | literal text |

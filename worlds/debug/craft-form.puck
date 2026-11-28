@@ -58,7 +58,9 @@ looks {
 // read one local whose every value the form register's envelope keeps, so the work sheet sees that a firing closes its
 // own gate and prices the rule by the registers that move.
 rule "craft-form" {
-  local target = (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * bodyState(each, suit))
+  local target = (
+    (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * bodyState(each, suit))
+  )
   when bodyState(each, form) != target
   mode: Level
   forEach: $bodies
