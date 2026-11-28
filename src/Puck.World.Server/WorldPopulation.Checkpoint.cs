@@ -131,6 +131,7 @@ public sealed partial class WorldPopulation {
             EventBodies: m_eventBodies.ToArray(),
             SleepingGravity: [.. m_sleepGravity.OrderBy(keySelector: static pair => pair.Key).Select(selector: static pair => (pair.Key, pair.Value))],
             AttachedSolids: MovingSolids?.CaptureAttached(),
+            Nets: m_nets.Capture(),
             Revision: m_revision,
             SeatKit: m_seatKit,
             SimulatedCount: m_simulatedCount
@@ -392,6 +393,8 @@ public sealed partial class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
         ValidateCheckpoint(checkpoint: checkpoint);
+        // The nets first: a net row's colliders are posed from its nodes as the attached rows restore.
+        m_nets.Restore(checkpoints: (checkpoint.Nets ?? []));
         if (MovingSolids is { } attached) { attached.RestoreAttached(rows: (checkpoint.AttachedSolids ?? [])); }
 
         // Restore is replacement. All caller-controlled entry and route addresses were preflighted above, before
@@ -726,6 +729,7 @@ public sealed partial class WorldPopulation {
     internal void ValidateCheckpoint(WorldPopulationCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         if (MovingSolids is { } attached) { attached.ValidateAttached(rows: (checkpoint.AttachedSolids ?? [])); }
+        m_nets.Validate(checkpoints: (checkpoint.Nets ?? []));
         if ((checkpoint.Entries is null) || (checkpoint.EventBodies is null) || (checkpoint.SleepingGravity is null)) {
             throw new InvalidOperationException(message: "population checkpoint entries are null.");
         }

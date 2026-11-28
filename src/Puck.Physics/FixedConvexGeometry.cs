@@ -14,15 +14,19 @@ internal static class FixedConvexGeometry {
             return (collider with { Center = FixedVector3.Zero, Rotation = FixedQuaternion.Identity }).SupportPoint(direction: direction);
         }
         if (collider.Kind == FixedStaticColliderKind.Superellipsoid) {
+            // The swept solid's support is the segment's (its end toward the direction) plus the superellipsoid's.
+            var segment = new FixedVector3(X: FixedQ4816.Zero,
+                Y: ((direction.Y == FixedQ4816.Zero) ? FixedQ4816.Zero : FixedQ4816.CopySign(collider.Elongation, direction.Y)), Z: FixedQ4816.Zero);
+
             if (collider.MeasuresDistance()) {
                 var weightedDirection = FixedVector3.Multiply(left: direction, right: collider.Extent).Normalize();
 
-                return (FixedVector3.Multiply(left: weightedDirection, right: collider.Extent) + (direction.Normalize() * collider.Radius));
+                return ((FixedVector3.Multiply(left: weightedDirection, right: collider.Extent) + (direction.Normalize() * collider.Radius)) + segment);
             }
             var weighted = FixedVector3.Multiply(left: FixedVector3.Abs(value: direction), right: collider.Extent);
             var largest = FixedQ4816.Max(x: weighted.X, y: FixedQ4816.Max(x: weighted.Y, y: weighted.Z));
 
-            if (largest == FixedQ4816.Zero) { return FixedVector3.Zero; }
+            if (largest == FixedQ4816.Zero) { return segment; }
             // Rescaling the dual direction before exponentiation avoids losing small authored radii to Q16.
             weighted /= largest;
             var inverse = (FixedQ4816.One / (collider.Exponent - FixedQ4816.One));
@@ -30,7 +34,7 @@ internal static class FixedConvexGeometry {
             var sum = FixedVector3.Dot(left: weighted, right: powers);
             var divisor = Power(sum, (FixedQ4816.One / collider.Exponent));
 
-            return (Signed(FixedVector3.Multiply(left: (powers / divisor), right: collider.Extent), direction) + (direction.Normalize() * collider.Radius));
+            return ((Signed(FixedVector3.Multiply(left: (powers / divisor), right: collider.Extent), direction) + (direction.Normalize() * collider.Radius)) + segment);
         }
         var d = FixedVector3.Abs(value: direction);
         var half = collider.Extent;
@@ -72,8 +76,12 @@ internal static class FixedConvexGeometry {
     // (FixedStaticCollider.MeasuresDistance) answers its true signed distance less its Radius, measured to the projection's
     // foot, whose outward normal is the implicit gradient there. A higher exponent answers its gauge, and a chamfered box a
     // signed bound outside a bevel vertex; their distance queries still use GJK, and this recognizes a boundary probe
-    // before a vanishing EPA tetrahedron is built.
+    // before a vanishing EPA tetrahedron is built. A superellipsoid's elongation is read first: the point less its
+    // nearest segment point, which carries both the value and the normal (FixedStaticCollider.MeasuresDistance).
     internal static (FixedQ4816 Distance, FixedVector3 Normal) Field(in FixedStaticCollider collider, FixedVector3 point) {
+        if ((collider.Kind == FixedStaticColliderKind.Superellipsoid) && (collider.Elongation != FixedQ4816.Zero)) {
+            point = point with { Y = (point.Y - FixedQ4816.Clamp(point.Y, -collider.Elongation, collider.Elongation)) };
+        }
         var p = FixedVector3.Abs(value: point);
         var e = collider.Extent;
 

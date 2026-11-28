@@ -282,7 +282,7 @@ public static partial class SdfFrameBlock {
 
         var occluders = frame.Occluders;
         var occluding = (occluderMask ?? ((occluders.Count > 0)
-            ? SdfLightSelection.SelectOccluders(camera: in camera, far: frame.FarDistance, occluders: occluders)
+            ? SdfLightSelection.SelectOccluders(camera: in camera, exposure: (tables.Exposures?.MultiplierOf(view: view) ?? 1f), far: frame.FarDistance, lightMask: mask, lights: lights, occluders: occluders)
             : UInt128.Zero));
 
         WriteUInt32(block: block, offset: OccluderCount, value: ((uint)occluders.Count));

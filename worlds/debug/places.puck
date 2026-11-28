@@ -22,6 +22,7 @@
 import "shapes"
 import "gallery/layout"
 import "../standard/place"
+import "labs/lab-kit"
 import "../standard/game-station"
 
 // One storey's room box: x and z spans and a level index, from 0.5 m under the level's floor to the slab above.
@@ -52,6 +53,15 @@ let galleryPlaces = concat(
     // (the map of the lobby's old furniture: the desktop, the press, the painting into Wonderland), and the painting
     // wing east of the lobby (paintings.puck).
     storeyPlace("nave", 0, naveWest, galleryEast, naveSouth, naveNorth)
+    // The lab wing's stretch of the north aisle (lab-wing.puck), from its first door's bay to its last's.
+    storeyPlace(
+      "lab-wing",
+      0,
+      pierX(minimum(map(labWingPlan, lab => lab.bay))),
+      pierX((maximum(map(labWingPlan, lab => lab.bay)) + 1)),
+      naveNorth,
+      galleryNorth
+    )
     storeyPlace("north-aisle", 0, galleryWestIn, galleryEast, naveNorth, galleryNorth)
     storeyPlace("west-hall", 0, galleryWestIn, naveWest, galleryWall, naveNorth)
     storeyPlace("painting-room", 0, courtWest, galleryEast, galleryWall, naveSouth)
@@ -82,8 +92,34 @@ let galleryPlaces = concat(
       }
     }
     { id: "lift", at [liftX, 9.2, liftZ], half [1.7, 9.7, 1.9] }
+    // On the rope net panel's aisle side (layout.puck's toyLatticeNetBay), from a metre over level 1's floor up and within
+    // 1.2 m of the net: a body here has climbed the net a metre or more.
+    {
+      id: "net-high"
+      at [bayX(toyLatticeNetBay), (galleryFloor[1] + 2.2), ((naveNorth + balconyInset) + 0.6)]
+      half [2.3, 1.2, 0.6]
+    }
     // The board game room: level 2's south gallery and the wing that projects over the forecourt.
     storeyPlace("board-room", wingLevel, wingWest, galleryEast, (wingSouth + galleryWall), naveSouth)
+    // The climbing wall (gallery/climbing-wall.puck): the column of the nave over its pad and up its face to the ledge,
+    // and its top, the ledge and the doorway behind it onto level 3, which a climb reaches only by its mantle.
+    {
+      id: "climbing-wall"
+      at [climbWallX, ((galleryFloor[0] + climbWallTop) / 2), ((climbWallFace - climbWallPad.depth) + naveNorth) / 2]
+      half [
+        (climbWallPad.width / 2),
+        (((climbWallTop - galleryFloor[0]) / 2) + 0.5),
+        ((naveNorth - (climbWallFace - climbWallPad.depth)) / 2)
+      ]
+    }
+    storeyPlace(
+      "climbing-wall-top",
+      climbWallLevel,
+      (climbWallX - 2.2),
+      (climbWallX + 2.2),
+      climbWallFace,
+      climbWallLanding[2]
+    )
   ],
   // Each gallery level whole, and the lift landing before the tower's door on it.
   map(
@@ -159,25 +195,27 @@ spawnPoints [
   // Behind the chair at the desktop computer against the gallery's west wall (desktop.puck), facing its monitor, inside
   // the screen's engage radius.
   { id: "desktop", position [(12.4 + galleryWestShift), 0.05, 23.7], yawDegrees: 90 }
+  // On the nave's floor 2.5 m before the climbing wall's pad (gallery/climbing-wall.puck), between the displays either
+  // side of it and facing the wall, in the building's frame: walk on and she takes the face.
+  {
+    id: "climbing-wall"
+    parent: gallery
+    position [climbWallX, galleryFloor[0], ((climbWallFace - climbWallPad.depth) - 2.5)]
+    yawDegrees: 180
+  }
   // On the valley floor in line with the gallery's entrance, 32 m south of it and 4 m short of the avatar studio's north
   // wall (studio.puck, world z -24), facing it: the benchmark's valley seam (benchmark-route.puck) starts here and walks
   // into the lobby. The gallery's own places (`gallery`, outside its entrance; `lift`; `stairs`) are the module's
   // (gallery/gallery.puck).
   { id: "seam-valley", position: galleryWorld(((entranceWest + entranceEast) / 2), 0.05, -32), yawDegrees: 180 }
+  // On level 1's north aisle, 1.5 m behind the rope net panel (gallery/shell.puck, layout.puck's toyLatticeNetBay) and
+  // facing it across the nave: walking forward takes the net and climbs it. Posed here, she keeps whatever size she was.
+  { id: "rope-net", position: galleryWorld(bayX(toyLatticeNetBay), galleryFloor[1], ((naveNorth + balconyInset) + 1.5)), yawDegrees: 0 }
 ]
 
 commands [
-  {
-    name: "debug.go"
-    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, alchemy, granaries, cards, auction, shedding, deduction, skirmish, desktop, painting-room, portals, portal-garden, portal-night, portal-city, portal-link, portal-fall, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, the valley's overlook, glacier and valley-<sector> floor spots, the pool, forest and forest-inside, or any spawn point) and returns the view to the play layout's chase camera."
-    parameters [
-      { name: "place", kind: Spawn, default: "stage" }
-      { name: "body", kind: Body, default: "0" }
-    ]
-    lines [
-      "body.pose spawn:{place} {body}"
-      "view.override camera auto"
-      "view.override layout play"
-    ]
-  }
+  goCommand(
+    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, alchemy, granaries, cards, auction, shedding, deduction, skirmish, desktop, climbing-wall, painting-room, portals, portal-garden, portal-night, portal-city, portal-link, portal-fall, lab-wing, lab-<lab> before each lab's door, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, the valley's overlook, glacier and valley-<sector> floor spots, the pool, forest and forest-inside, or any spawn point) and returns the view to the play layout's chase camera.",
+    home: "stage"
+  )
 ]

@@ -8,10 +8,18 @@ namespace Puck.World;
 
 public sealed partial class WorldRenderLeverCommandModule {
     // The world.occluders read-back: the count, then one line an occluder of the frame's table, as the kernels read it.
+    // view0 is the first view's selection with no exposure cutoff on its lights (an exposure of zero cuts nothing), so it
+    // holds the view's own mask at any exposure.
     private static string DescribeOccluders(SdfFrame frame) {
         var occluders = frame.Occluders;
         var kept = (((frame.Views.Count > 0) && (occluders.Count > 0))
-            ? SdfLightSelection.SelectOccluders(camera: frame.Views[0].Camera, far: frame.FarDistance, occluders: occluders)
+            ? SdfLightSelection.SelectOccluders(
+                camera: frame.Views[0].Camera,
+                exposure: 0f,
+                far: frame.FarDistance,
+                lightMask: SdfLightSelection.Select(camera: frame.Views[0].Camera, exposure: 0f, far: frame.FarDistance, lights: frame.Lights),
+                lights: frame.Lights,
+                occluders: occluders)
             : UInt128.Zero);
         var text = new StringBuilder();
 

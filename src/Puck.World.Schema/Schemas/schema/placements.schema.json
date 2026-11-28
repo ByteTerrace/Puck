@@ -148,6 +148,11 @@
             "$ref": "./common.schema.json#/$defs/WorldPlacementTurn",
             "description": "The placement\u0027s turn facet (see WorldPlacementTurn): the row turns about its own up axis by an angle read from state, a turntable, or null for a row that keeps its authored yaw. Omitted from the wire when null.",
             "default": null
+          },
+          "net": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementNet",
+            "description": "The placement\u0027s net facet (see WorldPlacementNet): the row\u0027s creation is a net of rope strands the authority steps, that gives under the bodies leaning on it and carries the bodies holding it, or null for a rigid row. Omitted from the wire when null.",
+            "default": null
           }
         },
         "required": [

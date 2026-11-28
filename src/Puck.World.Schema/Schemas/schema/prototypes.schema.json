@@ -99,7 +99,7 @@
             "default": null
           },
           "reach": {
-            "description": "How far past the occluder\u0027s bounding sphere, in the creation\u0027s units, it still darkens and shadows, eased to nothing there; the bounding sphere\u0027s own radius by default.",
+            "description": "How far past the occluder\u0027s bounding sphere, in the creation\u0027s units, it still darkens the ambient and indirect light, eased to nothing there; the bounding sphere\u0027s own radius by default. It bounds only that darkening: the shadow toward a light reaches as far as the light does.",
             "type": [
               "number",
               "null"

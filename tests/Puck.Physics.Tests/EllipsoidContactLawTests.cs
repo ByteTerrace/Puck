@@ -112,6 +112,70 @@ public sealed class EllipsoidContactLawTests {
 
         Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: " | ", values: failures));
     }
+    // An exponent-2 collider elongated along its Y (a capsule scaled apart in X and Z) is the segment swept by its ellipsoid:
+    // about its ends, along its straight part and inside it, a ball's push is its reach less the ellipsoid's true distance
+    // at the point less its nearest segment point, along that normal; a capsule's support descent, which reads the swept
+    // support map, agrees; and its world box holds both ends.
+    [Fact]
+    public void AnElongatedEllipsoidColliderMeasuresTheSweptSolid() {
+        var skin = Q(value: 0.05);
+        var turn = FixedQuaternion.FromAxisAngle(V(x: 0.2, y: 1, z: -0.4).Normalize(), FixedQ4816.FromDegrees(degrees: 31));
+        var (rx, rz, h) = (0.4, 0.15, 0.3);
+        var ry = Math.Sqrt(d: (rx * rz));
+        var collider = FixedStaticCollider.Superellipsoid(V(x: -1, y: 1.5, z: 2), turn, V(x: rx, y: ry, z: rz), Q(value: 2), Q(value: h)) with { Radius = Q(value: 0.05) };
+        var radii = collider.Extent;
+        var failures = new List<string>();
+        var box = collider.WorldBox();
+
+        foreach (var end in new[] { -1.0, 1.0 }) {
+            var tip = (collider.Center + turn.Rotate(vector: V(x: 0, y: (end * (h + ry + 0.05)), z: 0)));
+
+            if (!box.Contains(point: tip)) { failures.Add(item: $"world box {box} misses the end {tip}"); }
+        }
+        for (var step = 0; (step < 16); step++) {
+            var theta = ((step * 0.41) + 0.23);
+            var phi = ((step * 1.29) + 0.17);
+
+            foreach (var scale in new[] { 0.7, 1.04, 1.3 }) {
+                // A point about an end (its cap's ellipsoid moved to the segment's end on the point's side) and one beside
+                // the straight part, each in the collider's frame on the fixed grid.
+                var cap = V(x: (rx * Math.Sin(a: theta) * Math.Cos(d: phi) * scale), y: ((ry * Math.Cos(d: theta) * scale) + (Math.Sign(value: Math.Cos(d: theta)) * h)),
+                    z: (rz * Math.Sin(a: theta) * Math.Sin(a: phi) * scale));
+                var side = V(x: (rx * Math.Cos(d: phi) * scale), y: (h * Math.Sin(a: (theta * 3.0))), z: (rz * Math.Sin(a: phi) * scale));
+
+                foreach (var local in new[] { cap, side }) {
+                    var y = (double)local.Y;
+                    var q = (y - Math.Clamp(value: y, min: -h, max: h));
+                    var (distance, normal) = Reference(px: (double)local.X, py: q, pz: (double)local.Z, rx: (double)radii.X, ry: (double)radii.Y, rz: (double)radii.Z);
+                    var expected = (distance - 0.05);
+                    var ball = new FixedBodyColliderVolume(FixedBodyColliderKind.Sphere, FixedVector3.Zero, FixedVector3.Zero, FixedVector3.Zero, FixedQuaternion.Identity,
+                        Q(value: Math.Max(val1: 0.05, val2: (expected + 0.1))));
+                    var world = (collider.Center + turn.Rotate(vector: local));
+                    var penetration = (((double)ball.Radius + 0.05) - expected);
+                    var where = $"{local}";
+
+                    if (!collider.TryGetPush(world, FixedQuaternion.Identity, ball, skin, out var push, out _)) {
+                        failures.Add(item: $"{where}: no push");
+                        continue;
+                    }
+                    if (Math.Abs(value: ((double)push.Penetration - penetration)) > 0.0002) { failures.Add(item: $"{where}: penetration {(double)push.Penetration}, expected {penetration}"); }
+                    if (System.Numerics.Vector3.Dot(push.Normal.ToVector3(), turn.Rotate(vector: V(x: normal.X, y: normal.Y, z: normal.Z)).ToVector3()) < 0.9999f) {
+                        failures.Add(item: $"{where}: normal {push.Normal}");
+                    }
+                    if (expected <= 0) { continue; }
+
+                    // Outside, the support descent reads the swept solid's distance as the measure does.
+                    var capsule = new FixedBodyColliderVolume(FixedBodyColliderKind.Capsule, FixedVector3.Zero, FixedVector3.Zero, FixedVector3.Zero, FixedQuaternion.Identity, ball.Radius);
+
+                    if (!collider.TryGetPush(world, FixedQuaternion.Identity, capsule, skin, out var described, out _) || (Math.Abs(value: ((double)described.Penetration - penetration)) > 0.002)) {
+                        failures.Add(item: $"{where}: capsule descent {(double)described.Penetration}, expected {penetration}");
+                    }
+                }
+            }
+        }
+
+        Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: " | ", values: failures));
+    }
     // The signed distance from a point in general position to an axis-aligned ellipsoid and the outward normal at its
     // nearest point: the foot x_i = r_i² p_i / (t + r_i²) at the root of sum((x_i / r_i)²) = 1, bisected in double over t
     // above -min(r)², where the root is the only one for a point off every plane through an axis.

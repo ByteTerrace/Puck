@@ -420,7 +420,10 @@ public static partial class SdfFieldOps {
         public override SdfCompositionLipschitzAction CompositionLipschitz => SdfCompositionLipschitzAction.Ignore;
         public override SdfChainLipschitzAction ChainLipschitz => SdfChainLipschitzAction.Ignore;
         public override SdfSkipSphereAction SkipSphere => SdfSkipSphereAction.Disable;
-        public override SdfDistanceGainAction DistanceGain => SdfDistanceGainAction.Uncertified;
+        // The shape reads f(q) at q = p − clamp(p), and the swept solid holds the shape's solid moved by clamp(p), so the
+        // swept solid lies no farther from p than the shape's solid lies from q: a gain over the shape's own solid holds
+        // over the swept one, whose reach every stamp charges (SdfSolidGeometry.Reach, ShapeWarpReach).
+        public override SdfDistanceGainAction DistanceGain => SdfDistanceGainAction.Identity;
         public override SdfRigidPlanAction RigidPlan => SdfRigidPlanAction.Refuse;
         public override SdfScopeClampAction ScopeClamp => SdfScopeClampAction.Ignore;
         public override SdfWarpBoundAction WarpBound => SdfWarpBoundAction.Ignore;

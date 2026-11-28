@@ -140,6 +140,24 @@ shade template relief(height, amount = 1, structural steepest = 1.2, structural 
   }
 }
 
+// The colour a cell-crack relief or a brick relief carries, so the pattern reads in any light rather than only as the
+// tilt `relief` gives a lit face. `crackFace` darkens the material in the borders of `shadeCellBorder` at `scale` cells
+// a metre, a line `width` cells wide; `brickFace` shades each brick of `shadeBrick` its own share of the material and
+// greys its mortar. `filterScale` scales the footprint the edge ramp widens by, as the noises' does: 1 at the pixel's own
+// sampling limit, 0 keeping the authored bevel at any distance.
+shade template crackFace(scale, seed, width, filterScale = 1) {
+  surface {
+    albedo: material.albedo *
+      (1 - 0.7 * shadeCellBorder(surface.position * scale, seed, width, pixel: surface.footprint * scale * filterScale))
+  }
+}
+shade template brickFace(size, mortar, seed, filterScale = 1, mortarColor = [0.55, 0.55, 0.52]) {
+  surface {
+    let brick = shadeBrick(surface.position, size, mortar, seed, pixel: surface.footprint * filterScale)
+    albedo: mix(material.albedo * (0.75 + 0.5 * brick.y), mortarColor, brick.x)
+  }
+}
+
 function celBand(cosine, visibility, threshold, softness, combined) = mix(
   shadeStep(saturate(cosine), threshold, softness) * saturate(visibility),
   shadeStep(saturate(cosine) * saturate(visibility), threshold, softness),

@@ -107,7 +107,8 @@ public static partial class CliProjectBuild {
     /// <param name="outputDirectory">The directory every project in the closure writes into, or the publish directory
     /// when <paramref name="publish"/> is set.</param>
     /// <param name="logDirectory">The caller's log directory, created only when output is kept.</param>
-    /// <param name="timeout">How long the build may run.</param>
+    /// <param name="timeout">How long the build may run; <see cref="Timeout.InfiniteTimeSpan"/> for no wall budget, which
+    /// leaves <paramref name="quiet"/> or <paramref name="cancellationToken"/> to bound it.</param>
     /// <param name="build">The captured build process, or <see langword="null"/> when it could not start.</param>
     /// <param name="error">Why the build failed, its first errors and log path, or empty on success.</param>
     /// <param name="artifactName">The required artifact inside the output directory, or null to check only the build.</param>
@@ -117,8 +118,11 @@ public static partial class CliProjectBuild {
     /// into the checkout's own outputs, which every build of the same sources shares, and only the published files go
     /// into <paramref name="outputDirectory"/>.</param>
     /// <param name="cancellationToken">Cancels the build process.</param>
+    /// <param name="quiet">How long the build may write nothing before it is stopped, or <see langword="null"/> for no
+    /// such limit; MSBuild reports each project as it finishes, so this bounds a stalled build without bounding a slow
+    /// one. An injected <paramref name="runner"/> applies none.</param>
     /// <returns><see langword="true"/> when the build exited 0 inside its budget.</returns>
-    public static bool TryBuild(string repositoryRoot, string project, string outputDirectory, string logDirectory, TimeSpan timeout, out CliProcessResult? build, out string error, string? artifactName = null, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? runner = null, IReadOnlyList<string>? properties = null, bool publish = false, CancellationToken cancellationToken = default) {
+    public static bool TryBuild(string repositoryRoot, string project, string outputDirectory, string logDirectory, TimeSpan timeout, out CliProcessResult? build, out string error, string? artifactName = null, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? runner = null, IReadOnlyList<string>? properties = null, bool publish = false, CancellationToken cancellationToken = default, TimeSpan? quiet = null) {
         cancellationToken.ThrowIfCancellationRequested();
         build = null;
 
@@ -139,6 +143,7 @@ public static partial class CliProjectBuild {
                     cancellationToken: cancellationToken,
                     fileName: "dotnet",
                     input: string.Empty,
+                    quiet: quiet,
                     timeout: remaining,
                     workingDirectory: repositoryRoot
                 ))
@@ -152,7 +157,10 @@ public static partial class CliProjectBuild {
         var log = KeepLog(build: build, logDirectory: logDirectory, project: project, reason: out var logFailure);
 
         if (build.TimedOut) {
-            error = $"the {name} build exceeded its {timeout.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)}-second budget.";
+            var budget = ((timeout == Timeout.InfiniteTimeSpan) ? null : $"exceeded its {timeout.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)}-second budget");
+            var silence = ((quiet is { } wait) ? $"wrote nothing for {wait.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)} seconds" : null);
+
+            error = $"the {name} build {string.Join(separator: " or ", values: new[] { budget, silence }.OfType<string>())}.";
         } else if (build.ExitCode != 0) {
             error = $"the {name} build exited {build.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}.";
         } else if ((artifactName is { }) && !File.Exists(path: Path.Combine(path1: outputDirectory, path2: artifactName))) {

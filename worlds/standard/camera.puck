@@ -48,6 +48,23 @@ function lookCamera(name, eye, target, fov, focusDistance = 6, width = 1280, hei
   }
 }
 
+// A `views` layout that shows one fixed camera of a `cameras` section across the whole window, for inspecting a creation
+// or framing a place from the same eye every time: `name` is the layout's, `camera` the camera's (the same by default).
+template cameraLayout(name, camera = name) {
+  layout name {
+    seatCount: 0
+    slots [
+      {
+        camera: camera
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+  }
+}
+
 // A chase camera's framing of a body on a face it cannot stand on, for `chaseCamera(wall:)`: `distance` metres of boom
 // at `pitch` radians of elevation (negative looks up from below the pivot) about `pivotOffset` in the body's frame, and
 // the response the blend eases on: `frequency` hertz, `damping` ratio (1 never overshoots).

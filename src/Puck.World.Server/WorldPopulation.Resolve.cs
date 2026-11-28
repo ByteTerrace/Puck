@@ -152,11 +152,13 @@ public sealed partial class WorldPopulation {
                 throw new InvalidOperationException(message: $"the target/contact field could not compile the world's solids at boot: {reason}");
             }
         }
+        BuildNets(definition: definition);
         m_baseContactField = ResolveContactField(
             definition: definition,
             solids: derivedSolids,
             previousDefinition: previousDefinition
         );
+        if (MovingSolids is { } moving) { moving.Nets = m_nets; }
         MovingSolids?.CarrySamplesFrom(previous: previousMoving);
         if ((derivedSolids is not null) && (m_baseContactField is WorldColliderSet analytic)) {
             derivedSolids = derivedSolids.WithRegions(movingSolids: analytic, regions: m_fieldRegions, tuning: tuning);

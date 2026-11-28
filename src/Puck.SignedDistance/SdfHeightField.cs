@@ -18,7 +18,7 @@ namespace Puck.SignedDistance;
 /// renderer assumes is the one every reference was baked at. Presentation only: no simulation query reads either
 /// field.</para>
 /// </summary>
-public sealed class SdfHeightField {
+public sealed class SdfHeightField : SdfDisplacement {
     /// <summary>The reference top's height above the origin, in cells: every raised column of <see cref="Reference"/>
     /// stands this many cells tall above the origin, and the renderer's map assumes it (generated into the kernels as
     /// <c>SDF_HEIGHT_FIELD_REFERENCE_CELLS</c>).</summary>
@@ -102,6 +102,29 @@ public sealed class SdfHeightField {
     /// <summary>Gets the highest height, in world units, a displaced point of the field takes: <see cref="Top"/> above the
     /// origin, which no height passes. The reference mesh's own top bounds what lies higher.</summary>
     public float DrawnHigh => (Origin.Y + Top);
+    /// <inheritdoc/>
+    public override SdfDisplacementKind Kind => SdfDisplacementKind.HeightField;
+    /// <inheritdoc/>
+    public override SdfSampledField Values => Heights;
+
+    /// <inheritdoc/>
+    /// <remarks>The words after the kind: the columns along X, the columns along Z, the origin and the cell; the rest
+    /// are zero.</remarks>
+    public override void WriteHeader(Span<uint> header) {
+        header.Clear();
+        header[0] = (uint)Kind;
+        header[1] = (uint)Width;
+        header[2] = (uint)Depth;
+        header[3] = BitConverter.SingleToUInt32Bits(value: Origin.X);
+        header[4] = BitConverter.SingleToUInt32Bits(value: Origin.Y);
+        header[5] = BitConverter.SingleToUInt32Bits(value: Origin.Z);
+        header[6] = BitConverter.SingleToUInt32Bits(value: Cell);
+    }
+    /// <inheritdoc/>
+    /// <remarks>Only the heights move: the box spans <see cref="DrawnLow"/> to <see cref="DrawnHigh"/> along Y beside the
+    /// reference mesh's own.</remarks>
+    public override (Vector3 Low, Vector3 High) Bound(Vector3 low, Vector3 high) =>
+        ((low with { Y = MathF.Min(x: low.Y, y: DrawnLow) }), (high with { Y = MathF.Max(x: high.Y, y: DrawnHigh) }));
 
     /// <summary>Publishes new heights: a new <see cref="Heights"/> snapshot when any height moved, and a new
     /// <see cref="Reference"/> snapshot only when a column was raised from nothing or lowered to nothing.</summary>

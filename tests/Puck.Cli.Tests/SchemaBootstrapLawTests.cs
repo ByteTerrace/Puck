@@ -27,16 +27,19 @@ public sealed class SchemaBootstrapLawTests {
             output: (check ? null : output), clock: TimeProvider.System,
             runner: (arguments, timeout) => {
                 calls.Add(item: arguments.ToArray());
-                Assert.True(condition: (timeout > TimeSpan.Zero));
                 if (arguments[0] == "build") {
+                    // A build making progress has no wall budget; only its silence stops it.
+                    Assert.Equal(expected: Timeout.InfiniteTimeSpan, actual: timeout);
                     Assert.Contains(collection: arguments, expected: "-p:PuckSchemaBootstrap=true");
                     Assert.Contains(collection: arguments, expected: "-p:UseArtifactsOutput=true");
-                    Assert.Contains(expected: $"-p:ArtifactsPath={Puck.Abstractions.PuckPaths.Normalize(path: Path.Combine(path1: run, path2: "artifacts"))}", collection: arguments);
+                    // The artifacts stay in the checkout between runs, so a later bootstrap rebuilds only what changed.
+                    Assert.Contains(expected: $"-p:ArtifactsPath={Puck.Abstractions.PuckPaths.Normalize(path: Path.Combine(path1: directory.RootPath, path2: SchemaBootstrap.ArtifactsDirectory))}", collection: arguments);
                     Assert.Contains(collection: arguments, expected: CliOptions.NoNodeReuse);
                     Assert.DoesNotContain(collection: arguments, filter: static argument => argument.Contains(comparisonType: StringComparison.Ordinal, value: "DesignTimeBuild"));
                     _ = directory.WriteText(name: "run/cli/Puck.Cli.dll", text: "private current-model build");
                     return Result(exitCode: 0, stdout: "bootstrap build complete");
                 }
+                Assert.True(condition: (timeout > TimeSpan.Zero));
                 Assert.True(condition: File.Exists(path: arguments[0]));
                 Assert.Equal(expected: "schema", actual: arguments[1]);
                 Assert.DoesNotContain(collection: arguments, expected: "--bootstrap");

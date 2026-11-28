@@ -1,0 +1,38 @@
+// The climbing lab's plan (climbing.puck): three bays along one line on the studio floor, every face standing in one plane
+// and facing -Z toward the seat, which boots before them facing +Z. The wall and the net are copies of the gallery's
+// (gallery/climbing-wall.puck, gallery/shell.puck) at the gallery's own sizes, measured up from the studio floor as the
+// gallery's are from level 0's, so a climb of one is a climb of the other. The lab's scenarios (../climbing-wall-tests.puck,
+// ../net-tests.puck) read the same values. A module library: it hands its importers lets and emits no document.
+
+import "../gallery/layout"
+
+// The bays' centres along x (practice face, rope net, climbing wall), and the plane every face stands in.
+let climbBayX = [-6, 0, 6]
+let climbFaceZ = 4
+// The practice face: its height, half width and thickness, and how deep the block behind it runs.
+let climbPracticeHeight = 6
+let climbFaceHalf = 2
+let climbFaceThickness = 0.2
+let climbLedgeDepth = 3
+
+// The wall: the pad's top the face stands on, the ledge's top (level 3's floor over level 0's), the face's middle, and
+// the landing the ledge leads on to, a block `climbLedgeDepth` deep behind the frame whose top is the ledge's height.
+let climbLabFoot = climbWallPad.height
+let climbLabTop = (climbWallTop - galleryFloor[0])
+let climbLabWallX = climbBayX[2]
+let climbLabLandingZ = ((climbFaceZ + climbWallDepth) + 1.5)
+// A point on the wall's face, `u` metres across from its middle and `v` up from its foot.
+function climbLabAt(u, v) = [(climbLabWallX + u), (climbLabFoot + v), climbFaceZ]
+// Where the wall climb starts (on the pad, a step before the face) and ends (on the landing), and where it is posed.
+let climbLabWallBefore = [climbLabWallX, 0, (climbFaceZ - 3)]
+let climbLabWallStart = [climbLabWallX, climbLabFoot, (climbFaceZ - 0.7)]
+let climbLabWallLanding = [climbLabWallX, climbLabTop, climbLabLandingZ]
+// The floors of the gallery's levels 1 and 2 over level 0's: the heights the climb passes.
+let climbLabPassHeights = map([1, 2], k => (galleryFloor[k] - galleryFloor[0]))
+
+// The net: the gallery's panel (its cells, pitch and net) in a frame `climbNetHeight` tall, and where the climb is posed
+// and starts, 1.5 m before it.
+let climbNetHeight = 4
+let climbNetCells = (galleryBayTiles * (galleryTile / toyLatticePitch))
+let climbNetPanel = "climb-net-slot"
+let climbLabNetBefore = [climbBayX[1], 0, (climbFaceZ - 1.5)]

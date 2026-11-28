@@ -557,7 +557,7 @@ one-voxel-tall lattice of the current column heights.
 `SdfProgramBuilder.HeightField` emits the reference as the instance's sampled
 instruction, which the bake hashes and contours as it does any sampled field,
 and declares the heights as the instance's displacement
-(`SdfProgram.HeightFields`). Only a change of which columns are raised
+(`SdfProgram.Displacements`). Only a change of which columns are raised
 republishes the reference, so only that keys a new mesh. The heights field is
 never hashed: its snapshot reaches the render passes through the frame's
 sampled table, `sdfFrameSampled` (`SdfWorldPackage.FrameSampled`), each entry a

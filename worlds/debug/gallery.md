@@ -42,7 +42,7 @@ aisles.
 | Storeys | level k's floor top at 4.5k + 0.05 | slab 0.3 m, ceiling 4.2 m over the floor, roof at 18.05 |
 | Nave | x 12 to the east wall, z 9 to 29 | 20 m wide, 47.7 m long, open from level 0 to three skylights |
 | Arcades | piers every 5 m, 0.4 m behind each balcony edge | a branched pier on every level, 4.2 m tall, one wide bay between each pair |
-| Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); level 2: glass balustrade, brass rail 1.1 m up; level 3: open. Each opens in bay 6 where [the central tree](#the-central-tree)'s branches land |
+| Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); levels 2 and 3: glass balustrade, brass rail 1.1 m up. A doorway opens each bay where [the central tree](#the-central-tree)'s branches land on levels 2 and 3, and where [the climbing wall](#the-climbing-wall)'s ledge meets level 3 |
 | Stairs | one in each corner of the aisles, in the end bays (0 and 12), every one serving every storey: switchbacks south-west and north-east, spirals south-east and north-west, so the plan reads the same turned half round | eighteen 0.25 m risers a storey, but for the two storeys either side of level 1, whose risers grow finer toward it (see "The size of level 1"). Both forms fill 4 by 4 tiles (5 by 5 m) and arrive on the aisle's tile row in front of the arcade, clear of its end pier. A switchback has two 2.4 m flights of eight 0.47 m treads either side of a spine and a 1.25 m half landing against the long wall. A spiral climbs one turn a storey round a 0.5 m newel, its treads 0.52 m deep 1.5 m out; each floor rails its well but where the stair arrives |
 | Lift | car centre (18.8, -1.65), in a glass tower outside the south wall | car 2.8 by 3.1 m, door 1.8 m wide in the wall |
 | Entrance | x 24 to 28 in the south wall | 4 m wide, 3.3 m high, under the first arch |
@@ -59,13 +59,26 @@ of headroom over every tread.
 
 | Level | South of the nave | The nave | North of the nave |
 |---|---|---|---|
-| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay, and the central tree at its centre | The north aisle, open, between the north-west and north-east stairs |
+| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay, the central tree at its centre, and the climbing wall before the north edge in bay 10 | The north aisle between the north-west and north-east stairs, holding the lab wing ([the labs](labs/README.md)): a door onto each lab, three either side of the tree's bay |
 | 1 | The toybox: a lounge beside the south-west stair; its game stations; the rail round the endless fall's well | void | The toybox's other game stations, facing the south ones across the void |
 | 2 | The board game room, from the lift's landing east and out into the projecting wing | void | none (every display is on level 0) |
-| 3 | The terrace, with the south-west stair's head | void | The north gallery, open |
+| 3 | The terrace, with the south-west stair's head | void | The north gallery, open, with the climbing wall's doorway in bay 10 |
 
 [shapes.md](shapes.md) lists the displays and what each exhibit shows,
 [paintings.md](paintings.md) the wing, and the tables' own pages their games.
+
+## The lab wing
+
+Level 0's north aisle holds a freestanding door for each lab, the small
+worlds under [labs/](labs/README.md) that each test one behaviour on its own
+([lab-wing.puck](lab-wing.puck)). The doors stand on the aisle's second tile
+row in from the north wall, their glass toward the nave and their plaques at
+their right, in arcade bays 2 to 4 and 8 to 10, so the tree's bay stays open
+across the aisle and the corner stairs stay clear. Level 0's north wall keeps
+no bench or planter behind a door. Walk into a door's glass to stand in its
+lab, and walk back into the lab's `arrival` frame to come out of the door.
+[layout.puck](gallery/layout.puck)'s `labWingPlan` holds one row a lab, and
+[the lab book](labs/README.md) lists them.
 
 ## The toybox
 
@@ -163,6 +176,22 @@ edge. Each stands on level 1's floor and reaches into the fascia under level
 drawn only; a clear pane threaded through it holds every body, so no body
 flies or jumps in from the void and none drops out, while the panel stays open
 to the eye.
+
+**The rope net panel.** One panel is a real net: `gallery-lattice-north-9`
+(the north edge's bay 9, layout.puck's `toyLatticeNetBay`, kept off the climbing wall's bay 10) keeps the lattice's
+frame and drops its pane, and its placement carries the standard's
+`latticeNet` facet (architecture.puck, `ropeNet`'s material): a grid of 12 by
+9 nodes from post to post and sill to head, pinned at all four members, that
+the authority steps as rope (the engine's net, [the decision](../../docs/decisions/engine-design.md#a-net-is-a-node-grid-the-authority-steps-drawn-by-displacing-one-rest-mesh)).
+It still holds every body, but it gives: a body leaning on it bulges it, a
+body that walks into it takes it and climbs it like a park climbing net (the
+standard's climb, in or out of the Moth's suit), its weight pulls the net in
+under its hands with a ripple outward, and the drawn strands and knots move
+with the nodes. It settles and sleeps when no one touches it. `debug.go
+rope-net` stands a body before it; `world.nets` reads its nodes, deflection,
+holders and leaners; `world.benchmark run net-climb` plays a climb, and
+the [climbing lab](labs/README.md#climbing) holds a copy of the panel and plays the same climb headless in
+[net-tests.puck](net-tests.puck).
 
 **Hooks for puzzles.** Three panels are loose: `gallery-lattice-loose-south`
 and `gallery-lattice-loose-north` (bay 8, layout.puck's `toyLatticeLooseBay`)
@@ -360,6 +389,75 @@ balcony's edge, its top flush with the floor.
 
 The tree's colours, bark relief and leaf clumping are look.puck's `lookTree`.
 `gallery.shot hall` stands just east of the roots.
+
+## The climbing wall
+
+A sandstone climbing wall rises the full height of the hall, from the nave's
+floor to level 3, in front of the north balcony edge in bay 10
+([gallery/climbing-wall.puck](gallery/climbing-wall.puck), layout.puck's
+`climbWall*` values). A player who walks into it climbs past the toybox's
+lattice and level 2's balustrade, pulls up onto a ledge 13.5 m over the floor
+with the nave, the tree and the far galleries below her, and steps through a
+doorway onto level 3's north gallery. A fall lands on the sage pad at its foot.
+It answers the tree pack's
+[climbing pier](../../docs/game/art/gallery-tree-pack/07-climbing-pier.png),
+grown from a bouldering face into a climb of the whole hall.
+
+Bay 10 is the nave's last even bay that nothing else at the edge claims: the
+tree's branches land in bays 4, 7 and 8, its trunk stands in bay 6, the loose
+lattice panel is bay 8's, the rope net panel on level 1 is bay 9's and bay 12 holds the north-east stair. The displays in
+bays 9 and 11 stand more than a metre clear of the pad on either side.
+
+| Part | What it is | Size |
+|---|---|---|
+| Face | Sandstone plates in four tones from sand to coral over teal seams, each plate a canyon plane leaning a few degrees | 4 m across, 12.95 m from the pad to the coping |
+| Frame | Cream cheeks either side, its body back to the balcony edge, and a warm timber coping whose top is the ledge, level with level 3's floor | 4.4 m across, 1.1 m deep |
+| Pad | Three sage foam blocks, a step up from the floor | 5 m across, reaching 2.5 m out from the face, 0.25 m tall |
+| Doorway | Teal posts and lintel in level 3's balustrade behind the ledge, as at the tree's landings | 2 m clear |
+
+**What can be held.** Only the face: its placement alone carries
+`grip { holdable: true }`, so the standard's `climbAbility` takes it and nothing
+else of the wall. A climber stops at the face's edges, since the cheeks beside
+them cannot be held, and the climb ends at the coping, where the climb's mantle
+proves the ledge and sets her down on it. The face's plates and every hold are
+drawn only. Her contact is the face's flat backing, so the hold system reads one
+plane and she climbs anywhere on it at the ability's pace and stamina; the
+hands and feet her rig plants on the drawn surface find the holds. A climb of
+the wall takes about half her stamina wheel.
+
+**The routes.** Three lines of holds climb the face, each one saturated colour
+(look.puck's `lookClimb`), so a route reads from across the nave:
+
+| Route | Line | Holds |
+|---|---|---|
+| Sunflower | Up the middle, the gentlest | Jugs, slopers and foot chips, 0.6 m apart |
+| Teal | Up the west side | Crimps, pinches and foot chips, 0.72 m apart |
+| Berry | Up the east side, the hardest | Slopers, pinches, crimps and foot chips, 0.8 m apart |
+
+Every route ends just under the coping before the doorway. Four pastel volumes,
+mint and butter, stand on the face between the routes, and a hold that lands on
+one stands on its front. Each hold carries a recessed bolt. A route is a line of
+points on the face (`climbRoutes`), along which the standard's `climbRoute`
+lays a hold every pitch, stepping to either side in turn; each hold is a copy of
+its family's prototype, so the wall's 55 holds bake as ten small creations.
+
+The pieces are the standard's
+([climbing.puck](../standard/climbing.puck)): the face, the frame, the hold
+families (jug, crimp, sloper, pinch, foot chip, volume), the bolt and the pad,
+which any world can stand.
+
+| Console line | What it does |
+|---|---|
+| `debug.go climbing-wall` | Stands a body on the floor before the pad, facing the wall |
+| `gallery.shot climbing-wall` | Looks up the wall from the nave's floor |
+| `gallery.shot climbing-wall-across` | Looks at the wall from level 2's south gallery, across the void |
+| `world.benchmark run climbing-wall` | Climbs it through seat 1's own controls: onto the pad, up the face, over the ledge and through the doorway |
+
+`puck test worlds/debug/climbing-wall-tests.puck` plays the same climb headless on the
+[climbing lab](labs/README.md#climbing)'s copy of the wall
+and checks that the body held the face past the heights of levels 1 and 2, stood on the ledge
+and on the landing past it, never ran out of stamina, never fell and never ended a step
+inside a surface, and that a climber who lets go lands on the pad.
 
 ## The displays
 

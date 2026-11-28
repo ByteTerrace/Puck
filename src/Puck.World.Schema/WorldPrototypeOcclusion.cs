@@ -17,8 +17,9 @@ namespace Puck.World;
 /// covers a surface's whole hemisphere; one by default.</param>
 /// <param name="Shadow">The share, in [0, 1], of a ranged light, screen or emitter face its shadow takes away where it
 /// covers the light whole; <paramref name="Strength"/> by default.</param>
-/// <param name="Reach">How far past the occluder's bounding sphere, in the creation's units, it still darkens and shadows,
-/// eased to nothing there; the bounding sphere's own radius by default.</param>
+/// <param name="Reach">How far past the occluder's bounding sphere, in the creation's units, it still darkens the ambient
+/// and indirect light, eased to nothing there; the bounding sphere's own radius by default. It bounds only that
+/// darkening: the shadow toward a light reaches as far as the light does.</param>
 /// <param name="Softness">The penumbra's half slope toward a light of no size (a point or spot light): its shadow's edge
 /// widens by this much for each unit from the occluder; zero by default, a point light's hard edge.</param>
 /// <param name="Shape">Which solid is fitted to the rest box: a sphere, a capsule along the long axis, the box itself, or

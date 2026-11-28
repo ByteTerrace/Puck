@@ -154,8 +154,9 @@ public sealed partial class WorldColliderSet {
     // (whose field is its true distance and whose collider measures it), a Box's rounded or chamfered box, a round capsule
     // and a half-space are the drawn primitive dilated by the margin, as the field's margined primitive is. A cylinder is
     // exact only undilated and with no rim inset, since a dilated cylinder's rims round where its collider's stay sharp;
-    // an oriented-box stand-in, an inset core and any other superellipsoid (whose field dilates by its gauge, not by
-    // distance) only bound theirs. A negative margin erodes, which no collider here mirrors.
+    // so is a capsule scaled unlike in X and Z (below). An oriented-box stand-in, an inset core and any other
+    // superellipsoid (whose field dilates by its gauge, not by distance) only bound theirs. A negative margin erodes,
+    // which no collider here mirrors.
     private static FixedStaticCollider? ExactCollider(in FixedStaticCollider collider, in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
         if ((margin < FixedQ4816.Zero) || ShapePointOps.DeformsContact(shape: copy.Shape)) {
             return null;
@@ -164,7 +165,9 @@ public sealed partial class WorldColliderSet {
         var exact = collider.Kind switch {
             FixedStaticColliderKind.Sphere or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.HalfSpace => true,
             FixedStaticColliderKind.Cylinder => ((margin == FixedQ4816.Zero) && (CylinderInset(copy: in copy) == default)),
-            FixedStaticColliderKind.Superellipsoid => IsSpheroidCopy(copy: in copy),
+            // A capsule scaled unlike in X and Z draws its ellipsoid's gauge, which dilates past the collider's measured
+            // offset along its long axes.
+            FixedStaticColliderKind.Superellipsoid => (IsSpheroidCopy(copy: in copy) || ((copy.Shape.Type == SdfSolidPrimitive.Capsule) && (margin == FixedQ4816.Zero))),
             _ => false,
         };
 

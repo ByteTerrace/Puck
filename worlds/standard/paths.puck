@@ -1,5 +1,6 @@
 // Compile-time paths: a quadratic Bezier's point, closed polylines (their segments, the rounded curve a sweep follows,
-// where they cross a height, and their stretches), and the path masks authored paving and scenery placement share.
+// where they cross a height, and their stretches), open polylines walked by distance, and the path masks authored
+// paving and scenery placement share.
 // A quadratic Bezier's point at t in [0, 1], for controls of any dimension (arrays add element-wise).
 function quadraticPoint(a, b, c, t) = ((a * ((1 - t) * (1 - t))) + (b * ((2 * t) * (1 - t))) + (c * (t * t)))
 // The item of a list at index i read round the list as a loop, so -1 is the last and the length is the first.
@@ -20,6 +21,17 @@ function loopSegment(points, i) = (loopItem(points, (i + 1)) - loopItem(points, 
 function loopSegmentLength(points, i) = vectorLength(loopSegment(points, i))
 function loopDistance(points, i) = sum(map(range(0, i), k => loopSegmentLength(points, k)))
 function loopLength(points) = loopDistance(points, length(points))
+// An open polyline over the same corners, without the closing segment: its length, the segment that holds the distance
+// `s` along it (the last for any `s` past its end, which carries the last segment on), and the point and the unit
+// direction at `s`.
+function polylineLength(points) = loopDistance(points, (length(points) - 1))
+function polylineSegment(points, s) = minimum(
+  (length(points) - 2),
+  count(range(1, (length(points) - 1)), k => (loopDistance(points, k) <= s))
+)
+function polylineDirection(points, s) = vectorUnit(loopSegment(points, polylineSegment(points, s)))
+function polylineAt(points, s) = (points[polylineSegment(points, s)] +
+  (polylineDirection(points, s) * (s - loopDistance(points, polylineSegment(points, s)))))
 
 // The polyline with each corner rounded to a circular arc of `radius`, as quadratic Bezier pieces a sweep follows, each
 // { a, b, c, at, index }: `at` is the fraction of the loop's length at the piece's middle. A corner's arc meets its two

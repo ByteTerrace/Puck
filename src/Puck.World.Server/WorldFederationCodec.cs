@@ -1095,6 +1095,8 @@ public static partial class WorldFederationCodec {
         if (!WorldWireCodec.TryWriteInputAnswers(writer, snapshot.InputAnswers.Span)) { throw new ArgumentException(message: "snapshot input answers exceed wire bounds", paramName: nameof(snapshot)); }
         if (!WorldWireCodec.TryWriteOwnBodies(writer, snapshot.OwnBodies.Span)) { throw new ArgumentException(message: "snapshot own bodies exceed wire bounds", paramName: nameof(snapshot)); }
         ArgumentOutOfRangeException.ThrowIfGreaterThan(snapshot.Cues.Length, WorldRuleCapacity.MaxDeliveredCues);
+        writer.WriteInt32(value: snapshot.Nets.Length);
+        foreach (var node in snapshot.Nets.Span) { writer.WriteString(value: node.Placement); writer.WriteInt32(value: node.Node); writer.WriteFixedVector(value: node.Offset); }
         writer.WriteByte(snapshot.MusicBoundary);
         writer.WriteByte(snapshot.MusicSenses);
         writer.WriteInt32(snapshot.Cues.Length);
@@ -1912,6 +1914,8 @@ public static partial class WorldFederationCodec {
         var inputs = WorldWireCodec.ReadInputPublications(reader: ref reader);
         var answers = WorldWireCodec.ReadInputAnswers(reader: ref reader);
         var ownBodies = WorldWireCodec.ReadOwnBodies(reader: ref reader);
+        var nets = reader.ReadArray(field: "net nodes", maximum: (WireLimits.MaxDocumentBytes / 32),
+            readItem: static (ref WireReader r) => new WorldNetNode(Placement: r.ReadString(field: "net placement"), Node: r.ReadInt32(), Offset: r.ReadFixedVector()));
         var musicBoundary = reader.ReadByte();
         var musicSenses = reader.ReadByte();
         if ((musicBoundary & ~3) != 0 || (musicSenses & ~7) != 0) { reader.Fail(WireRefusal.EnumValueUnknown, "invalid snapshot music flags"); }
@@ -1942,6 +1946,7 @@ public static partial class WorldFederationCodec {
             OwnBodies: ownBodies,
             MusicBoundary: musicBoundary,
             MusicSenses: musicSenses,
+            Nets: nets,
             Revision: revision,
             SolidScales: sizes,
             StepTicks: stepTicks,

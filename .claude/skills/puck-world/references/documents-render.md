@@ -614,3 +614,43 @@ the switch, the same convention `rigid`/`carry` carry. A body's attach
 state is `m_tether is not null` — there is no separate mode field. Read
 back per body with `body.tether`, per kit with `world.kits`. The garden's
 `walker` kit (Wren) carries this facet too.
+
+### A placement's `net` facet
+
+A placement's `net` (`Puck.World.Schema.WorldPlacementNet`) makes its creation a
+net of rope strands (a climbing net, a rope bridge, a hammock, a cargo net, a
+banner, a sail): `columns` by `rows` nodes (2 to 16 each) over `origin + s·across
++ t·up` in the row's frame, the edges `pinLeft`, `pinRight`, `pinBottom` and
+`pinTop` hold to the frame (all by default), and its material: `nodeMass`,
+`stiffness` (newtons per metre a strand), `damping`, `sag` (a strand's slack),
+`reach` (the farthest a node moves), `iterations`, `strand` (the thickness it
+collides at), `bodyMass` (what a full-size body holding it weighs; a shrunk one
+weighs the cube of its size), `restSpeed`, `sleepSeconds` and `gravity`. The
+standard's `ropeNet` is a park climbing net's material and `latticeNet` lays
+one over a `lattice` frame built with `pane: 0` (`worlds/standard/architecture.puck`).
+
+The row needs `solid` and one static frame (no distribution, deal, mirror,
+attach, inhabit, turn or respond; `WorldDefinitionValidator.Placements.cs`).
+What runs:
+
+- The authority steps it after the tick's bodies (`WorldPopulation.StepNets`,
+  `FixedNet`): a body that holds it (a `Pull` hold whose anchor lies on it)
+  loads it with its weight there, and every body volume within its strand and
+  the contact reach of it pushes its nodes out. Untouched and still for
+  `sleepSeconds`, it sleeps and costs one box test a body.
+- It collides as a sheet of rounded boxes over its cells, posed every tick in
+  the analytic provider's live set (`WorldColliderSet.RecordNetColliders`), and a
+  `grip { holdable: true }` row is climbable. A body standing on it or holding
+  it rides its movement (`TryRideDisplacement`, `TryHeldDisplacement`).
+- Its nodes ride the population checkpoint and the authoritative hash
+  (`WorldNets`), and reach clients on the snapshot (`WorldSnapshot.Nets`,
+  `WorldNetMirror`); presentation draws the creation baked once at rest through
+  a sheet displacement (`WorldNetPresentation`, `SdfSheetDisplacement`).
+
+Read it back with `world.nets` (nodes, awake, deepest deflection, reach,
+holders, leaners); a rule reads `net("<placement>", deflection|awake|holders|pushers)`
+(`$net:`); `world.budget`'s `nets` line and `world.counters physics.nets`
+(`steps`, `nodes-solved`, `strands-solved`, `iterations`, `sleeps`, `wakes`) give
+its cost. The gallery's rope net panel is the worked example (`worlds/debug/gallery.md`,
+"The lattice"). A net drawn in a world seen through a portal or a session draws
+at rest; only the world's own scene displaces it.

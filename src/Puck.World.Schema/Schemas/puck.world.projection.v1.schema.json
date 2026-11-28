@@ -3798,6 +3798,11 @@
             "$ref": "#/$defs/WorldPlacementTurn",
             "description": "The placement\u0027s turn facet (see WorldPlacementTurn): the row turns about its own up axis by an angle read from state, a turntable, or null for a row that keeps its authored yaw. Omitted from the wire when null.",
             "default": null
+          },
+          "net": {
+            "$ref": "#/$defs/WorldPlacementNet",
+            "description": "The placement\u0027s net facet (see WorldPlacementNet): the row\u0027s creation is a net of rope strands the authority steps, that gives under the bodies leaning on it and carries the bodies holding it, or null for a rigid row. Omitted from the wire when null.",
+            "default": null
           }
         },
         "required": [
@@ -17675,6 +17680,119 @@
       "additionalProperties": false,
       "title": "WorldPlacementTurn"
     },
+    "WorldPlacementNet": {
+      "description": "A placement\u0027s net facet: the row\u0027s creation is a net of rope strands that gives under the bodies that lean on it and carries the bodies that hold it (a climbing net, a rope bridge, a hammock, a cargo net, a banner, a sail). The authority keeps a coarse grid of nodes over the parallelogram Origin \u002B s\u00B7Across \u002B t\u00B7Up in the row\u0027s frame, steps it in fixed point every tick it is awake (Puck.Physics.FixedNet: its strands\u0027 caps, its pins, its reach), and lets it sleep when nothing touches it. The net collides as a sheet of thin boxes over its node cells, posed every tick, a body holding it rides it and loads it with its weight, and a body leaning on it pushes its nodes out; presentation draws the creation baked once at rest and displaces each vertex by the nodes\u0027 offsets about it, so a net that moves rebuilds no program and keys no mesh.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "columns": {
+          "description": "The nodes along Across, 2 to MaxNodesPerEdge.",
+          "type": "integer"
+        },
+        "rows": {
+          "description": "The nodes along Up, 2 to MaxNodesPerEdge.",
+          "type": "integer"
+        },
+        "origin": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The rest position of node (0, 0), in the row\u0027s frame."
+        },
+        "across": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The rest edge from node (0, 0) to the last column\u0027s, in the row\u0027s frame."
+        },
+        "up": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The rest edge from node (0, 0) to the last row\u0027s, in the row\u0027s frame; not parallel to Across."
+        },
+        "pinLeft": {
+          "description": "Whether the first column, along Up at the origin, is held to the frame.",
+          "type": "boolean",
+          "default": true
+        },
+        "pinRight": {
+          "description": "Whether the last column is held to the frame.",
+          "type": "boolean",
+          "default": true
+        },
+        "pinBottom": {
+          "description": "Whether the first row, along Across at the origin, is held to the frame.",
+          "type": "boolean",
+          "default": true
+        },
+        "pinTop": {
+          "description": "Whether the last row is held to the frame. At least one edge is held.",
+          "type": "boolean",
+          "default": true
+        },
+        "nodeMass": {
+          "description": "The mass one free node carries, in kilograms; positive.",
+          "type": "number",
+          "default": 0.2
+        },
+        "stiffness": {
+          "description": "One strand\u0027s stiffness against stretch past its length, in newtons per metre; positive.",
+          "type": "number",
+          "default": 4000
+        },
+        "damping": {
+          "description": "The share of a node\u0027s speed lost each second; non-negative.",
+          "type": "number",
+          "default": 3
+        },
+        "sag": {
+          "description": "The slack each strand carries past its rest spacing, as a share of it, in [0, 1].",
+          "type": "number",
+          "default": 0
+        },
+        "reach": {
+          "description": "The farthest a node moves from rest, in metres before the row\u0027s scale; positive.",
+          "type": "number",
+          "default": 0.3
+        },
+        "iterations": {
+          "description": "The projection passes a step makes over every strand, 1 to MaxIterations.",
+          "type": "integer",
+          "default": 4
+        },
+        "strand": {
+          "description": "The thickness the net collides at, in metres before the row\u0027s scale: each node cell is a box this thick about the nodes\u0027 surface, and a body leaning on the net pushes its nodes until they stand this far beyond the box\u0027s face; positive.",
+          "type": "number",
+          "default": 0.035
+        },
+        "bodyMass": {
+          "description": "The mass, in kilograms, a body of authored size loads the net with while it holds it, scaled by the cube of the body\u0027s size; non-negative.",
+          "type": "number",
+          "default": 60
+        },
+        "restSpeed": {
+          "description": "The speed, in metres a second, under which every node counts as still; non-negative.",
+          "type": "number",
+          "default": 0.01
+        },
+        "sleepSeconds": {
+          "description": "The seconds every node must stay still, untouched, before the net sleeps; non-negative.",
+          "type": "number",
+          "default": 1
+        },
+        "gravity": {
+          "description": "The acceleration every free node falls at along world down, in metres a second squared; non-negative.",
+          "type": "number",
+          "default": 9.81
+        }
+      },
+      "required": [
+        "columns",
+        "rows",
+        "origin",
+        "across",
+        "up"
+      ],
+      "additionalProperties": false,
+      "title": "WorldPlacementNet"
+    },
     "WorldSpeakerSourceNone": {
       "description": "No signal is bound \u2014 honest silence (the emitter holds its place; audio.emitters reads the state).",
       "properties": {
@@ -20250,6 +20368,11 @@
         "turn": {
           "$ref": "#/$defs/WorldPlacementTurn",
           "description": "The placement\u0027s turn facet (see WorldPlacementTurn): the row turns about its own up axis by an angle read from state, a turntable, or null for a row that keeps its authored yaw. Omitted from the wire when null.",
+          "default": null
+        },
+        "net": {
+          "$ref": "#/$defs/WorldPlacementNet",
+          "description": "The placement\u0027s net facet (see WorldPlacementNet): the row\u0027s creation is a net of rope strands the authority steps, that gives under the bodies leaning on it and carries the bodies holding it, or null for a rigid row. Omitted from the wire when null.",
           "default": null
         }
       },

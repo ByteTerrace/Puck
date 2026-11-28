@@ -135,7 +135,7 @@ public static class WorldDiagnosticGeometry {
     private static float Reach(FixedStaticCollider collider) => collider.Kind switch {
         FixedStaticColliderKind.Sphere => collider.Extent.ToVector3().X,
         FixedStaticColliderKind.Cylinder => new Vector2(x: collider.Extent.ToVector3().X, y: collider.Extent.ToVector3().Y).Length(),
-        _ => (collider.Extent.ToVector3().Length() + ((float)collider.Radius)),
+        _ => (collider.Extent.ToVector3().Length() + ((float)collider.Radius) + ((float)collider.Elongation)),
     };
 
     /// <summary>Names a signed boundary contradiction only outside the check's explained uncertainty.</summary>
@@ -150,7 +150,7 @@ public static class WorldDiagnosticGeometry {
     /// <param name="collider">The actual compiled solver input.</param>
     /// <returns>The rounding bound.</returns>
     public static double Numerical(FixedStaticCollider collider) =>
-        (((double)FixedQ4816.Epsilon) * (16 + ((collider.Extent.ToVector3().Length() + ((double)collider.Radius)) * 8)));
+        (((double)FixedQ4816.Epsilon) * (16 + ((collider.Extent.ToVector3().Length() + ((double)collider.Radius) + ((double)collider.Elongation)) * 8)));
     /// <summary>Measures a point against the compiled analytic surface using presentation arithmetic.</summary>
     /// <param name="collider">The compiled surface.</param>
     /// <param name="point">World-space point.</param>
@@ -168,6 +168,12 @@ public static class WorldDiagnosticGeometry {
             ? collider.Rotation.RotateInverse(vector: relative) : relative).ToVector3();
         var e = collider.Extent.ToVector3();
 
+        if (collider.Kind == FixedStaticColliderKind.Superellipsoid) {
+            // The swept solid reads the superellipsoid at the point less its nearest segment point, as contact does.
+            var elongation = ((float)collider.Elongation);
+
+            p.Y -= Math.Clamp(value: p.Y, min: -elongation, max: elongation);
+        }
         if (collider.MeasuresDistance()) {
             return (double)(FixedEllipsoidProjection.Project(point: FixedVector3.FromVector3(value: p), radii: collider.Extent).Distance - collider.Radius);
         }

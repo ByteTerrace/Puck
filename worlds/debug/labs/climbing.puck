@@ -1,0 +1,329 @@
+// The climbing lab (README.md): the Moth's climb (avatars/moth-climb.puck, the standard's `climbAbility`) on a studio
+// floor under a held midday, with three bays along one line, each facing the seat as she boots (climbing-plan.puck holds
+// the plan):
+//
+//   west     a practice face 6 m tall in front of a block whose top is floor: a climb, a top-out and a mantle
+//   middle   the rope net panel: the gallery's (gallery/shell.puck), a toy-lattice frame whose net is the standard's
+//            rope net (architecture.puck's `latticeNet`), in the `climb-net-slot` placement
+//   east     the climbing wall: the gallery's (gallery/climbing-wall.puck), the standard's wall kit
+//            (worlds/standard/climbing.puck) with its routes (gallery/climbing-routes.puck): a face as tall as the
+//            hall's from level 0's floor to level 3's, its frame and ledge, holds and pad, and a landing past the
+//            ledge standing as level 3's floor does
+//
+// The routes `climb-wall` and `climb-net` play the two climbs as a player makes them, the same routes the gallery's
+// benchmark plays (benchmark-route.puck), and ../climbing-wall-tests.puck and ../net-tests.puck run them here.
+// Boot it with `--world worlds/debug/labs/climbing.puck`; the gallery's lab wing reaches it through its door
+// `lab-climbing`, and the `arrival` frame behind the seat leads back there.
+
+schema: "puck.world.definition.v1"
+basis: "../avatars/moth"
+documentId: "lab-climbing"
+
+import "../still-noon"
+import "../set-controls"
+import "../noclip"
+import "../ship-rows"
+import "../gallery/layout"
+import "../gallery/look"
+import "../gallery/climbing-routes"
+import "../../standard/architecture"
+import "../../standard/benchmark"
+import "../../standard/climbing"
+import "../../standard/place"
+import "lab-kit"
+import "climbing-plan"
+
+metadata {
+  title: "Climbing lab"
+  description: "The Moth's climb on a practice face, the gallery's rope net panel and the gallery's climbing wall, each as the hall builds it."
+}
+
+bodies {
+  capacity: 12
+  localSeats: 4
+  networkPlayers: 8
+  seatSpawns [hero]
+}
+
+let climbStone = "#A39686"
+let climbBlock = "#C2B9AB"
+
+// The seat boots 8 m before the faces, facing them (yaw 180 faces +Z); each bay has a spawn point 3 m before it.
+spawnPoints [
+  { id: "hero", position [0, 0, (climbFaceZ - 12)], yawDegrees: 180 }
+  { id: "climb-practice", position [climbBayX[0], 0, (climbFaceZ - 3)], yawDegrees: 180 }
+  { id: "climb-net", position [climbBayX[1], 0, (climbFaceZ - 3)], yawDegrees: 180 }
+  { id: "climb-wall", position [climbBayX[2], 0, (climbFaceZ - 3)], yawDegrees: 180 }
+]
+
+commands [
+  goCommand(
+    help: "Poses a body at one of the climbing lab's places (hero, climb-practice, climb-net, climb-wall, or any spawn point) and returns the view to the play layout's chase camera."
+  )
+]
+
+labFloor(halfX: 16, halfZ: 16)
+labWayBack(id: "climbing", at: [0, 0, (climbFaceZ - 16)], yaw: 180)
+
+// A holdable face `height` tall standing in the plane z 0 of its placement, facing -Z, and the block behind it whose top
+// is floor at the face's top.
+template climbFace(name, height) {
+  prototype $"{name}-face" {
+    document {
+      name: $"{name}-face"
+      schema: "puck.creation.v2"
+      palette [{ color: climbStone, roughness: 0.8, specular: 0.04 }]
+      shape Box "face" {
+        material: 0
+        position [0, (height / 2), (climbFaceThickness / 2)]
+        scale [climbFaceHalf, (height / 2), (climbFaceThickness / 2)]
+      }
+    }
+  }
+  prototype $"{name}-block" {
+    document {
+      name: $"{name}-block"
+      schema: "puck.creation.v2"
+      palette [{ color: climbBlock, roughness: 0.85, specular: 0.04 }]
+      shape Box "block" {
+        material: 0
+        position [0, (height / 2), (climbFaceThickness + (climbLedgeDepth / 2))]
+        scale [climbFaceHalf, (height / 2), (climbLedgeDepth / 2)]
+      }
+    }
+  }
+}
+
+// The face's and frame's palette: the standard's slots in the gallery's look.
+let climbPalette = climbingPalette(lookClimb.panels, lookClimb.seam, lookClimb.frame, lookClimb.coping)
+let climbNetLook = lookToyLattice(1)
+
+prototypes {
+  climbFace(name: "climb-practice", height: climbPracticeHeight)
+  // The net's frame: the gallery's toy lattice with the net drawn over its opening and no pane, since the placement's
+  // net facet is what the body meets.
+  prototype "climb-net-frame" {
+    document {
+      name: "climb-net-frame"
+      schema: "puck.creation.v2"
+      palette: latticePalette(climbNetLook.frame, climbNetLook.bar, climbNetLook.rail)
+      lattice(
+        base: 0,
+        cells: climbNetCells,
+        pitch: toyLatticePitch,
+        height: climbNetHeight,
+        bar: toyLatticeBar,
+        net: toyLatticeNet,
+        pane: 0
+      )
+    }
+  }
+  prototype "climb-wall-face" {
+    document {
+      name: "climb-wall-face"
+      schema: "puck.creation.v2"
+      palette: climbPalette
+      climbingFace(
+        base: 0,
+        width: climbWallWidth,
+        height: climbWallFaceHeight,
+        columns: climbFacets.columns,
+        rows: climbFacets.rows,
+        relief: climbFacets.relief,
+        tilt: climbFacets.tilt,
+        thickness: climbWallThickness,
+        salt: climbFacets.salt
+      )
+    }
+  }
+  prototype "climb-wall-frame" {
+    document {
+      name: "climb-wall-frame"
+      schema: "puck.creation.v2"
+      palette: climbPalette
+      climbingFrame(
+        base: 0,
+        width: climbWallWidth,
+        height: climbLabTop,
+        depth: climbWallDepth,
+        coping: climbWallCoping,
+        thickness: climbWallThickness
+      )
+    }
+  }
+  prototype "climb-wall-pad" {
+    document {
+      name: "climb-wall-pad"
+      schema: "puck.creation.v2"
+      palette: climbingPadPalette(lookClimb.pad)
+      climbingPad(
+        base: 0,
+        width: climbWallPad.width,
+        depth: (climbWallPad.depth + climbWallThickness),
+        height: climbWallPad.height
+      )
+    }
+  }
+  // The landing: level 3's floor past the doorway, a block whose top is the ledge's height, in the frame's colour.
+  prototype "climb-wall-landing" {
+    document {
+      name: "climb-wall-landing"
+      schema: "puck.creation.v2"
+      palette [{ color: lookClimb.frame, roughness: 0.6, specular: 0.04 }]
+      shape Box "landing" {
+        material: 0
+        position [0, (climbLabTop / 2), (climbLedgeDepth / 2)]
+        scale [((climbWallWidth / 2) + 1), (climbLabTop / 2), (climbLedgeDepth / 2)]
+      }
+    }
+  }
+  for p in climbHoldPrototypes {
+    prototype $"climb-wall-{p.family}-{p.kind}" {
+      document {
+        name: $"climb-wall-{p.family}-{p.kind}"
+        schema: "puck.creation.v2"
+        palette: climbingHoldPalette(p.color, lookClimb.bolt)
+        climbingHold(base: 0, kind: p.kind)
+      }
+    }
+  }
+  for (tone, n) in lookClimb.volumes {
+    prototype $"climb-wall-volume-{n}" {
+      document {
+        name: $"climb-wall-volume-{n}"
+        schema: "puck.creation.v2"
+        palette: climbingHoldPalette(tone, lookClimb.bolt)
+        climbingVolume(base: 0)
+      }
+    }
+  }
+}
+
+placements {
+  placement "climb-practice-face" {
+    prototype: "climb-practice-face"
+    position [climbBayX[0], 0, climbFaceZ]
+    grip {
+      holdable: true
+    }
+    solid
+  }
+  placement "climb-practice-block" {
+    prototype: "climb-practice-block"
+    position [climbBayX[0], 0, climbFaceZ]
+    solid
+  }
+  // The net: the frame's placement carries the net facet over its opening, holdable, so a body climbs it and its weight
+  // pulls it in.
+  placement $"{climbNetPanel}" {
+    prototype: "climb-net-frame"
+    position [climbBayX[1], 0, climbFaceZ]
+    solid
+    grip {
+      holdable: true
+    }
+    net: latticeNet(cells: climbNetCells, pitch: toyLatticePitch, height: climbNetHeight)
+  }
+  // The wall as the gallery places it: the face holds a climber and nothing else of the wall does; the pad reaches under
+  // the face's backing to the frame's body.
+  placement "climb-wall-face" {
+    prototype: "climb-wall-face"
+    position [climbLabWallX, climbLabFoot, climbFaceZ]
+    grip {
+      holdable: true
+    }
+    solid
+  }
+  placement "climb-wall-frame" {
+    prototype: "climb-wall-frame"
+    position [climbLabWallX, 0, climbFaceZ]
+    solid
+  }
+  placement "climb-wall-pad" {
+    prototype: "climb-wall-pad"
+    position [climbLabWallX, 0, (climbFaceZ + climbWallThickness)]
+    solid
+  }
+  placement "climb-wall-landing" {
+    prototype: "climb-wall-landing"
+    position [climbLabWallX, 0, (climbFaceZ + climbWallDepth)]
+    solid
+  }
+  for (volume, n) in climbVolumes {
+    placement $"climb-wall-volume-{n}" {
+      prototype: $"climb-wall-volume-{volume.tone}"
+      position: (climbLabAt(volume.at[0], volume.at[1]) - [0, 0, climbHoldSeat])
+      scale: volume.size
+    }
+  }
+  for (hold, n) in climbHolds {
+    placement $"climb-wall-hold-{n}" {
+      prototype: $"climb-wall-{hold.family}-{hold.kind}"
+      position: (climbLabAt(hold.at[0], hold.at[1]) - [0, 0, (climbHoldSeat + climbStandOff(hold.at))])
+      scale: hold.size
+    }
+  }
+  // The regions the routes end in: the wall's ledge and landing, across the frame, and the net's face from a metre up
+  // to within 1.2 m of it (gallery places.puck's `climbing-wall-top` and `net-high`).
+  placement "place-climb-wall-top" {
+    prototype: "place"
+    position [climbLabWallX, (climbLabTop + 1.6), ((climbFaceZ + climbLabLandingZ) / 2)]
+    region {
+      halfExtents [2.2, 2.1, ((climbLabLandingZ - climbFaceZ) / 2)]
+    }
+  }
+  placement "place-climb-net-high" {
+    prototype: "place"
+    position [climbBayX[1], 2.2, (climbFaceZ - 0.6)]
+    region {
+      halfExtents [2.3, 1.2, 0.6]
+    }
+  }
+}
+
+// The two climbs as a player makes them, through seat 1's own controls (standard/benchmark.puck's `walker`): the wall
+// from the floor onto the pad, up the face with the stick held forward, over the ledge by the climb's mantle and onto
+// the landing; the net from 1.5 m before it, taking it by walking into it, climbing a metre and more, hanging a moment,
+// then running back, which lets go. The climb is a crossing whose arrival is a place, since a body on a face gains no
+// ground toward any point.
+routes [
+  {
+    name: "climb-wall"
+    program: "walker"
+    chapters [
+      {
+        name: "the floor onto the pad"
+        steps [
+          { $type: "pose", point: climbLabWallBefore, yawDegrees: 180 }
+          { $type: "rest", seconds: 1 }
+          { $type: "go", point: climbLabWallStart, pace: "walk", direct: true, within: 0.3 }
+        ]
+      }
+      {
+        name: "the face to the ledge"
+        steps [{ $type: "cross", headingDegrees: 180, until: "place-climb-wall-top", pace: "walk", metres: 3 }]
+      }
+      {
+        name: "the ledge onto the landing"
+        steps [{ $type: "go", point: climbLabWallLanding, pace: "walk", direct: true, within: 0.4 }]
+      }
+    ]
+  }
+  {
+    name: "climb-net"
+    program: "walker"
+    chapters [
+      {
+        name: "the rope net"
+        steps [
+          { $type: "pose", point: climbLabNetBefore, yawDegrees: 180 }
+          { $type: "rest", seconds: 1 }
+          { $type: "cross", headingDegrees: 180, until: "place-climb-net-high", pace: "walk", metres: 3 }
+          { $type: "rest", seconds: 1.5 }
+          { $type: "go", point: climbLabNetBefore, pace: "run", direct: true, within: 0.4 }
+          { $type: "rest", seconds: 2 }
+        ]
+      }
+    ]
+  }
+]

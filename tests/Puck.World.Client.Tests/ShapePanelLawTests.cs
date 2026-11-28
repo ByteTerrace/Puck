@@ -942,19 +942,20 @@ public sealed class ShapePanelLawTests {
         }
     }
     [Fact]
-    public void AStretchedCapsulesSupportIsTheUnitCapsulesUnderItsScale() {
-        // Scaled apart in X and Z, the unit capsule (radius 1, segment to 0.5) rides a Scale: it spans y from −scale.y
-        // to 1.5·scale.y, and x across ±scale.x.
+    public void AStretchedCapsulesSupportIsItsSegmentSweptByItsEllipsoid() {
+        // Scaled apart in X and Z, the capsule is its segment (to 0.5·scale.y) swept by the ellipsoid of radii scale.x,
+        // √(scale.x·scale.z) and scale.z: it spans y from −√0.06 to 0.2 + √0.06, and x across ±scale.x.
         var scale = new Vector3(
             x: 0.2f,
             y: 0.4f,
             z: 0.3f
         );
+        var end = MathF.Sqrt(x: 0.06f);
 
-        Assert.Equal(0.6f, SdfSolidGeometry.Support(axis: Vector3.UnitY, lift: SdfLift.Extrude, scale: scale, type: SdfSolidPrimitive.Capsule), tolerance: 1e-6f);
-        Assert.Equal(0.4f, SdfSolidGeometry.Support(axis: -Vector3.UnitY, lift: SdfLift.Extrude, scale: scale, type: SdfSolidPrimitive.Capsule), tolerance: 1e-6f);
+        Assert.Equal((0.2f + end), SdfSolidGeometry.Support(axis: Vector3.UnitY, lift: SdfLift.Extrude, scale: scale, type: SdfSolidPrimitive.Capsule), tolerance: 1e-6f);
+        Assert.Equal(end, SdfSolidGeometry.Support(axis: -Vector3.UnitY, lift: SdfLift.Extrude, scale: scale, type: SdfSolidPrimitive.Capsule), tolerance: 1e-6f);
         Assert.Equal(0.2f, SdfSolidGeometry.Support(axis: -Vector3.UnitX, lift: SdfLift.Extrude, scale: scale, type: SdfSolidPrimitive.Capsule), tolerance: 1e-6f);
-        Assert.Equal(0.5f, SdfSolidGeometry.HalfExtent(axis: Vector3.UnitY, lift: SdfLift.Extrude, scale: scale, type: SdfSolidPrimitive.Capsule), tolerance: 1e-6f);
+        Assert.Equal((0.1f + end), SdfSolidGeometry.HalfExtent(axis: Vector3.UnitY, lift: SdfLift.Extrude, scale: scale, type: SdfSolidPrimitive.Capsule), tolerance: 1e-6f);
     }
     [Fact]
     public void ARecessOnACapsulesUnderFaceCarvesItsOwnDepth() {

@@ -1,0 +1,11 @@
+// The light lab's midday: ../still-noon.puck's clear, held noon with two changes for what this lab judges. The sun is
+// the size it is, 0.0047 rad, instead of the cycle's default 0.2 rad, whose penumbra washes the stained room's coloured
+// patch on the floor to pastel. And it stands at 50 degrees instead of 60, so that patch, cast through the east wall's
+// bay (sill 0.55 m, head 3.85 m), lands 0.65 to -1.5 m in x and -12.4 to -7.2 m in z on the floor, clear of the wall,
+// where the room's doorway sees it, rather than a metre-wide strip hard against the wall.
+// Only this lab imports it; the other labs and the debug world keep the soft sun. A document fragment of its own, for
+// the reason still-noon.puck is.
+
+import "../../standard/skies"
+
+dayCycle(daySeconds: 86400, start: 11.5, noonElevation: 50, heading: 37, cloudiness: 0.15, softness: 0.0047)

@@ -932,14 +932,22 @@ casts nothing on the floor.
 | Solids taken from each mesh draw's box on the GPU | Per-part solids that ride the draws' slots with no host work | Not built yet: a draw carries no author's opt-in, a bake group's box is no fit for a part, and a view's mask holds 128 records, not a world's draws |
 | Occluders as records of the lights table | No new table | Not built: the lights table's 128 records are the lights', which the validator holds a world to, and an occluder is visited by every ranged light rather than walked as one |
 
-**The rule.** An occluder adds nothing at and past its `Reach` from its centre:
-both its terms are scaled by the window a point light's falloff takes, which is
-exactly zero there. On that rule the view's mask, each views tile's mask and a
-glass wave's mask leave out the occluders whose sphere of reach misses what they
-shade, by the same machinery and the same two boxes the lights are culled by
-(`SdfLightSelection.SelectOccluders`, `sdfViewsTileLights`,
-`sdfWaveLightMasks`): one mechanism, a third mask beside the lights' and
-screens'. An occluder takes from the ambient, indirect and reflected environment
+**The rule.** An occluder's ambient term adds nothing at and past its `Reach`
+from its centre: it is scaled by the window a point light's falloff takes, which
+is exactly zero there. Its shadow toward a light reaches as far as the light
+does, as a real shadow does: a lamp high to one side throws a body's shadow
+metres past the body, which a window about the body would cut short. The
+shadow is exactly zero wherever the segment from a point to the light passes the
+occluder's bounding sphere by the penumbra's half width or more, so it adds
+nothing outside the hull of the light and that sphere grown by the penumbra. On
+those two rules the view's mask, each views tile's mask and a glass wave's mask
+leave out the occluders that can reach nothing they shade, by the same machinery
+and the same two boxes the lights are culled by (`SdfLightSelection.SelectOccluders`,
+`sdfOccluderReachesWalk` in `sdfViewsTileLights` and `sdfWaveLightMasks`): one
+mechanism, a third mask beside the lights' and screens', which a tile decides
+once its lights and screens stand. The view's mask on the host weighs the
+shadows toward its point, spot and line lights; a screen's or an emitter face's
+shadow from an occluder whose reach the view does not see is left out there. An occluder takes from the ambient, indirect and reflected environment
 terms and from a ranged light's, screen's or emitter face's visibility; it never
 takes from a directional light, whose cascades are its shadow, nor from the
 lights' screen-space contact term.
@@ -963,8 +971,10 @@ is 0.9 m in radius, sunk into the floor, against her 0.35 m kit capsule, and it
 takes most of the sky from the floor and furniture a metre and more about her.
 
 **What enforces it, and where that stops.** `sdfOccludersAmbient` and
-`sdfOccludersShadow` are the only readers of an occluder, and each multiplies by
-`sdfOccluderWindow`, so a culled occluder changes no pixel. Records multiply, so
+`sdfOccludersShadow` are the only readers of an occluder: the first multiplies by
+`sdfOccluderWindow`, and the second answers one wherever the segment passes the
+solid by the penumbra, which `sdfOccluderShadowsBox` bounds, so an occluder a
+tile or a wave culls changes no pixel there. Records multiply, so
 each body and placement casts one record a frame (`WorldCreationOccluders.AppendTo`
 rebuilds its candidates from empty), and `world.occluders` lists what was packed
 and who cast it. A body's own

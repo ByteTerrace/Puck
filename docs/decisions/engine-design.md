@@ -493,6 +493,42 @@ such as an exact chamfered-box collider. The owner confirmed this.
 Why: the owner's ruling. Bodies floating at the round dais and at box corners
 were visible flaws.
 
+## A net is a node grid the authority steps, drawn by displacing one rest mesh
+
+A rope net (a climbing net, a rope bridge, a hammock, a cargo net, a banner, a
+sail) is a placement's `net` facet (`WorldPlacementNet`), never a creation of
+its own kind. The authority keeps a coarse grid of point masses over a
+parallelogram in the row's frame (`FixedNet`) and steps it in fixed point after
+the tick's bodies move: gravity, the weight of the bodies holding it at their
+holds' anchors, the nodes pushed out of the capsules leaning on it, a few
+compliant passes over every strand's cap (`FixedTetherConstraint.SolvePair`, a
+rope that may go slack but stretches only as its stiffness allows), and a final
+hold of every node within its reach of rest (`FixedTetherConstraint.Solve`). An
+untouched net sleeps and its step costs nothing. Its nodes ride the population's
+checkpoint and the authoritative hash (`WorldNets`), reach every client on the
+snapshot (`WorldSnapshot.Nets`), and collide as a sheet of thin rounded boxes
+over its cells, posed every tick in the analytic provider's live set. A body
+holding it rides its movement under the anchor, as a body standing on a carrier
+rides the carrier. Presentation draws the row's creation baked once at rest and
+moves every vertex by the bilinear blend of its cell's node offsets
+(`SdfSheetDisplacement`, `sdfMeshSheetDisplaced`), the same displaced-vertex
+path a height field takes, so a net that moves rebuilds no program and keys no
+mesh.
+
+Options weighed: a creation rebaked from the nodes (a bake a tick, refused on
+cost); a skinned rig with a slot per node (hundreds of slots for one panel, and
+a rig that moves without the authority's say); the field lattice's reaction
+stepper (its values are scalars per cell and its reactions diffuse; a strand
+cap couples two cells' vectors, which no reaction expresses, so the net keeps
+the lattice's shape, a kernel of its own beside the population whose state the
+checkpoint carries and whose changed values a snapshot delivers, without its
+stepper); per-strand rigid bodies (a solver island of hundreds of capsules). The reach bound is what keeps the drawn box and the
+collider sheet honest without measuring the nodes: every reader widens by it.
+
+Why: the owner asked for the toybox's lattice to read and behave as rope
+netting that bodies climb, cheap, deterministic and general enough for rope
+bridges, hammocks, cargo nets, banners and sails.
+
 ## Where the physics stands against the state of the art
 
 An audit of Puck's algorithms against published and shipped practice
@@ -537,6 +573,16 @@ look).
 - **Exact where a closed form exists.** Box extents, an elliptical cylinder, a
   torus scaled equally in X and Z, and every regular polygon as its scaled
   convex polygon already lower to exact fields (`SdfSolidGeometry`).
+- **A capsule's X and Z scales are its section's radii** (the lead's ruling).
+  A capsule scaled apart in X and Z has an elliptical section and half-ellipsoid
+  ends whose Y radius is the geometric mean of the two
+  (`SdfSolidGeometry.CapsuleRadii`), which is the round capsule when they are
+  equal. The unit capsule under a stretch, whose ends grow with the segment's
+  scale, was never a capsule an author asked for, so this defines the surface
+  rather than replacing one. It lowers to its segment elongating the
+  exponent-2 superellipsoid, so it reads the ellipsoid's distance and takes the
+  ellipsoid's solve when that lands: until then a bound with the gauge's gain,
+  admitted by contact.
 - **A bounded closest-point solve elsewhere**, with its answer certified: an
   enclosing interval and a residual bound, interior points and axis and centre
   degeneracies included. A fixed iteration count alone certifies nothing.

@@ -47,17 +47,21 @@ static const float SdfMeshShadowSoftTexels = 1.0;
 
 // The pixel pattern the occlusion's and the shadows' taps follow: a rotation and a radial offset, each in [0, 1). Each
 // pixel takes its cell of a 4x4 ordered-dither tile, so any 4x4 window of pixels holds each of the tile's sixteen
-// patterns exactly once, and views averages such a window (sdfViewsFilter in sdf-views-stage.hlsli, KEEP IN SYNC with
+// patterns exactly once, and views averages such a window (sdfViewsFilter in sdf-views-filter.hlsli, KEEP IN SYNC with
 // its 4x4 window): on any surface the per-pixel noise cancels to the same sixteen-pattern estimate, leaving no
-// screen-locked structure. A temporal view also steps the pattern within its sixteenth by the sample index of its
-// eight-sample period, so a converged history averages 128 patterns.
+// screen-locked structure.
+// A temporal view also moves every pixel two cells along the tile at each sample of its eight-sample period, and steps
+// the pattern within its sixteenth by the sample index, so each pixel takes eight rotations an eighth of a turn apart and
+// a converged history averages them whatever part of its window views keeps (beside a crease or a silhouette, only the
+// neighbours on its own plane, whose cells alone would leave their subset's bias fixed to the pixel grid). Every 4x4
+// window still holds each cell once in every sample: one shift of all sixteen cells is a permutation of them.
 float2 sdfMeshPattern(uint2 pixel) {
     uint x = (pixel.x & 3u);
     uint y = (pixel.y & 3u);
     uint a = (x ^ y);
-    // The Bayer cell: the bits of x ^ y and y interleaved, then reversed.
-    uint cell = ((((a & 1u) << 3u) | ((y & 1u) << 2u)) | ((a & 2u) | ((y & 2u) >> 1u)));
     uint step = (passGroup.historyFrames & 7u);
+    // The Bayer cell: the bits of x ^ y and y interleaved, then reversed, moved two cells a sample.
+    uint cell = ((((((a & 1u) << 3u) | ((y & 1u) << 2u)) | ((a & 2u) | ((y & 2u) >> 1u))) + (2u * step)) & 15u);
 
     return float2(
         ((float(cell) + (float(step) / 8.0)) / 16.0),

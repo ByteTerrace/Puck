@@ -250,6 +250,14 @@ revolved ellipse its field emits) is therefore the field's own surface and an
 exact piece of a carved creation's partition. A higher exponent uses its Lp
 support map with fixed-point powers. The chair seat and back are exponent-4
 superellipsoids; they therefore never go through the oriented-bound fallback.
+A Capsule placement scaled alike in X and Z compiles to the rounded box about
+its segment. One scaled apart compiles to the same exponent-2 superellipsoid
+over `SdfSolidGeometry.CapsuleRadii`, elongated along its segment
+(`FixedStaticCollider.Elongation`): its measure and support read the point less
+its nearest segment point, so outside the solid the distance is exact, and
+inside it is the depth in the ellipsoid about that point. Its field, the
+elongated gauge, has the same zero set; under a margin the gauge dilates past
+the collider along the ellipsoid's long axes, as a triaxial ellipsoid's does.
 Both convex kinds use Q32 intermediates for small simplex predicates and Q16
 witnesses, with deterministic iteration limits and tie order.
 Box does not admit a separate authored `rounding` on this vocabulary; that
@@ -571,6 +579,30 @@ through the same `FixedRateAccumulator` discipline the rest of this library's
 per-tick rates use. `CaptureState`/`FromState` preserve the rope limits and
 that accumulator's remainder when a same-world checkpoint must continue on
 the exact next fixed-point fraction.
+
+`FixedTetherConstraint.SolvePair` is the same cap between two points that both
+move, as one compliant (XPBD) projection: slack is an exact no-op, and a taut
+strand moves both ends along their line by shares of their inverse masses, its
+multiplier accumulating across a step's iterations so the answer converges on
+the compliant rope rather than stiffening with the iteration count.
+
+## The net
+
+`FixedNet` is a net of rope strands as a grid of point masses over a
+parallelogram (`FixedNetSpec`), its edges optionally pinned. `Step` integrates
+the free nodes under gravity and the caller's `FixedNetLoad`s (a force at a grid
+point, spread bilinearly) and `FixedNetPusher`s (capsules that push nodes out),
+projects every strand's cap a few times through `SolvePair`, then holds each node
+within `Reach` of rest through `Solve`; a node's stored velocity is its step's
+whole movement, and damping takes its share as the next step integrates. A net
+that nothing touches and whose nodes stay under `RestSpeed` for `SleepTicks`
+sleeps, and a sleeping net's step returns at once. `CellColliders` writes a
+rounded box over each cell, `TryGrid` and `OffsetAt` locate a point on the net,
+`DisplacementAt` gives the net's movement under it over its latest step, and
+`TakeChanged`, `Capture`, `Restore` and `AppendStateHash` serve delivery,
+checkpoints and the hash. Every reader may bound the net by its rest layout grown
+by its reach. `physics.nets` counts its work. The World's host is a placement's
+`net` facet ([the facet](../../.claude/skills/puck-world/references/documents-render.md#a-placements-net-facet)).
 
 ## Bounded local perception
 

@@ -1,0 +1,481 @@
+// The light lab (README.md): one room a subject, so no subject's light reaches another's, round a plaza under a held
+// midday with the debug world's thin air. From west to east along the plaza's north side, each room's doorway in its
+// south wall:
+//
+//   occluders   a roofed room behind a baffle under a pendant lamp: the Moth when she walks in, a standing citizen and
+//               props with the standard's `propOcclusion`, each darkening the floor about it and shadowing the lamp
+//   night       a closed room behind a baffle, dark but for its own light: bare bulbs, a screen showing the test
+//               pattern and a console whose panel is an emitter face
+//   stained     a closed room whose east wall holds the gallery's stained glass bay, the sun coming through it in colour
+//   barrier     an open-fronted bay holding the gallery's magic barrier, its films glowing and cycling
+//   haze        a hall 30 m long, closed but for its doorway and lit by bulbs, for the thin air's haze indoors
+//
+// Boot it with `--world worlds/debug/labs/light.puck`; the gallery's lab wing reaches it through its door `lab-light`,
+// and the `arrival` frame on the plaza leads back there.
+
+schema: "puck.world.definition.v1"
+basis: "../avatars/moth"
+documentId: "lab-light"
+
+import "light-noon"
+import "../set-controls"
+import "../noclip"
+import "../ship-rows"
+import "../gallery/look"
+import "../../standard/bounds"
+import "../../standard/architecture"
+import "../../standard/occlusion"
+import "../../standard/citizen"
+import "lab-kit"
+
+metadata {
+  title: "Light lab"
+  description: "One room a subject: occluders under a lamp, a dark room of bulbs, a screen and an emitter face, stained glass, the magic barrier and indoor haze."
+}
+
+// Twelve seats, and the citizen above them.
+bodies {
+  capacity: 13
+  localSeats: 4
+  networkPlayers: 8
+  seatSpawns [hero]
+}
+
+// The debug world's air (debug.puck): a clear day's density thinning with height, scattering the sun forward.
+render {
+  atmosphere {
+    fog {
+      density: 0.0006
+      anisotropy: 0.5
+      height {
+        base: 0
+        falloff: 900
+      }
+    }
+  }
+}
+
+// The rooms' walls, 0.3 m thick, and their inside height: tall enough for the stained bay's surround.
+let lightWall = 0.3
+let lightHeight = 4.6
+// Each room's inside, its doorway in the south wall (`door`, a span along x, `doorTop` high), and the openings of its
+// east wall; `open` leaves the south wall out. A room's spawn point stands 3 m south of its doorway, facing in.
+let lightRooms = [
+  { id: "occluders", x0: -32, x1: -22, z0: -16, z1: -6, door [-29, -25], doorTop: 3, east [], open: false }
+  { id: "night", x0: -19, x1: -11, z0: -16, z1: -6, door [-16, -14], doorTop: 2.6, east [], open: false }
+  {
+    id: "stained", x0: -7, x1: 1, z0: -16, z1: -6, door [-4, -2], doorTop: 2.7
+    east [{ a0: -12.6, a1: -9.4, y0: 0.55, y1: 3.85 }], open: false
+  }
+  { id: "barrier", x0: 5, x1: 13, z0: -16, z1: -6, door [9, 9], doorTop: 0, east [], open: true }
+  { id: "haze", x0: 17, x1: 23, z0: -36, z1: -6, door [19, 21], doorTop: 2.7, east [], open: false }
+]
+function lightRoom(id) = filter(lightRooms, room => (room.id == id))[0]
+function lightDoorX(room) = ((room.door[0] + room.door[1]) / 2)
+
+// The bulbs: a bare lamp on a cord, its light just under the glass. Each hangs `lightBulbDrop` under the ceiling.
+let lightBulbDrop = 0.7
+let lightBulbRadius = 0.06
+let lightBulbPower = 800
+let lightBulbs = [
+  [-17, -9], [-13, -9], [-15, -14]
+  [20, -10], [20, -20], [20, -30]
+]
+// The occluders' pendant: its diffuser's luminance and how far under the ceiling it hangs. A spot's intensity is the
+// face's luminance times its area (`glowSpotPower`, `pendantGlowArea`: 0.0908 m2), so the floor 3.4 m under the lamp
+// takes about 0.0078 lux a nit: the gallery's 3000 nits gave 24 lux, a fraction of the bounce light at the doorway. At
+// 120000 nits (a frosted bulb's order) it gives about 940 lux, many times the little light the baffle lets round it,
+// so the lamp's shadows are the room's.
+let lightPendantDrop = 1.2
+let lightPendantLuminance = 120000
+// The night room's screen, on its north wall facing +Z, and its console, against its east wall facing -X.
+let lightScreen = { x: -15, y: 2, z: (lightRoom("night").z0 + 0.065), halfWidth: 1.2, halfHeight: 0.7 }
+let lightConsoleAt = [(lightRoom("night").x1 - 0.6), 0, -12]
+// The baffles: a freestanding wall `lightBaffleSetback` inside a doorway, `half` either side of the doorway's middle and
+// `height` high, wider than the doorway so no light reaches the room straight from the plaza. The night room's reaches
+// a doorway's width past it; the occluders' doorway is wider, so its baffle is too, and taller, so light rising off the
+// plaza floor does not clear it. A body walks round either end, 1 m (night) or 2 m (occluders) from the walls.
+let lightBaffleSetback = 1.6
+let lightBaffles = [
+  { room: "night", half: 2, height: 3 }
+  { room: "occluders", half: 3, height: 3.4 }
+]
+// The barrier: the gallery's (shell.puck's arch over a level-1 bay), standing across the bay's middle.
+let lightArchRadius = 2.08
+let lightArchSpring = 1.82
+
+spawnPoints: concat(
+  [{ id: "hero", position [0, 0, 6], yawDegrees: 0 }],
+  map(lightRooms, room => { id: $"light-{room.id}", position [lightDoorX(room), 0, (room.z1 + 3)], yawDegrees: 0 })
+)
+
+commands [
+  goCommand(
+    help: "Poses a body at one of the light lab's places (hero, light-occluders, light-night, light-stained, light-barrier, light-haze, or any spawn point) and returns the view to the play layout's chase camera."
+  )
+]
+
+labFloor(halfX: 40, halfZ: 40)
+labWayBack(id: "light", at: [0, 0, 10], yaw: 0)
+citizenLooks(coats: ["#7A4E8C"], hats: ["#2F2A26"])
+
+// A room's shell in world bounds: the walls round its inside, the south wall holed by its doorway (or left out), the
+// east wall by its openings, and a roof over the whole.
+template lightShell(room) {
+  for wall in (room.open ? [] : [1]) {
+    wallAlongX(
+      label: "south",
+      x0: (room.x0 - lightWall),
+      x1: (room.x1 + lightWall),
+      y0: 0,
+      y1: lightHeight,
+      z0: room.z1,
+      z1: (room.z1 + lightWall),
+      openings: [{ a0: room.door[0], a1: room.door[1], y0: 0, y1: room.doorTop }],
+      slot: 0
+    )
+  }
+  wallAlongX(
+    label: "north",
+    x0: (room.x0 - lightWall),
+    x1: (room.x1 + lightWall),
+    y0: 0,
+    y1: lightHeight,
+    z0: (room.z0 - lightWall),
+    z1: room.z0,
+    openings: [],
+    slot: 0
+  )
+  wallAlongZ(
+    label: "west",
+    x0: (room.x0 - lightWall),
+    x1: room.x0,
+    y0: 0,
+    y1: lightHeight,
+    z0: room.z0,
+    z1: room.z1,
+    openings: [],
+    slot: 0
+  )
+  wallAlongZ(
+    label: "east",
+    x0: room.x1,
+    x1: (room.x1 + lightWall),
+    y0: 0,
+    y1: lightHeight,
+    z0: room.z0,
+    z1: room.z1,
+    openings: room.east,
+    slot: 0
+  )
+  boundsBox(
+    label: "roof",
+    x0: (room.x0 - lightWall),
+    x1: (room.x1 + lightWall),
+    y0: lightHeight,
+    y1: (lightHeight + lightWall),
+    z0: (room.z0 - lightWall),
+    z1: (room.z1 + lightWall),
+    slot: 1
+  )
+}
+
+prototypes {
+  for room in lightRooms {
+    prototype $"light-room-{room.id}" {
+      document {
+        name: $"light-room-{room.id}"
+        schema: "puck.creation.v2"
+        palette [
+          { color: "#D9D4CA", roughness: 0.85, specular: 0.04 }
+          { color: "#BDB7AC", roughness: 0.9, specular: 0.02 }
+        ]
+        lightShell(room: room)
+      }
+    }
+  }
+  // The night and occluders' rooms' baffles.
+  for baffle in lightBaffles {
+    prototype $"light-baffle-{baffle.room}" {
+      document {
+        name: $"light-baffle-{baffle.room}"
+        schema: "puck.creation.v2"
+        palette [{ color: "#D9D4CA", roughness: 0.85, specular: 0.04 }]
+        boundsBox(
+          label: "baffle",
+          x0: (0 - baffle.half),
+          x1: baffle.half,
+          y0: 0,
+          y1: baffle.height,
+          z0: -0.15,
+          z1: 0.15,
+          slot: 0
+        )
+      }
+    }
+  }
+
+  prototype "light-bulb" {
+    document {
+      name: "light-bulb"
+      schema: "puck.creation.v2"
+      palette [
+        { color: "#23262B", roughness: 0.6, specular: 0.04 }
+        { color: "#FFE2B8", roughness: 0.3, emissive: 6000 }
+      ]
+      shape Cylinder "cord" {
+        material: 0
+        position [0, (0 - ((lightBulbDrop - lightBulbRadius) / 2)), 0]
+        scale [0.006, ((lightBulbDrop - lightBulbRadius) / 2), 0.006]
+        detail: true
+      }
+      shape Sphere "glass" {
+        material: 1
+        position [0, (0 - lightBulbDrop), 0]
+        scale [lightBulbRadius, lightBulbRadius, lightBulbRadius]
+        detail: true
+      }
+    }
+    lights [
+      point(
+        name: "bulb",
+        position: [0, (0 - (lightBulbDrop + lightBulbRadius + 0.02)), 0],
+        temperature: 2700K,
+        power: lightBulbPower
+      )
+    ]
+  }
+
+  prototype "light-pendant" {
+    document {
+      name: "light-pendant"
+      schema: "puck.creation.v2"
+      palette [
+        { color: lookStairPendant.drum, roughness: 0.45, specular: 0.05 }
+        { color: lookStairPendant.cord, roughness: 0.6, specular: 0.04 }
+        { color: lookStairPendant.color, roughness: 0.5, emissive: lightPendantLuminance }
+      ]
+      pendantLamp(base: 0, at: [0, 0, 0], drop: lightPendantDrop)
+    }
+    lights [
+      spot(
+        name: "glow",
+        position: pendantGlowAt([0, 0, 0], lightPendantDrop),
+        direction: [0, -1, 0],
+        angle: 90deg,
+        innerAngle: 70deg,
+        color: lookStairPendant.color,
+        power: glowSpotPower(lightPendantLuminance, pendantGlowArea())
+      )
+    ]
+  }
+
+  // The occluders' props, each casting as its box.
+  prototype "light-crate" {
+    occlusion: propOcclusion
+    document {
+      name: "light-crate"
+      schema: "puck.creation.v2"
+      palette [{ color: "#9C7A52", roughness: 0.8, specular: 0.04 }]
+      shape Box "crate" {
+        material: 0
+        position [0, 0.45, 0]
+        scale [0.45, 0.45, 0.45]
+        rounding: 0.02
+      }
+    }
+  }
+  prototype "light-drum" {
+    occlusion: propOcclusion
+    document {
+      name: "light-drum"
+      schema: "puck.creation.v2"
+      palette [{ color: "#4F6E8A", roughness: 0.5, specular: 0.2 }]
+      shape Cylinder "drum" {
+        material: 0
+        position [0, 0.45, 0]
+        scale [0.3, 0.45, 0.3]
+        rounding: 0.02
+      }
+    }
+  }
+  prototype "light-plinth" {
+    occlusion: propOcclusion
+    document {
+      name: "light-plinth"
+      schema: "puck.creation.v2"
+      palette [{ color: "#EDE7DA", roughness: 0.7, specular: 0.04 }]
+      shape Box "plinth" {
+        material: 0
+        position [0, 0.55, 0]
+        scale [0.6, 0.55, 0.4]
+        rounding: 0.01
+      }
+    }
+  }
+
+  // The screen's bezel, behind the picture on the north wall.
+  prototype "light-bezel" {
+    document {
+      name: "light-bezel"
+      schema: "puck.creation.v2"
+      palette [{ color: "#15171B", roughness: 0.4, specular: 0.1 }]
+      shape Box "bezel" {
+        material: 0
+        position [0, 0, -0.03]
+        scale [(lightScreen.halfWidth + 0.06), (lightScreen.halfHeight + 0.06), 0.03]
+      }
+    }
+  }
+  // The console: a dark desk and an upright panel whose glowing face lights what stands before it.
+  prototype "light-console" {
+    document {
+      name: "light-console"
+      schema: "puck.creation.v2"
+      palette [
+        { color: "#2B2F36", roughness: 0.5, specular: 0.1 }
+        { color: "#3FD0C2", roughness: 0.4, emissive: 300 }
+      ]
+      shape Box "desk" {
+        material: 0
+        position [0, 0.45, 0]
+        scale [0.6, 0.45, 0.35]
+        rounding: 0.02
+      }
+      shape Box "panel" {
+        material: 1
+        position [0, 1.25, 0.2]
+        rotation: rotate([0, 1, 0], 180)
+        scale [0.5, 0.3, 0.02]
+        lightsAs: Face
+      }
+    }
+  }
+
+  prototype "light-stained" {
+    document {
+      name: "light-stained"
+      schema: "puck.creation.v2"
+      palette: concat(kitPalette, stainedGlassPalette(lookStained.colors))
+      stainedGlassBay(base: 0, stained: length(kitPalette), cells: lookStained.cells, wall: lightWall)
+    }
+  }
+  prototype "light-barrier" {
+    document {
+      name: "light-barrier"
+      schema: "puck.creation.v2"
+      palette: filmArchPalette(
+        lookBarrier.film,
+        [0, lightArchSpring, 0],
+        lookBarrier.tints,
+        pane: lookBarrier.pane,
+        glow: lookBarrier.glow,
+        step: lookBarrier.step
+      )
+      filmArch(base: 0, radius: lightArchRadius, spring: lightArchSpring, films: length(lookBarrier.tints))
+    }
+  }
+}
+
+placements {
+  for room in lightRooms {
+    placement $"light-room-{room.id}" {
+      prototype: $"light-room-{room.id}"
+      position [0, 0, 0]
+      solid
+    }
+  }
+  for baffle in lightBaffles {
+    placement $"light-baffle-{baffle.room}" {
+      prototype: $"light-baffle-{baffle.room}"
+      position [lightDoorX(lightRoom(baffle.room)), 0, (lightRoom(baffle.room).z1 - lightBaffleSetback)]
+      solid
+    }
+  }
+  for (bulb, n) in lightBulbs {
+    placement $"light-bulb-{n}" {
+      prototype: "light-bulb"
+      position [bulb[0], lightHeight, bulb[1]]
+    }
+  }
+  placement "light-pendant" {
+    prototype: "light-pendant"
+    position [-27, lightHeight, -11]
+  }
+  placement "light-crate" {
+    prototype: "light-crate"
+    position [-25, 0, -13]
+    yawDegrees: 20
+    solid
+  }
+  placement "light-drum" {
+    prototype: "light-drum"
+    position [-29.5, 0, -9]
+    solid
+  }
+  placement "light-plinth" {
+    prototype: "light-plinth"
+    position [-27, 0, -14.4]
+    solid
+  }
+  placement "light-citizen" {
+    prototype: "citizen-0-0"
+    position [-29, 0, -12.5]
+    yawDegrees: 120
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "walker"
+      look: "citizen-0-0"
+      source: "Idle"
+    }
+  }
+  placement "light-bezel" {
+    prototype: "light-bezel"
+    position [lightScreen.x, lightScreen.y, lightRoom("night").z0]
+    yawDegrees: 180
+  }
+  placement "light-console" {
+    prototype: "light-console"
+    position: lightConsoleAt
+    yawDegrees: 90
+    solid
+  }
+  placement "light-stained" {
+    prototype: "light-stained"
+    position [(lightRoom("stained").x1 + (lightWall / 2)), 0, -11]
+    yawDegrees: 270
+    solid
+  }
+  placement "light-barrier" {
+    prototype: "light-barrier"
+    position [9, 0, -11]
+  }
+}
+
+// The night room's screen: the test pattern at a monitor's brightness, nobody's to engage.
+screens [
+  {
+    index: 0
+    origin [lightScreen.x, lightScreen.y, lightScreen.z]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: lightScreen.halfWidth
+    halfHeight: lightScreen.halfHeight
+    halfDepth: 0.005
+    round: 0
+    source: producer(id: "testPattern", settings: { width: 480, height: 280 })
+    luminance: 150nit
+    route {
+      engageable: false
+      engageRadius: 0
+    }
+  }
+]

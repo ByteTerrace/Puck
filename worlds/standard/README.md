@@ -248,6 +248,12 @@ pieces are the arcade cabinet (for one player or two), the television set (a tel
 its shelf and a cabled pad for each player) and the lounge (a rug and two beanbags). The debug world's gallery is built
 from it (`../debug/gallery.md`), and `../debug/gallery-kit.puck` holds one of each canyon piece for `puck mesh preview`.
 
+`climbing.puck` is a library of climbing-wall pieces: a face of canyon-plane plates over seams whose flat backing is
+the one surface a world makes holdable, the frame a face stands in with the ledge a climb tops out on, the hold families
+(jug, crimp, sloper, pinch, foot chip and volume, each with a recessed bolt), a segmented landing pad, and
+`climbRoute`, which lays a route's holds along a line of points on a face so a world places one copy of a family's
+prototype per hold. The debug world's gallery climbs one with `climbAbility` (`../debug/gallery.md`).
+
 `game-station.puck` is a station whose table's top is one glass display that plays a catalog of games, one at a time, as
 a display station shows a catalog of shapes: the table in the display stations' family, its glass panels, the menu of
 games with NEW GAME, the `station.game` mailbox, the status line for each chair, the board engage with two chairs and
