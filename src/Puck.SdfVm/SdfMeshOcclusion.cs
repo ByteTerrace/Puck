@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Maths;
@@ -53,7 +52,6 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private readonly string m_part;
     private readonly GpuFittedBuffer[] m_candidates;
     private readonly List<IGpuBuffer>[] m_retired;
-    private readonly byte[] m_pushed = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
     // The most bytes one index buffer view spans on Direct3D 12 (D3D12_INDEX_BUFFER_VIEW's 32-bit size), whole indices.
     private const ulong MaxIndexViewBytes = (uint.MaxValue & ~3U);
     // The mesh region buffer the staged frame's sets bind, which the raster phases read as their index buffer.
@@ -405,12 +403,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             offsetBytes: 0UL,
             sizeBytes: Math.Min(val1: indices.SizeBytes, val2: MaxIndexViewBytes)
         );
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: m_pushed, value: 0u);
-        recorder.PushConstants(
+        recorder.PushIndex(
             bindPoint: GpuBindPoint.Graphics,
             commandBufferHandle: commandBuffer,
-            data: m_pushed,
-            offset: 0,
+            index: 0u,
             pipelineLayoutHandle: pipeline.LayoutHandle,
             stageFlags: SdfWorldTables.PipelineLayouts.MeshStages
         );
@@ -549,12 +545,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             return;
         }
 
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: m_pushed, value: (step << SdfKernelInterfaces.MeshLevelShift) | level);
-        recorder.PushConstants(
+        recorder.PushIndex(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            data: m_pushed,
-            offset: 0,
+            index: ((step << SdfKernelInterfaces.MeshLevelShift) | level),
             pipelineLayoutHandle: pipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Compute
         );

@@ -561,8 +561,10 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_FIELD_ENTRY_ROWS", value: SdfWorldPackage.FieldEntryRows);
         declarations.Count(name: "SDF_FIELD_TILE_ENTRIES", value: SdfWorldPackage.FieldTileEntries);
         declarations.Count(name: "SDF_FIELD_TILE_EDGE", value: SdfWorldPackage.FieldTileEdge);
-        declarations.Section(title: "The glass sums the glass raster pass accumulates and the glass shading pass reads.");
+        declarations.Section(title: "The glass sums the glass raster pass accumulates and the glass shading pass reads, and the glass tiles' layout (frame/sdf-glass-tiles.hlsli).");
         declarations.Count(name: "SDF_GLASS_SUM_WORDS", value: SdfWorldPackage.GlassSumWords);
+        declarations.Count(name: "SDF_GLASS_TILE_HEADER_WORDS", value: SdfWorldPackage.GlassTileHeaderWords);
+        declarations.Count(name: "SDF_GLASS_TILE_WORDS", value: SdfWorldPackage.GlassTileWords);
         // The layer list's length bounds the interfaces a glass pixel shades, which shade admission and the dispatch planner
         // price (SdfShadeProgram.GlassInterfaces, in an assembly the package cannot reference): the two stay one number
         // here, where both are visible, or no kernel is generated.

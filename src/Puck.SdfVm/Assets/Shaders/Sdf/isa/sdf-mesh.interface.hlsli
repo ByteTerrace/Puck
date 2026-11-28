@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/b57584964a51bd0bb01b3bd0e7a45a2f44e29e5a41ae6b1f9848fd13441e499e). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/7d7c308059e5434009c68d02b6c299a46895f6694164d86fe43b3455a8638ff7). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -145,15 +145,16 @@ struct SdfMeshPass {
 [[vk::binding(5, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t5, space3);
 [[vk::binding(6, 3)]] RWStructuredBuffer<uint> sdfGlassSumsRW : register(u6, space3);
 [[vk::binding(7, 3)]] RWStructuredBuffer<uint64_t> sdfGlassLayersRW : register(u7, space3);
-[[vk::binding(8, 3)]] Texture2D<float4> meshVisibility : register(t8, space3);
-[[vk::binding(9, 3)]] StructuredBuffer<uint4> sdfMeshOcclusionCandidates : register(t9, space3);
-[[vk::binding(10, 3)]] RWStructuredBuffer<uint4> sdfMeshOcclusionVisibleRW : register(u10, space3);
-[[vk::binding(11, 3)]] RWStructuredBuffer<uint> sdfMeshOcclusionDrawsRW : register(u11, space3);
-[[vk::binding(12, 3)]] RWStructuredBuffer<uint> sdfMeshOcclusionCountsRW : register(u12, space3);
-[[vk::binding(13, 3)]] RWStructuredBuffer<uint> sdfMeshOcclusionDepthRW : register(u13, space3);
-[[vk::binding(14, 3)]] StructuredBuffer<uint> sdfMeshIndirectCommands : register(t14, space3);
-[[vk::binding(15, 3)]] StructuredBuffer<uint4> sdfWords : register(t15, space3);
-[[vk::binding(16, 3)]] StructuredBuffer<uint> sdfMeshDraws : register(t16, space3);
+[[vk::binding(8, 3)]] RWStructuredBuffer<uint> sdfGlassTilesRW : register(u8, space3);
+[[vk::binding(9, 3)]] Texture2D<float4> meshVisibility : register(t9, space3);
+[[vk::binding(10, 3)]] StructuredBuffer<uint4> sdfMeshOcclusionCandidates : register(t10, space3);
+[[vk::binding(11, 3)]] RWStructuredBuffer<uint4> sdfMeshOcclusionVisibleRW : register(u11, space3);
+[[vk::binding(12, 3)]] RWStructuredBuffer<uint> sdfMeshOcclusionDrawsRW : register(u12, space3);
+[[vk::binding(13, 3)]] RWStructuredBuffer<uint> sdfMeshOcclusionCountsRW : register(u13, space3);
+[[vk::binding(14, 3)]] RWStructuredBuffer<uint> sdfMeshOcclusionDepthRW : register(u14, space3);
+[[vk::binding(15, 3)]] StructuredBuffer<uint> sdfMeshIndirectCommands : register(t15, space3);
+[[vk::binding(16, 3)]] StructuredBuffer<uint4> sdfWords : register(t16, space3);
+[[vk::binding(17, 3)]] StructuredBuffer<uint> sdfMeshDraws : register(t17, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfMeshPushedIndex {

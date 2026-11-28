@@ -83,6 +83,10 @@ public enum SdfKernel {
     Glass,
     /// <summary>The glass kernel with authored interpretation absent, for frames with no active program.</summary>
     GlassPlain,
+    /// <summary>The glass tiles' upkeep, on the glass interface: the glass clear's zeroing of the sums of the tiles the
+    /// preceding raster listed and of the tiles' mask, and the glass tiles pass's indirect arguments for the glass shading
+    /// pass, each a step its pushed index chooses.</summary>
+    GlassTiles,
     /// <summary>The sky's environment map, the gradient in every texel's direction, dispatched by the residency's
     /// <c>sdf.environment</c> graph producer when lighting-visible irradiance crosses one display code.</summary>
     SkyEnvironment,

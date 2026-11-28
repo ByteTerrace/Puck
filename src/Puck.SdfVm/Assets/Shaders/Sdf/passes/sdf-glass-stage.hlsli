@@ -1,5 +1,8 @@
-// The glass shading pass rewrites the lit image after views and before sky and resolve. It copies pixels that have neither a
-// front face before its opaque hit or a ray that starts inside a solid. The pass shades up to SDF_GLASS_LAYERS
+// The glass shading pass shades the glass after views and before sky and resolve, a group for each tile the glass raster
+// listed (frame/sdf-glass-tiles.hlsli, CSMain): it writes the glass image and the sky filter for every pixel of a tile
+// where some pixel has a front face before its opaque hit or a ray that starts inside a solid, the lit image's own texel
+// for every other pixel of that tile, and gives back the mark of a tile where none has; the passes after it read the glass
+// image where the tiles mark a pixel's tile and the lit image views wrote everywhere else. The pass shades up to SDF_GLASS_LAYERS
 // interfaces: the nearest front face (the glass target's) and the next nearest after it in the sums' layer list
 // (sdfGlassNextLayer), nearest first, so the order the faces rasterized in never shows. Each interface is shaded alike (one
 // loop body, never a copy):
@@ -284,7 +287,24 @@ float3 sdfGlassTransmission(SdfMaterialData material, float3 opticalDepth, float
     return exp(-opticalDepth) * unscattered;
 }
 
-void sdfGlassPixel(uint2 pixel) {
+// Whether a pixel's shading differs from the lit image views wrote: a glass front face lies before its opaque hit in a
+// view that composes the final picture or shows the shading's cost, or its ray starts inside glass. A tile none of whose
+// pixels does keeps neither the glass image nor the sky filter, and the passes after it read the lit image there.
+bool sdfGlassPixelNeeds(uint2 pixel, uint2 extent) {
+    float4 front = glassVisibility.Load(int3(pixel, 0));
+    SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, extent));
+    float opaque = (sdfVisibilityHit(visibility) ? visibility.t : worldFarDistance(worldView()));
+    bool shows = ((front.y >= 1.0) && (front.x < opaque));
+    bool final = sdfDebugComposesFinal(passGroup.debugMode);
+    bool diagnostic = ((passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_COST) || (passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_TIER));
+
+    return ((shows && (final || diagnostic)) || (final && (sdfGlassWindingAt(sdfGlassSumWord(pixel, extent)) > 0)));
+}
+
+// Shades one pixel of a tile the glass tiles keep marked: the glass image and the pixel's sky filter word at its place in
+// the tile (frame/sdf-glass-tiles.hlsli), both written for every pixel, the lit image and a filter that passes the sky as
+// it is for a pixel that shows no glass.
+void sdfGlassPixel(uint2 pixel, uint tile, uint place, uint capacity) {
     uint2 extent = passGroup.imageExtent;
     // The pass works in nits and stores at the view's light scale, as the views pass does.
     float storedScale = sdfStoredLightScale(passGroup.debugMode, passGroup.lightScale);
@@ -566,9 +586,7 @@ void sdfGlassPixel(uint2 pixel) {
         reactive = 1.0;
         sdfWorkSteps++;
     }
-    if (glass || (insideDistance > 0.0)) {
-        sdfGlassSkyFilterRW[(pixel.y * extent.x) + pixel.x] = sdfGlassSkyFilterPack(skyFilter);
-    }
+    sdfGlassTilesRW[sdfGlassTileFilterWord(capacity, tile, place)] = ((glass || (insideDistance > 0.0)) ? sdfGlassSkyFilterPack(skyFilter) : 0u);
 
     // A cell whose first pixel shows no glass face keeps no gather.
     if (writesProbes) {
@@ -583,13 +601,59 @@ void sdfGlassPixel(uint2 pixel) {
     sdfWorkTexels = 1u;
 }
 
+// Whether any pixel of the group's tile needs its shading (sdfGlassPixelNeeds).
+groupshared uint sdfGlassTileNeeded;
+
+// A group a listed tile: the pushed index is the job's first entry in the glass tiles' list, and the job's indirect
+// arguments dispatch a group for each listed entry from it (passes/sdf-glass-tiles.comp.hlsl), so no group shades a tile
+// the raster wrote nothing in. A tile none of whose pixels needs its shading gives its mark back and writes nothing; one
+// that does keeps it, setting it again if an earlier recording over the same raster gave it back.
 [numthreads(8, 8, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID) {
-    uint across = (passGroup.extent.x + 7u) / 8u;
-    uint group = pushedIndex.index + id.x / 8u;
-    id.xy = uint2(group % across, group / across) * 8u + uint2(id.x % 8u, id.y);
-    if (all(id.xy < passGroup.extent)) {
-        sdfGlassPixel(id.xy);
+void CSMain(uint3 group : SV_GroupID, uint place : SV_GroupIndex) {
+    uint2 extent = passGroup.imageExtent;
+    uint words;
+    uint stride;
+
+    sdfGlassTilesRW.GetDimensions(words, stride);
+
+    uint capacity = sdfGlassTileCapacity(words);
+    uint tile = sdfGlassTilesRW[sdfGlassTileListWord(capacity, (pushedIndex.index + group.x))];
+
+    // A listed tile lies below the capacity; the guard keeps every word this group addresses inside the buffers.
+    if (tile >= capacity) {
+        return;
+    }
+
+    uint2 pixel = sdfGlassTilePixel(tile, place, extent);
+    bool covered = all(pixel < extent);
+
+    if (place == 0u) {
+        sdfGlassTileNeeded = 0u;
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (covered && sdfGlassPixelNeeds(pixel, extent)) {
+        sdfGlassTileNeeded = 1u;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // The mark follows this recording's answer either way: a recording made again over a standing raster may need a tile
+    // an earlier one gave back.
+    bool needed = (sdfGlassTileNeeded != 0u);
+
+    if (place == 0u) {
+        uint bit = (1u << (tile & 31u));
+
+        if (needed) {
+            InterlockedOr(sdfGlassTilesRW[sdfGlassTileMaskWord(tile)], bit);
+        } else {
+            InterlockedAnd(sdfGlassTilesRW[sdfGlassTileMaskWord(tile)], ~bit);
+        }
+    }
+    if (!needed) {
+        return;
+    }
+    if (covered) {
+        sdfGlassPixel(pixel, tile, place, capacity);
     }
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
     puckCountLights(sdfWorkLights, sdfWorkFaceLights);

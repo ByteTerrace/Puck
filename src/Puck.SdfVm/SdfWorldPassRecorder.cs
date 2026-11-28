@@ -140,12 +140,14 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
 
     private readonly nint[] m_meshSets = [];
     // The buffers each mesh set binds now: its mesh region, its dynamic transforms, its work counters, and the
-    // visibility records and glass sums the glass pass reads and accumulates (the dummy in every other raster part).
+    // visibility records, glass sums and glass tiles the glass pass reads, accumulates and marks (the dummy in every other
+    // raster part).
     private readonly IGpuBuffer?[][] m_meshSetBuffers = [];
 
-    private const int MeshSetBuffers = 8;
+    private const int MeshSetBuffers = 9;
     private const int MeshSetCounters = 2;
     private const int MeshSetGlassSums = 4;
+    private const int MeshSetGlassTiles = 8;
     private const int MeshSetOcclusionBuffers = 6;
     private const int MeshSetVisibility = 3;
     private const int OcclusionSetsPerMesh = 2;
@@ -160,16 +162,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
 
     // The framebuffers the mesh part's occlusion phase draws in, one per instance of its target, over the target and depth.
     private readonly IGpuFramebuffer[] m_lateFramebuffers = [];
-    // The glass clear's record of each glass sums buffer it has cleared (GlassClear): the bytes the glass raster may have
-    // left nonzero there, from the rows its glass draws spanned (SdfWorldTables.GlassRows). The invariant is that every
-    // word outside that range is zero, so a clear of the range alone leaves the whole buffer zero for the raster. A buffer
-    // this recorder has not cleared yet holds anything and is cleared whole. The raster stands and records with the clear
-    // (one signature), so the range a submitted clear staged is the one its frame's raster wrote within.
-    private readonly List<(IGpuBuffer Buffer, ulong Start, ulong End)> m_glassDirty = [];
-    // The rows a glass draw's span is widened by on each side: the jitter moves the grid under half a pixel, and a
-    // rasterized triangle covers the pixels whose centres it holds.
-    private const uint GlassRowMargin = 2;
-    private (IGpuBuffer Buffer, ulong Start, ulong End)? m_glassPending;
     private readonly IGpuBuffer?[][] m_meshSetOcclusion = [];
     private readonly nint[] m_meshSetTargets = [];
     // Early and late compute sets beside each mesh set. Early binds a sampled filler while the target is an attachment;
@@ -204,13 +196,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     // What the frame's decision chose for its emission.
     private struct Decided {
         public SdfWorldTables? Tables;
-        // The glass clear's range of its sums.
-        public IGpuBuffer? Sums;
-        public ulong ClearStart;
-        public ulong ClearEnd;
-        // The glass clear's sky filter, cleared whole: the glass pass writes only its glass pixels, so every other word
-        // must pass the sky as it is.
-        public IGpuBuffer? SkyFilter;
         // A raster part's draw.
         public bool Occlude;
         public SdfMeshCull Cull;
@@ -252,10 +237,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             m_screens[slot] = new nint[SdfWorldTables.MaxScreenSurfaces];
         }
 
-        // The glass clear records one buffer clear and binds nothing.
-        if (m_part == SdfWorldPackage.Parts.GlassClear) {
-            return;
-        }
         if (!IsMesh) {
             m_sets = new RenderGraphPackageSets(
                 context: context,
@@ -464,9 +445,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     if (skips) { m_owner.SkippedClearMeshTarget(instance: m_context.Instance, tables: staged); }
                     return skips;
                 }
-            // The glass clear and the glass raster skip a frame in which no glass draw meets the view's frustum
-            // (SdfWorldPasses.GlassSeen); the shading pass, which reads their sums and target, then draws nothing.
-            case SdfWorldPackage.Parts.GlassClear:
+            // The glass raster skips a frame in which no glass draw meets the view's frustum (SdfWorldPasses.GlassSeen),
+            // with the clear and the tiles pass; the shading pass, which reads their sums and target, then draws nothing.
             case SdfWorldPackage.Parts.Glass: {
                     return !m_owner.GlassSeen(instance: m_context.Instance, view: m_view, context: in context);
                 }
@@ -498,24 +478,10 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             m_targetsClear[recorded.Index] = recorded.Clear;
             m_recordedTarget = null;
         }
-        if (m_glassPending is { } cleared) {
-            var known = FindGlassDirtyIndex(buffer: cleared.Buffer);
-
-            if (known >= 0) { m_glassDirty[known] = cleared; } else { m_glassDirty.Add(item: cleared); }
-            m_glassPending = null;
-        }
         if (m_part == SdfWorldPackage.Parts.Views) {
             m_owner.SubmittedTaint(m_context.Instance, m_sourceTaint, m_readsHistory);
         }
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_resolved) { m_owner.MarkSampleRendered(instance: m_context.Instance); }
-    }
-    private int FindGlassDirtyIndex(IGpuBuffer buffer) {
-        for (var index = 0; (index < m_glassDirty.Count); index++) {
-            if (ReferenceEquals(objA: m_glassDirty[index].Buffer, objB: buffer)) {
-                return index;
-            }
-        }
-        return -1;
     }
     // Decides the pass's frame: everything the instance's later passes, its commit or its residency read (the rows and hits
     // it notes, the view's history, the shading plan it commits, the screens' leases) changes here, in pass order, and the
@@ -537,30 +503,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
 
         m_owner.RecordHits(instance: m_context.Instance, part: m_part, tables: tables);
-        // The glass clear zeroes its sky filter whole, and the glass sums ahead of the glass pass's accumulation: the bytes the last
-        // submitted raster may have written (m_glassDirty), and it stages the rows this frame's raster may write, at the
-        // render grid's width that the raster addresses the sums by (sdfGlassSumWord).
-        if (m_part == SdfWorldPackage.Parts.GlassClear) {
-            var sums = recording.Outputs[0].Buffer!;
-            var known = FindGlassDirtyIndex(buffer: sums);
-            var (start, end) = ((known >= 0) ? (m_glassDirty[known].Start, Math.Min(val1: m_glassDirty[known].End, val2: sums.SizeBytes)) : (0UL, sums.SizeBytes));
-            var renderFrame = residency.Frame!;
-            var rows = tables.GlassRows(
-                camera: renderFrame.Views[Math.Min(val1: m_view.View, val2: (renderFrame.Views.Count - 1))].Camera,
-                height: recording.RenderHeight,
-                margin: GlassRowMargin
-            );
-            var rowBytes = ((ulong)recording.RenderWidth * SdfWorldPackage.GlassSumWords * sizeof(uint));
-
-            m_owner.NoteGlassExtent(instance: m_context.Instance, width: recording.RenderWidth, height: recording.RenderHeight);
-            m_decided.Sums = sums;
-            m_decided.ClearStart = start;
-            m_decided.ClearEnd = end;
-            m_decided.SkyFilter = recording.Outputs[1].Buffer!;
-            m_glassPending = ((rows is { } span) ? (sums, (span.First * rowBytes), ((span.Last + 1UL) * rowBytes)) : (sums, 0UL, 0UL));
-
-            return RenderGraphPackageOutcome.Drew;
-        }
         var frame = residency.Frame!;
         var view = Math.Min(
             val1: m_view.View,
@@ -648,13 +590,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     public void Emit(in RenderGraphPackageRecording recording) {
         var tables = m_decided.Tables!;
 
-        if (m_part == SdfWorldPackage.Parts.GlassClear) {
-            if (m_decided.ClearEnd > m_decided.ClearStart) {
-                recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, m_decided.Sums!.BufferHandle, (m_decided.ClearEnd - m_decided.ClearStart), m_decided.ClearStart);
-            }
-            recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, m_decided.SkyFilter!.BufferHandle, m_decided.SkyFilter.SizeBytes, 0UL);
-            return;
-        }
         if (IsMesh) {
             RecordMesh(
                 cull: in m_decided.Cull,
@@ -836,19 +771,16 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     var colour = recording.Outputs[OutputIndexOf(member: SdfWorldPackage.ReflectionColorWritten)].Buffer!;
                     var pipeline = tables.Pipeline(kernel: SdfKernel.ViewsReflections);
                     var block = (1u << (int)SdfWorldPackage.ReflectionColorLevels);
-                    Span<byte> step = stackalloc byte[sizeof(uint)];
 
-                    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: step, value: 0u);
                     BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
-                    recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: step, offset: 0,
+                    recorder.PushIndex(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, index: 0u,
                         pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
                     recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: recording.FrameWidth.CeilingDivide(divisor: block),
                         groupCountY: recording.FrameHeight.CeilingDivide(divisor: block), groupCountZ: 1);
                     recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: colour.BufferHandle,
                         sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
                         destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
-                    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: step, value: 1u);
-                    recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: step, offset: 0,
+                    recorder.PushIndex(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, index: 1u,
                         pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
                     recorder.Dispatch(commandBufferHandle: commandBuffer,
                         groupCountX: recording.Width.CeilingDivide(divisor: m_reflectionCell).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels),
@@ -862,18 +794,14 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     var bins = recording.Outputs[OutputIndexOf(member: SdfWorldPackage.ShadeTilesWritten)].Buffer!;
                     var pipeline = tables.Pipeline(kernel: SdfKernel.ViewsBins);
                     var tiles = (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels) * recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels));
-                    Span<byte> step = stackalloc byte[sizeof(uint)];
-
-                    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: step, value: 0u);
                     BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
-                    recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: step, offset: 0,
+                    recorder.PushIndex(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, index: 0u,
                         pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
                     recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
                     recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: bins.BufferHandle,
                         sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
                         destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
-                    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: step, value: 1u);
-                    recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: step, offset: 0,
+                    recorder.PushIndex(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, index: 1u,
                         pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
                     recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: Math.Clamp(tiles.CeilingDivide(divisor: 64u), 1u, 65535u), groupCountY: 1, groupCountZ: 1);
                     return;
@@ -1046,6 +974,13 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             buffer: (IsGlass ? recording.Outputs[2].Buffer! : tables.DummyBuffer),
             set: set
         );
+        // The glass pass marks and lists every tile it accumulates into in the glass tiles, its fourth output.
+        tables.WriteMeshBuffer(
+            bound: ref m_meshSetBuffers[meshSet][MeshSetGlassTiles],
+            buffer: (IsGlass ? recording.Outputs[3].Buffer! : tables.DummyBuffer),
+            member: SdfWorldPackage.GlassTilesWritten,
+            set: set
+        );
 
         // The raster set binds dummies at the compute-only members and reads the command identity alias. The
         // selection kernel's own sets bind its writable state and each phase's sampled target.
@@ -1070,6 +1005,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             tables.WriteMeshWorkCounters(bound: ref bound[MeshSetCounters], counters: WorkCountersOf(recording: in recording).Buffer, set: occlusionSet);
             tables.WriteMeshBuffer(bound: ref bound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: occlusionSet);
             tables.WriteMeshAccumulation(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, set: occlusionSet);
+            tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassTiles], buffer: tables.DummyBuffer, member: SdfWorldPackage.GlassTilesWritten, set: occlusionSet);
             occlusion.Bind(bound: bound, boundTarget: ref m_occlusionSetTargets[index], first: MeshSetBuffers, set: occlusionSet, tables: tables,
                 target: ((twoPhase && (phase != 0)) ? target.ImageViewHandle : tables.SampledFiller.ImageViewHandle));
         }

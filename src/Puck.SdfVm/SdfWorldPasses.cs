@@ -220,6 +220,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             if (context.Part == SdfWorldPackage.Parts.GlassShade) {
                 return new SdfGlassRecorder(context: context, groups: groups, owner: this, view: view);
             }
+            if (context.Part is SdfWorldPackage.Parts.GlassClear or SdfWorldPackage.Parts.GlassTiles) {
+                return new SdfGlassTilesRecorder(context: context, groups: groups, owner: this, view: view);
+            }
             return new SdfWorldPassRecorder(
                 context: context,
                 groups: groups,
@@ -892,23 +895,27 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             residency.BeginFrame(frameSeconds: m_context.FrameDeltaSeconds);
         }
     }
-    // The plan a binned view's bins pass writes its jobs' arguments for, made from the frame, the view's light mask and the
-    // passes' common extent, priced for the residency's shading selection, and committed as the instance's plan. It bins
-    // only while the view's residency shades in bins (SdfWorldResidency.ShadesInBins), and is unsplit otherwise.
-    internal SdfShadeDispatch CommitShadePlan(string instance, SdfFrame frame, uint width, uint height, int tableLights, UInt128 lightMask) {
+    // The plan a pass writes its jobs' indirect arguments for, made from the frame, the view's light mask and the passes'
+    // common extent, priced for the residency's shading selection, and committed as the instance's plan for its kind: a
+    // binned view's bins pass commits the views plan, which bins only while the view's residency shades in bins
+    // (SdfWorldResidency.ShadesInBins) and is unsplit otherwise; the glass tiles pass commits the glass plan, unsplit and
+    // priced for every interface a glass pixel shades.
+    internal SdfShadeDispatch CommitShadePlan(string instance, SdfFrame frame, uint width, uint height, int tableLights, UInt128 lightMask, bool glass = false) {
         var entry = Refresh(instance: instance);
         var residency = entry.View?.Residency;
-        var plan = SdfShadeDispatch.For(previous: entry.ShadePlan, frame: frame, glass: false, height: height, tableLights: tableLights,
-            lightMask: lightMask, width: width, tier: (residency?.ShadeTier ?? SdfShadeTier.Neutral), binned: (residency?.ShadesInBins ?? false));
+        var plan = SdfShadeDispatch.For(previous: (glass ? entry.GlassPlan : entry.ShadePlan), frame: frame, glass: glass, height: height, tableLights: tableLights,
+            lightMask: lightMask, width: width, tier: (residency?.ShadeTier ?? SdfShadeTier.Neutral), binned: (!glass && (residency?.ShadesInBins ?? false)));
 
-        entry.ShadePlan = plan;
+        if (glass) { entry.GlassPlan = plan; } else { entry.ShadePlan = plan; }
         return plan;
     }
-    // The plan a binned view's views pass records with: the one whose arguments the bins pass last wrote, so views advances
-    // by the widths the arguments hold even while the bins pass stands (a views pass re-records alone when only an input
-    // the filter does not read changed, and a publication changes the selection's pricing without re-rendering either).
-    internal SdfShadeDispatch ShadePlanOf(string instance, SdfFrame frame, uint width, uint height, int tableLights, UInt128 lightMask) =>
-        (Refresh(instance: instance).ShadePlan ?? CommitShadePlan(frame: frame, height: height, instance: instance, lightMask: lightMask, tableLights: tableLights, width: width));
+    // The plan a pass dispatching indirectly records with: the one whose arguments the pass before it last wrote, so it
+    // advances by the widths the arguments hold even while that pass stands (a views or glass shading pass re-records alone
+    // when only an input the arguments' writer does not read changed, and a publication changes the selection's pricing
+    // without re-rendering either).
+    internal SdfShadeDispatch ShadePlanOf(string instance, SdfFrame frame, uint width, uint height, int tableLights, UInt128 lightMask, bool glass = false) =>
+        ((glass ? Refresh(instance: instance).GlassPlan : Refresh(instance: instance).ShadePlan) ??
+            CommitShadePlan(frame: frame, glass: glass, height: height, instance: instance, lightMask: lightMask, tableLights: tableLights, width: width));
     /// <summary>Gets the shading submissions of the package's released recorders, which its next frame completes unless
     /// a device loss comes first.</summary>
     public SdfShadeReleases ShadeReleases { get; } = new();

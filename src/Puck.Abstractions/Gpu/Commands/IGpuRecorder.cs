@@ -66,6 +66,19 @@ public interface IGpuRecorder {
     /// <param name="offset">The byte offset, a multiple of four.</param>
     /// <param name="data">The non-empty payload, a multiple of four bytes.</param>
     void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data);
+    /// <summary>Records an update of the push index: the one little-endian word a layout pushes at offset zero
+    /// (<see cref="GpuPipelineLayoutDescription.PushIndexBytes"/>), through <see cref="PushConstants"/>.</summary>
+    /// <param name="commandBufferHandle">The command buffer being recorded.</param>
+    /// <param name="bindPoint">The bind point of the pipeline the index is read by.</param>
+    /// <param name="pipelineLayoutHandle">That pipeline's layout.</param>
+    /// <param name="stageFlags">The defined shader stages that read the index, as the layout declares them.</param>
+    /// <param name="index">The index.</param>
+    void PushIndex(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint index) {
+        Span<byte> data = stackalloc byte[sizeof(uint)];
+
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: data, value: index);
+        PushConstants(bindPoint: bindPoint, commandBufferHandle: commandBufferHandle, data: data, offset: 0, pipelineLayoutHandle: pipelineLayoutHandle, stageFlags: stageFlags);
+    }
     /// <summary>Binds a geometry buffer's vertices at vertex binding 0.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="bufferHandle">The <see cref="IGpuBuffer.BufferHandle"/> of a buffer created with

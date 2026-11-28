@@ -5,13 +5,14 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 // The glass shading pass (SdfWorldPackage.Parts.GlassShade), which reads the glass interface
-// (SdfWorldInterfaces.GlassParameters): one invocation a pixel of the render grid, writing the lit image views wrote over
-// again with each glass pixel shaded over the opaque image behind it. It binds the residency's World set, whose tables
-// hold the material table, the lights and the sky's environment map, and a pass group binding the lit image and the glass
-// target as sampled images, the visibility records and the glass sums as buffers, the reactivity a temporal view's
-// resolve reads (the tables' dummy in any other view), the image it writes, and the glass probe history it reads and
-// writes (SdfHistoryPorts). Its block holds the frame's common values, copied by name from the world layout, the
-// temporal ones every part of a frame writes alike among them.
+// (SdfWorldInterfaces.GlassParameters): a group for each tile the glass raster listed, dispatched indirectly at the
+// widths of the glass plan the glass tiles pass wrote its arguments for (SdfWorldPasses.ShadePlanOf with glass), writing the glass
+// image and the sky filter of each tile that shows glass. It binds the residency's World set, whose tables hold the
+// material table, the lights and the sky's environment map, and a pass group binding the lit image and the glass target
+// as sampled images, the visibility records and the glass sums as buffers, the reactivity a temporal view's resolve reads
+// (the tables' dummy in any other view), the image it writes, the glass tiles it reads, marks and writes the filter into,
+// and the glass probe history it reads and writes (SdfHistoryPorts). Its block holds the frame's common values, copied by
+// name from the world layout, the temporal ones every part of a frame writes alike among them.
 internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     private static readonly SdfFrameBlock.Copy[] FrameCopies = SdfFrameBlock.CopiesInto(layout: SdfWorldInterfaces.GlassParameters);
     // The pass's inputs by position: the lit image, the visibility records, the glass target and the glass sums, then
@@ -29,8 +30,8 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
     private readonly SdfWorldTables?[] m_portTables;
     // The glass probe history's ports (SdfWorldPackage.GlassProbeHistory).
     private readonly SdfHistoryPorts m_history;
-    // The output position of the sky filter the pass writes (SdfWorldPackage.GlassSkyFilter).
-    private readonly int m_skyFilterOutput;
+    // The output position of the glass tiles the pass marks and writes the sky filter into (SdfWorldPackage.GlassTiles).
+    private readonly int m_tilesOutput;
 
     private bool m_disposed;
     private SdfShadeDispatch? m_shadePlan;
@@ -48,10 +49,10 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
             outputs: outputs,
             slots: context.InFlightFrames
         );
-        // The filter is a version of the clear's storage, so the compiled port may carry either name.
-        m_skyFilterOutput = Array.FindIndex(array: outputs, match: static name => (name is SdfWorldPackage.Parts.GlassSkyFilter or SdfWorldPackage.Parts.GlassSkyFilterCleared));
-        if (m_skyFilterOutput < 0) {
-            throw new InvalidOperationException(message: $"The glass shading pass of '{context.Instance}' declares no sky filter output (outputs: {string.Join(separator: ", ", values: outputs)}).");
+        // The shaded tiles are a version of the clear's storage, so the compiled port may carry any of its names.
+        m_tilesOutput = Array.FindIndex(array: outputs, match: SdfGlassTilesRecorder.IsTilesVersion);
+        if (m_tilesOutput < 0) {
+            throw new InvalidOperationException(message: $"The glass shading pass of '{context.Instance}' declares no glass tiles output (outputs: {string.Join(separator: ", ", values: outputs)}).");
         }
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Glass).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
@@ -93,8 +94,9 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
         m_work.Write(passSet: set, recording: recording);
         BindPorts(recording: in recording, set: set, tables: tables);
         m_history.Bind(layout: SdfWorldInterfaces.GlassParameters.Layout, pass: m_context.Pass, recording: in recording, set: set, tables: tables);
-        m_shadePlan = SdfShadeDispatch.For(previous: m_shadePlan, frame: frame, width: recording.Width, height: recording.Height,
-            tableLights: tables.Lights.Count, lightMask: tables.GlassLightMaskOf(frame: frame, view: index), glass: true, tier: residency.ShadeTier);
+        // The plan whose job widths the glass tiles pass wrote this pass's arguments at.
+        m_shadePlan = m_owner.ShadePlanOf(instance: m_context.Instance, frame: frame, width: recording.RenderWidth, height: recording.RenderHeight,
+            tableLights: tables.Lights.Count, lightMask: tables.GlassLightMaskOf(frame: frame, view: index), glass: true);
         var pipeline = m_shade.RecordPipeline(recording.Slot, residency, m_shadePlan, SdfKernel.Glass);
 
         recording.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, pipelineHandle: pipeline.Handle);
@@ -106,7 +108,7 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
             group: ((uint)ShaderInterfaceGroup.World),
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
-        m_shadePlan.Record(in recording, pipeline);
+        m_shadePlan.RecordIndirect(in recording, pipeline);
         return RenderGraphPackageOutcome.Drew;
     }
     public ulong ReadbackBytes => 0;
@@ -134,7 +136,11 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
         tables.WriteInterfaceBuffer(buffer: recording.Inputs[GlassSumsInput].Buffer!, layout: layout, member: SdfWorldPackage.GlassSums, set: set);
         bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.Output), descriptorSetHandle: set, imageViewHandle: recording.Outputs[0].ReadImage(latch: recording.Latch).ImageViewHandle);
         tables.WriteInterfaceBuffer(buffer: ((m_temporal ? recording.Outputs[1].Buffer : null) ?? tables.DummyBuffer), layout: layout, member: SdfWorldPackage.ReactivityWritten, set: set);
-        tables.WriteInterfaceBuffer(buffer: recording.Outputs[m_skyFilterOutput].Buffer!, layout: layout, member: SdfWorldPackage.GlassSkyFilterWritten, set: set);
+        tables.WriteInterfaceBuffer(buffer: recording.Outputs[m_tilesOutput].Buffer!, layout: layout, member: SdfWorldPackage.GlassTilesWritten, set: set);
+        // The members only the glass tiles' upkeep reads or writes.
+        tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: SdfWorldPackage.GlassTiles, set: set);
+        tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: SdfWorldPackage.GlassSumsClearWritten, set: set);
+        tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: SdfWorldPackage.GlassArgumentsWritten, set: set);
         m_history.Forget(slot: slot);
         m_portTables[slot] = tables;
     }

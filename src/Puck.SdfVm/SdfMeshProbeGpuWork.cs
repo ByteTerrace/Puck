@@ -674,9 +674,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: traced.LayoutHandle);
         // The traced kernel reads the published scene's root words at the base it is pushed: every residency's scene
         // shares the probe scenes' buffer (sdfProbeRootWord).
-        Span<byte> rootWord = stackalloc byte[sizeof(uint)];
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: rootWord, value: (uint)m_sceneExport!.Prefix);
-        recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, data: rootWord, offset: 0,
+        recorder.PushIndex(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, index: (uint)m_sceneExport!.Prefix,
             pipelineLayoutHandle: traced.LayoutHandle, stageFlags: GpuShaderStage.Compute);
         if (relight) {
             recorder.DispatchIndirect(command, work!.BufferHandle, 0);

@@ -50,25 +50,27 @@
 bool sdfFieldShown() {
     return ((passGroup.debugMode == SDF_DEBUG_VIEW_PROXIMITY) || (passGroup.fieldStyle.z > 0.0));
 }
+// The render pixel under an output pixel.
+uint2 sdfRenderPixelOf(uint2 pixel) {
+    uint2 grid = max(passGroup.imageExtent, uint2(1u, 1u));
+
+    return min(((pixel * passGroup.imageExtent) / max(passGroup.extent, uint2(1u, 1u))), (grid - 1u));
+}
 // The index of the render pixel under an output pixel in a buffer of one word a render pixel, and whether a buffer of
 // `count` words holds one for every render pixel: the tables' dummy, which a view binds where no pass wrote the buffer
 // this frame, does not, and a pixel then reads none of it.
 bool sdfRenderWordIndex(uint2 pixel, uint count, out uint index) {
     uint2 grid = max(passGroup.imageExtent, uint2(1u, 1u));
-    uint2 render = min(((pixel * passGroup.imageExtent) / max(passGroup.extent, uint2(1u, 1u))), (grid - 1u));
+    uint2 render = sdfRenderPixelOf(pixel);
 
     index = ((render.y * passGroup.imageExtent.x) + render.x);
     return (count >= (grid.x * grid.y));
 }
 // The tint the glass a pixel shows passes the sky behind it with (frame/sdf-glass-sky-filter.hlsli), from the glass sky
-// filter's word at the render pixel under the output pixel: one where no glass pass wrote the filter this frame.
+// filter's word at the render pixel under the output pixel: one where the glass tiles do not mark its tile, which is
+// every pixel of a view whose glass passes did not run this frame (sdfGlassTileFilter).
 float3 sdfCompositeGlassTint(uint2 pixel) {
-    uint count;
-    uint stride;
-    uint index;
-
-    sdfGlassSkyFilter.GetDimensions(count, stride);
-    return (sdfRenderWordIndex(pixel, count, index) ? sdfGlassSkyTint(sdfGlassSkyFilter[index]) : float3(1.0, 1.0, 1.0));
+    return sdfGlassSkyTint(sdfGlassTileFilter(sdfGlassTiles, sdfRenderPixelOf(pixel), passGroup.imageExtent));
 }
 // The field views over a composited, display-referred pixel: the proximity view dims the scene, then the field pass's
 // word at the render pixel under the output pixel covers it by its share. A view whose graph has not yet taken the field

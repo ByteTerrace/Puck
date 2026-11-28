@@ -79,8 +79,8 @@ tables the upload wrote. The passes finish that view's own output image:
    upload (with the world's shadows) → mask → bake → mesh → pyramid → surface → views → sky → composite
 ```
 
-A view of a program that holds a glass shape runs three more passes between
-views and the sky, `glass-clear → glass → glass-shade`
+A view of a program that holds a glass shape runs four more passes between
+views and the sky, `glass-clear → glass → glass-tiles → glass-shade`
 ([glass after the opaque image](#glass-after-the-opaque-image)); any other view
 runs the chain as it stands and pays nothing for them.
 
@@ -425,13 +425,15 @@ scale with the triangles drawn and the fragments they cover. `surface` and
 occlusion and shadow filter taps, and a hit pixel's lighting scales with the
 lights and volumes it reads. `composite` scales with the output's pixels and
 `sky` with the uncovered ones. In a view with glass, `glass` scales with the
-glass draws' fragments (every face of each, front and back) and `glass-shade`
-with the render grid's pixels, a copy for every pixel no glass covers and a
-refracted read, up to eight for a frosted pane, for every pixel glass does;
-`glass-clear` clears only the rows of the sums the previous raster could have
-written, from the rows its glass draws' boxes spanned
-(`SdfWorldTables.GlassRows`), so a view whose glass covers a band of the screen
-clears that band rather than the whole buffer.
+glass draws' fragments (every face of each, front and back), and the other glass
+passes with the 8 by 8 tiles of the render grid those fragments touched, which
+the raster lists in the glass tiles (`frame/sdf-glass-tiles.hlsli`):
+`glass-shade` runs a group a listed tile, dispatched indirectly from the count,
+with a refracted read, up to eight for a frosted pane, for every pixel glass
+covers, and `glass-clear` zeroes only the sums of the tiles the previous raster
+listed. The sky, the resolve and the composite read the glass image only in the
+tiles that show glass and the lit image views wrote everywhere else, so nothing
+copies the image.
 
 Each pass exposes `gpu.shapes.evaluated` beside `gpu.march.steps`; on the
 baked-mesh path only `bake` evaluates shapes, so a settled frame counts none.
@@ -841,15 +843,16 @@ phase alike. The standard's stained glass opts in; water and window panes
 keep their grey shadow or none.
 
 A view of a program with a glass shape runs the glass fragment
-(`SdfWorldPackage.WithGlass`), three passes between views and the sky, and
-every later pass reads the image the last of them writes in the lit image's
-place:
+(`SdfWorldPackage.WithGlass`), four passes between views and the sky, and
+every later reader of the lit image reads the image the last of them writes
+wherever the glass tiles mark the pixel's tile:
 
 | Pass | Does |
 |---|---|
-| `glass-clear` | Zeroes the glass sums, whose stride is `SdfWorldPackage.GlassSumWords`. |
-| `glass` | Rasterizes the glass draws. Its reversed-Z target retains the nearest front face before the opaque hit. Integer sums hold the clipped path length, RGB optical depth, winding, and material key. The layer list holds the nearest `SdfWorldPackage.GlassLayers` front faces in distance order, and a word holds the nearest back face. |
-| `glass-shade` | Writes the lit image again, shading the target's nearest front face and the layer list's faces after it, nearest first, each by the one loop body: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read once where the ray, bent by Snell's law at each interface and carried through its share of the glass, carries on parallel to the pixel's ray to the opaque hit's depth, and absorbed by Beer–Lambert over the optical depth the sums hold; the interfaces compose front to back, each showing its own light under what the nearer ones pass; an emissive glass adds its emission (the material's `emissive`, scaled by its emissive lane) to what it shows; a material's flow layer (`sdfShadeFlow`, the one the light stage runs) tilts the normal it reflects and refracts by; the surroundings reflect by Fresnel as an opaque surface's do (`worldEnvironmentReflection` blurred by the roughness, then `sdfMeshReflection` from the pixel's one probe gather, the sky alone where no probe answers), and each light adds its highlight through the one light interface (`sdfLightResponse`), its shadowing the probes'; the medium and the contact (below) add their light; frost spreads the read over a disc of taps whose radius grows with each interface's roughness and its distance to what lies behind. |
+| `glass-clear` | Zeroes the glass sums (`SdfWorldPackage.GlassSumWords` words a pixel, laid out tile by tile) of the tiles the previous raster listed, and the glass tiles' count and mask. |
+| `glass` | Rasterizes the glass draws. Its reversed-Z target retains the nearest front face before the opaque hit. Integer sums hold the clipped path length, RGB optical depth, winding, and material key. The layer list holds the nearest `SdfWorldPackage.GlassLayers` front faces in distance order, and a word holds the nearest back face. Every tile it writes sums in is marked and listed in the glass tiles. |
+| `glass-tiles` | Writes `glass-shade`'s indirect arguments from the count of listed tiles. |
+| `glass-shade` | Shades each listed tile into the glass image, writing every pixel of a tile where some pixel shows glass (the lit image's own texel where none covers it) and giving back the mark of a tile where none does; at a glass pixel, shading the target's nearest front face and the layer list's faces after it, nearest first, each by the one loop body: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read once where the ray, bent by Snell's law at each interface and carried through its share of the glass, carries on parallel to the pixel's ray to the opaque hit's depth, and absorbed by Beer–Lambert over the optical depth the sums hold; the interfaces compose front to back, each showing its own light under what the nearer ones pass; an emissive glass adds its emission (the material's `emissive`, scaled by its emissive lane) to what it shows; a material's flow layer (`sdfShadeFlow`, the one the light stage runs) tilts the normal it reflects and refracts by; the surroundings reflect by Fresnel as an opaque surface's do (`worldEnvironmentReflection` blurred by the roughness, then `sdfMeshReflection` from the pixel's one probe gather, the sky alone where no probe answers), and each light adds its highlight through the one light interface (`sdfLightResponse`), its shadowing the probes'; the medium and the contact (below) add their light; frost spreads the read over a disc of taps whose radius grows with each interface's roughness and its distance to what lies behind. |
 
 For a closed solid each back face adds and each front face subtracts the
 distance from the near plane to that crossing, clipped at the opaque hit.
@@ -879,12 +882,13 @@ so a pane over a pool keeps the pane's tint thin and the pool's deep, and the
 interfaces together absorb exactly what the sums hold. The even part assumes
 the later panes alike, since the sums keep only the nearest exit. The glass pixel's coverage is the light behind's, darkened by
 the luminance of the RGB share the interfaces pass. That share goes to the
-composite in the glass's sky filter (`SdfWorldPackage.GlassSkyFilter`, one word
-a render pixel), and the composite tints its sky share by the filter's chroma,
-so the sky behind a stained pane shows through tinted as the opaque light behind
-it is, at the pixel's own direction, unrefracted and unfrosted. The composite
-binds the filter only in a frame whose glass passes ran; otherwise it reads the
-tables' dummy and passes the sky as it is. A frosted read leaves out each tap
+composite in the glass's sky filter (one word a render pixel of each tile that
+shows glass, in the glass tiles), and the composite tints its sky share by the
+filter's chroma, so the sky behind a stained pane shows through tinted as the
+opaque light behind it is, at the pixel's own direction, unrefracted and
+unfrosted. The composite binds the tiles only in a frame whose glass passes ran;
+otherwise it reads the tables' dummy, which marks no tile, and passes the sky as
+it is. A frosted read leaves out each tap
 that lands on a surface nearer than the glass, as the centre read does, so a
 frame, came or arch in front of a pane is not spread over it. The reflection and the
 highlights pass through the atmosphere over the glass's own distance; the light

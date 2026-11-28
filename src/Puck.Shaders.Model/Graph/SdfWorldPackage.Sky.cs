@@ -85,7 +85,11 @@ public static partial class SdfWorldPackage {
             Written(element: ShaderValueType.Uint, name: ExposureMeterWritten),
             Written(element: ShaderValueType.Uint, name: MoteLightWritten),
             Read(element: ShaderValueType.Uint, name: FieldColors),
-            Read(element: ShaderValueType.Uint, name: GlassSkyFilter),
+            // The glass image and the glass tiles (GlassTiles): every view's sky and a native view's composite read the
+            // glass image where the tiles mark a pixel's tile, and the composite tints the sky behind glass by the tiles'
+            // sky filter; a view with no glass this frame binds a filler and the tables' dummy, which holds no tile.
+            ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: GlassLitImage, type: ShaderValueType.Float4),
+            Read(element: ShaderValueType.Uint, name: GlassTiles),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyBaseImage, type: ShaderValueType.Float4),
             .. SkyUpperImages.Select(selector: static name => ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: name, type: ShaderValueType.Float4)),
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: SkyBaseWritten, type: ShaderValueType.Float4),
