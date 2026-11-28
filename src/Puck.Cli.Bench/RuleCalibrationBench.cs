@@ -30,8 +30,9 @@ internal static class RuleCalibrationBench {
     private const int SweepCells = 4096;
     private const int LongFiringEffects = 16;
     private const int GrowthArenas = 32;
-    private const int GrowthFixedCells = 16_384;
-    private const int GrowthDoublings = 16;
+    // Both rows sit at the arena's per-row ceiling: the fixed row full, the growable row doubling up to it.
+    private const int GrowthFixedCells = Puck.State.StateCapacity.MaxCellsPerRow;
+    private static readonly int GrowthDoublings = System.Numerics.BitOperations.Log2(value: (uint)Puck.State.StateCapacity.MaxCellsPerRow);
 
     private sealed record Scenario(string Name, string Source);
     // Per tick: the rule part's time and what the evaluator spent, the effect units split into doors and the rest.
@@ -73,8 +74,8 @@ internal static class RuleCalibrationBench {
             Each figure is solved from the medians of the measured rounds against the evaluator's own spent counts
             (world.budget.rules --spent's units, the doors counted apart), so it is picoseconds per unit exactly as
             the sheet counts units.
-            Arena growth is timed apart, over arenas whose growable row doubles to 65,536 cells beside a fixed
-            16,384-cell row, against StateArena.ReservationWork. The host passes (flock affinities, decision perception)
+            Arena growth is timed apart, over arenas whose growable row doubles to the per-row cell ceiling beside a full
+            fixed row, against StateArena.ReservationWork. The host passes (flock affinities, decision perception)
             are not measured and take the check figure, which the build note says.
 
             Take the reading on a quiet machine (puck lease quiet), then paste the printed `rules { ... }` block into
