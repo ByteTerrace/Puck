@@ -285,7 +285,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, ISdfRefitDresser, IDisp
     /// (<see cref="WorldRoutedWindow.View"/>), whose world has not moved since its latest dress: no definition, composition
     /// or state delivery changed a value, no body moved or is left moving (<see cref="WorldSessionMirror.BodyRevision"/>,
     /// <see cref="WorldSessionMirror.MovingBodyCount"/>), the stamp pool rests past one period of the hold
-    /// (<see cref="WorldCreationInstances.Rests"/>), the presentation's levers stand, and the presentation is neither
+    /// (<see cref="WorldCreationInstances.Rests(double)"/>), the presentation's levers stand, and the presentation is neither
     /// tick-locked nor converging. The views are the windows' then the cameras <see cref="Film"/> adds, with the sky layers
     /// fitted to them (<see cref="FitSkyViews"/>) against the held sky; the settings are the held frame's under this
     /// frame's interest. A scene a seat is presented in, or a second scene of the presentation's own world
