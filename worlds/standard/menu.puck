@@ -1,0 +1,547 @@
+// The player's menu, made of pages (docs/decisions/play.md, "The menu is one thing: pages on a worn screen"). A
+// library: it hands its importers functions and a template and emits no document. It names no body and no look: the
+// screen that shows it is worn-screen.puck's and the avatar's or suit's that mounts it, and the menu's state, rules,
+// controls and pages are this file's.
+//
+// A press of the menu key (`menu`: I, Escape, the pad's Menu button, or the View page's West) opens it and the next
+// closes it, as `cancel` does. Opening raises the worn screen's arm and opens its cover, and the camera focuses in on
+// it, in one of two reads the rules choose every tick:
+//
+//   focused   the body stands still: the arm comes all the way up and the camera focuses in fully, for working the
+//             screen
+//   glance    the body moves (a movement key held, or it is in the air): the arm comes up part way (`glance`) and the
+//             camera focuses in as far, a look at the screen while moving
+//
+// Whether the world pauses while the menu is open is the world's pause policy (docs/plans/hub-and-saves.md, gap 10), not
+// this library's; the body keeps every movement control while it is open. At a machine the pad's Menu button is the
+// machine's Start, and holding it for `hold` opens the menu (docs/decisions/play.md, "Menu and an emulated console's
+// Start"). The step keys (the arrows' up and down, the d-pad's) move the mark on a page and the page keys (the arrows' left and right, the
+// d-pad's) turn the pages; confirm (Enter, the pad's South) acts on the marked line.
+//
+// The screen's arm, cover and camera are presentation: the rules write aims keyed by body, each eased by a dynamics row,
+// which the rig and the camera read. Which forearm carries the screen is the player's: the `wornScreenSide` body register
+// (0 left, the default, 1 right), which crosses worlds with the body. `menu.hand.left` and `menu.hand.right` ask for a
+// forearm through the body's `wornScreenSideAsk` cell (-1 asks nothing), which a rule carries to the register.
+//
+// The state, keyed by body, for a rig, a camera and a screen to read:
+//
+//   menuOpen            1 while the menu is open
+//   menu                the body register following it, the input family's selector
+//   wornScreenSide      the body register naming the forearm, 0 left and 1 right
+//   menuPage            the page shown, its place in `pages`
+//   menuMark            the marked line on the companions page, 1 for the first kind
+//   menuRaiseLeft       the left arm's aim: 1 the focused read, `glance` the glance read, 0 closed; eased by `menu-arm`;
+//   menuRaiseRight      and the right arm's. The screen's cover opens as its arm rises, and the camera focuses in toward
+//                       the rising arm's side as far as it rises (worn-screen.puck).
+//   menuTabs            the page tabs, the shown page lit (markup)
+//   menuHint            the shown page's controls
+//   menuBody            the shown page's lines
+//   menuCompanion<i>    on the companions page, the i-th kind's line: its name and whether it is kept, with you or marked
+//
+// Pages are data: { id, title, hint, lines }. The companions page is the first and lists the kinds the character can keep
+// (companion-roster.puck), the active one marked "with you"; a pick on a kept kind makes it the active companion. Every
+// other page shows its own lines, which the lane that owns the page writes: `menuLines<p>` keyed by body is page p's text
+// (a Text row, seeded with the page's `lines`), and a lane that writes it while the page is shown writes
+// `menuShownLines` -1 for that body too, so the screen takes the new text. The quests, marks and notes pages wait for
+// their lanes this way.
+//
+// The text a screen shows is the world's, not one body's: a text paint's template reads a literal key, so the screen
+// shows the menu of the body `key` names (`menuScreenPaints`), the first seat by default.
+//
+//   import "../standard/menu"
+//   menuPlay(kinds: rosterKinds)
+//   // in the avatar's or suit's creation, the worn screen (worn-screen.puck), whose glass wears `menuScreenPaints`
+//   // in a world with input modes: families [menuFamily(), ...] and `menu` among a family's channels
+//
+// The state also holds `wornScreenSideAsk`, the due tick of a hold (`menuHoldDue`) and the marks the screen's texts are
+// copied by (`menuShownPage`, `menuShownLines`, `menuCompanionCode<i>`, `menuCompanionShown<i>`). Every rule sweeps `$players`, and each carries as
+// few effects as it can: a rule is priced by its effects times the players it may fire for.
+
+// The screen's look: a deep plum field the interface glows on, a mint for the companion with you, an amber for the mark,
+// a cream for what is kept and a muted lilac for the rest, with a mint rule under the tabs. Minimal on purpose; a
+// reference restyles it here.
+let menuGlass = { color: "#140E1C", roughness: 0.3, specular: 0.04, emissive: 2600, emissiveLane: 0 }
+let menuLook = {
+  field: "#140E1C"
+  rule: "#7FD8B4"
+  lit: "#FFC46A"
+  kept: "#F2E6CF"
+  with: "#7FD8B4"
+  dim: "#8E7FA3"
+  quiet: "#B7A9C9"
+}
+
+// The menu's pages, the companions first. A page's `lines` are its text until its lane writes its own.
+let menuPages = [
+  { id: "companions", title: "COMPANIONS", hint: "< >  pages     ^ v  choose     OK  call", lines: "" }
+  { id: "quests", title: "QUESTS", hint: "< >  pages", lines: "No quest followed yet." }
+  { id: "marks", title: "MARKS", hint: "< >  pages", lines: "No marks kept yet." }
+  { id: "notes", title: "NOTES", hint: "< >  pages", lines: "No notes written yet." }
+]
+
+// The tabs line for page `shown`: every page's title, the shown one lit.
+function menuTabsLine(pages, shown, look) = join(
+  map(range(0, length(pages)), p => $"[color={(p == shown) ? look.lit : look.dim}]{pages[p].title}[/color]"),
+  "   "
+)
+
+// A companion line's code: 0 a kind not kept, 2 one kept and resting, 4 the one with you, each plus 1 while marked, and
+// 6 for nothing (another page is shown).
+function menuMarked(code) = contains([1, 3, 5], code)
+function menuCompanionText(kind, code, look) = ((code == 6) ? "" :
+  ((code < 2) ? $"[color={menuMarked(code) ? look.lit : look.dim}]{menuMarked(code) ? "> " : "  "}???   not met[/color]" :
+    $"[color={menuMarked(code) ? look.lit : ((code >= 4) ? look.with : look.kept)}]{menuMarked(code) ? "> " : "  "}{kind.name}   {(code >= 4) ? "with you" : (menuMarked(code) ? "call" : "resting")}[/color]"))
+
+// The family that offers the menu's channels while it is open. Opening and closing keep `keep` held, so a body
+// glancing at its worn screen while it walks keeps walking.
+function menuFamily(suspendedBy = [], channels = ["menuStep", "menuPage", "confirm", "cancel"], keep = [
+  "forward"
+  "strafe"
+  "turn"
+  "run"
+]) = {
+  name: "menu"
+  selector { kind: BodyState, name: "menu" }
+  default: "closed"
+  states [
+    { name: "closed", values ["0"], channels [] }
+    { name: "open", values ["1"], channels: channels }
+  ]
+  suspendedBy: suspendedBy
+  transitions [
+    { from: "closed", to: "open", keep: keep }
+    { from: "open", to: "closed", keep: keep }
+  ]
+}
+
+// The screen's interface, as the paints of the palette slot its screen wears. `parent` is the screen shape, a box whose
+// local +Z is the glass's outward normal, +X across it as the reader sees it and +Y up it; `half` its half extents
+// across and up. `key` is the body whose menu it shows; `kinds` the roster's (one line each).
+function menuScreenPaints(parent, half, kinds, key = "0", look = menuLook) = concat(
+  [
+    // The tabs across the top, a rule under them, the page's lines and the controls along the bottom.
+    menuScreenText(
+      parent,
+      half,
+      [-0.94, 0.94, 0.62, 0.94],
+      $"{{state.menuTabs.{key}}}",
+      look.dim,
+      0.2,
+      "center",
+      true
+    )
+    {
+      parent: parent
+      type: "Box"
+      position [0, (half[1] * 0.58), 0]
+      scale [(half[0] * 0.94), (half[1] * 0.012), 0.02]
+      color: look.rule
+    }
+    menuScreenText(
+      parent,
+      half,
+      [-0.94, 0.94, -0.96, -0.74],
+      $"{{state.menuHint.{key}}}",
+      look.dim,
+      0.14,
+      "center",
+      false
+    )
+    menuScreenText(
+      parent,
+      half,
+      [-0.9, 0.9, -0.7, 0.5],
+      $"{{state.menuBody.{key}}}",
+      look.kept,
+      0.17,
+      "left",
+      false,
+      true
+    )
+  ],
+  map(range(0, length(kinds)), i => menuScreenText(
+    parent,
+    half,
+    [-0.9, 0.9, (menuCompanionTop(i) - 0.26), menuCompanionTop(i)],
+    $"{{state.menuCompanion{i}.{key}}}",
+    look.kept,
+    0.2,
+    "left",
+    true
+  ))
+)
+// The top of the companions page's i-th line, as a fraction of the screen's half height.
+function menuCompanionTop(i) = (0.46 - (i * 0.3))
+// A text in the rectangle `box` [x0, x1, y0, y1] of the screen, in fractions of its half extents: `em` a fraction of its
+// half height, `markup` reading the text's colour tags, `wrap` breaking lines at the rectangle's width.
+function menuScreenText(parent, half, box, template, ink, em, align, markup, wrap = false) = {
+  parent: parent
+  type: "Box"
+  position [(half[0] * ((box[0] + box[1]) / 2)), (half[1] * ((box[2] + box[3]) / 2)), 0]
+  scale [(half[0] * ((box[1] - box[0]) / 2)), (half[1] * ((box[3] - box[2]) / 2)), 0.02]
+  color: ink
+  text {
+    template: template
+    emHeight: (half[1] * em)
+    align: align
+    fit: true
+    wrap: wrap
+    markup: markup
+  }
+}
+
+// The menu of every player's body: its state, rules and controls. `kinds` are the roster's (companion-roster.puck);
+// `pages` the menu's, the companions first. `glance` is how far the arm comes up (and the camera focuses in) in the
+// glance read; `moving` how far a movement key must be held for the body to be moving. `seats` sizes
+// the body cells (bodies 0 to seats - 1 are seeded; a visitor's body takes a cell when its menu first changes, up
+// to `capacity`). The sources are what the controls bind: `openSources` (I, Escape and the pad's Menu button) and
+// `padOpenSources` (the View page) open and close it, and while it is open `stepUpSources`, `stepDownSources`,
+// `pageNextSources` and `pagePreviousSources` move the mark and turn the pages, `pickSources` confirm and `backSources`
+// close. An engaged machine reads the pad's Menu button as its own Start, and a mode offers a seat only one of the two
+// channels, so `startSources` keeps that button bound to `start` beside `menu` (the page lists both; the seat's mode
+// decides which one answers). `hold` is how long `start` is held at a machine to open the menu.
+template menuPlay(kinds, pages = menuPages, glance = 0.55, moving = 0.2, hold = 1s, seats = 4, capacity = 16, openSources = [
+  "keyboard.i"
+  "keyboard.escape"
+  "gamepad.start"
+], startSources = ["gamepad.start"], padOpenSources = ["gamepad.buttonWest", "keyboard.j"], stepUpSources = [
+  "keyboard.arrowUp"
+  "gamepad.dpadUp"
+], stepDownSources = [
+  "keyboard.arrowDown"
+  "gamepad.dpadDown"
+], pageNextSources = [
+  "keyboard.arrowRight"
+  "gamepad.dpadRight"
+], pagePreviousSources = [
+  "keyboard.arrowLeft"
+  "gamepad.dpadLeft"
+], pickSources = [
+  "keyboard.enter"
+  "gamepad.buttonSouth"
+], backSources = [
+  "keyboard.backspace"
+  "gamepad.buttonEast"
+], look = menuLook) {
+  let pageCount = length(pages)
+  let companionCount = length(kinds)
+  let bodies = map(range(0, seats), body => $"{body}")
+  let codes = range(0, 7)
+
+  dynamics [
+    { name: "menu-arm", f: 2.2, r: 0, zeta: 1 }
+  ]
+
+  state {
+    body [
+      { name: "menu", kind: "Counter", initial: 0, envelope { $type: "set", values [0, 1] } }
+      { name: "wornScreenSide", kind: "Counter", initial: 0, envelope { $type: "set", values [0, 1] } }
+    ]
+    world {
+      for name in ["menuOpen", "menuPage", "menuHoldDue"] {
+        row {
+          name: name
+          kind: Int
+          capacity: capacity
+          cells: map(bodies, body => { key: body, value: 0 })
+        }
+      }
+      row {
+        name: "menuMark"
+        kind: Int
+        capacity: capacity
+        cells: map(bodies, body => { key: body, value: 1 })
+      }
+      // The forearm a command asks for and what the screen's texts were last copied for, -1 for none.
+      for name in concat(
+        ["wornScreenSideAsk", "menuShownPage", "menuShownLines"],
+        flatMap(range(0, companionCount), i => [$"menuCompanionCode{i}", $"menuCompanionShown{i}"])
+      ) {
+        row {
+          name: name
+          kind: Int
+          capacity: capacity
+          cells: map(bodies, body => { key: body, value: -1 })
+        }
+      }
+      for eased in [
+        { name: "menuRaiseLeft", response: "menu-arm" }
+        { name: "menuRaiseRight", response: "menu-arm" }
+      ] {
+        row {
+          name: eased.name
+          kind: Fixed
+          capacity: capacity
+          dynamics {
+            row: eased.response
+          }
+          cells: map(bodies, body => { key: body, value: "0" })
+        }
+      }
+      for name in concat(
+        ["menuTabs", "menuHint", "menuBody"],
+        map(range(0, companionCount), i => $"menuCompanion{i}")
+      ) {
+        row {
+          name: name
+          kind: Text
+          capacity: capacity
+          cells: map(bodies, body => { key: body, value: "" })
+        }
+      }
+      // Each page's lines, keyed by body: what the page's own lane writes.
+      for p in range(0, pageCount) {
+        row {
+          name: $"menuLines{p}"
+          kind: Text
+          capacity: capacity
+          cells: map(bodies, body => { key: body, value: pages[p].lines })
+        }
+      }
+      // Every text a screen can show, by page or by a companion line's code.
+      row {
+        name: "menuTabTexts"
+        kind: Text
+        capacity: pageCount
+        cells: map(range(0, pageCount), p => { key: $"{p}", value: menuTabsLine(pages, p, look) })
+      }
+      row {
+        name: "menuHintTexts"
+        kind: Text
+        capacity: pageCount
+        cells: map(range(0, pageCount), p => { key: $"{p}", value: pages[p].hint })
+      }
+      for i in range(0, companionCount) {
+        row {
+          name: $"menuCompanionTexts{i}"
+          kind: Text
+          capacity: length(codes)
+          cells: map(codes, code => { key: $"{code}", value: menuCompanionText(kinds[i], code, look) })
+        }
+      }
+    }
+  }
+
+  // The menu key opens the menu and closes it, as `cancel` closes it: one answer, written once, with the body's
+  // register that follows it.
+  rule "menu-toggle" {
+    forEach: $players
+    local open = menuOpen[$each] ?? 0
+    when channel(each, menu) >= 1 or (channel(each, cancel) >= 1 and open == 1)
+    mode: Edge
+    menuOpen[$each] = 1 - open
+    setBodyState(key: $each, state: "menu", expression: 1 - open)
+  }
+
+  // A seat engaged at a machine holds `start` (the pad's Menu button) for `hold` to open the menu, or to close it: a
+  // press arms the due tick and a seat still holding `start` when it passes toggles the menu as the menu key does. A
+  // tap is only the machine's Start. `start` is offered only where a machine reads it, so a seat that walks never
+  // arms this. The machine still reads the press itself (docs/plans/hub-and-saves.md, gap 11).
+  rule "menu-hold-arm" {
+    forEach: $players
+    when channel(each, start) >= 1
+    mode: Edge
+    schedule menuHoldDue[$each] in hold
+  }
+  rule "menu-hold" {
+    forEach: $players
+    local open = menuOpen[$each] ?? 0
+    local due = menuHoldDue[$each] ?? 0
+    when channel(each, start) >= 1 and due > 0 and $tick >= due
+    mode: Level
+    menuHoldDue[$each] = 0
+    menuOpen[$each] = 1 - open
+    setBodyState(key: $each, state: "menu", expression: 1 - open)
+  }
+
+  // A forearm asked for becomes the body's choice.
+  rule "worn-screen-side" {
+    forEach: $players
+    local ask = wornScreenSideAsk[$each] ?? -1
+    when ask >= 0
+    mode: Level
+    setBodyState(key: $each, state: "wornScreenSide", expression: ask)
+    wornScreenSideAsk[$each] = -1
+  }
+
+  // The page keys turn the pages, round from the last to the first.
+  rule "menu-page" {
+    forEach: $players
+    local page = menuPage[$each] ?? 0
+    local step = channel(each, menuPage)
+    when (menuOpen[$each] ?? 0) == 1 and absolute(step) >= 0.5
+    mode: Edge
+    menuPage[$each] = ((step > 0) ? ((page + 1 >= pageCount) ? 0 : page + 1) : ((page <= 0) ? pageCount - 1 : page - 1))
+  }
+  if companionCount > 0 {
+    // On the companions page the step keys move the mark a line up or down, held at the ends, and confirm calls the
+    // marked kind when the character keeps it: it becomes the active companion.
+    rule "menu-step" {
+      forEach: $players
+      local mark = menuMark[$each] ?? 1
+      local step = channel(each, menuStep)
+      when (menuOpen[$each] ?? 0) == 1 and (menuPage[$each] ?? 0) == 0 and absolute(step) >= 0.5
+      mode: Edge
+      menuMark[$each] = clamp(mark - ((step > 0) ? 1 : -1), 1, companionCount)
+    }
+    rule "menu-pick" {
+      forEach: $players
+      local mark = menuMark[$each] ?? 1
+      // The marked kind when the body keeps it, else 0: `pick<n>` is the answer over the first n kinds.
+      local pick0 = 0
+      for (k, i) in kinds {
+        local $"pick{i + 1}" = (
+          ((mark == i + 1) and (bodyState(each, $"rosterKeeps{k.kind}") == 1)) ? k.kind : $"pick{i}"
+        )
+      }
+      local kind = $"pick{companionCount}"
+      when (menuOpen[$each] ?? 0) == 1 and (menuPage[$each] ?? 0) == 0 and channel(each, confirm) >= 1 and kind > 0
+      mode: Edge
+      setBodyState(key: $each, state: "companionActive", expression: kind)
+    }
+  }
+
+  // The read: what the arms aim at, which the cover and the camera follow, from whether the menu is open, whether the body moves and which
+  // forearm carries the worn screen. Written only when an aim changes.
+  rule "menu-read" {
+    forEach: $players
+    local open = menuOpen[$each] ?? 0
+    local moves = (
+      ((absolute(channel(each, forward)) + absolute(channel(each, strafe))) >= moving) or (fact(each, Airborne) == 1)
+    )
+    local raise = (open == 1) ? (moves ? glance : 1) : 0
+    local right = toInt(bodyState(each, wornScreenSide))
+    when (menuRaiseLeft[$each] ?? 0) != (raise * (1 - right)) or (menuRaiseRight[$each] ?? 0) != (raise * right)
+    mode: Level
+    menuRaiseLeft[$each] = raise * (1 - right)
+    menuRaiseRight[$each] = raise * right
+  }
+
+  // The screen's texts follow what they show, each written only when that changes: the tabs and controls with the page,
+  // the page's lines with the page, and each companion line with its code.
+  rule "menu-show-page" {
+    forEach: $players
+    local page = menuPage[$each] ?? 0
+    when (menuShownPage[$each] ?? -1) != page or (menuShownLines[$each] ?? -1) != page
+    mode: Level
+    menuShownPage[$each] = page
+    menuShownLines[$each] = page
+    setState(state: menuTabs, key: $each, fromState: menuTabTexts, fromKey: menuPage[$each] ?? 0)
+    setState(state: menuHint, key: $each, fromState: menuHintTexts, fromKey: menuPage[$each] ?? 0)
+    for p in range(0, pageCount) {
+      if page == p {
+        setState(state: menuBody, key: $each, fromState: $"menuLines{p}", fromKey: $each)
+      }
+    }
+  }
+  for (k, i) in kinds {
+    rule $"menu-companion-{k.id}" {
+      forEach: $players
+      local kept = bodyState(each, $"rosterKeeps{k.kind}") == 1
+      local active = kept and (bodyState(each, companionActive) == k.kind)
+      local marked = (menuMark[$each] ?? 1) == i + 1
+      local code = ((menuPage[$each] ?? 0) == 0) ? ((active ? 4 : (kept ? 2 : 0)) + (marked ? 1 : 0)) : 6
+      when ($"menuCompanionCode{i}"[$each] ?? -1) != code
+      mode: Level
+      $"menuCompanionCode{i}"[$each] = code
+    }
+    rule $"menu-companion-{k.id}-text" {
+      forEach: $players
+      when ($"menuCompanionShown{i}"[$each] ?? -1) != ($"menuCompanionCode{i}"[$each] ?? -1)
+      mode: Level
+      $"menuCompanionShown{i}"[$each] = $"menuCompanionCode{i}"[$each]
+      setState(
+        state: $"menuCompanion{i}",
+        key: $each,
+        fromState: $"menuCompanionTexts{i}",
+        fromKey: $"menuCompanionCode{i}"[$each]
+      )
+    }
+  }
+
+  commands [
+    {
+      name: "menu.hand.left"
+      help: "Wears the menu on a body's left forearm (the default): asks for it through the body's wornScreenSideAsk cell, which a rule carries to its wornScreenSide register."
+      parameters [{ name: "body", kind: Body, default: "0" }]
+      lines ["world.state.cell.set wornScreenSideAsk {body} 0"]
+    }
+    {
+      name: "menu.hand.right"
+      help: "Wears the menu on a body's right forearm: asks for it through the body's wornScreenSideAsk cell, which a rule carries to its wornScreenSide register."
+      parameters [{ name: "body", kind: Body, default: "0" }]
+      lines ["world.state.cell.set wornScreenSideAsk {body} 1"]
+    }
+  ]
+
+  // The menu key on the resting page and the View page, and the menu's own controls while it is open: the
+  // resting page's, with the step, page, pick and back keys in place of what those keys do there.
+  bindingOverlays [
+    {
+      id: "menu"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers [
+          {
+            id: "lt"
+            label: "LT"
+            pressThreshold: 0.55
+            releaseThreshold: 0.35
+            sources ["gamepad.leftTrigger", "keyboard.z"]
+          }
+        ]
+        contexts [
+          { family: "state:menuOpen", state: "1", group: "menu" }
+        ]
+        chords [
+          {
+            chord []
+            group: "play"
+            page {
+              id: "base"
+              entries [
+                { channel: "menu", id: "menu", label: "Menu", scale: 1, sources: openSources }
+                { channel: "start", id: "menuStart", scale: 1, sources: startSources }
+              ]
+            }
+          }
+          {
+            chord ["lt"]
+            group: "play"
+            page {
+              id: "pad-lt"
+              inherits: "base"
+              label: "View"
+              entries [
+                { channel: "menu", id: "viewMenu", label: "Menu", scale: 1, sources: padOpenSources }
+              ]
+            }
+          }
+          {
+            chord []
+            group: "menu"
+            page {
+              id: "menu"
+              inherits: "base"
+              label: "Menu"
+              entries [
+                { channel: "menuStep", id: "menuUp", label: "Up", scale: 1, sources: stepUpSources }
+                { channel: "menuStep", id: "menuDown", label: "Down", scale: -1, sources: stepDownSources }
+                { channel: "menuPage", id: "menuNext", label: "Next page", scale: 1, sources: pageNextSources }
+                {
+                  channel: "menuPage"
+                  id: "menuPrevious"
+                  label: "Previous page"
+                  scale: -1
+                  sources: pagePreviousSources
+                }
+                { channel: "confirm", id: "menuPick", label: "Call", scale: 1, sources: pickSources }
+                { channel: "cancel", id: "menuBack", label: "Close", scale: 1, sources: backSources }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

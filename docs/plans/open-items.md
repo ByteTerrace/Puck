@@ -6272,10 +6272,10 @@ the model.
   seat and a visitor's body at a terminal cannot type into it. Let one rule
   sweep every player's step events (each event bound with its owner), as
   `$players` sweeps their bodies.
-- [low] The terminal console closes only on the backtick: Escape is the host's,
-  reserved for the pause menu ([play decisions](../decisions/play.md#the-game)).
-  When the pause menu lands (hub plan H4), decide whether opening it closes an
-  open terminal console, so Escape still leaves the console in one press.
+- [low] The terminal console closes only on the backtick: Escape opens the
+  menu ([play decisions](../decisions/play.md#the-game)), which the console's
+  controls do not offer. Decide whether Escape should also close an open console
+  in one press.
 - Cross-check the Triton's reports against several independent sources (SDL
   is one second opinion, never the specification), then rewrite the input
   reference's Triton section to cite them:

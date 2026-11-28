@@ -10,11 +10,11 @@
 // so an entry the player made keeps its identity while it lives and reads absent once released. Each pool has a travel
 // class:
 //
-//   home      stays with the account: the journal's notes, the player's own tags and links between notes, where they
+//   home      stays with the account: the menu's notes page, the player's own tags and links between notes, where they
 //             are laid out. A world on the account's host writes them through the character it binds; no projection
 //             carries them to another host.
 //   crossing  travels with the character into every world it enters: marks it leaves, items it carries, quests it
-//             follows, the companions of its menagerie. A visited world writes them on the travelling copy, and the
+//             follows, the companions of its roster. A visited world writes them on the travelling copy, and the
 //             account adopts them on return.
 //
 // Facts are integers under each writing package's namespace (`<package>$<fact>`), so a world writes only its own; its
@@ -36,13 +36,13 @@ identity {
     { pool: items, class: Crossing }
     { pool: quests, class: Crossing }
     { pool: questShares, class: Crossing }
-    { pool: menagerie, class: Crossing }
+    { pool: companionRoster, class: Crossing }
   ]
 }
 
 state {
-  // A journal entry the player writes: free text, where it sits in the player's own arrangement, and whether it is
-  // pinned to the top of the journal.
+  // A note the player writes: free text, where it sits in the player's own arrangement, and whether it is
+  // pinned to the top of the notes page.
   record Note {
     text: Text = ""
     x: Int bounds(-4096..4096) = 0
@@ -96,7 +96,7 @@ state {
   pool tags of Tag capacity(64)
   pairPool noteTags record Join left notes right tags maxLive 1024 directed true allowSelf false
   pairPool noteLinks record Join left notes right notes maxLive 1024 directed true allowSelf false
-  // A companion the character keeps in its menagerie (menagerie.puck): which kind it is, by the kind's number, and the
+  // A companion the character keeps in its roster (companion-roster.puck): which kind it is, by the kind's number, and the
   // name the player gave it, empty for the kind's own.
   record Companion {
     kind: Int bounds(0..255) = 0
@@ -107,5 +107,5 @@ state {
   pool items of Item capacity(128)
   pool quests of Quest capacity(64)
   pool questShares of QuestShare capacity(256)
-  pool menagerie of Companion capacity(64)
+  pool companionRoster of Companion capacity(64)
 }

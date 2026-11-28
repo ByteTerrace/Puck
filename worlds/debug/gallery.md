@@ -580,7 +580,7 @@ in teal over its reply in cream, and the line being typed in amber behind a
 prompt, in type large enough to read from a step or two behind her. Nothing on
 screen hints that it exists, and taps on the glass do nothing while it shows.
 Every key she types goes into the line, and the backtick returns the screen to
-its interface (Escape is the pause menu's, so it stays unbound); stepping back
+its interface (Escape opens the menu, which the console does not offer); stepping back
 closes it too. The console's state is the display's, not hers, so another
 player engaged at the same display types into the same line, and everyone
 looking at the glass watches the characters appear. It answers only these

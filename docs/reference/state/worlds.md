@@ -388,7 +388,7 @@ state {
 }
 ```
 
-A `Home` pool (the journal's notes) stays with the account: a world on the
+A `Home` pool (the menu's notes) stays with the account: a world on the
 account's host writes it through the owned identity a seat drives under, and no
 projection carries it. A `Crossing` pool (marks, items, quest progress) travels
 in the identity's projection to every world it enters, with the pair pools that

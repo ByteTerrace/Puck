@@ -1,0 +1,119 @@
+// The worn screen: the menu (menu.puck) shown on a screen worn on a body part, as an avatar's or a suit's creation
+// carries it. A library: it hands its importers functions and templates and emits no document. Everything about the
+// screen is here (its geometry, its cover, its glass, how the arm raises it and how the camera focuses on it), so an
+// avatar or a suit carries it by naming a mount and a few of its own palette slots, and a restyle changes this file alone.
+//
+// A mount is { part, at, shoulder, elbow }, in the creation's frame for the body's left side (the right mirrors it, as
+// mirror.puck's helpers do): `part` the limb shape the screen rides (its side's name is `<part>-<side>`), `at` the point
+// on its outer face the screen's bezel stands on, a face whose outward normal is -X while the arm hangs at the body's
+// side, and `shoulder` and `elbow` the points the arm's raise turns about. Which side wears the open screen is the
+// player's: the menu's `wornScreenSide` body register (0 left, 1 right), so a suit that carries a screen on both sides
+// opens the one the player chose and keeps the other's cover shut.
+//
+// Inside the creation's document, an avatar writes, for each side:
+//
+//   wornScreen(mount: myMount, side: side, isRight: isRight, ids: [<three free shape ids>], materials: { bezel, cover, screen })
+//
+// lists `wornScreenGlass(...)` as the glass's palette slot (one slot a side), splices `wornScreenSwings(...)` into its
+// upper arm's and forearm's swings, and lists `wornScreenDrivers` among its drivers; its look's lane 0 lights the glass
+// as an arm rises (`maximum(menuRaiseLeft[$body], menuRaiseRight[$body])`). Its chase camera takes
+// `focus: wornScreenFocus()`.
+import "camera"
+import "mirror"
+import "rig"
+import "menu"
+
+// The screen's shape, in the left side's frame about the mount's `at`: a bezel `bezel` half extents deep, along the arm
+// and across it; the glass `screen` half extents across and up it as its reader sees it, standing `screen.out` out from
+// `at`, a millimetre proud of the bezel; and a cover `cover` half extents standing `cover.out` out, over both, hinged on
+// its front edge and swung `open` radians to stand open. The cover opens with its arm's raise along a quarter turn of
+// sine, so it stands wide open as the arm arrives (three quarters open in the glance read).
+let wornScreenShape = {
+  bezel { half [0.007, 0.064, 0.08], rounding: 0.004 }
+  screen { half [0.07, 0.055], depth: 0.002, out: 0.006 }
+  cover { half [0.004, 0.068, 0.084], rounding: 0.003, out: 0.0145, open: -1.9 }
+}
+// The glass's turn: a box's +Z out of the gauntlet (-X), +Y down the forearm and +X forward, so its lettering reads
+// upright from the eyes once the arm is raised.
+let wornScreenGlassTurn = [0.7071068, 0, -0.7071068, 0]
+// How the arm raises the screen to read it, the focused read's whole pose (the glance read is the same pose part way):
+// the upper arm swings forward `lift` radians about the shoulder, and the forearm rolls the screen's face up toward the
+// eyes (`roll`), then lifts (`bend`) and turns (`turn`) about the elbow, so the glass stands before the chest on its
+// side, tipped toward the face and over the shoulder.
+let wornScreenPose = { lift: 0.8, roll: -2.25, bend: 0.6, turn: -0.2 }
+
+// The screen on one limb: bezel, glass and cover, with shape ids `ids` (three, unique in the creation) and the creation's
+// palette slots `materials` { bezel, cover, screen }: the glass's slot is this side's `wornScreenGlass`.
+template wornScreen(mount, side, isRight, ids, materials, shape = wornScreenShape) {
+  shape Box $"wornScreenBezel-{side}" {
+    id: ids[0]
+    position: mirrorX(isRight, mount.at)
+    scale: shape.bezel.half
+    material: materials.bezel
+    parent: $"{mount.part}-{side}"
+    rounding: shape.bezel.rounding
+  }
+
+  shape Box $"wornScreenGlass-{side}" {
+    id: ids[1]
+    position: mirrorX(isRight, (mount.at + [(0 - shape.screen.out), 0, 0]))
+    rotation: mirrorRotation(isRight, wornScreenGlassTurn)
+    scale [shape.screen.half[0], shape.screen.half[1], shape.screen.depth]
+    material: materials.screen
+    parent: $"{mount.part}-{side}"
+  }
+
+  shape Box $"wornScreenCover-{side}" {
+    id: ids[2]
+    position: mirrorX(isRight, (mount.at + [(0 - shape.cover.out), 0, 0]))
+    scale: shape.cover.half
+    material: materials.cover
+    parent: $"{mount.part}-{side}"
+    rounding: shape.cover.rounding
+    swings [
+      swing(
+        $"worn-screen-cover-{side}",
+        signed(isRight, [0, 1, 0], [1, -1, -1]),
+        shape.cover.open,
+        mirrorX(isRight, (mount.at + [(0 - shape.cover.out), 0, (0 - shape.cover.half[2])]))
+      ) with { wave: "sine" }
+    ]
+  }
+}
+
+// One side's glass, a palette slot lettered with the menu's interface (menu.puck's `menuScreenPaints`) and lit by lane 0
+// as the cover opens. `kinds` are the roster's.
+function wornScreenGlass(side, kinds, shape = wornScreenShape) = (menuGlass with {
+  paints: menuScreenPaints(parent: $"wornScreenGlass-{side}", half: shape.screen.half, kinds: kinds)
+})
+
+// The swings the arm wearing the screen adds to raise it, `part` "upper" for its upper arm and "fore" for its forearm,
+// turning about the mount's shoulder and elbow.
+function wornScreenSwings(part, mount, side, isRight, pose = wornScreenPose) = ((part == "upper") ? [
+  swing($"worn-screen-{side}", [1, 0, 0], pose.lift, mirrorX(isRight, mount.shoulder)) with { wave: "linear" }
+] : [
+  swing($"worn-screen-{side}", signed(isRight, [0, 1, 0], [1, -1, -1]), pose.roll, mirrorX(isRight, mount.elbow)) with {
+    wave: "linear"
+  }
+  swing($"worn-screen-{side}", [1, 0, 0], pose.bend, mirrorX(isRight, mount.elbow)) with { wave: "linear" }
+  swing($"worn-screen-{side}", signed(isRight, [0, 1, 0], [1, -1, -1]), pose.turn, mirrorX(isRight, mount.elbow)) with {
+    wave: "linear"
+  }
+])
+
+// The drivers the screen's swings ride: each arm's raise follows the menu's eased aim (menu.puck's `menuRaise<Side>`),
+// 1 the focused read's whole pose, and its cover rides the same aim at a quarter turn a unit. For a creation's `drivers`.
+let wornScreenDrivers = flatMap([["left", "Left"], ["right", "Right"]], s => [
+  { name: $"worn-screen-{s[0]}", signal: $"state.menuRaise{s[1]}.$body", cadence: 1, when ["always"] }
+  { name: $"worn-screen-cover-{s[0]}", signal: $"state.menuRaise{s[1]}.$body", cadence: 1.5707963, when ["always"] }
+])
+
+// The chase camera's focus while the menu is open (camera.puck's `focusFraming`): it eases in toward the side whose arm
+// rises, as far as that arm rises (all the way in the focused read, part way in the glance read).
+function wornScreenFocus(distance = 1.9, pitch = 0.45, pivotOffset = [0.3, 1.35, 0.1]) = focusFraming(
+  left: "menuRaiseLeft",
+  right: "menuRaiseRight",
+  distance: distance,
+  pitch: pitch,
+  pivotOffset: pivotOffset
+)

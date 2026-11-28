@@ -14,7 +14,7 @@ let questActive = 1
 let questDone = 2
 let questSetAside = 3
 
-// What came of a share, as the sharer's journal records it.
+// What came of a share, as the sharer's `questShares` records record it.
 let shareAccepted = 1
 let shareCompleted = 2
 let shareUnqualified = 3
@@ -65,10 +65,10 @@ rule template questSetAsideNow(questId) {
 // who finished every quest `requires` names. `parts` lists each part's quest id and step count
 // (`[{ quest: "lanternLit", steps: 2 }, …]`).
 //
-// Sharing: a seat writes its own body index into `<id>Share.from` (the journal's share press does, and a console line
+// Sharing: a seat writes its own body index into `<id>Share.from` (the menu's share press does, and a console line
 // can), and the chain is offered to every other player in the world who is a member of `group`. Each recipient joins at
 // the farthest part, up to the one the sharer follows, that they qualify for: a part they already hold is kept as it
-// is, and a recipient who qualifies for none does not join. The sharer's journal gains one `questShares` record for each
+// is, and a recipient who qualifies for none does not join. The sharer's `questShares` pool gains one record for each
 // recipient: who, the part, and accepted, completed or did not qualify. When a recipient later finishes the part they
 // joined at while the sharer is still a member present in the same world, the record turns to completed.
 template questChain(id, parts, group, requires = []) {

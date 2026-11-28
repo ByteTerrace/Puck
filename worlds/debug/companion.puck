@@ -40,8 +40,8 @@ companionDesign(
   population: (galleryPopulation + 2 + boardRoomBodies + cardBodies),
   interests: companionAttractions
 )
-// Her companion wears whichever kind of her menagerie is active (avatars/moth.puck's menagerie).
-companion(owner: 0, slot: companionBody, position: [-1.2, 1.52, 1], menagerie: true)
+// Her companion wears whichever kind of her roster is active (avatars/moth.puck's companionRoster).
+companion(owner: 0, slot: companionBody, position: [-1.2, 1.52, 1], roster: true)
 // The garden's obelisk teaches the Moth's companion sight (garden.puck); here it reaches farther once she carries it.
 companionSight(owner: 0)
 // It flies to whatever she locks onto, and to her group's pings (targeting.puck).

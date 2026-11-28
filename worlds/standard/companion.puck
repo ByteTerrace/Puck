@@ -266,10 +266,10 @@ template companionDesign(population, interests = [], threatSeconds = 0.6s) {
 // slot its placement inhabits, which only its driver's grants name; `position` is where it waits at boot. `attention`
 // is how far, in metres, its curiosity reaches from its owner's head; `lead` how far ahead of its owner it flies while
 // leading; `ping` how long a short-lived mark lasts. A world expands `companionDesign` once before any `companion`.
-// `menagerie` makes it wear its owner's active companion (menagerie.puck): its body's `companionKind` register follows
+// `roster` makes it wear its owner's active companion (companion-roster.puck): its body's `companionKind` register follows
 // its owner's `companionActive`, which the look assignment's `companion` selector reads.
-template companion(owner, slot, position, attention = 4, lead = 3, ping = 6s, menagerie = false) {
-  if menagerie {
+template companion(owner, slot, position, attention = 4, lead = 3, ping = 6s, roster = false) {
+  if roster {
     rule $"companion{owner}-kind" {
       local active = bodyState(body, owner, companionActive)
       when bodyState(body, slot, companionKind) != active

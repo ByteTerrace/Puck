@@ -11,8 +11,8 @@
 //
 // Engaged at a terminal, the console key (the backtick, `toggleSources`) opens the terminal's console; it closes it again
 // (as do any `closeSources`), and the console closes when the body that has it open steps back from the terminal.
-// Escape is not among them: it is the host's, reserved for the pause menu (docs/decisions/play.md), so no page may bind
-// it. While the console is open, every seat engaged at that terminal works it: its controls are the console's alone,
+// Escape is not among them: it opens the menu (menu.puck), which the console's controls do not offer. While the console
+// is open, every seat engaged at that terminal works it: its controls are the console's alone,
 // every character its keyboard commits is typed into the terminal's line, Enter runs it, Backspace erases its last
 // character, and nothing the seat presses moves its body or its camera. The console key itself is never typed. A letter
 // is typed in lower case, so a line matches without case. The console key reaches the console rather than the host's

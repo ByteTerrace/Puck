@@ -2988,8 +2988,8 @@ sequence and, for a local seat, the seat kit; a body no selector picks for (a
 fraction included) keeps what the sequence gives it. Because selectors are keyed
 rows, a document importing another refines one of its selectors by name (the
 debug world's `noclip.puck` refines `suit.puck`'s `form` selector to read its
-`form` register) and adds its own beside them (the Moth's menagerie dresses a
-companion by its `companionKind` register, `worlds/standard/menagerie.puck`).
+`form` register) and adds its own beside them (the Moth's companion roster dresses a
+companion by its `companionKind` register, `worlds/standard/companion-roster.puck`).
 The validator also refuses a selector with no name or a repeated one. A register is declared document-wide, so every
 body holds it at its `initial`, props and pieces included: a case naming the
 `initial` value would select every body, so a selector names only the values that
