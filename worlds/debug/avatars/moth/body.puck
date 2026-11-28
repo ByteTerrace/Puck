@@ -4,15 +4,22 @@
 // (head.puck at the same 0.68 scale), so one head model serves both forms.
 //
 // The player module wears her through the `moth-pilot` look when the body's suit register is 0 (contract.puck). Every
-// coordinate is in the author frame (+Y up, +Z her front, +X her left), with her soles at Y = 0. A template's `side` is
-// 1 for her left and -1 for her right: it mirrors X, the Y and Z of a rotation's vector part, and the sign of a swing about a sideways-tilting axis.
+// coordinate is in the creation frame (+Y up, -Z her front, +X her right), with her soles at Y = 0. A template's `side`
+// is 1 for her left and -1 for her right: it mirrors X, the Y and Z of a rotation's vector part, and the sign of a swing
+// about a sideways-tilting axis.
 //
 // She rides the suited Moth's drivers and dynamics; her stride curve (`pilot-stride`) is her own, scaled to her 0.85 m
 // hip. While `pilotHold` holds 1 for her body, the `hold` driver bends her arms in front of her and the `hold` frame
-// seats the handheld (75 x 133 x 27.5 mm) in her hands.
+// seats the handheld (75 x 133 x 27.5 mm) in her hands. Her mantle plays the suits' keyed pull-up (moth.puck's mantle
+// curves) at her own joints, and her journal rides a wrist panel on each forearm, a slim one for her bare arm
+// (contract.puck's `mothBodyWristMount`). Each bone's shapes share its bake group, so a limb bakes as one mesh.
 
 import "head"
 import "../../../standard/rig"
+import "../../../standard/mirror"
+import "../../../standard/wrist-panel"
+import "../../menagerie"
+import "contract"
 
 // What an importer binds: the creation its look wears, and the cell its look's hold pose reads, which the importer's
 // rules write.
@@ -27,22 +34,6 @@ let pilotHeadScale = 0.68
 let pilotHeadAt = [0, 1.527, -0.095]
 
 let pilotSoftness = 2.2
-// The plait's lobes down her braid's core, alternating either side of it, and the half-angle each leans by.
-let braidLobes = [
-  [0.112, 1.335, -0.0904]
-  [0.1278, 1.313, -0.0951]
-  [0.102, 1.291, -0.0994]
-  [0.1187, 1.269, -0.1032]
-  [0.0938, 1.247, -0.1065]
-  [0.1113, 1.225, -0.1094]
-  [0.089, 1.203, -0.1104]
-  [0.1095, 1.181, -0.1107]
-  [0.0881, 1.159, -0.1106]
-  [0.1088, 1.137, -0.1102]
-  [0.0876, 1.115, -0.1095]
-]
-let braidTwist = 0.247404
-let braidUntwist = 0.9689124
 let diagonal = 0.7071068
 
 // Her joints on her left side, each a swing pivot: hip (0.09, 0.86, 0), knee (0.1, 0.475, 0.012), ankle
@@ -104,6 +95,17 @@ let brickChip = 23 // the processor
 let brickCartridge = 24 // the cartridge down its slot
 let brickCell = 25 // the two AA cells in the battery bay
 let brickLed = 26 // the red power light
+// Her journal panels: the glass of each (contract.puck's worn screen slots) and the lavender of their flaps.
+let journalScreenLeft = mothBody.wornScreen.screens.left
+let journalScreenRight = mothBody.wornScreen.screens.right
+let journalFlap = 29 // the panels' lavender flaps
+
+// Each bone's bake group: the torso 40, the pelvis 43, and by side the upper arm, the forearm with the hand, the shin
+// with its knee pad and the boot with its shaft and sole.
+function upperArmGroup(side) = (side == 1) ? 44 : 45
+function forearmGroup(side) = (side == 1) ? 41 : 42
+function shinGroup(side) = (side == 1) ? 46 : 47
+function bootGroup(side) = (side == 1) ? 48 : 49
 
 // Authored darker than the sheet reads: the studio's light lifts a charcoal about half again, as it lifts the suit's
 // lavender #744080 to the owner's dusty #B186B6.
@@ -113,14 +115,18 @@ let strapGrey = "#3A3C44"
 let patchLavender = "#8C6A94"
 let ochreTone = "#C98F35"
 
-// One arm: sleeve, shoulder patch, elbow pad, cuff and the bare hand with its four fingers and thumb. Its upper arm
-// swings at the shoulder and its forearm at the elbow, on the suited Moth's drivers; `hold` brings both forward and in.
-template pilotArm(name, side, baseId, handGroup) {
+// One arm: sleeve, shoulder patch, elbow pad, cuff, her journal's wrist panel and the bare hand with its four fingers
+// and thumb. Its upper arm swings at the shoulder and its forearm at the elbow, on the suited Moth's drivers; `hold`
+// brings both forward and in, the journal raises the panel to read, and the mantle plays her pull-up.
+template pilotArm(name, side, baseId) {
+  let isRight = (1 - side) / 2
+
   shape Sweep $"upperArm-{name}" {
     id: baseId
     position [side * -0.172, 1.355, 0.015]
     rotation: rotate([0, 1, 0], 180)
     material: sleeve
+    group: upperArmGroup(side)
     parent: "torso"
     curve {
       a [0, 0, 0]
@@ -142,6 +148,9 @@ template pilotArm(name, side, baseId, handGroup) {
       // Holding the handheld: the upper arm forward a little and turned in, so the bent forearm points to her middle.
       swing("hold", [-1, 0, 0], -0.25, [side * -0.172, 1.355, 0.015]) with { wave: "constant" }
       swing("hold", [0, 1, 0], -0.5 * side, [side * -0.172, 1.355, 0.015]) with { wave: "constant" }
+      // A mantle throws both arms up for the catch, brings the hands down onto the top, pushes and sweeps them back.
+      swing("mantle", [-1, 0, 0], -2.4, [side * -0.172, 1.355, 0.015]) with { wave: "curve:mantle-reach" }
+      for s in wristPanelSwings("upper", mothBodyWristMount, name, isRight) { s }
     ]
   }
 
@@ -152,6 +161,7 @@ template pilotArm(name, side, baseId, handGroup) {
     rotation: rotate([0, 1, 0], 180)
     scale [0.05, 0.066, 0.056]
     material: sleeve
+    group: upperArmGroup(side)
     parent: $"upperArm-{name}"
     exponent: pilotSoftness
   }
@@ -161,6 +171,7 @@ template pilotArm(name, side, baseId, handGroup) {
     position [side * -0.212, 1.068, 0.032]
     rotation: rotate([0, 1, 0], 180)
     material: sleeve
+    group: forearmGroup(side)
     parent: $"upperArm-{name}"
     curve {
       a [0, 0, 0]
@@ -184,6 +195,9 @@ template pilotArm(name, side, baseId, handGroup) {
       // parent's delta.
       swing("hold", [0, 1, 0], 0.15 * side, [side * -0.212, 1.068, 0.032]) with { wave: "constant" }
       swing("hold", [-1, 0, 0], -1.5, [side * -0.212, 1.068, 0.032]) with { wave: "constant" }
+      // The elbows bend as she pulls over a ledge and straighten as she pushes.
+      swing("mantle", [-1, 0, 0], -1.4, [side * -0.212, 1.068, 0.032]) with { wave: "curve:mantle-elbow" }
+      for s in wristPanelSwings("fore", mothBodyWristMount, name, isRight) { s }
     ]
   }
 
@@ -192,6 +206,7 @@ template pilotArm(name, side, baseId, handGroup) {
     position [side * -0.218, 1.062, 0.066]
     scale [0.04, 0.05, 0.022]
     material: pad
+    group: forearmGroup(side)
     parent: $"forearm-{name}"
     exponent: 2.6
   }
@@ -201,9 +216,20 @@ template pilotArm(name, side, baseId, handGroup) {
     position [side * -0.222, 0.846, 0.01]
     scale [0.033, 0.013, 0.033]
     material: collarKnit
+    group: forearmGroup(side)
     parent: $"forearm-{name}"
     exponent: 2.4
   }
+
+  // Her journal's panel on the forearm's outer face, slim enough for her bare arm.
+  wristPanel(
+    mount: mothBodyWristMount,
+    side: name,
+    isRight: isRight,
+    ids: [260 + isRight * 3, 261 + isRight * 3, 262 + isRight * 3],
+    materials: { bezel: belt, flap: journalFlap, screen: (side == 1) ? journalScreenLeft : journalScreenRight },
+    shape: mothBodyPanelShape
+  )
 
   // The bare hand hangs palm in, its fingers curling a little toward the palm.
   shape Sweep $"wrist-{name}" {
@@ -211,7 +237,7 @@ template pilotArm(name, side, baseId, handGroup) {
     position [side * -0.222, 0.845, 0.01]
     rotation: rotate([0, 1, 0], 180)
     material: skin
-    group: handGroup
+    group: forearmGroup(side)
     parent: $"forearm-{name}"
     curve {
       a [0, 0, 0]
@@ -230,7 +256,7 @@ template pilotArm(name, side, baseId, handGroup) {
     material: skin
     blend: "SmoothUnion"
     smooth: 0.01
-    group: handGroup
+    group: forearmGroup(side)
     parent: $"forearm-{name}"
     exponent: 2.6
   }
@@ -242,7 +268,7 @@ template pilotArm(name, side, baseId, handGroup) {
     material: skin
     blend: "SmoothUnion"
     smooth: 0.006
-    group: handGroup
+    group: forearmGroup(side)
     parent: $"forearm-{name}"
     curve {
       a [0, 0, 0]
@@ -253,63 +279,26 @@ template pilotArm(name, side, baseId, handGroup) {
     }
   }
 
-  shape Sweep $"finger-{name}-0" {
-    id: baseId + 8
-    position [side * -0.222, 0.735, -0.024]
-    rotation: rotate([0, 1, 0], 180)
-    material: skin
-    parent: $"forearm-{name}"
-    curve {
-      a [0, 0, 0]
-      b [side * -0.002, -0.038, 0.002]
-      c [side * -0.014, -0.068, 0.004]
-      radiusStart: 0.0082
-      radiusEnd: 0.0068
-    }
-  }
-
-  shape Sweep $"finger-{name}-1" {
-    id: baseId + 9
-    position [side * -0.222, 0.735, -0.0035]
-    rotation: rotate([0, 1, 0], 180)
-    material: skin
-    parent: $"forearm-{name}"
-    curve {
-      a [0, 0, 0]
-      b [side * -0.002, -0.042, 0]
-      c [side * -0.016, -0.076, 0]
-      radiusStart: 0.0084
-      radiusEnd: 0.007
-    }
-  }
-
-  shape Sweep $"finger-{name}-2" {
-    id: baseId + 10
-    position [side * -0.222, 0.735, 0.0165]
-    rotation: rotate([0, 1, 0], 180)
-    material: skin
-    parent: $"forearm-{name}"
-    curve {
-      a [0, 0, 0]
-      b [side * -0.002, -0.04, -0.001]
-      c [side * -0.015, -0.071, -0.003]
-      radiusStart: 0.008
-      radiusEnd: 0.0066
-    }
-  }
-
-  shape Sweep $"finger-{name}-3" {
-    id: baseId + 11
-    position [side * -0.222, 0.737, 0.036]
-    rotation: rotate([0, 1, 0], 180)
-    material: skin
-    parent: $"forearm-{name}"
-    curve {
-      a [0, 0, 0]
-      b [side * -0.002, -0.031, -0.002]
-      c [side * -0.012, -0.056, -0.006]
-      radiusStart: 0.007
-      radiusEnd: 0.0058
+  for (finger, i) in [
+    { at [-0.222, 0.735, -0.024], b [-0.002, -0.038, 0.002], c [-0.014, -0.068, 0.004], r [0.0082, 0.0068] }
+    { at [-0.222, 0.735, -0.0035], b [-0.002, -0.042, 0], c [-0.016, -0.076, 0], r [0.0084, 0.007] }
+    { at [-0.222, 0.735, 0.0165], b [-0.002, -0.04, -0.001], c [-0.015, -0.071, -0.003], r [0.008, 0.0066] }
+    { at [-0.222, 0.737, 0.036], b [-0.002, -0.031, -0.002], c [-0.012, -0.056, -0.006], r [0.007, 0.0058] }
+  ] {
+    shape Sweep $"finger-{name}-{i}" {
+      id: baseId + 8 + i
+      position [side * finger.at[0], finger.at[1], finger.at[2]]
+      rotation: rotate([0, 1, 0], 180)
+      material: skin
+      group: forearmGroup(side)
+      parent: $"forearm-{name}"
+      curve {
+        a [0, 0, 0]
+        b [side * finger.b[0], finger.b[1], finger.b[2]]
+        c [side * finger.c[0], finger.c[1], finger.c[2]]
+        radiusStart: finger.r[0]
+        radiusEnd: finger.r[1]
+      }
     }
   }
 }
@@ -342,6 +331,10 @@ template pilotLeg(name, side, baseId) {
       swing("air", [-1, 0, 0], -0.06, [side * -0.09, 0.86, 0]) with { wave: "linear", phase: 13.3 }
       // Touching down at about 4 m/s the hip folds 0.4 rad into the crouch, and springs back as the give settles.
       swing("land", [-1, 0, 0], 0.1, [side * -0.09, 0.86, 0]) with { wave: "linear" }
+      // Over a ledge the knees tuck up under her; her left leg leads onto the top and her right pushes off it.
+      swing("mantle", [-1, 0, 0], -1.5, [side * -0.09, 0.86, 0]) with {
+        wave: (side == 1) ? "curve:mantle-tuck-lead" : "curve:mantle-tuck-trail"
+      }
     ]
   }
 
@@ -350,6 +343,7 @@ template pilotLeg(name, side, baseId) {
     position [side * -0.1, 0.475, -0.012]
     rotation: rotate([0, 1, 0], 180)
     material: trousers
+    group: shinGroup(side)
     parent: $"thigh-{name}"
     curve {
       a [0, 0, 0]
@@ -366,6 +360,7 @@ template pilotLeg(name, side, baseId) {
       // The knee folds 1.2 rad at the peak, 1.45 rising and 0.95 falling, and takes twice the hip's fold on landing.
       swing("air", [-1, 0, 0], 0.05, [side * -0.1, 0.475, -0.012]) with { wave: "linear", phase: 24 }
       swing("land", [-1, 0, 0], -0.2, [side * -0.1, 0.475, -0.012]) with { wave: "linear" }
+      swing("mantle", [-1, 0, 0], 1.8, [side * -0.1, 0.475, -0.012]) with { wave: "curve:mantle-fold" }
     ]
   }
 
@@ -374,6 +369,7 @@ template pilotLeg(name, side, baseId) {
     position [side * -0.1, 0.468, -0.07]
     scale [0.054, 0.07, 0.017]
     material: pad
+    group: shinGroup(side)
     parent: $"shin-{name}"
     profile {
       kind: "RoundedRectangle"
@@ -388,6 +384,7 @@ template pilotLeg(name, side, baseId) {
     rotation: compose(rotate([0, 1, 0], 180), [0, -diagonal, 0, diagonal])
     scale [0.13, 0.13, 0.055]
     material: leather
+    group: bootGroup(side)
     parent: $"shin-{name}"
     profile {
       kind: "Convex"
@@ -405,6 +402,7 @@ template pilotLeg(name, side, baseId) {
       }
       swing("air", [-1, 0, 0], 0.02, [side * -0.105, 0.085, 0.005]) with { wave: "linear", phase: 12.5 }
       swing("land", [-1, 0, 0], 0.1, [side * -0.105, 0.085, 0.005]) with { wave: "linear" }
+      swing("mantle", [-1, 0, 0], 0.3, [side * -0.105, 0.085, 0.005]) with { wave: "curve:mantle-fold" }
     ]
   }
 
@@ -413,6 +411,7 @@ template pilotLeg(name, side, baseId) {
     position [side * -0.105, 0.12, 0.008]
     scale [0.058, 0.09, 0.066]
     material: leather
+    group: bootGroup(side)
     parent: $"boot-{name}"
     exponent: 3
   }
@@ -423,6 +422,7 @@ template pilotLeg(name, side, baseId) {
     rotation [-diagonal, 0, 0, diagonal]
     scale [0.054, 0.135, 0.0125]
     material: sole
+    group: bootGroup(side)
     parent: $"boot-{name}"
     profile {
       kind: "RoundedRectangle"
@@ -729,6 +729,10 @@ prototypes {
         { color: "#4A4D54", roughness: 0.5, specular: 0.04 }
         { color: "#2C5E8C", roughness: 0.35, specular: 0.05, coat: 0.3 }
         { color: "#FF3A2A", emissive: 400, roughness: 0.3 }
+        // Her journal panels' glass, lettered with the journal's interface and lit as a flap opens, and their flaps.
+        wristPanelGlass("left", menagerieKinds, mothBodyPanelShape)
+        wristPanelGlass("right", menagerieKinds, mothBodyPanelShape)
+        { color: patchLavender, roughness: 0.6, specular: 0.05, coat: 0.2 }
       ]
 
       // The whole body rides the pelvis, which turns her hips into a diagonal, trails a turn, leans into her planar
@@ -750,6 +754,8 @@ prototypes {
           swing("lean", [0, 0, -1], -0.016, [0, 0, 0]) with { wave: "linear" }
           swing("surge", [-1, 0, 0], 0.006, [0, 0, 0]) with { wave: "linear" }
           swing("land", [-1, 0, 0], -0.02, [0, 0, 0]) with { wave: "linear" }
+          // Over a ledge her hips pitch with her chest as it drives over her hands.
+          swing("mantle", [-1, 0, 0], 0.25, [0, 0.84, 0]) with { wave: "curve:mantle-chest" }
         ]
         slides [
           { driver: "bob", axis [0, 1, 0], amplitude: 0.018, phase: -1.5708, wave: "sine" }
@@ -790,6 +796,7 @@ prototypes {
         position [0, 1.0, 0.004]
         scale [0.142, 0.022, 0.104]
         material: belt
+        group: 43
         parent: "pelvis"
         exponent: 3
       }
@@ -799,6 +806,7 @@ prototypes {
         position [0, 1.0, -0.1]
         scale [0.026, 0.018, 0.008]
         material: ochre
+        group: 43
         parent: "pelvis"
       }
 
@@ -808,6 +816,7 @@ prototypes {
         rotation [0, 0.4226, 0, 0.9063]
         scale [0.013, 0.016, 0.006]
         material: ochre
+        group: 43
         parent: "pelvis"
       }
 
@@ -817,6 +826,7 @@ prototypes {
         rotation [0, -0.4226, 0, 0.9063]
         scale [0.013, 0.016, 0.006]
         material: ochre
+        group: 43
         parent: "pelvis"
       }
 
@@ -836,6 +846,8 @@ prototypes {
           swing("bob", [-1, 0, 0], -0.025, [0, 0.96, 0]) with { wave: "sine", phase: -1.0708 }
           swing("heading", [0, 1, 0], -0.4, [0, 0.96, 0]) with { wave: "sine" }
           swing("trail", [0, 1, 0], 0.08, [0, 0.96, 0]) with { wave: "linear" }
+          // Over a ledge her chest arches back for the catch, then drives over her hands onto the top.
+          swing("mantle", [-1, 0, 0], 0.55, [0, 0.96, 0]) with { wave: "curve:mantle-chest" }
         ]
         slides [
           { driver: "breath", axis [0, 1, 0], amplitude: 0.003, phase: 0, wave: "sine" }
@@ -888,6 +900,7 @@ prototypes {
         rotation [0, 0.9772, 0.2124, 0]
         scale [0.016, 0.076, 0.003]
         material: strap
+        group: 40
         parent: "torso"
       }
 
@@ -897,6 +910,7 @@ prototypes {
         rotation [0, 0.9772, 0.2124, 0]
         scale [0.016, 0.076, 0.003]
         material: strap
+        group: 40
         parent: "torso"
       }
 
@@ -906,6 +920,7 @@ prototypes {
         rotation [0, 0.9992, -0.0399, 0]
         scale [0.016, 0.113, 0.003]
         material: strap
+        group: 40
         parent: "torso"
       }
 
@@ -915,6 +930,7 @@ prototypes {
         rotation [0, 0.9992, -0.0399, 0]
         scale [0.016, 0.113, 0.003]
         material: strap
+        group: 40
         parent: "torso"
       }
 
@@ -924,6 +940,7 @@ prototypes {
         position [0, 1.245, 0.12]
         scale [0.03, 0.028, 0.006]
         material: ochre
+        group: 40
         parent: "torso"
       }
 
@@ -934,6 +951,7 @@ prototypes {
         position [0, 1.37, 0.004]
         scale [0.06, 0.04, 0.056]
         material: collarKnit
+        group: 39
         parent: "torso"
         exponent: 2.6
         swings [
@@ -942,19 +960,22 @@ prototypes {
           swing("trail", [0, 1, 0], 0.07, [0, 1.36, 0.005]) with { wave: "linear" }
           // Holding the handheld, she looks down at it.
           swing("hold", [-1, 0, 0], 0.3, [0, 1.36, 0.005]) with { wave: "constant" }
+          // Over a ledge she looks up at the lip, then down over the top.
+          swing("mantle", [-1, 0, 0], -0.35, [0, 1.36, 0.005]) with { wave: "curve:mantle-look" }
         ]
       }
 
       mothHead(pilotHeadScale, pilotHeadAt, "collar", skin, lip, eyeWhite, iris, pupil, glint, hair)
 
-      // The braid roots under the lock beside her right cheek as one smooth tapering root, which a core carries over her
-      // right collarbone onto her chest; the plait's lobes alternate down the core to an ochre tie and a short tassel.
-      // It rides her head, so it sways a little as she walks.
+      // The braid roots under the lock beside her right cheek as one smooth tapering root, then plaits as three twisted
+      // strands over her right collarbone onto her chest, to an ochre tie and a short tassel. It rides her head with the
+      // collar, in one bake group, so it sways a little as she walks.
       shape Sweep "braid-0" {
         id: 220
         position [0.12, 1.478, -0.03]
         rotation: rotate([0, 1, 0], 180)
         material: hair
+        group: 39
         parent: "collar"
         curve {
           a [0, 0, 0]
@@ -965,45 +986,27 @@ prototypes {
         }
       }
 
-      shape Sweep "braid-1" {
-        id: 221
-        position [0.125, 1.345, -0.088]
-        rotation: rotate([0, 1, 0], 180)
-        material: hair
-        parent: "collar"
-        curve {
-          a [0, 0, 0]
-          b [0.015, -0.058, 0.014]
-          c [0.025, -0.125, 0.022]
-          radiusStart: 0.012
-          radiusEnd: 0.011
-        }
-      }
-
-      shape Sweep "braid-2" {
-        id: 222
-        position [0.1, 1.22, -0.11]
-        rotation: rotate([0, 1, 0], 180)
-        material: hair
-        parent: "collar"
-        curve {
-          a [0, 0, 0]
-          b [0.002, -0.07, 0.002]
-          c [0.002, -0.135, -0.002]
-          radiusStart: 0.011
-          radiusEnd: 0.009
-        }
-      }
-
-      for (lobe, i) in braidLobes {
-        shape Superellipsoid $"braidLobe-{i}" {
-          id: 231 + i
-          position: lobe
-          rotation: ((i % 2) == 0) ? [0, 0, -braidTwist, braidUntwist] : [0, 0, braidTwist, braidUntwist]
-          scale [0.0125, 0.02, 0.0135]
+      for (plait, k) in [
+        { id: 221, at [0.125, 1.345, -0.088], b [0.015, -0.058, 0.014], c [0.025, -0.125, 0.022] }
+        { id: 222, at [0.1, 1.22, -0.11], b [0.002, -0.07, 0.002], c [0.002, -0.135, -0.002] }
+      ] {
+        shape Sweep $"braid-{k + 1}" {
+          id: plait.id
+          position: plait.at
+          rotation: rotate([0, 1, 0], 180)
           material: hair
+          group: 39
           parent: "collar"
-          exponent: pilotSoftness
+          curve {
+            a [0, 0, 0]
+            b: plait.b
+            c: plait.c
+            radiusStart: 0.0085
+            radiusEnd: 0.0075
+            strands: 3
+            strandOffset: 0.0085
+            twist: 1.8
+          }
         }
       }
 
@@ -1012,6 +1015,7 @@ prototypes {
         position [0.098, 1.082, -0.108]
         scale [0.017, 0.008, 0.017]
         material: ochre
+        group: 39
         parent: "collar"
         rounding: 0.003
       }
@@ -1021,12 +1025,13 @@ prototypes {
         position [0.098, 1.05, -0.107]
         scale [0.014, 0.03, 0.013]
         material: hair
+        group: 39
         parent: "collar"
         exponent: pilotSoftness
       }
 
-      pilotArm("left", 1, 140, 41)
-      pilotArm("right", -1, 160, 42)
+      pilotArm("left", 1, 140)
+      pilotArm("right", -1, 160)
       pilotLeg("left", 1, 180)
       pilotLeg("right", -1, 200)
 
@@ -1296,6 +1301,10 @@ prototypes {
           blendOutSeconds: 0.2
           when ["state.pilotHold.$body"]
         }
+        // Her wrist panels' arm raise and flaps.
+        for driver in wristPanelDrivers { driver }
+        // The pull over a ledge, keyed over the mantle's progress (moth.puck's `mantlePose` and its mantle curves).
+        progressLayer(name: "mantle", row: "mantlePose")
       ]
 
       effectors [

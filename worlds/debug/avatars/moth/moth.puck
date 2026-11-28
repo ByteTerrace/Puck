@@ -15,6 +15,7 @@ import "suits"
 import "../../../standard/journal"
 import "../../../standard/menagerie"
 import "../../menagerie"
+import "contract"
 
 // What an importer binds: the cell her body's hold pose reads, which a world's rules write to have her hold the
 // handheld (devices.puck's brick).
@@ -27,7 +28,8 @@ exports {
 
 // Her journal, worn on her wrist (../../../standard/journal.puck, ../../../standard/wrist-panel.puck), and the
 // companions she keeps in its menagerie (../../menagerie.puck): every character of the set starts with Mintstitch and
-// Tangerine. The panel mounts on both suits' forearms (contract.puck's `mothWristMount`); her own body has none yet.
+// Tangerine. The panel mounts on both suits' forearms (contract.puck's `mothWristMount`) and, slimmer, on her own
+// body's (`mothBodyWristMount`).
 journalPlay(kinds: menagerieKinds)
 menagerie(kinds: menagerieKinds, granted: [1, 2])
 menagerieCreatures()
@@ -45,7 +47,7 @@ text {
   ]
 }
 
-// Each form's look. Lane 0 is her journal's glass, lit as its arm rises (both suits wear the wrist panel). Lane 1 is
+// Each form's look. Lane 0 is her journal's glass, lit as its arm rises (every form wears the wrist panel). Lane 1 is
 // the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is
 // flight mode itself, the heel and nozzle glows it lights. Lane 3 is the heel jets' flame under the air jump. The scout
 // suit grants no jetpack and no air jump, so only its dash lights its pods.
@@ -88,6 +90,8 @@ looks [
       gaitAmplitude: 0
       replayFrames: false
       secondsPerFrame: 0
+      // Lane 0 is her journal's glass, lit as its arm rises.
+      lanes [maximum(journalRaiseLeft[$body], journalRaiseRight[$body])]
       // The first holding frame wins, so she keeps her eyes open while she holds the handheld.
       poses {
         hold: "state.pilotHold.$body"
@@ -221,6 +225,30 @@ curves [
   }
 ]
 
+// Her mantle, keyed over the move: each curve is one joint's share of its pose against the move's progress, eased in
+// and out of every key (the standard rig's `easedCurve`), and her rigs play them on the `mantle` driver, which reads `mantlePose` (the progress) as one turn and takes her joints from every other
+// layer while it runs. The move rises straight up beside the face before it carries her in over the top
+// (WorldBody's MantleMove), so the keys follow it: her arms snap up for the catch (0.08) as her chest arches back and
+// her head looks up at the lip; her hands come down onto the top and her elbows bend as she pulls (0.22); her arms
+// straighten under her shoulders and push (0.45) while her chest drives over her hands and her knees tuck up under her
+// (0.6), her feet clearing the lip; then her arms sweep back, her leading leg reaches over the top and her trailing leg
+// pushes off (0.8 to 0.92), and every joint is back in her run's pose at the landing (1), so she steps out running.
+function mantleCurve(name, keys) = easedCurve(name, keys)
+curves [
+  // The upper arms' swing forward and up (1) and back past her sides (negative).
+  mantleCurve("mantle-reach", [[0, 0], [0.08, 1], [0.25, 0.45], [0.45, 0.05], [0.6, -0.1], [0.8, -0.3], [1, 0]])
+  // The elbows' bend.
+  mantleCurve("mantle-elbow", [[0, 0], [0.08, 0.1], [0.22, 1], [0.45, 0.1], [0.7, 0.3], [1, 0]])
+  // The chest's lean over her hands (1), arched back at the catch (negative).
+  mantleCurve("mantle-chest", [[0, 0], [0.08, -0.3], [0.3, 0.4], [0.55, 1], [0.8, 0.5], [1, 0]])
+  // The head's look up at the lip (1) and down over the top (negative).
+  mantleCurve("mantle-look", [[0, 0], [0.08, 1], [0.4, 0.5], [0.65, -0.4], [0.9, -0.1], [1, 0]])
+  // The knees' tuck: the leading leg's hip lifts and reaches over the top, the trailing leg's pushes back off it.
+  mantleCurve("mantle-tuck-lead", [[0, 0], [0.1, 0.15], [0.4, 0.85], [0.6, 1], [0.8, 0.75], [0.92, 0.45], [1, 0]])
+  mantleCurve("mantle-tuck-trail", [[0, 0], [0.1, 0.15], [0.4, 0.85], [0.6, 1], [0.8, 0.4], [0.92, -0.15], [1, 0]])
+  // The knees' fold.
+  mantleCurve("mantle-fold", [[0, 0], [0.1, 0.2], [0.4, 0.9], [0.6, 1], [0.8, 0.5], [0.92, 0.15], [1, 0]])
+]
 
 dynamics [
   {
@@ -279,24 +307,14 @@ dynamics [
   }
 ]
 
-// The mantle's pose follows its timer quickly and a little past it, so her arms snap up for the reach and settle as
-// she lands on the ledge.
-dynamics [
-  {
-    f: 6
-    name: "mantle-pose"
-    r: 0
-    zeta: 0.75
-  }
-]
-
+// The mantle's progress, 0 to 1 over the move and 0 between mantles: the phase her rigs' mantle curves play at.
 state {
   world {
     row {
       name: "mantlePose"
       kind: "Fixed"
       capacity: 1
-      cells [{ key: "0", value: "0", dynamics { row: "mantle-pose" } }]
+      cells [{ key: "0", value: "0" }]
     }
   }
 }
@@ -372,12 +390,13 @@ rule "blink-open" {
   blinkAt[$each] = $tick + blinkRest
 }
 
-// The mantle's timer drives one eased presentation cell for her reach and pull.
+// The mantle's timer counts down the seconds the move has left; her pose plays at the share of it gone. A climb's own
+// mantle, longer than hers, holds the pose at its start until the last of it.
 rule "mantle-pose-on" {
   when bodyState(each, mantling) > 0
-  mode: Edge
+  mode: Level
   forEach: mantlePose
-  mantlePose[$each] = 1
+  mantlePose[$each] = maximum(0, 1 - bodyState(each, mantling) / mothMantleSeconds)
 }
 
 rule "mantle-pose-off" {

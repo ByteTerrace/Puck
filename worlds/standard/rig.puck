@@ -10,11 +10,54 @@ function swing(driver, axis, amplitude, pivot) = {
   pivot: pivot
 }
 
+// A driver that plays a move keyed over its progress: the body's `row` cell runs 0 to 1 over the move and rests at 0,
+// and the driver reads it as one turn, so a swing whose wave is `curve:<row>` plays that curve end to end over the move.
+// While the cell is above zero it takes the joints its swings pose from every driver declared before it (a replacing
+// layer), easing in over `blendIn` seconds and handing them back over `blendOut`; declare it after the layers it
+// replaces. Written in a creation's `drivers` list.
+function progressLayer(name, row, blendIn = 0.03, blendOut = 0.12) = {
+  name: name
+  signal: $"state.{row}.$body"
+  cadence: 2 * pi
+  mode: "replace"
+  blendInSeconds: blendIn
+  blendOutSeconds: blendOut
+  when [$"state.{row}.$body"]
+}
+
+// A world `curves` row keyed like an animation channel: `keys` are [progress, value] pairs, progress rising from 0 to 1,
+// and the curve eases in and out of every key (each span the smoothstep cubic between its keys, flat at both), so a
+// `curve:<name>` wave plays the value at each key and settles there. The row's X is `span` times the progress, long
+// against the values' range, so its arc, which a curve wave samples by, runs nearly evenly with the progress. Each
+// knot's curvature is the cubic's on either side of it: six times the span's rise over its run squared, leaving
+// upward and arriving downward when the value rises, so the spline meets every key flat.
+function easedCurve(name, keys, span = 20) = {
+  name: name
+  knots: map(range(0, length(keys)), i => easedKnot(keys, i, span))
+}
+function easedKnot(keys, i, span) = let before = maximum(i - 1, 0) in let after = minimum(i + 1, length(keys) - 1) in let runIn = span * (keys[i][0] - keys[before][0]) in let runOut = span * (keys[after][0] - keys[i][0]) in {
+  position [span * keys[i][0], 0, keys[i][1]]
+  tangentYaw: 0
+  curvature: (6 * (keys[after][1] - keys[i][1])) / squareMax(runOut)
+  incomingCurvature: (0 - (6 * (keys[i][1] - keys[before][1]))) / squareMax(runIn)
+}
+// A run squared, or 1 for none (the first key's arrival, the last key's departure, whose rise is zero too).
+function squareMax(run) = (run == 0) ? 1 : run * run
+
 // Turns as unit quaternions [x, y, z, w], the spelling of every `rotation` a shape row carries; the builtins `rotate`,
 // `compose` and `rotatePoint` make and apply them.
 // A turn about the unit `axis` by the angle, within a quarter turn either way, whose tangent is `t`: the half-angle
 // identities give it without a round trip through an inverse trigonometric function.
 function turnByTangent(axis, t) = turnByCosine(axis, 1 / squareRoot(1 + t * t), t < 0 ? -1 : 1)
+// The turn that undoes the unit turn `q`: its conjugate.
+function inverseTurn(q) = [0 - q[0], 0 - q[1], 0 - q[2], q[3]]
+// A pose written in the creation's frame, re-expressed in the local frame of a shape standing at `at` turned by `turn`:
+// the frame a paint, a volume or a riding text run parented to that shape is authored in. A paint that marks where a
+// shape (a cutter, a plate) stood is that shape's pose written through `poseIn`, so the two never drift apart.
+function poseIn(at, turn, position, rotation = [0, 0, 0, 1]) = {
+  position: rotatePoint(inverseTurn(turn), position - at)
+  rotation: compose(inverseTurn(turn), rotation)
+}
 // A turn about the unit `axis` by the angle whose cosine is `c`, the angle's sine taking the sign `sense`.
 function turnByCosine(axis, c, sense) = [
   axis[0] * sense * squareRoot((1 - c) / 2),

@@ -1315,8 +1315,8 @@ public sealed partial class WorldBody {
     // the mantle's depth into the face, and lowered onto walkable support (FixedStepUp.TryStep, the step a kerb
     // takes) that it stands on rather than rolls off (FixedStepUp.Stands: a top too narrow for the landing leaves its
     // axis over the drop beyond, and she hangs instead). The landing it proves is the only place a mantle carries a
-    // body, which is what keeps a mantle from putting one inside geometry or on an edge. The body lets go of its row and travels as an exclusive timed move: a parabola
-    // through the top of the raise at its middle, so it rises beside the face before it moves in over the edge.
+    // body, which is what keeps a mantle from putting one inside geometry or on an edge. The body lets go of its row and
+    // travels as an exclusive timed move (MantleMove), rising beside the face before it moves in over the edge.
     private bool TryBeginMantle(in FixedBodyHold hold, FixedQ4816 raise, ref BodyMotionScratch scratch) {
         if (
             (hold.Mantle.DurationTicks == 0UL) ||
@@ -1423,13 +1423,16 @@ public sealed partial class WorldBody {
 
         return true;
     }
-    // A mantle's exclusive move: a parabola through the top of the raise at its middle, so the body rises beside the
-    // face before it moves in over the edge.
+    // A mantle's exclusive move: the quadratic Bézier from the body's feet to the landing whose control point stands
+    // `raise` straight above the start. It leaves straight up and arrives moving in over the top, never steps back from
+    // the face, and it peaks (raise − rise)² / (2·raise − rise) above the landing at most, a few millimetres for the
+    // raise the proof picks, so the body pulls onto the ledge rather than hopping over it. The timed move's arc is the curve's offset from its chord at the
+    // middle: (control − travel / 2) / 2.
     private static WorldTimedBodyMove MantleMove(in FixedVector3 travel, in FixedVector3 up, FixedQ4816 raise, ulong durationTicks, BodyMotionCurve curve, in FixedVector3 exitVelocity) => new(
         ElapsedTicks: 0UL,
         ExitVelocity: exitVelocity,
         Motion: new FixedTimedMove(
-            Arc: ((up * raise) - (travel / FixedQ4816.FromInteger(value: 2L))),
+            Arc: (((up * raise) - (travel / FixedQ4816.FromInteger(value: 2L))) / FixedQ4816.FromInteger(value: 2L)),
             Curve: curve,
             Displacement: travel,
             DurationTicks: durationTicks,
