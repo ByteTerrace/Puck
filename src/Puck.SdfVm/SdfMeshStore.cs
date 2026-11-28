@@ -665,11 +665,21 @@ public sealed class SdfMeshStore {
         var path = PathOf(identity, key, CheckpointExtension);
 
         if (mesh is { OwnsNativeStorage: true }) {
-            var encoded = new MemoryStream();
-
-            if (Quietly(action: () => SdfMeshStoreCodec.EncodeExact(encoded, key, mesh, m_allocator))) {
-                _ = WriteLater(bytes: encoded.Length, behind: Behind.Inline, write: () => KeepIfWritten(WriteEntry(path, encoded, static (output, buffer) => buffer.WriteTo(stream: output), queued: true), identity, CheckpointExtension, key));
-            }
+            var encoded = new RentedMemoryStream(allocator: m_allocator, owner: WriteOwner);
+            try {
+                if (!Quietly(action: () => SdfMeshStoreCodec.EncodeExact(encoded, key, mesh, m_allocator))) {
+                    encoded.Dispose();
+                    return;
+                }
+                _ = WriteLater(bytes: encoded.Length, behind: Behind.Inline, write: () => {
+                    using (encoded) {
+                        KeepIfWritten(WriteEntry(path, encoded, static (output, buffer) => output.Write(buffer.Written), queued: true), identity, CheckpointExtension, key);
+                    }
+                });
+            } catch (Exception exception) when (exception is OutOfMemoryException or HostMemoryRefusedException) {
+                encoded.Dispose();
+                _ = Interlocked.Increment(ref m_droppedWrites);
+            } catch { encoded.Dispose(); throw; }
             return;
         }
         _ = WriteLater(bytes: (mesh?.StorageBytes ?? 0L), behind: Behind.Inline, write: () => KeepIfWritten(WriteEntry(path, (key, mesh, allocator: m_allocator), static (output, entry) => SdfMeshStoreCodec.EncodeExact(output, entry.key, entry.mesh, entry.allocator), queued: true), identity, CheckpointExtension, key));

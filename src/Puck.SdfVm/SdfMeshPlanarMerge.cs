@@ -115,7 +115,7 @@ public static class SdfMeshPlanarMerge {
                 var vertex = ((int)indices.Span[((3 * triangle) + corner)]);
                 var point = positions.Span[vertex];
 
-                if (((siteRegion[site[vertex]] >= 0) && (siteRegion[site[vertex]] != region)) ||
+                if (((siteRegion[site.Span[vertex]] >= 0) && (siteRegion[site.Span[vertex]] != region)) ||
                     ((members.Length != 0) && (members.Span[vertex] != member)) ||
                     (Vector3.Dot(vector1: normals.Span[vertex], vector2: normal) < cosine) ||
                     !(Math.Abs(value: (VectorFunctions.DotWide(first: normal, second: point) - offset)) <= distance)) { return false; }
@@ -147,9 +147,9 @@ public static class SdfMeshPlanarMerge {
                 for (var corner = 0; (corner < 3); corner++) {
                     var vertex = ((int)indices.Span[((3 * triangle) + corner)]);
 
-                    if (siteRegion[site[vertex]] < 0) {
-                        siteRegion[site[vertex]] = region;
-                        claimedSites.Add(item: site[vertex]);
+                    if (siteRegion[site.Span[vertex]] < 0) {
+                        siteRegion[site.Span[vertex]] = region;
+                        claimedSites.Add(item: site.Span[vertex]);
                     }
                 }
             }
@@ -180,9 +180,9 @@ public static class SdfMeshPlanarMerge {
         var turned = normals.ToArray();
 
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
-            if (siteRegion[site[vertex]] < 0) { continue; }
+            if (siteRegion[site.Span[vertex]] < 0) { continue; }
 
-            var (normal, offset) = planes[siteRegion[site[vertex]]];
+            var (normal, offset) = planes[siteRegion[site.Span[vertex]]];
             var point = positions.Span[vertex];
             var off = (VectorFunctions.DotWide(first: normal, second: point) - offset);
 
@@ -208,7 +208,7 @@ public static class SdfMeshPlanarMerge {
         private readonly RentedScope m_scope;
         private readonly int m_triangles;
         private readonly int m_vertices;
-        private readonly int[] m_site;
+        private readonly ReadOnlyMemory<int> m_site;
         private readonly OwnedBuffer<float> m_u;
         private readonly OwnedBuffer<float> m_w;
         private readonly OwnedBuffer<int> m_corners;
@@ -422,7 +422,7 @@ public static class SdfMeshPlanarMerge {
             named.GetSpan().Fill(value: None);
             for (var half = 0; (half < (3 * m_triangles)); half++) {
                 var vertex = m_corners[half];
-                var site = m_site[vertex];
+                var site = m_site.Span[vertex];
                 var own = m_regionOf[(half / 3)];
 
                 if ((own < 0) || ((named[site] != None) && ((named[site] != vertex) || (region[site] != own)))) {
@@ -661,17 +661,17 @@ public static class SdfMeshPlanarMerge {
             var normals = m_normals.Span;
             var members = m_mesh.VertexMembers.Span;
             var remaining = (m_triangles - m_removedTriangles);
-            var indices = new uint[(3 * remaining)];
-            var triangleMaterials = (materials.IsEmpty ? [] : new uint[remaining]);
+            var indices = RentedScope.Allocate<uint>(m_mesh.Products, 3 * remaining);
+            var triangleMaterials = RentedScope.Allocate<uint>(m_mesh.Products, materials.IsEmpty ? 0 : remaining);
             var remap = m_scope.Buffer<int>(length: m_vertices);
             var at = 0;
 
             remap.GetSpan().Fill(value: -1);
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
                 if (!m_alive[triangle]) { continue; }
-                if (!materials.IsEmpty) { triangleMaterials[at] = materials[triangle]; }
+                if (!materials.IsEmpty) { triangleMaterials.Span[at] = materials[triangle]; }
                 for (var corner = 0; (corner < 3); corner++) {
-                    indices[((3 * at) + corner)] = ((uint)m_corners[((3 * triangle) + corner)]);
+                    indices.Span[((3 * at) + corner)] = ((uint)m_corners[((3 * triangle) + corner)]);
                     remap[m_corners[((3 * triangle) + corner)]] = 0;
                 }
                 at++;
@@ -683,29 +683,29 @@ public static class SdfMeshPlanarMerge {
                 if (remap[vertex] == 0) { remap[vertex] = kept++; }
             }
 
-            var keptSites = new int[kept];
+            var keptSites = RentedScope.Allocate<int>(m_mesh.Products, kept);
             var firstKept = m_scope.Buffer<int>(length: m_vertices);
             firstKept.GetSpan().Fill(value: -1);
-            var keptPositions = new Vector3[kept];
-            var keptNormals = new Vector3[kept];
-            var keptMembers = (members.IsEmpty ? [] : new byte[kept]);
-            var keptInfluences = (m_mesh.Influences.IsEmpty ? [] : new SdfMeshInfluence[kept]);
+            var keptPositions = RentedScope.Allocate<Vector3>(m_mesh.Products, kept);
+            var keptNormals = RentedScope.Allocate<Vector3>(m_mesh.Products, kept);
+            var keptMembers = RentedScope.Allocate<byte>(m_mesh.Products, members.IsEmpty ? 0 : kept);
+            var keptInfluences = RentedScope.Allocate<SdfMeshInfluence>(m_mesh.Products, m_mesh.Influences.IsEmpty ? 0 : kept);
 
             for (var vertex = 0; (vertex < m_vertices); vertex++) {
                 if (remap[vertex] < 0) { continue; }
-                ref var site = ref firstKept[m_site[vertex]];
+                ref var site = ref firstKept[m_site.Span[vertex]];
                 if (site < 0) { site = remap[vertex]; }
-                keptSites[remap[vertex]] = site;
-                keptPositions[remap[vertex]] = positions[vertex];
-                keptNormals[remap[vertex]] = normals[vertex];
-                if (!members.IsEmpty) { keptMembers[remap[vertex]] = members[vertex]; }
-                if (keptInfluences.Length > 0) { keptInfluences[remap[vertex]] = m_mesh.Influences.Span[vertex]; }
+                keptSites.Span[remap[vertex]] = site;
+                keptPositions.Span[remap[vertex]] = positions[vertex];
+                keptNormals.Span[remap[vertex]] = normals[vertex];
+                if (!members.IsEmpty) { keptMembers.Span[remap[vertex]] = members[vertex]; }
+                if (keptInfluences.Length > 0) { keptInfluences.Span[remap[vertex]] = m_mesh.Influences.Span[vertex]; }
             }
             for (var index = 0; (index < indices.Length); index++) {
-                indices[index] = ((uint)remap[((int)indices[index])]);
+                indices.Span[index] = ((uint)remap[((int)indices.Span[index])]);
             }
 
-            return new SdfMesh(indices: indices, members: m_mesh.Members, normals: keptNormals, positions: keptPositions, triangleMaterials: triangleMaterials, vertexMembers: keptMembers, influences: keptInfluences) { BakeCell = m_mesh.BakeCell, BakedSites = keptSites };
+            return new SdfMesh(indices: indices, members: m_mesh.Members, normals: keptNormals, positions: keptPositions, triangleMaterials: triangleMaterials, vertexMembers: keptMembers, influences: keptInfluences) { Products = m_mesh.Products, BakeCell = m_mesh.BakeCell, BakedSites = keptSites };
         }
         private int Orient(int a, int b, int c) => SdfMeshPlanarMerge.Orient(ax: m_u[a], ay: m_w[a], bx: m_u[b], by: m_w[b], cx: m_u[c], cy: m_w[c]);
         private bool InCircle(int a, int b, int c, int d) => SdfMeshPlanarMerge.InCircle(ax: m_u[a], ay: m_w[a], bx: m_u[b], by: m_w[b], cx: m_u[c], cy: m_w[c], dx: m_u[d], dy: m_w[d]);

@@ -6,8 +6,8 @@ namespace Puck.Abstractions.Memory;
 /// One owner's map from a 64-bit key to a reference-free value, held in <see cref="OwnedBuffer{T}"/> storage, which is
 /// native, so a build's lookup table never reaches the collector. Open addressing with linear probing over a power-of-two table kept at most half full; a key's home slot is its
 /// SplitMix64 mix (<see cref="InvertibleBitMix.Mix64"/>), so keys that differ in their high bits only (a lattice
-/// coordinate packed into a word) spread over the table. Growth rehashes into a table twice the size. There is no
-/// removal. Not thread-safe.
+/// coordinate packed into a word) spread over the table. Growth rehashes into a table twice the size. There are no
+/// tombstones. Removal closes the probe chain. Not thread-safe.
 /// </summary>
 /// <typeparam name="TValue">The value.</typeparam>
 public sealed class OwnedLongMap<TValue> : IDisposable where TValue : unmanaged {
@@ -98,6 +98,32 @@ public sealed class OwnedLongMap<TValue> : IDisposable where TValue : unmanaged 
         }
         value = default;
         return false;
+    }
+    /// <summary>Removes a key, closing its probe chain so every remaining key stays reachable.</summary>
+    /// <param name="key">The key.</param>
+    /// <returns>Whether the map held the key.</returns>
+    public bool Remove(long key) {
+        var used = m_used.GetSpan();
+        var keys = m_keys.GetSpan();
+        var values = m_values.GetSpan();
+        var hole = Home(key);
+        while (used[hole] != 0 && keys[hole] != key) { hole = (hole + 1) & m_mask; }
+        if (used[hole] == 0) { return false; }
+        for (var slot = (hole + 1) & m_mask; used[slot] != 0; slot = (slot + 1) & m_mask) {
+            var home = Home(keys[slot]);
+            if (((hole - home) & m_mask) >= ((slot - home) & m_mask)) { continue; }
+            keys[hole] = keys[slot];
+            values[hole] = values[slot];
+            hole = slot;
+        }
+        used[hole] = 0;
+        Count--;
+        return true;
+    }
+    /// <summary>Removes every entry, retaining the table's storage.</summary>
+    public void Clear() {
+        m_used.GetSpan().Clear();
+        Count = 0;
     }
     /// <summary>Releases the map's storage and its charges.</summary>
     public void Dispose() {

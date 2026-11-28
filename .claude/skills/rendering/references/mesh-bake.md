@@ -601,7 +601,7 @@ laws exercise that boundary.
   naming of kept floors and the trace judge read, the judge through the groups
   whose floor, done state or product changed (`Judgeable`). The retier decision
   still reads every group once a measure.
-- **A stage's scratch is owned, its result exact.** A CPU stage grows its
+- **A stage's scratch and transient products are owned.** A CPU stage grows its
   per-vertex and per-quad workspace in `OwnedBuffer<T>` lists and tables, taken
   through a `RentedScope` or the contour lattice's `Allocator`, which is the
   group's native allocator (`SdfMeshLibrary.Allocator`) in a World: that scratch
@@ -612,8 +612,7 @@ laws exercise that boundary.
   Tables a stage still leases as arrays (`RentedArrays.Rent(minimumLength, out
   array)`, `RentedScope.Rent`) take that managed path in a World too. Storage
   types are stop types of the bake's code identity (`SdfMeshBakeClosure`), so
-  changing them bakes nothing again. The stage copies out only the arrays its
-  result keeps. A group's lattices and point tables
+  changing them bakes nothing again. A group's lattices and point tables
   stay in owned native storage. A rental can be longer than requested and its
   contents are unspecified. Fill the range before reading it and track the
   logical count separately. The
@@ -629,14 +628,26 @@ laws exercise that boundary.
   positions again. A cut keeps its tables for its rounds in a `RentedScope` of its
   own (`SdfMeshMaterialCut`, disposed when its group lets it go), its site weld is
   an open-addressed native table (`SdfMeshWeld`), and the hash tables of a stage
-  are `OwnedLongMap`s (`RentedScope.LongMap`), never a `Dictionary` or `HashSet`
-  that grows from empty on every call. A collapse takes its lists and arrays from
+  use `OwnedLongMap`s (`RentedScope.LongMap`). Removal closes the probe chain,
+  including across the table's wrap, so a collapse's line map can remove consumed
+  edges. A collapse takes its lists and arrays from
   a pooled workspace (`SdfMeshCollapse.Collapser.Workspace`) and gives them back
-  when its levels are made. The stages' outputs (the contour's arrays, the cut's
-  mesh, the merged and levelled meshes) are still allocated exactly as managed
-  arrays, and a rental past the shared pool's 1 MiB is a fresh array, which the
-  done line's `allocated` counts: they are what a bake still allocates, since the
-  checkpoint writer may hold a managed mesh after the stage ends.
+  when its levels are made. `SdfContour` carries counted memory slices, explicit
+  vertex and quad counts, and presence flags for its optional planes; buffer
+  capacity never describes its surface. Its position and quad setters update
+  their counts together, including through a record copy. The group's
+  `ContourProducts` owns the extraction, weld and crease split's native planes
+  until the material cut builds its mesh. `MeshProducts` owns the cut, merge,
+  chunks and collapse's native planes until `PublishMesh` copies them into the
+  library. Shared planes remain readable through that last consumer; parallel
+  chunk collapses allocate through independent child scopes created before the
+  fork. Readmission and group teardown release both scopes too.
+  A scoped mesh reports `SdfMesh.OwnsNativeStorage`, so `WriteCheckpoint` encodes
+  it on the caller before its buffers can go. The writer owns the encoded native
+  stream, charged to its own account, and disposes it after writing. A library
+  with no native allocator publishes independent managed planes
+  (`SdfMesh.ManagedCopy`); a library with an allocator uses its existing native
+  copy. Neither publication retains a view into the group's buffers.
 - **A dispatch fills its samples.** A take takes lattices by priority until
   `MeshBakeMaxSamples`, passing over one too large for what is left and taking
   smaller ones behind it; stopping at the first that did not fit left the debug

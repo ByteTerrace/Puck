@@ -18,35 +18,54 @@ namespace Puck.SignedDistance.Baking;
 /// <param name="Normals">Three floats per vertex: the unit outward normal.</param>
 /// <param name="Quads">Four vertex indices per quad.</param>
 /// <param name="QuadMaterials">One material per quad.</param>
-public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads, int[] QuadMaterials) {
+public sealed record SdfContour(Memory<float> Positions, Memory<float> Normals, Memory<int> Quads, Memory<int> QuadMaterials) {
+    private Memory<float> m_positions = Positions;
+    private Memory<int> m_quads = Quads;
+    /// <summary>Gets the counted position plane, independent of its backing buffer's capacity.</summary>
+    public Memory<float> Positions { get => m_positions; init { m_positions = value; VertexCount = value.Length / 3; } }
+    /// <summary>Gets the counted quad plane, independent of its backing buffer's capacity.</summary>
+    public Memory<int> Quads { get => m_quads; init { m_quads = value; QuadCount = value.Length / 4; } }
     /// <summary>Gets the quads.</summary>
-    public int QuadCount => (Quads.Length / 4);
+    public int QuadCount { get; private init; } = (Quads.Length / 4);
     /// <summary>Gets the vertices.</summary>
-    public int VertexCount => (Positions.Length / 3);
+    public int VertexCount { get; private init; } = (Positions.Length / 3);
     /// <summary>Gets, per vertex, whether it lies on a crease or corner of the surface, a point where crossings that turn
     /// apart by more than thirty degrees meet; empty when the contour records none. A vertex
     /// <see cref="SplitAtCreases"/> appends records none.</summary>
-    public bool[] Features { get; init; } = [];
+    public Memory<bool> Features { get; init; }
     /// <summary>Gets, per vertex, whether the contour placed it where no crossing pins it to the surface: drawn by its
     /// crossings' tangent planes away from their mean (to a crease, or to the point the planes of a face rounded within the
     /// cell share, proud of the rounding), or merged from a refined cell's fine vertices, which interpolate the cell's
     /// coarse corners. Empty when the contour records none. A vertex <see cref="SplitAtCreases"/> appends records
     /// none.</summary>
-    public bool[] Solved { get; init; } = [];
+    public Memory<bool> Solved { get; init; }
     /// <summary>Gets, per vertex, whether the contour placed it inside its cell beside a curved convex crease that lies
     /// past the cell, where it may lie inside the solid off both faces and its quads turn across the crease: moved onto
     /// the surface, it stays a crease vertex (<see cref="Features"/>) so <see cref="SplitAtCreases"/> shades each face's
     /// quads as that face. Empty when the contour records none. A vertex <see cref="SplitAtCreases"/> appends records
     /// none.</summary>
-    public bool[] Beside { get; init; } = [];
+    public Memory<bool> Beside { get; init; }
     /// <summary>Gets, per quad, the lattice edge the quad crosses as a signed axis (<see cref="SdfContourFacing.Axis"/>):
     /// the direction its triangles face out along. Empty for a contour that records none, whose quads are then judged by
     /// their vertices' normals.</summary>
-    public sbyte[] QuadAxes { get; init; } = [];
+    public Memory<sbyte> QuadAxes { get; init; }
     /// <summary>Gets, per vertex, three components: the way the lattice says the vertex's surface patch faces
     /// (<see cref="SdfContourFacing.Patch"/>), which judges a triangle lying edge-on to its quad's lattice edge. Empty for
     /// a contour that records none. A vertex <see cref="SplitAtCreases"/> appends records none.</summary>
-    public float[] Patches { get; init; } = [];
+    public Memory<float> Patches { get; init; }
+
+    /// <summary>Gets whether the optional feature plane is present.</summary>
+    public bool HasFeatures => !Features.IsEmpty;
+    /// <summary>Gets whether the optional solved plane is present.</summary>
+    public bool HasSolved => !Solved.IsEmpty;
+    /// <summary>Gets whether the optional beside plane is present.</summary>
+    public bool HasBeside => !Beside.IsEmpty;
+    /// <summary>Gets whether the optional lattice-edge plane is present.</summary>
+    public bool HasQuadAxes => !QuadAxes.IsEmpty;
+    /// <summary>Gets whether the optional patch-facing plane is present.</summary>
+    public bool HasPatches => !Patches.IsEmpty;
+
+    internal RentedScope? Products { get; init; }
 
     // A lifted chamfer's corner meets its neighboring bevel at 31.4 degrees, although the bevel meets the main face at
     // 45. Leave room below that smaller turn for sampled triangle normals; using 32 blended the corner across its rim.
@@ -113,7 +132,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
             for (var corner = 0; (corner < count); corner++) {
                 var (a, b) = (raw[corner], raw[((corner + 1) % count)]);
-                var length = Vector3.DistanceSquared(value1: At(values: Positions, vertex: a), value2: At(values: Positions, vertex: b));
+                var length = Vector3.DistanceSquared(value1: At(values: Positions.Span, vertex: a), value2: At(values: Positions.Span, vertex: b));
 
                 if ((a != b) && (length < limit)) {
                     candidateList.Add(item: (length, Math.Min(val1: a, val2: b), Math.Max(val1: a, val2: b)));
@@ -135,9 +154,9 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         using var parent = OwnedBuffer<int>.OfLength(allocator: allocator, clear: false, length: vertexCount, observer: workspace);
         using var starts = OwnedBuffer<int>.OfLength(allocator: allocator, clear: true, length: (vertexCount + 1), observer: workspace);
 
-        Positions.AsSpan().CopyTo(destination: positions.GetSpan());
-        Normals.AsSpan().CopyTo(destination: normals.GetSpan());
-        if (patches.Length > 0) { Patches.AsSpan().CopyTo(destination: patches.GetSpan()); }
+        Positions.Span.CopyTo(destination: positions.GetSpan());
+        Normals.Span.CopyTo(destination: normals.GetSpan());
+        if (patches.Length > 0) { Patches.Span.CopyTo(destination: patches.GetSpan()); }
         for (var vertex = 0; (vertex < vertexCount); vertex++) { parent[vertex] = vertex; }
         for (var quad = 0; (quad < quadCount); quad++) {
             var count = RawCorners(quad: quad, corners: raw);
@@ -156,12 +175,13 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         }
 
         // A welded vertex's quads: the union of its parts', kept apart from the rows of the vertices no weld has reached.
-        var welded = new Dictionary<int, List<int>>();
-        var affected = new List<int>();
-        var facing = new List<bool>();
-        var areas = new List<Vector3>();
-        var neighbours = new HashSet<int>();
-        var allowed = new HashSet<int>();
+        using var welded = new OwnedLongMap<(int Start, int Count)>(allocator, workspace);
+        using var weldedQuads = new OwnedBuffer<int>(allocator, workspace);
+        using var affected = new OwnedBuffer<int>(allocator, workspace);
+        using var facing = new OwnedBuffer<bool>(allocator, workspace);
+        using var areas = new OwnedBuffer<Vector3>(allocator, workspace);
+        using var neighbours = new OwnedLongMap<byte>(allocator, workspace);
+        using var allowed = new OwnedLongMap<byte>(allocator, workspace);
         var corners = new int[4];
         var any = false;
 
@@ -171,7 +191,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
             return vertex;
         }
-        ReadOnlySpan<int> Around(int vertex) => (welded.TryGetValue(key: vertex, value: out var list) ? CollectionsMarshal.AsSpan(list: list) : incident.AsSpan(start: starts[vertex], length: (starts[(vertex + 1)] - starts[vertex])));
+        ReadOnlySpan<int> Around(int vertex) => (welded.TryGetValue(key: vertex, value: out var list) ? weldedQuads.AsSpan(start: list.Start, length: list.Count) : incident.AsSpan(start: starts[vertex], length: (starts[(vertex + 1)] - starts[vertex])));
         // A quad's distinct corners as the welds so far name them, in order around it.
         int Corners(int quad, Span<int> into) {
             var count = RawCorners(quad: quad, corners: raw);
@@ -194,7 +214,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             if ((count < 3) || (quad >= QuadAxes.Length)) { return true; }
             if (count == 3) { corners[3] = corners[2]; }
 
-            return (SdfContourFacing.Splits(axis: QuadAxes[quad], patches: patches.GetSpan(), positions: positions.GetSpan(), quad: corners) is not (false, false));
+            return (SdfContourFacing.Splits(axis: QuadAxes.Span[quad], patches: patches.GetSpan(), positions: positions.GetSpan(), quad: corners) is not (false, false));
         }
         int Rank(int vertex) => ((features[vertex] && !beside[vertex]) ? 2 : (features[vertex] ? 1 : 0));
         // A quad's area normal about its corners as the welds so far place them (Newell's sum), zero for one closed to
@@ -225,7 +245,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             affected.Clear();
             foreach (var quad in Around(vertex: a)) { affected.Add(item: quad); }
             foreach (var quad in Around(vertex: b)) {
-                if (!affected.Contains(item: quad)) { affected.Add(item: quad); }
+                if (!affected.GetSpan().Contains(quad)) { affected.Add(item: quad); }
             }
 
             // The link condition: every neighbour the two share is the third corner of a triangle between them.
@@ -234,7 +254,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
             neighbours.Clear();
             allowed.Clear();
-            foreach (var quad in affected) {
+            foreach (var quad in affected.GetSpan()) {
                 var count = Corners(quad: quad, into: corners);
                 var (at, bt) = (corners.AsSpan(start: 0, length: count).IndexOf(value: a), corners.AsSpan(start: 0, length: count).IndexOf(value: b));
 
@@ -246,31 +266,31 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                         break;
                     }
                     adjacent = true;
-                    if (count == 3) { allowed.Add(item: corners[(3 - at - bt)]); }
+                    if (count == 3) { _ = allowed.TryAdd(key: corners[(3 - at - bt)], value: 0); }
                 }
                 if (at >= 0) {
-                    neighbours.Add(item: corners[((at + 1) % count)]);
-                    neighbours.Add(item: corners[(((at + count) - 1) % count)]);
+                    _ = neighbours.TryAdd(key: corners[((at + 1) % count)], value: 0);
+                    _ = neighbours.TryAdd(key: corners[(((at + count) - 1) % count)], value: 0);
                 }
             }
             if (crossed || !adjacent) { continue; }
 
             var linked = true;
 
-            foreach (var quad in affected) {
+            foreach (var quad in affected.GetSpan()) {
                 var count = Corners(quad: quad, into: corners);
                 var bt = corners.AsSpan(start: 0, length: count).IndexOf(value: b);
 
                 if (bt < 0) { continue; }
                 foreach (var next in (ReadOnlySpan<int>)[corners[((bt + 1) % count)], corners[(((bt + count) - 1) % count)]]) {
-                    if ((next != a) && neighbours.Contains(item: next) && !allowed.Contains(item: next)) { linked = false; }
+                    if ((next != a) && neighbours.TryGetValue(key: next, value: out _) && !allowed.TryGetValue(key: next, value: out _)) { linked = false; }
                 }
             }
             if (!linked) { continue; }
 
             facing.Clear();
             areas.Clear();
-            foreach (var quad in affected) {
+            foreach (var quad in affected.GetSpan()) {
                 facing.Add(item: FacesOut(quad: quad));
                 areas.Add(item: Facing(quad: quad));
             }
@@ -290,7 +310,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
             var keeps = true;
 
-            for (var index = 0; (index < affected.Count); index++) {
+            for (var index = 0; (index < affected.Length); index++) {
                 if (facing[index] && !FacesOut(quad: affected[index])) {
                     keeps = false;
                     break;
@@ -314,7 +334,8 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             }
 
             any = true;
-            welded[a] = [.. affected];
+            welded.Set(a, (weldedQuads.Length, affected.Length));
+            weldedQuads.AddRange(affected.GetSpan());
             _ = welded.Remove(key: b);
             if (take == 1f) {
                 normals.AsSpan(start: (3 * b), length: 3).CopyTo(destination: normals.AsSpan(start: (3 * a), length: 3));
@@ -347,8 +368,8 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                 quads.Add(item: corners[corner]);
                 remap[corners[corner]] = 0;
             }
-            materials.Add(item: QuadMaterials[quad]);
-            if (quad < QuadAxes.Length) { axes.Add(item: QuadAxes[quad]); }
+            materials.Add(item: QuadMaterials.Span[quad]);
+            if (quad < QuadAxes.Length) { axes.Add(item: QuadAxes.Span[quad]); }
         }
 
         var kept = 0;
@@ -357,26 +378,26 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             if (remap[vertex] == 0) { remap[vertex] = kept++; }
         }
 
-        var quadArray = quads.ToArray();
+        var quadArray = RentedScope.Copy<int>(Products, quads.GetSpan());
 
-        for (var corner = 0; (corner < quadArray.Length); corner++) { quadArray[corner] = remap[quadArray[corner]]; }
+        for (var corner = 0; (corner < quadArray.Length); corner++) { quadArray.Span[corner] = remap[quadArray.Span[corner]]; }
 
-        float[] Compact(ReadOnlySpan<float> values) {
-            var compact = new float[(3 * kept)];
+        Memory<float> Compact(ReadOnlySpan<float> values) {
+            var compact = RentedScope.Allocate<float>(Products, 3 * kept);
 
             for (var vertex = 0; (vertex < vertexCount); vertex++) {
-                if (remap[vertex] >= 0) { values.Slice(start: (3 * vertex), length: 3).CopyTo(destination: compact.AsSpan(start: (3 * remap[vertex]), length: 3)); }
+                if (remap[vertex] >= 0) { values.Slice(start: (3 * vertex), length: 3).CopyTo(destination: compact.Span.Slice(start: (3 * remap[vertex]), length: 3)); }
             }
 
             return compact;
         }
-        bool[] CompactFlags(ReadOnlySpan<bool> values, bool[] original) {
-            if (original.Length == 0) { return []; }
+        Memory<bool> CompactFlags(ReadOnlySpan<bool> values, Memory<bool> original) {
+            if (original.IsEmpty) { return default; }
 
-            var compact = new bool[kept];
+            var compact = RentedScope.Allocate<bool>(Products, kept);
 
             for (var vertex = 0; (vertex < vertexCount); vertex++) {
-                if (remap[vertex] >= 0) { compact[remap[vertex]] = values[vertex]; }
+                if (remap[vertex] >= 0) { compact.Span[remap[vertex]] = values[vertex]; }
             }
 
             return compact;
@@ -386,20 +407,22 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             Beside = CompactFlags(original: Beside, values: beside),
             Features = CompactFlags(original: Features, values: features),
             Normals = Compact(values: normals),
-            Patches = ((patches.Length > 0) ? Compact(values: patches) : []),
+            Patches = ((patches.Length > 0) ? Compact(values: patches) : default),
             Positions = Compact(values: positions),
-            QuadAxes = axes.ToArray(),
-            QuadMaterials = materials.ToArray(),
+            QuadAxes = RentedScope.Copy<sbyte>(Products, axes.GetSpan()),
+            QuadMaterials = RentedScope.Copy<int>(Products, materials.GetSpan()),
+            VertexCount = kept,
+            QuadCount = materials.Length,
             Quads = quadArray,
             Solved = CompactFlags(original: Solved, values: solved),
         };
 
         // Native flags at a vertex each, false past those given.
-        static OwnedBuffer<bool> Grown(bool[] flags, int length, IAllocator? allocator, IAllocationObserver? workspace) {
+        static OwnedBuffer<bool> Grown(Memory<bool> flags, int length, IAllocator? allocator, IAllocationObserver? workspace) {
             var grown = OwnedBuffer<bool>.OfLength(allocator: allocator, clear: false, length: length, observer: workspace);
             var given = Math.Min(val1: flags.Length, val2: length);
 
-            flags.AsSpan(start: 0, length: given).CopyTo(destination: grown.GetSpan());
+            flags.Span.Slice(start: 0, length: given).CopyTo(destination: grown.GetSpan());
             grown.AsSpan(start: given).Clear();
 
             return grown;
@@ -407,18 +430,18 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     }
     // A quad's corners as its vertex indices name them: three where its last two are one vertex (a triangle), else four.
     private int RawCorners(int quad, Span<int> corners) {
-        Quads.AsSpan(start: (4 * quad), length: 4).CopyTo(destination: corners);
+        Quads.Span.Slice(start: (4 * quad), length: 4).CopyTo(destination: corners);
 
         return ((corners[2] == corners[3]) ? 3 : 4);
     }
     /// <summary>Returns a vertex's position.</summary>
     /// <param name="vertex">The vertex's index.</param>
     /// <returns>The position.</returns>
-    public Vector3 PositionOf(int vertex) => At(values: Positions, vertex: vertex);
+    public Vector3 PositionOf(int vertex) => At(values: Positions.Span, vertex: vertex);
     /// <summary>Returns a vertex's normal.</summary>
     /// <param name="vertex">The vertex's index.</param>
     /// <returns>The normal, as the contour stores it.</returns>
-    public Vector3 NormalOf(int vertex) => At(values: Normals, vertex: vertex);
+    public Vector3 NormalOf(int vertex) => At(values: Normals.Span, vertex: vertex);
     // A vertex's three floats in an array of positions or normals.
     internal static Vector3 At(ReadOnlySpan<float> values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
     /// <summary>Returns the contour with its crease vertices split: a vertex two of whose quads face
@@ -435,55 +458,55 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     public SdfContour SplitAtCreases(IAllocationObserver? workspace = null, IAllocator? allocator = null) {
         var positions = Positions;
         var normals = Normals;
-        var vertexCount = (positions.Length / 3);
+        var vertexCount = VertexCount;
         var cosine = CreaseCosine;
 
         // A quad at a crease vertex folded across the crease, its two triangles facing apart by more than the crease
         // angle (one on each face, as where a crease is shorter than a cell), shades as its two triangles: as one quad it
         // takes one side's normal at every corner, and its other triangle shades as a spike of that side on this one.
         using var quadList = new OwnedBuffer<int>(allocator: allocator, capacity: Quads.Length, observer: workspace);
-        using var materialList = new OwnedBuffer<int>(allocator: allocator, capacity: QuadMaterials.Length, observer: workspace);
+        using var materialList = new OwnedBuffer<int>(allocator: allocator, capacity: QuadCount, observer: workspace);
         using var axisList = new OwnedBuffer<sbyte>(allocator: allocator, capacity: QuadAxes.Length, observer: workspace);
 
-        for (var quad = 0; (quad < QuadMaterials.Length); quad++) {
-            var (ia, ib, ic, id) = (Quads[(4 * quad)], Quads[((4 * quad) + 1)], Quads[((4 * quad) + 2)], Quads[((4 * quad) + 3)]);
+        for (var quad = 0; (quad < QuadCount); quad++) {
+            var (ia, ib, ic, id) = (Quads.Span[(4 * quad)], Quads.Span[((4 * quad) + 1)], Quads.Span[((4 * quad) + 2)], Quads.Span[((4 * quad) + 3)]);
             if (ic != id) {
-                var a = At(values: positions, vertex: ia);
-                var first = Vector3.Cross(vector1: (At(values: positions, vertex: ib) - a), vector2: (At(values: positions, vertex: ic) - a));
-                var second = Vector3.Cross(vector1: (At(values: positions, vertex: ic) - a), vector2: (At(values: positions, vertex: id) - a));
+                var a = At(values: positions.Span, vertex: ia);
+                var first = Vector3.Cross(vector1: (At(values: positions.Span, vertex: ib) - a), vector2: (At(values: positions.Span, vertex: ic) - a));
+                var second = Vector3.Cross(vector1: (At(values: positions.Span, vertex: ic) - a), vector2: (At(values: positions.Span, vertex: id) - a));
 
                 if ((first.LengthSquared() > 0f) && (second.LengthSquared() > 0f) && (Vector3.Dot(vector1: Vector3.Normalize(value: first), vector2: Vector3.Normalize(value: second)) < cosine)) {
                     quadList.AddRange(items: [ia, ib, ic, ic, ia, ic, id, id]);
-                    materialList.Add(item: QuadMaterials[quad]);
-                    materialList.Add(item: QuadMaterials[quad]);
+                    materialList.Add(item: QuadMaterials.Span[quad]);
+                    materialList.Add(item: QuadMaterials.Span[quad]);
                     if (quad < QuadAxes.Length) {
-                        axisList.Add(item: QuadAxes[quad]);
-                        axisList.Add(item: QuadAxes[quad]);
+                        axisList.Add(item: QuadAxes.Span[quad]);
+                        axisList.Add(item: QuadAxes.Span[quad]);
                     }
                     continue;
                 }
             }
             quadList.AddRange(items: [ia, ib, ic, id]);
-            materialList.Add(item: QuadMaterials[quad]);
-            if (quad < QuadAxes.Length) { axisList.Add(item: QuadAxes[quad]); }
+            materialList.Add(item: QuadMaterials.Span[quad]);
+            if (quad < QuadAxes.Length) { axisList.Add(item: QuadAxes.Span[quad]); }
         }
 
-        var quads = quadList.ToArray();
+        var quads = RentedScope.Copy<int>(Products, quadList.GetSpan());
         var quadCount = (quads.Length / 4);
-        var folded = (quadCount != QuadMaterials.Length);
+        var folded = (quadCount != QuadCount);
 
         // Each quad's area-weighted facing: its two triangles along its first diagonal.
         using var facings = OwnedBuffer<Vector3>.OfLength(allocator: allocator, clear: false, length: quadCount, observer: workspace);
 
         for (var quad = 0; (quad < quadCount); quad++) {
-            var a = At(values: positions, vertex: quads[(4 * quad)]);
-            var b = At(values: positions, vertex: quads[((4 * quad) + 1)]);
-            var c = At(values: positions, vertex: quads[((4 * quad) + 2)]);
-            var d = At(values: positions, vertex: quads[((4 * quad) + 3)]);
+            var a = At(values: positions.Span, vertex: quads.Span[(4 * quad)]);
+            var b = At(values: positions.Span, vertex: quads.Span[((4 * quad) + 1)]);
+            var c = At(values: positions.Span, vertex: quads.Span[((4 * quad) + 2)]);
+            var d = At(values: positions.Span, vertex: quads.Span[((4 * quad) + 3)]);
 
             var facing = (Vector3.Cross(vector1: (b - a), vector2: (c - a)) + Vector3.Cross(vector1: (c - a), vector2: (d - a)));
-            var outward = (((At(values: normals, vertex: quads[(4 * quad)]) + At(values: normals, vertex: quads[((4 * quad) + 1)])) +
-                At(values: normals, vertex: quads[((4 * quad) + 2)])) + At(values: normals, vertex: quads[((4 * quad) + 3)]));
+            var outward = (((At(values: normals.Span, vertex: quads.Span[(4 * quad)]) + At(values: normals.Span, vertex: quads.Span[((4 * quad) + 1)])) +
+                At(values: normals.Span, vertex: quads.Span[((4 * quad) + 2)])) + At(values: normals.Span, vertex: quads.Span[((4 * quad) + 3)]));
 
             // A quad folded against its own vertices' normals has no facing to shade by: it keeps their normals and
             // lends its facing to no split.
@@ -495,8 +518,8 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         starts.AsSpan(start: 0, length: (vertexCount + 1)).Clear();
         for (var corner = 0; (corner < quads.Length); corner++) {
-            if (((corner & 3) == 3) && (quads[corner] == quads[(corner - 1)])) { continue; }
-            starts[(quads[corner] + 1)]++;
+            if (((corner & 3) == 3) && (quads.Span[corner] == quads.Span[(corner - 1)])) { continue; }
+            starts[(quads.Span[corner] + 1)]++;
         }
         for (var vertex = 0; (vertex < vertexCount); vertex++) {
             starts[(vertex + 1)] += starts[vertex];
@@ -507,8 +530,8 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         filled.AsSpan(start: 0, length: vertexCount).Clear();
         for (var corner = 0; (corner < quads.Length); corner++) {
-            if (((corner & 3) == 3) && (quads[corner] == quads[(corner - 1)])) { continue; }
-            var vertex = quads[corner];
+            if (((corner & 3) == 3) && (quads.Span[corner] == quads.Span[(corner - 1)])) { continue; }
+            var vertex = quads.Span[corner];
 
             around[(starts[vertex] + filled[vertex]++)] = (corner >> 2);
         }
@@ -550,22 +573,22 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             facing = Vector3.Normalize(value: facing);
 
             // A triangle lists its last vertex twice; both corners take one vertex.
-            var triangle = (quads[((4 * quad) + 3)] == quads[((4 * quad) + 2)]);
+            var triangle = (quads.Span[((4 * quad) + 3)] == quads.Span[((4 * quad) + 2)]);
 
             for (var corner = 0; (corner < 4); corner++) {
                 var at = ((4 * quad) + corner);
 
                 if ((corner == 3) && triangle) {
-                    quads[at] = quads[(at - 1)];
+                    quads.Span[at] = quads.Span[(at - 1)];
                     continue;
                 }
 
-                var vertex = quads[at];
+                var vertex = quads.Span[at];
 
                 // Any other vertex splits off the corners of the quads that face more than the crease angle from its own
                 // normal: it lies on a rounding narrower than its cell, where the field's normal turns, and those quads on
                 // a face beyond the rounding, which would otherwise shade as a band of the rounding's normal a cell wide.
-                if (!creased[vertex] && (Feature(vertex: vertex) || (Vector3.Dot(vector1: facing, vector2: At(values: normals, vertex: vertex)) >= cosine))) { continue; }
+                if (!creased[vertex] && (Feature(vertex: vertex) || (Vector3.Dot(vector1: facing, vector2: At(values: normals.Span, vertex: vertex)) >= cosine))) { continue; }
 
                 var sum = Vector3.Zero;
                 var group = int.MaxValue;
@@ -604,14 +627,14 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                     if (last < 0) { splits.Add(key: splitKey, value: splitList.Length); } else { splitList[last].Next = splitList.Length; }
                     splitList.Add(item: (splitMembers.Length, members.Length, split, -1));
                     splitMembers.AddRange(items: members.GetSpan());
-                    addedPositions.Add(item: positions[(3 * vertex)]);
-                    addedPositions.Add(item: positions[((3 * vertex) + 1)]);
-                    addedPositions.Add(item: positions[((3 * vertex) + 2)]);
+                    addedPositions.Add(item: positions.Span[(3 * vertex)]);
+                    addedPositions.Add(item: positions.Span[((3 * vertex) + 1)]);
+                    addedPositions.Add(item: positions.Span[((3 * vertex) + 2)]);
                     addedNormals.Add(item: normal.X);
                     addedNormals.Add(item: normal.Y);
                     addedNormals.Add(item: normal.Z);
                 }
-                quads[at] = split;
+                quads.Span[at] = split;
             }
         }
 
@@ -620,14 +643,23 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         // Only a fold changes the quads' own records and only a split adds vertices; an array neither touched stays this
         // contour's, as the flags and patches do.
         return this with {
-            Normals = ((addedNormals.Length == 0) ? normals : [.. normals, .. addedNormals.GetSpan()]),
-            Positions = ((addedPositions.Length == 0) ? positions : [.. positions, .. addedPositions.GetSpan()]),
-            QuadAxes = ((!folded && (axisList.Length == QuadAxes.Length)) ? QuadAxes : axisList.ToArray()),
-            QuadMaterials = (folded ? materialList.ToArray() : QuadMaterials),
+            Normals = Append(normals, addedNormals),
+            Positions = Append(positions, addedPositions),
+            QuadAxes = ((!folded && (axisList.Length == QuadAxes.Length)) ? QuadAxes : RentedScope.Copy<sbyte>(Products, axisList.GetSpan())),
+            QuadMaterials = (folded ? RentedScope.Copy<int>(Products, materialList.GetSpan()) : QuadMaterials),
+            VertexCount = vertexCount + addedPositions.Length / 3,
+            QuadCount = quadCount,
             Quads = quads,
         };
 
-        bool Feature(int vertex) => ((vertex < Features.Length) && Features[vertex]);
+        Memory<float> Append(Memory<float> original, OwnedBuffer<float> added) {
+            if (added.Length == 0) { return original; }
+            var result = RentedScope.Allocate<float>(Products, original.Length + added.Length);
+            original.Span.CopyTo(result.Span);
+            added.GetSpan().CopyTo(result.Span[original.Length..]);
+            return result;
+        }
+        bool Feature(int vertex) => ((vertex < Features.Length) && Features.Span[vertex]);
     }
 }
 /// <summary>An axis-aligned box of a sampled lattice's frame whose surface <see cref="SdfSampledLattice.Refine"/> contours
@@ -3051,15 +3083,17 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// of the surface apart from the rest, under two lattice cells across and a hundredth of the largest piece's quads,
     /// is dropped: the specks a sheet leaves where it thins below the fine spacing.</summary>
     /// <returns>The surface; empty when no lattice edge changes sign.</returns>
-    public SdfContour Contour() {
+    /// <param name="products">The transient planes' owner, or null for a managed contour. Every plane is a counted
+    /// memory slice, and remains readable only while this scope stands.</param>
+    public SdfContour Contour(RentedScope? products = null) {
         PrepareCrossings();
         var surface = ((m_factor > 1)
-            ? SdfDualContouring.ExtractRefined(grid: new Lattice(owner: this))
-            : SdfDualContouring.Extract(grid: new Lattice(owner: this)));
-        var materials = new int[surface.QuadCount];
+            ? SdfDualContouring.ExtractRefined(products: products, grid: new Lattice(owner: this))
+            : SdfDualContouring.Extract(products: products, grid: new Lattice(owner: this)));
+        var materials = RentedScope.Allocate<int>(products, surface.QuadCount);
 
         for (var quad = 0; (quad < materials.Length); quad++) {
-            materials[quad] = MaterialAt(key: surface.QuadCorners[quad]);
+            materials.Span[quad] = MaterialAt(key: surface.QuadCorners.Span[quad]);
         }
 
         var normals = surface.Normals;
@@ -3067,7 +3101,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var quads = surface.Quads;
         var axes = surface.QuadAxes;
 
-        (quads, materials, axes) = WithoutSpecks(axes: axes, materials: materials, positions: positions, quads: quads);
+        (quads, materials, axes) = WithoutSpecks(products: products, axes: axes, materials: materials, positions: positions, quads: quads);
 
         var contour = new SdfContour(
             Normals: normals,
@@ -3075,6 +3109,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             QuadMaterials: materials,
             Quads: quads
         ) {
+            Products = products,
             Beside = surface.Beside,
             Features = surface.Features,
             Patches = surface.Patches,
@@ -3093,8 +3128,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
             var at = (4 * quad);
 
-            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(axis: ((quad < contour.QuadAxes.Length) ? contour.QuadAxes[quad] : ((sbyte)0)), features: contour.Features, normals: contour.Normals, patches: contour.Patches, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at))) {
-                (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (quads[(at + 1)], quads[(at + 2)], quads[(at + 3)], quads[at]);
+            if ((quads.Span[(at + 2)] != quads.Span[(at + 3)]) && !SplitsAlongFirstDiagonal(axis: ((quad < contour.QuadAxes.Length) ? contour.QuadAxes.Span[quad] : ((sbyte)0)), features: contour.Features.Span, normals: contour.Normals.Span, patches: contour.Patches.Span, positions: contour.Positions.Span, quad: quads.Span.Slice(length: 4, start: at))) {
+                (quads.Span[at], quads.Span[(at + 1)], quads.Span[(at + 2)], quads.Span[(at + 3)]) = (quads.Span[(at + 1)], quads.Span[(at + 2)], quads.Span[(at + 3)], quads.Span[at]);
             }
         }
 
@@ -3109,21 +3144,21 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // The set holds at most one entry per quad that can claim a diagonal, so it is sized once, not grown by doubling.
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
             var at = (4 * quad);
-            var (a, c, d) = (quads[at], quads[(at + 2)], quads[(at + 3)]);
+            var (a, c, d) = (quads.Span[at], quads.Span[(at + 2)], quads.Span[(at + 3)]);
 
-            if ((c != d) && (((a < solved.Length) && solved[a]) || ((c < solved.Length) && solved[c]))) { claimants++; }
+            if ((c != d) && (((a < solved.Length) && solved.Span[a]) || ((c < solved.Length) && solved.Span[c]))) { claimants++; }
         }
         try {
             for (var quad = 0; (quad < contour.QuadCount); quad++) {
                 var at = (4 * quad);
-                var (a, b, c, d) = (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]);
+                var (a, b, c, d) = (quads.Span[at], quads.Span[(at + 1)], quads.Span[(at + 2)], quads.Span[(at + 3)]);
 
-                if ((c == d) || !(((a < solved.Length) && solved[a]) || ((c < solved.Length) && solved[c]))) { continue; }
+                if ((c == d) || !(((a < solved.Length) && solved.Span[a]) || ((c < solved.Length) && solved.Span[c]))) { continue; }
                 taken ??= new OwnedLongMap<byte>(allocator: allocator, capacity: (claimants + (claimants >> 2)), observer: workspace);
                 if (taken.TryAdd(key: PackedIntPair.Pack(high: Math.Min(val1: a, val2: c), low: Math.Max(val1: a, val2: c)), value: 0)) { continue; }
-                if ((quad < contour.QuadAxes.Length) && !SdfContourFacing.Splits(axis: contour.QuadAxes[quad], patches: contour.Patches, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at)).Second) { continue; }
+                if ((quad < contour.QuadAxes.Length) && !SdfContourFacing.Splits(axis: contour.QuadAxes.Span[quad], patches: contour.Patches.Span, positions: contour.Positions.Span, quad: quads.Span.Slice(length: 4, start: at)).Second) { continue; }
                 if (taken.TryAdd(key: PackedIntPair.Pack(high: Math.Min(val1: b, val2: d), low: Math.Max(val1: b, val2: d)), value: 0)) {
-                    (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (b, c, d, a);
+                    (quads.Span[at], quads.Span[(at + 1)], quads.Span[(at + 2)], quads.Span[(at + 3)]) = (b, c, d, a);
                 }
             }
         } finally {
@@ -3141,7 +3176,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // each face and a fourth: split one way, a triangle joins the two faces' vertices across the crease and cuts its
     // corner; split the other, the crease vertex is a corner of both triangles and each lies on one face. Every quad of a
     // contour splits by this one rule.
-    private static bool SplitsAlongFirstDiagonal(float[] positions, float[] normals, float[] patches, bool[] features, ReadOnlySpan<int> quad, sbyte axis) {
+    private static bool SplitsAlongFirstDiagonal(ReadOnlySpan<float> positions, ReadOnlySpan<float> normals, ReadOnlySpan<float> patches, ReadOnlySpan<bool> features, ReadOnlySpan<int> quad, sbyte axis) {
         var (v0, v1, v2, v3) = (SdfContour.At(values: positions, vertex: quad[0]), SdfContour.At(values: positions, vertex: quad[1]), SdfContour.At(values: positions, vertex: quad[2]), SdfContour.At(values: positions, vertex: quad[3]));
 
         if (axis != 0) {
@@ -3183,7 +3218,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // How far triangle (a, b, c), wound counter-clockwise, turns from the normals of its corners that lie on no crease:
     // one minus the cosine between its facing and each such corner's normal, summed. A crease vertex's normal blends
     // the faces meeting there and says nothing of which one a triangle lies on.
-    private static double Turn(int a, int b, int c, float[] positions, float[] normals, bool[] features) {
+    private static double Turn(int a, int b, int c, ReadOnlySpan<float> positions, ReadOnlySpan<float> normals, ReadOnlySpan<bool> features) {
         var (ax, ay, az) = (((double)positions[(3 * a)]), ((double)positions[((3 * a) + 1)]), ((double)positions[((3 * a) + 2)]));
         var (ux, uy, uz) = ((positions[(3 * b)] - ax), (positions[((3 * b) + 1)] - ay), (positions[((3 * b) + 2)] - az));
         var (vx, vy, vz) = ((positions[(3 * c)] - ax), (positions[((3 * c) + 1)] - ay), (positions[((3 * c) + 2)] - az));
@@ -3236,7 +3271,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // Drops the specks a sheet thinner than the finest cell leaves where it thins to a knife edge (the top of a shell cut
     // where its inside meets its outside): pieces of the surface apart from the rest, each smaller than two lattice cells
     // across and holding under a hundredth of the largest piece's quads. A whole surface that small, a part's own, stays.
-    private (int[] Quads, int[] Materials, sbyte[] Axes) WithoutSpecks(int[] quads, int[] materials, sbyte[] axes, float[] positions) {
+    private (Memory<int> Quads, Memory<int> Materials, Memory<sbyte> Axes) WithoutSpecks(Memory<int> quads, Memory<int> materials, Memory<sbyte> axes, Memory<float> positions, RentedScope? products) {
         var quadCount = materials.Length;
         var vertexCount = (positions.Length / 3);
         using var pieceSets = new DisjointSet(count: vertexCount, owner: m_observer);
@@ -3245,54 +3280,59 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         for (var quad = 0; (quad < quadCount); quad++) {
             for (var corner = 1; (corner < 4); corner++) {
-                pieceSets.Union(first: quads[(4 * quad)], second: quads[((4 * quad) + corner)]);
+                pieceSets.Union(first: quads.Span[(4 * quad)], second: quads.Span[((4 * quad) + corner)]);
             }
         }
 
         // Each piece's quads and bounds.
-        var pieces = new Dictionary<int, (int Quads, Vector3 Low, Vector3 High)>();
+        using var pieceOf = new OwnedLongMap<int>(m_allocator, m_observer);
+        using var pieces = new OwnedBuffer<(int Root, int Quads, Vector3 Low, Vector3 High)>(m_allocator, m_observer);
+        var largest = 0;
 
         for (var quad = 0; (quad < quadCount); quad++) {
-            var root = Root(vertex: quads[(4 * quad)]);
-            (int Quads, Vector3 Low, Vector3 High) piece = (pieces.TryGetValue(key: root, value: out var found) ? found : (0, new Vector3(value: float.PositiveInfinity), new Vector3(value: float.NegativeInfinity)));
+            var root = Root(vertex: quads.Span[(4 * quad)]);
+            var number = pieceOf.NumberOf(root);
+            if (number == pieces.Length) { pieces.Add((root, 0, new Vector3(float.PositiveInfinity), new Vector3(float.NegativeInfinity))); }
+            ref var piece = ref pieces[number];
 
             for (var corner = 0; (corner < 4); corner++) {
-                var vertex = quads[((4 * quad) + corner)];
-                var point = new Vector3(x: positions[(3 * vertex)], y: positions[((3 * vertex) + 1)], z: positions[((3 * vertex) + 2)]);
+                var vertex = quads.Span[((4 * quad) + corner)];
+                var point = new Vector3(x: positions.Span[(3 * vertex)], y: positions.Span[((3 * vertex) + 1)], z: positions.Span[((3 * vertex) + 2)]);
 
-                piece = (piece.Quads, Vector3.Min(value1: piece.Low, value2: point), Vector3.Max(value1: piece.High, value2: point));
+                piece.Low = Vector3.Min(value1: piece.Low, value2: point);
+                piece.High = Vector3.Max(value1: piece.High, value2: point);
             }
-            pieces[root] = ((piece.Quads + 1), piece.Low, piece.High);
+            piece.Quads++;
+            largest = Math.Max(largest, piece.Quads);
         }
-        if (pieces.Count < 2) {
+        if (pieces.Length < 2) {
             return (quads, materials, axes);
         }
 
-        var largest = pieces.Values.Max(selector: static piece => piece.Quads);
         var reach = (2f * m_cell.Length());
-        var specks = new HashSet<int>();
+        using var specks = new OwnedLongMap<byte>(m_allocator, m_observer);
 
-        foreach (var (root, piece) in pieces) {
-            if (((100 * piece.Quads) < largest) && ((piece.High - piece.Low).Length() < reach)) { _ = specks.Add(item: root); }
+        foreach (var piece in pieces.GetSpan()) {
+            if (((100 * piece.Quads) < largest) && ((piece.High - piece.Low).Length() < reach)) { _ = specks.TryAdd(key: piece.Root, value: 0); }
         }
         if (specks.Count == 0) {
             return (quads, materials, axes);
         }
 
-        var keptQuads = new List<int>(capacity: quads.Length);
-        var keptMaterials = new List<int>(capacity: quadCount);
-        var keptAxes = new List<sbyte>(capacity: quadCount);
+        using var keptQuads = new OwnedBuffer<int>(m_allocator, m_observer, capacity: quads.Length);
+        using var keptMaterials = new OwnedBuffer<int>(m_allocator, m_observer, capacity: quadCount);
+        using var keptAxes = new OwnedBuffer<sbyte>(m_allocator, m_observer, capacity: quadCount);
 
         for (var quad = 0; (quad < quadCount); quad++) {
-            if (specks.Contains(item: Root(vertex: quads[(4 * quad)]))) { continue; }
+            if (specks.TryGetValue(key: Root(vertex: quads.Span[(4 * quad)]), value: out _)) { continue; }
             for (var corner = 0; (corner < 4); corner++) {
-                keptQuads.Add(item: quads[((4 * quad) + corner)]);
+                keptQuads.Add(item: quads.Span[((4 * quad) + corner)]);
             }
-            keptMaterials.Add(item: materials[quad]);
-            keptAxes.Add(item: axes[quad]);
+            keptMaterials.Add(item: materials.Span[quad]);
+            keptAxes.Add(item: axes.Span[quad]);
         }
 
-        return ([.. keptQuads], [.. keptMaterials], [.. keptAxes]);
+        return (RentedScope.Copy<int>(products, keptQuads.GetSpan()), RentedScope.Copy<int>(products, keptMaterials.GetSpan()), RentedScope.Copy<sbyte>(products, keptAxes.GetSpan()));
     }
     private int Index(int x, int y, int z) => (x + (m_samplesX * (y + (m_samplesY * z))));
     private (int X, int Y, int Z) FineCoordinates(int key) {

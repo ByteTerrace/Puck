@@ -193,14 +193,15 @@ public static class SdfMeshCollapse {
 
         // Every made vertex is kept, whichever levels name it, past the mesh's own vertices, which alone its own triangles name.
         using var held = mesh.Hold();
-        var positions = new Vector3[(mesh.VertexCount + collapser.MadeVertices)];
-        var normals = new Vector3[positions.Length];
+        var positions = RentedScope.Allocate<Vector3>(mesh.Products, mesh.VertexCount + collapser.MadeVertices);
+        var normals = RentedScope.Allocate<Vector3>(mesh.Products, positions.Length);
 
-        held.Positions.Span.CopyTo(destination: positions);
-        held.Normals.Span.CopyTo(destination: normals);
-        collapser.WriteMade(positions: positions.AsSpan(start: mesh.VertexCount), normals: normals.AsSpan(start: mesh.VertexCount));
+        held.Positions.Span.CopyTo(destination: positions.Span);
+        held.Normals.Span.CopyTo(destination: normals.Span);
+        collapser.WriteMade(positions: positions.Span[mesh.VertexCount..], normals: normals.Span[mesh.VertexCount..]);
 
         return new SdfMesh(positions: positions, indices: Carried(mesh: mesh, plane: held.Indices), normals: normals, triangleMaterials: Carried(mesh: mesh, plane: held.TriangleMaterials)) {
+            Products = mesh.Products,
             BakeCell = mesh.BakeCell,
             Clusters = clusters,
             Encloses = mesh.Encloses,
@@ -211,7 +212,7 @@ public static class SdfMeshCollapse {
     // A plane of the mesh the levelled mesh carries unchanged: the mesh's own array, shared, when nothing lets it go (an
     // array the collector owns, of a mesh that never restores its planes); else a copy that outlives the hold.
     private static ReadOnlyMemory<uint> Carried(SdfMesh mesh, ReadOnlyMemory<uint> plane) =>
-        ((!mesh.LetsGoPlanes && MemoryMarshal.TryGetArray(memory: plane, segment: out _)) ? plane : plane.ToArray());
+        ((mesh.Products is not null || (!mesh.LetsGoPlanes && !RentedScope.RequiresOwner(plane))) ? plane : plane.ToArray());
 
     /// <summary>The collapse runs whose levels a clustered mesh draws cluster by cluster, from the finest (a quarter and
     /// half a cell, <see cref="CellShares"/>): the levels a draw near enough to hold some of its triangles near and some
@@ -322,17 +323,18 @@ public static class SdfMeshCollapse {
         using var held = mesh.Hold();
         var indices = held.Indices.Span;
         var materials = held.TriangleMaterials.Span;
-        var reordered = new uint[indices.Length];
-        var reorderedMaterials = new uint[materials.Length];
+        var reordered = RentedScope.Allocate<uint>(mesh.Products, indices.Length);
+        var reorderedMaterials = RentedScope.Allocate<uint>(mesh.Products, materials.Length);
 
         for (var at = 0; (at < order.Length); at++) {
             var triangle = order[at];
 
-            indices.Slice(start: (3 * triangle), length: 3).CopyTo(destination: reordered.AsSpan(start: (3 * at)));
-            if (!materials.IsEmpty) { reorderedMaterials[at] = materials[triangle]; }
+            indices.Slice(start: (3 * triangle), length: 3).CopyTo(destination: reordered.Span[(3 * at)..]);
+            if (!materials.IsEmpty) { reorderedMaterials.Span[at] = materials[triangle]; }
         }
 
-        return new SdfMesh(positions: held.Positions.ToArray(), indices: reordered, normals: held.Normals.ToArray(), triangleMaterials: reorderedMaterials) {
+        return new SdfMesh(positions: RentedScope.Copy<Vector3>(mesh.Products, held.Positions.Span), indices: reordered, normals: RentedScope.Copy<Vector3>(mesh.Products, held.Normals.Span), triangleMaterials: reorderedMaterials) {
+            Products = mesh.Products,
             BakeCell = mesh.BakeCell,
             BakedSites = mesh.BakedSites,
             Encloses = mesh.Encloses,
@@ -399,7 +401,7 @@ public static class SdfMeshCollapse {
         private readonly OwnedBuffer<double> m_lineZ;
         private readonly OwnedBuffer<double> m_lineDistance;
         private readonly OwnedBuffer<int> m_lineNext;
-        private readonly Dictionary<long, (int First, int Last)> m_lines = new(comparer: PackedIntPairComparer.Instance);
+        private readonly OwnedLongMap<(int First, int Last)> m_lines;
 
         // Each triangle's bound on how far it strays from the mesh's own surface (zero for the mesh's own triangles).
         private readonly OwnedBuffer<double> m_stray;
@@ -494,6 +496,7 @@ public static class SdfMeshCollapse {
         // The samples this collapser listed and measured, which Levels adds to the process's work (CountSamples).
         private long m_listedSamples;
         private long m_measuredSamples;
+        private readonly RentedScope? m_products;
         private bool m_linesListed;
         private int m_laidCount;
 
@@ -632,6 +635,8 @@ public static class SdfMeshCollapse {
         // each read is bounded by the place, triangle or sample count, never the array's length.
         public Collapser(SdfMesh mesh, bool preserveFeatures, RentedScope scope, double[] errors, double[] cosines, int[]? clusterOf) {
             Take();
+            m_lines = scope.LongMap<(int First, int Last)>();
+            m_products = mesh.Products;
             m_errors = errors;
             m_cosines = cosines;
             m_lineLimit = (preserveFeatures ? (Math.Max(val1: mesh.BakeCell.X, val2: Math.Max(val1: mesh.BakeCell.Y, val2: mesh.BakeCell.Z)) / 8.0) : double.PositiveInfinity);
@@ -644,7 +649,7 @@ public static class SdfMeshCollapse {
             var sites = mesh.Sites();
             m_placeOf = scope.Buffer<int>(length: vertices);
             for (var vertex = 0; vertex < vertices; vertex++) {
-                m_placeOf[vertex] = sites[vertex] == vertex ? m_places++ : m_placeOf[sites[vertex]];
+                m_placeOf[vertex] = sites.Span[vertex] == vertex ? m_places++ : m_placeOf[sites.Span[vertex]];
             }
             m_point = scope.Buffer<Point>(length: m_places);
             for (var vertex = 0; (vertex < vertices); vertex++) {
@@ -822,6 +827,7 @@ public static class SdfMeshCollapse {
             m_lineZ = shared.m_lineZ;
             m_lineDistance = shared.m_lineDistance;
             m_lineNext = shared.m_lineNext;
+            m_products = shared.m_products;
             m_lines = shared.m_lines;
             m_stray = shared.m_stray;
             m_fanStart = shared.m_fanStart;
@@ -958,17 +964,17 @@ public static class SdfMeshCollapse {
 
             if (m_aliveTriangles > (KeptShare * kept)) { return null; }
 
-            var indices = new uint[(3 * m_aliveTriangles)];
-            var materials = new uint[(m_carriesMaterials ? m_aliveTriangles : 0)];
+            var indices = RentedScope.Allocate<uint>(m_products, 3 * m_aliveTriangles);
+            var materials = RentedScope.Allocate<uint>(m_products, m_carriesMaterials ? m_aliveTriangles : 0);
             var at = 0;
 
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
                 if (!m_alive[triangle]) { continue; }
 
-                indices[(3 * at)] = ((uint)m_corners[(3 * triangle)]);
-                indices[((3 * at) + 1)] = ((uint)m_corners[((3 * triangle) + 1)]);
-                indices[((3 * at) + 2)] = ((uint)m_corners[((3 * triangle) + 2)]);
-                if (m_carriesMaterials) { materials[at] = m_materials[triangle]; }
+                indices.Span[(3 * at)] = ((uint)m_corners[(3 * triangle)]);
+                indices.Span[((3 * at) + 1)] = ((uint)m_corners[((3 * triangle) + 1)]);
+                indices.Span[((3 * at) + 2)] = ((uint)m_corners[((3 * triangle) + 2)]);
+                if (m_carriesMaterials) { materials.Span[at] = m_materials[triangle]; }
                 at++;
             }
 
@@ -1828,7 +1834,7 @@ public static class SdfMeshCollapse {
                 m_lineNext[samples.Last] = sample;
             }
             m_lineNext[sample] = -1;
-            m_lines[key] = (first, sample);
+            m_lines.Set(key, (first, sample));
         }
         // Measures every line sample on an edge the collapsing place's lines (PrepareFrom's m_lineNeighbours) leave against
         // the edges they become, from the neighbour to each of the place's other line places, choosing the nearest within

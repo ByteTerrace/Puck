@@ -12,6 +12,7 @@ public sealed partial record SdfMesh {
     private SdfMesh(SdfMesh source) {
         if (source.m_payload is not null) { throw new InvalidOperationException(message: "A published native mesh cannot be record-cloned."); }
         BakeCell = source.BakeCell;
+        Products = source.Products;
         BakedSites = source.BakedSites;
         Chunks = source.Chunks;
         Clusters = source.Clusters;
@@ -75,9 +76,26 @@ public sealed partial record SdfMesh {
     internal bool TryAcquire(bool cached) => (m_payload?.TryAcquire(cached: cached) ?? true);
     // Whether the mesh's storage was released by its last claimant, so nothing may claim or read it again.
     internal bool IsReleased => (m_payload?.Released ?? false);
-    // Whether the mesh's planes are native storage its claims own, which its last release frees; a managed mesh's planes
-    // are arrays nothing writes once it is built, kept alive by any reference to it.
-    internal bool OwnsNativeStorage => (m_payload is not null);
+    // Native planes belong either to published claims or to a transient stage scope. The checkpoint writer must encode
+    // either on its caller, since a queued reference to the mesh extends neither lifetime.
+    internal bool OwnsNativeStorage => (m_payload is not null) || (Products is not null) || HasBorrowedPlanes;
+
+    // Detect the storage itself as well as the stage owner: a new constructor that forgets to propagate Products must
+    // still encode before queueing and copy before publication. Array-backed planes are independently kept by the GC;
+    // every other memory manager's lifetime belongs to its owner, never to a reference to this record.
+    private bool HasBorrowedPlanes {
+        get {
+            if (RentedScope.RequiresOwner(m_positions) || RentedScope.RequiresOwner(m_normals) || RentedScope.RequiresOwner(m_indices) || RentedScope.RequiresOwner(m_triangleMaterials) ||
+                RentedScope.RequiresOwner(Members) || RentedScope.RequiresOwner(VertexMembers) || RentedScope.RequiresOwner(Influences)) { return true; }
+            for (var level = 0; level < Levels.Count; level++) {
+                if (RentedScope.RequiresOwner(Levels[level].UnheldIndices) || RentedScope.RequiresOwner(Levels[level].UnheldMaterials)) { return true; }
+            }
+            for (var chunk = 0; chunk < Chunks.Count; chunk++) {
+                if (Chunks[chunk].OwnsNativeStorage) { return true; }
+            }
+            return false;
+        }
+    }
 
     /// <summary>Gets the bytes the mesh's own storage holds: for a native mesh, what its storage owners are charged,
     /// excluding storage it shares with the mesh it was renumbered from; for a managed one, its arrays' bytes, counting
@@ -130,10 +148,11 @@ public sealed partial record SdfMesh {
     /// (<see cref="SdfMeshStoreCodec.Conform"/>) instead of the mesh's own positions and normals, which the entry stores
     /// quantized: the form of a mesh published with <paramref name="restore"/>, whose restored normals must be the ones
     /// its region first wrote.</param>
-    /// <returns>The native mesh, or this mesh when <paramref name="allocator"/> is <see langword="null"/>.</returns>
+    /// <returns>The native mesh; without an allocator, an independent managed copy of a scoped mesh, or this mesh when
+    /// its managed planes already outlive the caller.</returns>
     /// <exception cref="InvalidOperationException">The mesh is chunked, and its chunks are not views of its attributes.</exception>
     internal SdfMesh NativeCopy(IAllocator? allocator, MemoryAccount account, (SdfMeshLibrary Library, UInt128 Identity, SdfMeshGeometry Geometry, int[] Materials)? restore = null, SdfMeshStoreCodec.Positions? stored = null) {
-        if (allocator is null) { return this; }
+        if (allocator is null) { return m_payload is null && OwnsNativeStorage ? ManagedCopy() : this; }
         if (m_payload is not null) { return Acquire(); }
         if ((Chunks.Count != 0) && !JoinsChunks()) { throw new InvalidOperationException(message: "A chunked mesh's chunks view its attributes."); }
 
@@ -166,6 +185,20 @@ public sealed partial record SdfMesh {
 
             return storage.Finish()!;
         } catch { storage.Abandon(); throw; }
+    }
+
+    // A library without a native allocator still publishes independently owned planes. A transient memory view must
+    // never escape its group's scope merely because the offline library keeps managed meshes.
+    private SdfMesh ManagedCopy() {
+        using var held = Hold();
+        return new SdfMesh(held.Positions.ToArray(), held.Indices.ToArray(), held.Normals.ToArray(), held.TriangleMaterials.ToArray(),
+            Members.ToArray(), VertexMembers.ToArray(), Influences.ToArray()) {
+            BakeCell = BakeCell,
+            Encloses = Encloses,
+            Clusters = Clusters,
+            Chunks = Chunks.Select(static chunk => chunk.ManagedCopy()).ToArray(),
+            Levels = Levels.Select(static level => new SdfMeshLevel(Error: level.Error, Indices: level.UnheldIndices.ToArray(), TriangleMaterials: level.UnheldMaterials.ToArray())).ToArray(),
+        };
     }
     /// <summary>Returns the storage a decode of a store entry, or a copy of a managed mesh, writes the mesh's planes into:
     /// blocks of one payload under the process account, held by the mesh the storage finishes.</summary>

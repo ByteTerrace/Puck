@@ -122,16 +122,19 @@ public static class SdfMeshSkin {
     public static (int Root, int Member, int Blended, int SplitPlaces) Audit(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
         if (mesh.VertexMembers.IsEmpty) { return (0, 0, 0, 0); }
-        var places = new Dictionary<Vector3, SdfMeshSkinTuple>();
-        var split = new HashSet<Vector3>();
+
         using var held = mesh.Hold();
         var positions = held.Positions.Span;
+        using var places = new SdfMeshWeld(positions.Length);
+        using var split = new Puck.Abstractions.Memory.OwnedLongMap<byte>(allocator: null);
 
         for (var at = 0; (at < positions.Length); at++) {
             var tuple = new SdfMeshSkinTuple(First: mesh.VertexMembers.Span[at], Influence: (mesh.Influences.IsEmpty ? SdfMeshInfluence.Rigid : mesh.Influences.Span[at]));
             var position = positions[at];
 
-            if (!places.TryAdd(key: position, value: tuple) && (places[position] != tuple)) { split.Add(item: position); }
+            var site = places.Site(position, at);
+            var original = new SdfMeshSkinTuple(First: mesh.VertexMembers.Span[site], Influence: mesh.Influences.IsEmpty ? SdfMeshInfluence.Rigid : mesh.Influences.Span[site]);
+            if (original != tuple) { _ = split.TryAdd(site, 0); }
         }
         var (root, member, blended) = Paths(mesh: mesh);
 
@@ -204,16 +207,18 @@ public static class SdfMeshSkin {
         // The contoured mesh is a managed mesh of the bake, whose planes the skin shares.
         using var held = mesh.Hold();
         var positions = held.Positions.Span;
-        var first = new byte[positions.Length];
-        var influences = new SdfMeshInfluence[first.Length];
-        var places = new Dictionary<Vector3, SdfMeshSkinTuple>();
+        var first = Puck.Abstractions.Memory.RentedScope.Allocate<byte>(mesh.Products, positions.Length);
+        var influences = Puck.Abstractions.Memory.RentedScope.Allocate<SdfMeshInfluence>(mesh.Products, first.Length);
+        using var places = new SdfMeshWeld(positions.Length, allocator: mesh.Products?.Allocator, owner: mesh.Products?.Owner);
         var weights = new FixedQ4816[slots.Length];
         byte Member(int index) => ((slots[index] == group.Slot) ? SdfMesh.NoMember : (byte)Array.IndexOf(array: others, value: slots[index]));
 
         for (var vertex = 0; (vertex < first.Length); vertex++) {
             var point = positions[vertex];
 
-            if (!places.TryGetValue(key: point, value: out var tuple)) {
+            var site = places.Site(point, vertex);
+            var tuple = site == vertex ? default : new SdfMeshSkinTuple(First: first.Span[site], Influence: influences.Span[site]);
+            if (site == vertex) {
                 var fixedPoint = FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point));
 
                 if (!field.ReadInfluences(position: fixedPoint, shapeOwners: owners, shares: weights)) { refusal = "field influence reading refused"; return null; }
@@ -232,13 +237,13 @@ public static class SdfMeshSkin {
                     if (!field.ReadInfluenceGradient(fixedPoint, owners, slots.Length, a, b, step, out gradient)) { refusal = "share gradient left the field"; return null; }
                 }
                 tuple = SdfMeshSkinTuple.Of(first: Member(index: a), gradient: gradient.ToVector3(), second: Member(index: b), share: quantized);
-                places.Add(key: point, value: tuple);
+
             }
-            first[vertex] = tuple.First;
-            influences[vertex] = tuple.Influence;
+            first.Span[vertex] = tuple.First;
+            influences.Span[vertex] = tuple.Influence;
         }
         refusal = null;
-        return new(held.Positions, held.Indices, held.Normals, held.TriangleMaterials, members, first, influences);
+        return new(held.Positions, held.Indices, held.Normals, held.TriangleMaterials, members, first, influences) { Products = mesh.Products, BakedSites = mesh.BakedSites };
     }
 
     // The three largest owners by share, ties to the lower slot; -1 where fewer owners exist.

@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Buffers;
 using System.Diagnostics;
 using System.Numerics;
@@ -2750,28 +2751,28 @@ public sealed partial class SdfMeshPathBake {
         var started = Stopwatch.GetTimestamp();
 
         try {
-            contour = lattice.Contour();
+            contour = lattice.Contour(products: group.ContourProducts);
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
             SdfMeshBakeReport.Refused(refusal: exception.Message, selector: group.Selector);
         }
         Account(detail: new(Count: contour?.QuadCount, Factor: lattice.Refinement, Measured: lattice.MeasuredCells), group: group, since: started, stage: BakeStage.Contour);
 
         var empty = ((contour is null) || (contour.QuadCount == 0));
-        int[] creases = [];
+        ReadOnlyMemory<int> creases = default;
 
         if (empty) {
             if (contour is not null) { StoreEmpty(group); }
         } else if (contour is not null) {
-            creases = CreaseVertices(allocator: group.Allocator, contour: contour, workspace: group.Memory);
+            creases = CreaseVertices(products: group.ContourProducts, allocator: group.Allocator, contour: contour, workspace: group.Memory);
             if (creases.Length > 0) {
                 group.Projection = new ContourProjection(allocator: group.Allocator, contour: contour, observer: group.Memory);
                 group.CreaseSpacing = lattice.ContourCell;
                 group.CreaseSlope = lattice.SurfaceSlope();
                 group.Points.Resize(creases.Length, clear: false, preserve: false);
                 for (var index = 0; (index < creases.Length); index++) {
-                    var vertex = creases[index];
+                    var vertex = creases.Span[index];
 
-                    group.Points[index] = new Vector4(x: contour.Positions[(3 * vertex)], y: contour.Positions[((3 * vertex) + 1)], z: contour.Positions[((3 * vertex) + 2)], w: 1f);
+                    group.Points[index] = new Vector4(x: contour.Positions.Span[(3 * vertex)], y: contour.Positions.Span[((3 * vertex) + 1)], z: contour.Positions.Span[((3 * vertex) + 2)], w: 1f);
                 }
             }
         }
@@ -2797,14 +2798,14 @@ public sealed partial class SdfMeshPathBake {
         }
     }
     // The vertices a contour's field check measures (AnswerCreases): every vertex no crossing pins to the surface.
-    private static int[] CreaseVertices(SdfContour contour, IAllocationObserver? workspace, IAllocator? allocator) {
+    private static ReadOnlyMemory<int> CreaseVertices(SdfContour contour, IAllocationObserver? workspace, IAllocator? allocator, RentedScope? products = null) {
         using var found = new OwnedBuffer<int>(allocator: allocator, observer: workspace);
 
         for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
-            if (((vertex < contour.Features.Length) && contour.Features[vertex]) || ((vertex < contour.Solved.Length) && contour.Solved[vertex])) { found.Add(item: vertex); }
+            if (((vertex < contour.Features.Length) && contour.Features.Span[vertex]) || ((vertex < contour.Solved.Length) && contour.Solved.Span[vertex])) { found.Add(item: vertex); }
         }
 
-        return found.ToArray();
+        return RentedScope.Copy<int>(products, found.GetSpan());
     }
     // The next chunk of the vertices a group's field check measures (gradients at taps the crease spacing apart) or of its
     // material points (values alone), as many as a frame's share of field evaluations takes.
@@ -2839,7 +2840,7 @@ public sealed partial class SdfMeshPathBake {
         var softened = 0;
 
         for (var index = 0; (index < request.Samples); index++) {
-            var vertex = group.Creases![(group.PointsAnswered + index)];
+            var vertex = group.Creases!.Value.Span[(group.PointsAnswered + index)];
             var gradient = new Vector3(x: gradients[(3 * index)], y: gradients[((3 * index) + 1)], z: gradients[((3 * index) + 2)]);
 
             softened += (ProjectCrease(contour: contour, gradient: gradient, projection: group.Projection!, slope: group.CreaseSlope, tolerance: tolerance, value: values[index], vertex: vertex) ? 1 : 0);
@@ -2887,18 +2888,18 @@ public sealed partial class SdfMeshPathBake {
         if (!(MathF.Abs(x: distance) > tolerance)) { return false; }
         gradient /= length;
         if (!(Vector3.Dot(vector1: gradient, vector2: projection.Outward(vertex: vertex)) > 0f)) { return false; }
-        var cut = ((vertex < contour.Beside.Length) && contour.Beside[vertex] && (distance < 0f));
+        var cut = ((vertex < contour.Beside.Length) && contour.Beside.Span[vertex] && (distance < 0f));
         var point = projection.Move(amount: out var amount, contour: contour, displacement: (-distance * gradient), vertex: vertex);
 
         if (!(amount > 0f)) { return false; }
-        contour.Positions[(3 * vertex)] = point.X;
-        contour.Positions[((3 * vertex) + 1)] = point.Y;
-        contour.Positions[((3 * vertex) + 2)] = point.Z;
+        contour.Positions.Span[(3 * vertex)] = point.X;
+        contour.Positions.Span[((3 * vertex) + 1)] = point.Y;
+        contour.Positions.Span[((3 * vertex) + 2)] = point.Z;
         if ((MathF.Abs(x: distance) * (1f - amount)) <= tolerance) {
-            if ((vertex < contour.Features.Length) && !cut) { contour.Features[vertex] = false; }
-            contour.Normals[(3 * vertex)] = gradient.X;
-            contour.Normals[((3 * vertex) + 1)] = gradient.Y;
-            contour.Normals[((3 * vertex) + 2)] = gradient.Z;
+            if ((vertex < contour.Features.Length) && !cut) { contour.Features.Span[vertex] = false; }
+            contour.Normals.Span[(3 * vertex)] = gradient.X;
+            contour.Normals.Span[((3 * vertex) + 1)] = gradient.Y;
+            contour.Normals.Span[((3 * vertex) + 2)] = gradient.Z;
         }
 
         return true;
@@ -3000,7 +3001,8 @@ public sealed partial class SdfMeshPathBake {
 
         var span = group.Points.GetSpan()[..points];
         var decided = group.PointDecided;
-        var boxes = new Dictionary<(int X, int Y, int Z), int>();
+        using var xy = new OwnedLongMap<int>(group.Allocator, group.Memory);
+        using var boxes = new OwnedLongMap<int>(group.Allocator, group.Memory);
         var walks = 0;
         var count = 0;
         var kept = 0;
@@ -3012,7 +3014,8 @@ public sealed partial class SdfMeshPathBake {
             var point = new Vector3(x: span[index].X, y: span[index].Y, z: span[index].Z);
             var key = (((int)MathF.Floor(x: (point.X / side))), ((int)MathF.Floor(x: (point.Y / side))), ((int)MathF.Floor(x: (point.Z / side))));
 
-            if (!boxes.TryGetValue(key: key, value: out var material)) {
+            var packed = PackedIntPair.Pack(high: xy.NumberOf(PackedIntPair.Pack(high: key.Item1, low: key.Item2)), low: key.Item3);
+            if (!boxes.TryGetValue(key: packed, value: out var material)) {
                 var low = (new Vector3(x: key.Item1, y: key.Item2, z: key.Item3) * side);
                 // A group whose boxes hold several materials pays a walk for few points: past MaterialTrialWalks, it
                 // walks on only while each walk decides MaterialWalkPoints points.
@@ -3020,7 +3023,7 @@ public sealed partial class SdfMeshPathBake {
 
                 walks += (worth ? 1 : 0);
                 material = ((worth && evaluator.TryUniformMaterial(lower: SdfMeshAudit.Fixed(point: (low - pad)), material: out var found, upper: SdfMeshAudit.Fixed(point: ((low + new Vector3(value: side)) + pad)))) ? found : -1);
-                boxes.Add(key: key, value: material);
+                boxes.Add(key: packed, value: material);
             }
             decided[index] = material;
             if (material >= 0) {
@@ -3070,7 +3073,7 @@ public sealed partial class SdfMeshPathBake {
         var started = Stopwatch.GetTimestamp();
 
         try {
-            mesh = group.Cut!.Build();
+            mesh = group.Cut!.Build(products: group.MeshProducts);
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
             SdfMeshBakeReport.Refused(refusal: exception.Message, selector: group.Selector);
         }
@@ -3081,6 +3084,7 @@ public sealed partial class SdfMeshPathBake {
         group.Contour = null;
         group.Creases = null;
         group.Cut = null;
+        group.ReleaseContourProducts();
         // The CPU influence reading propagates owners through composition once per exact position. Copies at a
         // crease or material cut carry the same motion, independently of their normals. It reads the group's own
         // instructions (SdfMeshSkinSource), so the skin stays a function of the geometry the mesh is stored under.
@@ -3139,6 +3143,7 @@ public sealed partial class SdfMeshPathBake {
             Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true);
         }
 
+        group.ReleaseMeshProducts();
         using (EnterGate(site: BakeGate.Land)) {
             m_accounts.Merged += merged;
             group.Contouring = false;
@@ -3281,7 +3286,7 @@ public sealed partial class SdfMeshPathBake {
 
             var triangles = m_triangles;
 
-            double Patch(int vertex, int axis) => ((((3 * vertex) + axis) < contour.Patches.Length) ? contour.Patches[((3 * vertex) + axis)] : 0.0);
+            double Patch(int vertex, int axis) => ((((3 * vertex) + axis) < contour.Patches.Length) ? contour.Patches.Span[((3 * vertex) + axis)] : 0.0);
             void Add(int a, int b, int c, sbyte axis) {
                 if ((a == b) || (a == c) || (b == c)) { return; }
                 var pa = contour.PositionOf(vertex: a);
@@ -3302,8 +3307,8 @@ public sealed partial class SdfMeshPathBake {
             for (var quad = 0; (quad < contour.QuadCount); quad++) {
                 var at = (4 * quad);
 
-                var (a, b, c, d) = (contour.Quads[at], contour.Quads[(at + 1)], contour.Quads[(at + 2)], contour.Quads[(at + 3)]);
-                var axis = ((quad < contour.QuadAxes.Length) ? contour.QuadAxes[quad] : ((sbyte)0));
+                var (a, b, c, d) = (contour.Quads.Span[at], contour.Quads.Span[(at + 1)], contour.Quads.Span[(at + 2)], contour.Quads.Span[(at + 3)]);
+                var axis = ((quad < contour.QuadAxes.Length) ? contour.QuadAxes.Span[quad] : ((sbyte)0));
 
                 Add(a: a, axis: axis, b: b, c: c);
                 Add(a: a, axis: axis, b: c, c: d);
@@ -3613,6 +3618,12 @@ public sealed partial class SdfMeshPathBake {
         // reading (Classify), which decide whether its next lattice asks the affine reading at all.
         public (long Walks, long Settled) AffineTrial { get; set; }
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.
+        private RentedScope? m_contourProducts;
+        private RentedScope? m_meshProducts;
+        public RentedScope ContourProducts => m_contourProducts ??= new(owner: Memory, allocator: Allocator);
+        public RentedScope MeshProducts => m_meshProducts ??= new(owner: Memory, allocator: Allocator);
+        public void ReleaseContourProducts() { m_contourProducts?.Dispose(); m_contourProducts = null; }
+        public void ReleaseMeshProducts() { m_meshProducts?.Dispose(); m_meshProducts = null; }
         public SdfContour? Contour { get; set; }
         // The cut holds native storage, which letting go of it (a null or another cut) releases.
         public SdfMeshMaterialCut? Cut {
@@ -3628,7 +3639,7 @@ public sealed partial class SdfMeshPathBake {
         private SdfMeshMaterialCut? m_cut;
         // While the contour's unpinned vertices are checked against the field, the vertices, the spacing their
         // gradient taps scale by, and the field's typical slope across its surface (SdfSampledLattice.SurfaceSlope).
-        public int[]? Creases { get; set; }
+        public ReadOnlyMemory<int>? Creases { get; set; }
         public ContourProjection? Projection { get; set; }
 
         public Vector3 CreaseSpacing { get; set; } = Vector3.One;
@@ -3802,6 +3813,7 @@ public sealed partial class SdfMeshPathBake {
                     m_pointDecided?.Dispose();
                     Contour = null; Cut = null; Creases = null; Projection?.Dispose(); Projection = null;
                     Next = null; Deferred = null;
+                    ReleaseContourProducts(); ReleaseMeshProducts();
                     Memory.Dispose();
                 }
                 if (Retired && !m_released) {

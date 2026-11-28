@@ -175,13 +175,13 @@ public sealed partial class SdfMeshPathBake {
             var at = new Vector3[creases.Length];
 
             for (var index = 0; (index < creases.Length); index++) {
-                at[index] = new Vector3(x: contour.Positions[(3 * creases[index])], y: contour.Positions[((3 * creases[index]) + 1)], z: contour.Positions[((3 * creases[index]) + 2)]);
+                at[index] = new Vector3(x: contour.Positions.Span[(3 * creases.Span[index])], y: contour.Positions.Span[((3 * creases.Span[index]) + 1)], z: contour.Positions.Span[((3 * creases.Span[index]) + 2)]);
             }
 
             var (creaseValues, creaseGradients) = LevelGradients(field: field, iso: IsoAt, points: at, spacing: SdfMeshBakeTaps.Spacing(cell: creaseCell));
 
             for (var index = 0; (index < creases.Length); index++) {
-                _ = ProjectCrease(contour: contour, gradient: new Vector3(x: creaseGradients[(3 * index)], y: creaseGradients[((3 * index) + 1)], z: creaseGradients[((3 * index) + 2)]), projection: projection, slope: slope, tolerance: tolerance, value: creaseValues[index], vertex: creases[index]);
+                _ = ProjectCrease(contour: contour, gradient: new Vector3(x: creaseGradients[(3 * index)], y: creaseGradients[((3 * index) + 1)], z: creaseGradients[((3 * index) + 2)]), projection: projection, slope: slope, tolerance: tolerance, value: creaseValues[index], vertex: creases.Span[index]);
             }
         }
 
