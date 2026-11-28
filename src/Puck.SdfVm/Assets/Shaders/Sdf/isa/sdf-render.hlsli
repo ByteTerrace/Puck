@@ -27,8 +27,12 @@
 #define SDF_PROBE_RELIGHT_EMITTER_ROWS               3u
 #define SDF_PROBE_SELECT_INPUT_WORDS                 8u
 #define SDF_PROBE_SELECT_HEADER_ROWS                 5u
-#define SDF_PROBE_CACHE_WORDS                        290u
-#define SDF_PROBE_RELIGHT_RESULT_WORDS               305u
+#define SDF_PROBE_CACHE_WORDS                        348u
+#define SDF_PROBE_CACHE_RESULT_WORD                  290u
+#define SDF_PROBE_RELIGHT_MOVED_WORD                 305u
+#define SDF_PROBE_CONVERGED_SHARE                    0.02
+#define SDF_PROBE_CONVERGED_FLOOR                    0.001
+#define SDF_PROBE_RELIGHT_RESULT_WORDS               306u
 #define SDF_PROBE_CAMERA_SAMPLE_OUTPUT_WORDS         20u
 #define SDF_PROBE_CAMERA_SAMPLE_CLOSURE_PASSES       16u
 #define SDF_PROBE_RECORD_INPUT_WORD                  62u

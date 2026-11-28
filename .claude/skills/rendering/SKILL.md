@@ -1989,8 +1989,8 @@ paired arithmetic. Carry author-facing parameters through
   vertex members and influences stay. The entry numbers triangle materials by place, so a restore writes them in the
   ids the mesh carries (the `Restorable`'s materials, from `SdfMeshStorage.WritesMaterialsIn`), never the entry's: a
   restore in the entry's ids gave a released floor program material 0 in the irradiance trace, an orange gallery. So read the planes under a hold and keep no view past it: a long-lived
-  reader copies what it keeps, as the irradiance scene copies each traced level's triangles over the
-  vertices they reach and each draw mesh's traced materials (`SdfMeshIrradianceScene.Geometry`), and a
+  reader retains a mesh claim and borrows its planes for each query, as the irradiance scene does
+  (`SdfMeshIrradianceScene.Geometry`); it keeps hierarchy metadata, with no vertex/index/material copy. A
   count comes from the mesh (`VertexCount`, `IndexCount`, `HasNormals`, `HasTriangleMaterials`), never a
   plane's length. `SdfMeshRegion.WriteMesh` takes a hold, so every region write, a coarsened copy run's
   included, reads resident planes; the owed set (`OwedMeshes`) holds a need for the owed meshes the latest
@@ -2046,7 +2046,7 @@ wrong. The contracts that bite most often:
   no level of its own. The audit reads the merged mesh, level zero. The
   irradiance trace reads each static mesh's coarsest level within
   `SdfMeshIrradiance.TraceError` (`SdfMeshIrradianceScene.GeometryKey.Of`): its
-  geometry copies that level's indices, its instance records and bottoms
+  geometry borrows that level's indices for CPU queries; its instance records and bottoms
   address the level's indices and materials past the finer levels' in the region
   (`Geometry.FirstTriangle`), a hit's triangle is the level's own, and the
   diagnostics' nearest query adds the level's error to its budget. A scene built
@@ -2356,14 +2356,18 @@ counts in `sdf.transforms`, never in `records.posed`.
   and the join included; the workers' share is not in any part.
 - **A camera cut costs an ordinary frame.** The irradiance volume's gate is never held across a scan of a window or a
   table (`SdfMeshIrradiance.Upkeep.cs`, `SdfMeshIrradiance.ProbeCache`): a window move publishes at once, and the
-  refill, the probe caches' retention, growth and releases, and a whole snapshot for the probe service each take a
-  bounded run of slots a hold. A new writer of the volume's words keeps the feedback mirror's invariant (the header of
-  `SdfMeshIrradiance.SnapshotWhole`) by marking what it wrote dirty, never by forgetting the mirror to resend the
-  volume whole. A frame whose bake's demand measure still runs dresses what the groups hold instead of joining it
+  refill and the probe caches' retention, growth and releases each take a bounded run of slots a hold.
+  A layout replacement allocates and clears its host keys off the gate (`PrepareVolume`), then staging exchanges
+  the ready buffer while readers retain the old one through the epochs. Until then the installed volume draws.
+  `ForgetPublication` replaces the hit allocation state as a whole, with no owner sort or per-owner free.
+  Runtime irradiance is device-owned: there is no CPU feedback mirror or full-volume upload. `RecordCommit`
+  publishes both records and previous-light history after every job of the batch completed. CPU queries read
+  bounded cages through `SdfMeshProbeGpuWork.ReadRecords`; [mesh GI](references/mesh-gi.md) owns their pending state.
+  A frame whose bake's demand measure still runs dresses what the groups hold instead of joining it
   (`SdfMeshPathBake.StandsWhileMeasuring`), and the demand points hold that frame's observation until the measure is
   collected (`SdfMeshDemand.MayChange`, `ApplyStaged`); a tick-locked frame, another program or a changed copy layout
   joins. `host.frames` names what is left as `lightingwait` and `demandwait` among the produce-work parts (measured
-  on the frame thread only), beside `sdf.mesh-gi.gate-waits`, `refill-*`, `cache-*` and `whole-snapshots` and
+  on the frame thread only), beside `sdf.mesh-gi.gate-waits`, `refill-*`, `cache-*`, `query-readback-records` and
   `sdf.residency.demand.join-waits` and `frames-stood` in `world.counters`.
 - **A dress walks only what moved.** `SdfMeshDresser.Dress` skips its group walk while the bake's product revision and
   copy layout revision stand; `SdfMeshPathBake.Replace` (the group list's one writer), Restart's clear, the

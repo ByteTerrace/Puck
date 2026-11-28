@@ -17,6 +17,12 @@ public static class VectorFunctions {
     public static uint PackHalf2x16(float low, float high) =>
         ((uint)BitConverter.HalfToUInt16Bits(value: ((Half)low))) | (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)high))) << 16);
 
+    /// <summary>Unpacks two IEEE binary16 values into single-precision lanes, low half first.</summary>
+    /// <param name="packed">The two binary16 bit patterns.</param>
+    /// <returns>The low value in X and the high value in Y.</returns>
+    public static Vector2 UnpackHalf2x16(uint packed) => new(
+        (float)BitConverter.UInt16BitsToHalf((ushort)packed), (float)BitConverter.UInt16BitsToHalf((ushort)(packed >> 16)));
+
     private const float UnormByteScale = 255f;
     private const float UnormShortScale = 65535f;
 

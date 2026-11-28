@@ -14,6 +14,8 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     uint flags = sdfProbeInput[input];
     if ((flags & 1u) == 0) { return; }
     bool reuse = (flags & 2u) != 0;
+    uint cache = sdfProbeInput[input + 3] * SDF_PROBE_CACHE_WORDS + SDF_PROBE_CACHE_RESULT_WORD;
+    bool device = (flags & 8u) != 0;
     uint output = probe * SDF_PROBE_RELIGHT_RESULT_WORDS;
     uint partials = count * SDF_PROBE_RELIGHT_RESULT_WORDS + 1 + probe * SDF_PROBE_RELIGHT_SLICES * SDF_PROBE_RELIGHT_PARTIAL_WORDS;
     if (lane < 6) {
@@ -27,7 +29,9 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         }
         float total = sdfProbeLighting[9 + lane / 4][lane % 4];
         uint previous = input + SDF_PROBE_RELIGHT_PREVIOUS_WORD + 18 + 3 * lane;
-        local = reuse ? asfloat(uint3(sdfProbeInput[previous], sdfProbeInput[previous + 1], sdfProbeInput[previous + 2])) : local / total;
+        float3 keptLocal = device ? asfloat(uint3(sdfProbeCache[cache + 18 + 3 * lane], sdfProbeCache[cache + 19 + 3 * lane], sdfProbeCache[cache + 20 + 3 * lane])) :
+            asfloat(uint3(sdfProbeInput[previous], sdfProbeInput[previous + 1], sdfProbeInput[previous + 2]));
+        local = reuse ? keptLocal : local / total;
         varying = varying / total + local;
         sky /= total;
         [unroll] for (uint c = 0; c < 3; c++) {
@@ -44,7 +48,8 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
             set |= sdfProbeHitsRW[at];
             cleared |= sdfProbeHitsRW[at + SDF_MESH_IRRADIANCE_LIGHT_WORDS];
         }
-        uint visible = ((reuse ? sdfProbeInput[input + SDF_PROBE_RELIGHT_PREVIOUS_WORD + 36 + w] : 0) | set) & ~cleared;
+        uint keptVisibility = device ? sdfProbeCache[cache + 36 + w] : sdfProbeInput[input + SDF_PROBE_RELIGHT_PREVIOUS_WORD + 36 + w];
+        uint visible = ((reuse ? keptVisibility : 0) | set) & ~cleared;
         sdfProbeHitsRW[output + 36 + w] = visible;
         sdfProbeHitsRW[record + SDF_MESH_IRRADIANCE_LIGHTS_WORD + w] = visible;
     }
@@ -55,5 +60,21 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         uint open = output + SDF_PROBE_RELIGHT_SKY_OUTPUT_WORD + 2 * lane;
         sdfProbeHitsRW[record + SDF_MESH_IRRADIANCE_SKY_LIGHT_WORD + lane] = f32tof16(asfloat(sdfProbeHitsRW[open])) |
             (f32tof16(asfloat(sdfProbeHitsRW[open + 1])) << 16);
+    }
+    DeviceMemoryBarrierWithGroupSync();
+    if (lane == 0) {
+        bool moved = (flags & 4u) != 0;
+        if (!moved) {
+            for (uint axis = 0; axis < 18; axis++) {
+                uint skyWord = SDF_PROBE_RELIGHT_SKY_OUTPUT_WORD + axis;
+                float now = asfloat(sdfProbeHitsRW[output + axis]);
+                float before = asfloat(sdfProbeCache[cache + axis]);
+                float skyNow = asfloat(sdfProbeHitsRW[output + skyWord]);
+                float skyBefore = asfloat(sdfProbeCache[cache + skyWord]);
+                moved = moved || abs(now - before) > SDF_PROBE_CONVERGED_SHARE * max(abs(now), abs(before)) + SDF_PROBE_CONVERGED_FLOOR ||
+                    abs(skyNow - skyBefore) > SDF_PROBE_CONVERGED_SHARE * max(abs(skyNow), abs(skyBefore)) + SDF_PROBE_CONVERGED_FLOOR;
+            }
+        }
+        sdfProbeHitsRW[output + SDF_PROBE_RELIGHT_MOVED_WORD] = moved ? 1u : 0u;
     }
 }

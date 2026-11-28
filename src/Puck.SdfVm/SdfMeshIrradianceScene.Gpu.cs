@@ -28,7 +28,7 @@ public sealed partial class SdfMeshIrradianceScene {
             if (!captured.TryGetValue(instance.Mesh, out var prior)) { return false; }
             var placed = current[instance.Mesh];
             if (placed.VertexWord != prior.VertexWord || placed.IndexWord != prior.IndexWord ||
-                (!instance.TriangleMaterials.IsEmpty && placed.MaterialWord != prior.MaterialWord)) { return false; }
+                (instance.Mesh.HasTriangleMaterials && placed.MaterialWord != prior.MaterialWord)) { return false; }
         }
         return true;
     }
@@ -212,7 +212,7 @@ public sealed partial class SdfMeshIrradianceScene {
         var first = instance.Geometry.FirstTriangle;
         record[SdfMeshProbeTrace.GeometryWord] = (uint)(placement.IndexWord + (3 * first));
         record[SdfMeshProbeTrace.GeometryWord + 1] = (uint)placement.VertexWord;
-        record[SdfMeshProbeTrace.GeometryWord + 2] = instance.TriangleMaterials.IsEmpty ? uint.MaxValue : (uint)(placement.MaterialWord + first);
+        record[SdfMeshProbeTrace.GeometryWord + 2] = !instance.Mesh.HasTriangleMaterials ? uint.MaxValue : (uint)(placement.MaterialWord + first);
         record[SdfMeshProbeTrace.GeometryWord + 3] = unchecked((uint)instance.Material);
         record[SdfMeshProbeTrace.IdentityWord] = instance.Identity ? 1u : 0u;
         record[SdfMeshProbeTrace.InstanceIndexWord] = (uint)index;

@@ -6,15 +6,14 @@ meters each view's image (`SdfExposure.Meter`, the composite's histogram), never
 adaptation still reads the volume's gather at each surface.
 
 `host.memory owners 0` reports the trace hierarchy under `sdf.mesh-gi.trace-scene`,
-the arrays used to build it under `sdf.mesh-gi.scene-build`, the CPU probe
-volume under `sdf.mesh-gi.volume`, the probe caches' tables under
+the arrays used to build it under `sdf.mesh-gi.scene-build`, the CPU slot
+keys (full records on the CPU reference path) under `sdf.mesh-gi.volume`, the probe caches' tables under
 `sdf.mesh-gi.probe-cache`, and the hit and light blocks their entries name (with
-a batch's passing hit words and a rewrite's snapshot) under
+a batch's passing hit words and bounded query payloads) under
 `sdf.mesh-gi.probe-blocks`. With the residency's mesh library allocator (the
-World's), the volume's words, the blocks and each geometry's copies of its mesh
-level live in native storage in the native-allocator row, freed through the
-volume's reader epochs (`SdfMeshIrradiance`'s `m_blocks`) or the geometry's last
-release; the hierarchy's nodes and the caches' tables stay managed. A geometry
+World's), the volume's keys and the blocks live in native storage in the native-allocator row, freed through the
+volume's reader epochs (`SdfMeshIrradiance`'s `m_blocks`); the geometry owns only its hierarchy metadata.
+Mesh planes are borrowed under `SdfMesh.Held` for builds and CPU queries, never copied into the scene. A geometry
 reused by two scenes keeps one charge until its last scene releases it. A host refusal leaves the installed
 scene available and the volume retries on its scene-build cadence. The GPU
 upload retries its refused chunk before publishing the new root.
@@ -191,8 +190,16 @@ feedback volume, after the publication (`KeepsGpuPublication`) still stands as i
 is taken and every earlier job of the batch ran; so every probe of a batch reads
 the bounce the volume held before it, as the CPU reference does. The batch
 lands only once that commit completed, then frame upload copies the ready slots
-into the published GPU table. The CPU retains depth/sky and diagnostic lighting, and releases full
-hit arrays once the batch is relit. Once the device has answered a camera sample, the camera sample reads
+into the published GPU table. The device owns all runtime probe payloads. The CPU keeps cell keys,
+placement and scheduling metadata, captured input identities and light visibility bits;
+`VolumeWords` refuses payload access on that path and `LightBlock` refuses cube access.
+`RecordCommit` installs the previous-light history beside the hits at the same time as the records,
+so an abandoned batch cannot affect convergence or local-light reuse. CPU gather and light queries
+schedule `ReadRecords`, at most three eight-corner cages, and report pending until the fence answers.
+The one receiver cache is replaced, not accumulated. `world.probe` additionally streams its CPU
+reference's hit receivers through one fixed scratch and retains only their gathered RGB;
+repeat the query after presentation advances. `query-readback-records` counts these explicit reads.
+Once the device has answered a camera sample, the camera sample reads
 the GPU kernel's small answer rather than traversing the hierarchy on the frame. A job whose scene's meshes
 are not resident within `AdmissionWait` is cancelled like an obsolete one, so it
 never holds the coordinator or the camera sample behind it without bound.
@@ -806,16 +813,17 @@ read again is refilled and republished whole.
   radiance cube, light bits, origin and sky-light cube before
   `SdfMeshIrradianceProbe.DepthWord`, then the packed first-hit surface words and
   packed normal-gradient words; `world.budget` and `world.probe` print the
-  table's bytes per tier. The GPU runtime releases the CPU hit array once the batch is relit, keeping
-  depth/sky and diagnostic lighting (`ProbeBlock` and `LightBlock`); the CPU
-  reference keeps the full hits too. `world.budget` derives the retained block
-  cost from those types. A level's cache holds its window grown by the
+  table's bytes per tier. The GPU runtime releases its trace payload once the batch is relit.
+  Its retained `LightBlock` holds only visibility metadata and captured input identity;
+  previous light remains in the GPU hit cache. The CPU reference keeps complete blocks.
+  `world.budget` reports actual CPU key/block bytes, the bounded query limit and the added device history.
+  A level's cache holds its window grown by the
   window's band (`MarginOf`, dims/8 a side) on every side: when the window moves,
   the staging asks for that box (`ProbeCache.AskRetain`), and once the cache holds
   more probes than the box has cells (at Medium 92,800 probes over the three
   levels) the caches' upkeep publishes a compacted table of the cells inside it and
   moves the kept entries in, a bounded run of slots for each hold of the gate. `world.residency`'s `probe-cache-*` line reads it. A batch's
-  depth/sky and light blocks stay alive while any kept probe names them, so
+  retained blocks stay alive while any kept probe names them, so
   bytes per kept probe can exceed their nominal payload.
   The cache uses table-owned publication arenas, with no publication object per
   key. Retired values clear when unheld, on retirement or the next write or
@@ -827,8 +835,7 @@ read again is refilled and republished whole.
   The views read the probe service's feedback table itself, the one device copy
   of the volume: a publication (`SdfWorldTables.PublishMeshIrradiance`) binds
   it in the World set and moves the irradiance revision, and copies nothing.
-  Every write the service records into it (the snapshot and updates through
-  its region, a batch's commit) hands it to the views' stages
+  Every batch commit the service records into it hands it to the views' stages
   (`SdfWorldTables.TableReaders`), on the one queue the views use, so a view
   may read records committed a few frames before their publication; each slot
   carries its cell and the views reject another cell's, and a still view
@@ -840,9 +847,8 @@ read again is refilled and republished whole.
   (`SdfWorldTables.SettleMeshIrradiance`) and disposed only after the upload
   carrying the unbinding (`RetireBackgroundResource`). A moved window
   publishes each completed slot. A device reattach brings new tables with no
-  table: nothing publishes until a completed relight carries the volume's full
-  snapshot into the new feedback, then every slot republishes at once
-  (`RepublishAll`).
+  table: its new feedback is cleared on the device, old allocation tokens are forgotten,
+  and each completed replacement batch publishes its measured slots. No host snapshot restores it.
   The lighting reserves its device storage before it allocates it
   (`SdfLightingHold`, under `SdfResidencySelector.LightingOwner`): the table,
   the hit, camera-sample and batch caches of the layout the frame asks for,
@@ -851,7 +857,7 @@ read again is refilled and republished whole.
   selector's elastic budget does not fall when the lighting first lights.
   `world.residency`'s `lighting reserved=` line and `host.memory families`'
   `reservation` rows read it.
-  Feedback has a CPU shadow for reset snapshots; hierarchy staging streams
+  Feedback has no CPU shadow; hierarchy staging streams
   from the scene arrays with only a root-word shadow. Upload buffers shrink
   after small flushes. `world.residency` reports scene, hit-cache and feedback
   device/upload/shadow bytes separately. `trace-scene-cpu-array-bytes` counts
@@ -859,7 +865,7 @@ read again is refilled and republished whole.
   dictionaries, shared bake meshes and temporary build workspace.
   `world.probe` reports publication and CPU-volume bytes. These logical holdings
   overlap process/account/backend readings; never add those readings together.
-  Publication copies changed slots only, coalesced into runs.
+  Publication binds the feedback; batch commits copy only their measured slots.
 - Each published probe contains its own measured cubes, exactly as the CPU bounce
   read sees them. Sky, surface radiance and the surface map come from the same
   hits, so an opening cannot count as sky in one sample set and a bounced hit in
