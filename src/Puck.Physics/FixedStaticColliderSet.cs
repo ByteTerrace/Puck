@@ -78,6 +78,12 @@ public interface IColliderGroupFilter {
     bool Keeps(int key);
 }
 
+/// <summary>A filter that keeps every group: a query that visits the whole set.</summary>
+public readonly struct KeepsEveryGroup : IColliderGroupFilter {
+    /// <inheritdoc/>
+    public bool Keeps(int key) => true;
+}
+
 /// <summary>Colliders with their <see cref="FixedStaticCollider.WorldBox"/> bounds and <see cref="FixedColliderFrame"/> certificates,
 /// computed from the colliders themselves: the only form in which <see cref="FixedStaticContactSolver"/> takes colliders,
 /// so every bound it culls by is the collider's own and no caller supplies one. A set is either compiled once over an
@@ -196,7 +202,7 @@ public sealed class FixedStaticColliderSet {
     /// <returns>The candidates, or the default value (every collider) for an empty set.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="scratch"/> is <see langword="null"/>.</exception>
     public FixedColliderCandidates Candidates(FixedAabb region, FixedQ4816 skin, List<int> scratch) =>
-        Candidates(filter: default(KeepsEvery), region: region, scratch: scratch, skin: skin);
+        Candidates(filter: default(KeepsEveryGroup), region: region, scratch: scratch, skin: skin);
     /// <summary>Lists the colliders whose bounds meet a region grown by the contact skin, as
     /// <see cref="Candidates(FixedAabb, FixedQ4816, List{int})"/> does, among the groups a filter keeps. A group the
     /// filter refuses is left out even where the query's body leaves the region, so the candidates are always active
@@ -223,10 +229,6 @@ public sealed class FixedStaticColliderSet {
             }
         }
         return new FixedColliderCandidates(indices: CollectionsMarshal.AsSpan(list: scratch), region: region);
-    }
-
-    private readonly struct KeepsEvery : IColliderGroupFilter {
-        public bool Keeps(int key) => true;
     }
 
     // Grows storage to hold a count; new collider storage holds no compiled slot.

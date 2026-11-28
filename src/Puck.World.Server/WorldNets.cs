@@ -95,25 +95,23 @@ public sealed class WorldNets {
         /// <summary>Returns the colliders bodies meet as the net stands: its strands (<see cref="FixedNet.StrandColliders"/>),
         /// each rounded by half the strand, recomputed only when a node moved.</summary>
         /// <returns>The colliders, in strand order, borrowed until the net next moves.</returns>
-        public ReadOnlySpan<FixedStaticCollider> Colliders() {
-            if (m_collidersRevision != Net.Revision) {
-                if (m_colliders.Length != Net.FreeStrandCount) { m_colliders = new FixedStaticCollider[Net.FreeStrandCount]; }
-                Net.StrandColliders(destination: m_colliders, radius: (Strand / FixedQ4816.FromInteger(value: 2)));
-                m_collidersRevision = Net.Revision;
-            }
-            return m_colliders;
-        }
+        public ReadOnlySpan<FixedStaticCollider> Colliders() => Posed(cache: ref m_colliders, revision: ref m_collidersRevision, strands: true);
         /// <summary>Returns the surface a hold takes as the net stands: a sheet over its cells (<see cref="FixedNet.CellColliders"/>),
         /// so a climber's hands find the net between its strands as on them, recomputed only when a node moved. Bodies
         /// do not meet it.</summary>
         /// <returns>The colliders, row by row, borrowed until the net next moves.</returns>
-        public ReadOnlySpan<FixedStaticCollider> HoldColliders() {
-            if (m_holdCollidersRevision != Net.Revision) {
-                if (m_holdColliders.Length != Net.CellCount) { m_holdColliders = new FixedStaticCollider[Net.CellCount]; }
-                Net.CellColliders(destination: m_holdColliders, radius: (Strand / FixedQ4816.FromInteger(value: 2)));
-                m_holdCollidersRevision = Net.Revision;
+        public ReadOnlySpan<FixedStaticCollider> HoldColliders() => Posed(cache: ref m_holdColliders, revision: ref m_holdCollidersRevision, strands: false);
+        // One of the net's collider sets as it stands, rounded by half the strand, posed again only when a node moved.
+        private ReadOnlySpan<FixedStaticCollider> Posed(ref FixedStaticCollider[] cache, ref int revision, bool strands) {
+            if (revision != Net.Revision) {
+                var count = (strands ? Net.FreeStrandCount : Net.CellCount);
+                var radius = (Strand / FixedQ4816.FromInteger(value: 2));
+
+                if (cache.Length != count) { cache = new FixedStaticCollider[count]; }
+                if (strands) { Net.StrandColliders(destination: cache, radius: radius); } else { Net.CellColliders(destination: cache, radius: radius); }
+                revision = Net.Revision;
             }
-            return m_holdColliders;
+            return cache;
         }
     }
 

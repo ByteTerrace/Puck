@@ -209,15 +209,9 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
     /// <paramref name="dynamicColliders"/>, or <see langword="default"/> when it meets none.</param>
     /// <returns><see langword="true"/> when the ray meets a surface facing it within <paramref name="maxDistance"/>.</returns>
     public bool TryCast(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedStaticColliderSet dynamicColliders,
-        out FixedSurfaceAttachCandidate candidate) {
-        ArgumentNullException.ThrowIfNull(argument: dynamicColliders);
-        var region = FixedSurfaceQuery.CastReach(direction: in direction, maxDistance: maxDistance, origin: in origin);
-
-        return FixedSurfaceQuery.TryCast(candidate: out candidate, colliders: Set, direction: in direction, dynamicColliders: dynamicColliders,
-            maxDistance: maxDistance, origin: in origin,
-            candidates: m_grid.Candidates(boxes: Set.Boxes, region: region, scratch: Scratch(), skin: FixedQ4816.Zero),
-            dynamicCandidates: dynamicColliders.Candidates(region: region, scratch: (DynamicCandidateScratch ??= []), skin: FixedQ4816.Zero));
-    }
+        out FixedSurfaceAttachCandidate candidate) =>
+        TryCast(candidate: out candidate, direction: in direction, dynamicColliders: dynamicColliders, filter: default(KeepsEveryGroup),
+            maxDistance: maxDistance, origin: in origin);
     /// <summary>Casts a ray to the first surface of these colliders and of the per-tick groups a filter keeps
     /// (<see cref="TryCast(in FixedVector3, in FixedVector3, FixedQ4816, FixedStaticColliderSet, out FixedSurfaceAttachCandidate)"/>):
     /// a refused group's colliders are not there for this ray, so it meets what stands behind them.</summary>
