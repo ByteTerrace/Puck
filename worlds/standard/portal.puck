@@ -4,6 +4,31 @@
 // library's rows as templates and functions, and emits no document. Where each portal stands, how its frame looks and
 // where it leads are the importing world's: one portal is a row, and a world places any number from its layout.
 //
+// A portal leads nowhere until a world wires it, and a portal wired to nothing is a mirror (the owner's ruling): its
+// glass shows the room it stands in, reflected through the glass, and walking into it steps you back out of the same
+// portal, turned about, into that room. It is never a wall, a dead end or a fall. A portal whose chosen destination
+// cannot be reached (unresolved, refused) falls back to the mirror too. Wiring is two things, both the world's own:
+//
+//   the library   one list of the destinations the world's portals may lead to, each a `portalEntry`: the
+//                 destination's name, the world document it opens, the face a traveller steps out of there (its
+//                 arrival), and the title and note a panel shows. The library's `references` and `destinations` rows
+//                 are `portalReferences` and `portalDestinations` of it, and a world starts no destination its library
+//                 does not name.
+//   each portal   which entry it starts on (`route`, its place in the library), or none (`route: null`, a mirror).
+//
+// Wiring portal 3 to the garden:
+//
+//   let library = [portalEntry(destination: "garden", document: "garden", title: "THE GARDEN", note: "A sunset plot.")]
+//   let portals = [portalOf(id: "portal-3", x: 0, z: 0, yaw: 180, look: portalStanding(color: "#245F5C"), library: library, route: 0)]
+//   references: portalReferences(library)
+//   destinations: portalDestinations(library)
+//   state { world { portalState(portals: portals) } }
+//
+// and the portal's placement and creation (`portalPrototypes`, `portalPlacements`). A portal with a library stands its
+// panel (panel.puck) at its right, a console listing the library and, last, MIRROR, so a player points the portal at any
+// entry or at nothing, as a display station browses its catalog; the world adds `portalPanels(portals)` to its panel set.
+// `to: entry` wires a portal to one entry for good, with no panel (a painting on a wall).
+//
 // A portal is a row (`portalOf` writes one with its defaults):
 //
 //   id          its placement's and its prototype's id, and its panel's; a crossing names `<id>/glass` as its counterpart
@@ -11,23 +36,24 @@
 //   site        stands at the world point `site`
 //   yaw         the way its glass faces, as a placement's yaw turns it (0 faces -z, 180 faces +z)
 //   look        its frame (`portalStanding`, or a world's own: the canvas's `proud` and its `rings`, below)
-//   to          where a fixed portal leads: a route `{ destination, counterpart, fallback }`, or null
-//   library     where a routed portal may lead: a list of routes, and `route` the one it boots on; null for a fixed one
+//   library     the entries it may lead to, in the world's order; empty for an unconnected portal
+//   route       the entry it starts on, or null for the mirror
+//   panel       whether it stands a panel (only with a library)
 //   plaque      `{ title, note }` lettered on a plaque beside it (a wall or a post, as its look says), or null
-//   sign        what the glass reads while it leads nowhere (`to` and `library` both null)
 //
-// A routed portal stands its panel (panel.puck) at its right: a console whose list is the library, so a player points
-// the portal at any entry, as a display station browses its catalog. The portal's face routes by the panel's choice (its
-// `routes` read `panelChoice` at the portal's id), so the authority's door scan, which reads that cell, decides both
-// where the door leads and what its glass shows, and everyone sees the same (the engine's `WorldFaceRoutes`). A route is
-// a library entry: `destination` names a `destinations` row (`portalReferences` and `portalDestinations` write the
-// library's rows), `counterpart` the destination's border face a traveller steps out of, and `fallback` the colour the
-// glass shows past the deepest window inside a window; `title` and `note` are what the panel shows of it and
-// `document` the world it opens.
+// The portal's face routes by one cell (the engine's `WorldFaceRoutes`): its panel's `panelChoice` at the portal's id, or
+// its own `portalRoute-<id>` slot for a portal with no panel (`portalState`). The authority's door scan reads the cell and
+// decides both where the door leads and what its glass shows, and everyone sees the same; a cell naming no entry takes
+// the mirror, the routes' fallback.
+//
+// A library is one list. An entry is a single destination today; a federated portal group (the worlds of a hub's
+// federation, each member a destination every member's portals list) is to be an entry of the same list, expanding to
+// its current members (docs/decisions/play.md, "Portals and their panels").
 //
 // A portal's glass is a window drawn at the share of the screen it covers and only while it is seen (the engine's portal
-// visibility), and it holds a session only while its door is open, one route at a time: the module adds no work of its
-// own that grows with where it leads.
+// visibility), and it holds a session only while its door is open, one route at a time. A mirror holds a session onto
+// the world it stands in, which shares that world's one image (no second stream, no second residency), and draws as one
+// more view of the world's own frame, reflected: the module adds no work of its own that grows with where it leads.
 import "bounds"
 import "panel"
 
@@ -60,8 +86,23 @@ function portalStanding(color, roughness = 0.45, specular = 0.2, post = 0.08) = 
   plaque: "post"
 }
 
-// A portal row, with the defaults a fixed, unlettered portal in the world's own frame takes.
-function portalOf(id, x, z, yaw, look, y = 0, site = [0, 0, 0], parent = null, to = null, library = null, route = 0, plaque = null, sign = ["OPENING", "SOON"]) = {
+// A library entry: the destination `destination` names, opening the world document `document` (named from the root
+// document's directory) and setting a traveller down out of the face `arrival` there, with what a panel shows of it.
+// `fallback` is the colour its glass shows past the deepest window inside a window.
+function portalEntry(destination, document, title, note = "", arrival = "arrival/glass", fallback = "#10141B") = {
+  destination: destination
+  document: document
+  counterpart: arrival
+  fallback: fallback
+  title: title
+  note: note
+}
+// The mirror a portal shows wired to nothing, as the route its face boots on.
+let portalMirror = { destination: "$self", counterpart: null, fallback: portalFallbackSelf, title: "MIRROR", note: "Not connected: the glass shows this room, and walking in steps you back out into it." }
+
+// A portal row, with the defaults an unconnected, unlettered portal in the world's own frame takes. `to` wires it to one
+// entry for good, with no panel.
+function portalOf(id, x, z, yaw, look, y = 0, site = [0, 0, 0], parent = null, library = [], route = null, to = null, panel = true, plaque = null) = {
   id: id
   x: x
   y: y
@@ -70,14 +111,16 @@ function portalOf(id, x, z, yaw, look, y = 0, site = [0, 0, 0], parent = null, t
   site: site
   parent: parent
   look: look
-  to: to
-  library: library
-  route: route
+  library: ((to != null) ? [to] : library)
+  route: ((to != null) ? 0 : route)
+  panel: ((to == null) and panel and (length(library) > 0))
   plaque: plaque
-  sign: sign
 }
-// Where a portal leads when it boots: its route in its library, or its fixed route.
-function portalRouteOf(portal) = ((portal.library != null) ? portal.library[portal.route] : portal.to)
+// The cell value a portal boots on: its route, or, for the mirror, the place after its library's last entry, which its
+// routes take as their fallback.
+function portalChoice(portal) = ((portal.route == null) ? length(portal.library) : portal.route)
+// Where a portal leads when it boots: its route's entry, or the mirror.
+function portalRouteOf(portal) = first(range(0, length(portal.library)), i => (i == portal.route), i => portal.library[i], portalMirror)
 // The rings' widths out to ring `k`, and the frame's whole reach past the canvas.
 function portalRingInset(look, k) = reduce(range(0, k), 0, (sum, j) => (sum + look.rings[j].width))
 function portalOuter(look) = (portalCanvasHalf[0] + portalRingInset(look, length(look.rings)))
@@ -199,11 +242,26 @@ template portalFace(destination, counterpart, fallback, routes = null, open = nu
     } with ((routes == null) ? {} : { routes: routes }))
   ]
 }
-// The routes a routed portal's face reads: its library, chosen by its panel's `panelChoice` cell.
-function portalRoutes(portal) = {
+// The routes a portal's face reads: its library, chosen by its panel's `panelChoice` cell, or by its own
+// `portalRoute-<id>` slot for a portal with no panel; a cell naming no entry takes the mirror.
+function portalRoutes(portal) = (portal.panel ? {
   state: "panelChoice"
   key: portal.id
   entries: map(portal.library, entry => { destination: entry.destination, counterpart: entry.counterpart, fallback: entry.fallback })
+} : {
+  state: $"portalRoute-{portal.id}"
+  entries: map(portal.library, entry => { destination: entry.destination, counterpart: entry.counterpart, fallback: entry.fallback })
+})
+// The route cell of every portal of `portals` with no panel, for a world's `state.world`: one Int slot a portal,
+// `portalRoute-<id>`, holding the entry it starts on, so every set of portals a world places declares its own.
+template portalState(portals) {
+  for portal in filter(portals, portal => (portal.panel != true)) {
+    row {
+      name: $"portalRoute-{portal.id}"
+      kind: Int
+      value: portalChoice(portal)
+    }
+  }
 }
 
 // A library's `references` and `destinations` rows: an entry's `document` opened as the destination its `destination`
@@ -216,13 +274,14 @@ function portalDestinations(library) = map(
 
 // Where a routed portal's panel stands, facing +Z from the portal's foot: right of the frame, a step before its glass.
 function portalPanelAt(portal) = [((portalOuter(portal.look) + 0.3) + panelGlassHalf[0]), 0, 0.35]
-// The panels of `portals`' routed portals, one a portal, keyed by the portal's id: what a world puts in its panel set
-// (panel.puck's `panelSet`) with its other panels.
-function portalPanels(portals) = map(filter(portals, portal => (portal.library != null)), portal => {
+// The panels of `portals`' paneled portals, one a portal, keyed by the portal's id: what a world puts in its panel set
+// (panel.puck's `panelSet`) with its other panels. A panel lists the library and, last, MIRROR, the choice that leaves
+// the portal unconnected.
+function portalPanels(portals) = map(filter(portals, portal => portal.panel), portal => {
   id: portal.id
   title: $"DESTINATIONS {length(portal.library)}"
-  entries: map(portal.library, entry => { title: entry.title, note: entry.note })
-  choice: portal.route
+  entries: concat(map(portal.library, entry => { title: entry.title, note: entry.note }), [{ title: portalMirror.title, note: portalMirror.note }])
+  choice: portalChoice(portal)
   site: portal.site
   x: facingPoint(portal, portalPanelAt(portal))[0]
   y: facingPoint(portal, portalPanelAt(portal))[1]
@@ -243,8 +302,7 @@ template portalPrototypes(portals) {
   }
 }
 
-// Each portal's placement, wearing its face: a routed portal's routes over its library, a fixed portal's one route, or,
-// leading nowhere, its sign.
+// Each portal's placement, wearing its face, routed over its library and booting on its route or the mirror.
 template portalPlacements(portals) {
   for portal in portals {
     placement $"{portal.id}" {
@@ -254,22 +312,12 @@ template portalPlacements(portals) {
       }
       position [portal.x, portal.y, portal.z]
       yawDegrees: portal.yaw
-      if portalRouteOf(portal) != null {
-        portalFace(
-          destination: portalRouteOf(portal).destination,
-          counterpart: portalRouteOf(portal).counterpart,
-          fallback: portalRouteOf(portal).fallback,
-          routes: ((portal.library != null) ? portalRoutes(portal) : null)
-        )
-      } else {
-        faceSources [
-          {
-            face: "glass"
-            filter: linear
-            source { $type: "text", lines: portal.sign }
-          }
-        ]
-      }
+      portalFace(
+        destination: portalRouteOf(portal).destination,
+        counterpart: portalRouteOf(portal).counterpart,
+        fallback: portalRouteOf(portal).fallback,
+        routes: portalRoutes(portal)
+      )
     }
   }
 }

@@ -1,9 +1,9 @@
 // The board games lab's stress mode: twelve game stations playing holodeck chess at once, the stress scenario for the
 // board games under real use (board-games.puck beside it is the lab itself). Each station is the debug world set's
-// station (../game-stations.puck), instanced under its own alias, so every station has its own rows, rules, piece
-// bodies, topology and search job, and a move at one station never restarts another's search (a search job restarts when
-// a row its judge's rules read changes, and no station's rules read another's rows). Every station's computer plays both
-// sides from its own opening (chess-station.puck's `autoplay`), so all twelve lift pieces, settle and judge continuously,
+// station (../game-stations.puck): the twelve play one set of rules, each with its own state, piece bodies, topology and
+// search job, and a move at one station never restarts another's search (a search job judges its own station's bindings
+// alone, and restarts only when a row they read changes). Every station's computer plays both sides from its own opening
+// (chess-station.puck's `autoplay`), so all twelve lift pieces, settle and judge continuously,
 // 384 rigid piece bodies in all; a game that stops passing turns (a draw limit, a mate) is set up afresh, every body
 // standing on its starting square again. The stations open in four groups of three, eight ticks apart, so the worst tick
 // sees three stations changing together.
@@ -12,12 +12,12 @@
 // What to read while it plays: `world.budget.rules --spent` (the sheet's total against the tick's ceiling and the top
 // rules), `world.counters physics` (contacts, bodies awake, solver work), `world.search` (each station's job: restarts,
 // lastRestart, spent and peak tick), `host.frames` (the tick's parts: rules, motion, contact) and `world.status` (bodies
-// against capacity). `world.state s0$chessStationPlies` reads one station's turns played and `s0$chessStationGames` its
-// games set up afresh; `station.chess s3 11 27` plays e2-e4 at station s3 through its move door. `puck test
+// against capacity). `world.state chessStationPlies0` reads the first station's turns played and `chessStationGames0`
+// its games set up afresh; `station.chess 3 11 27` plays e2-e4 at station s3 through its move door. `puck test
 // worlds/debug/labs/board-games-stress.puck --reproduce` plays every station's first turns twice and compares the runs.
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth"
+basis: "../stage"
 documentId: "board-games-stress"
 
 import "../set-controls"
@@ -67,7 +67,7 @@ let stressOpenings = [
   [8, 24]
 ]
 
-gameStationRoom(stations: stressStations)
+gameStationRoom(stations: stressStations, autoplay: map(range(0, 12), index => stressAutoplay(index)))
 
 state {
   // The chess game's vocabularies (../game-stations.puck's header).
@@ -95,18 +95,6 @@ state {
   }
 }
 
-use gameStationGames as s0(station: stressStations[0], index: 0, autoplay: stressAutoplay(0))
-use gameStationGames as s1(station: stressStations[1], index: 1, autoplay: stressAutoplay(1))
-use gameStationGames as s2(station: stressStations[2], index: 2, autoplay: stressAutoplay(2))
-use gameStationGames as s3(station: stressStations[3], index: 3, autoplay: stressAutoplay(3))
-use gameStationGames as s4(station: stressStations[4], index: 4, autoplay: stressAutoplay(4))
-use gameStationGames as s5(station: stressStations[5], index: 5, autoplay: stressAutoplay(5))
-use gameStationGames as s6(station: stressStations[6], index: 6, autoplay: stressAutoplay(6))
-use gameStationGames as s7(station: stressStations[7], index: 7, autoplay: stressAutoplay(7))
-use gameStationGames as s8(station: stressStations[8], index: 8, autoplay: stressAutoplay(8))
-use gameStationGames as s9(station: stressStations[9], index: 9, autoplay: stressAutoplay(9))
-use gameStationGames as s10(station: stressStations[10], index: 10, autoplay: stressAutoplay(10))
-use gameStationGames as s11(station: stressStations[11], index: 11, autoplay: stressAutoplay(11))
 
 render {
   farDistance: 200
@@ -130,17 +118,17 @@ test "twelve stations each play their turns, and two runs agree" {
     ticks 1800
   }
   expect {
-    s0.chessStationPlies >= 16
-    s1.chessStationPlies >= 16
-    s2.chessStationPlies >= 16
-    s3.chessStationPlies >= 16
-    s4.chessStationPlies >= 16
-    s5.chessStationPlies >= 16
-    s6.chessStationPlies >= 16
-    s7.chessStationPlies >= 16
-    s8.chessStationPlies >= 16
-    s9.chessStationPlies >= 16
-    s10.chessStationPlies >= 16
-    s11.chessStationPlies >= 16
+    chessStationPlies0 >= 16
+    chessStationPlies1 >= 16
+    chessStationPlies2 >= 16
+    chessStationPlies3 >= 16
+    chessStationPlies4 >= 16
+    chessStationPlies5 >= 16
+    chessStationPlies6 >= 16
+    chessStationPlies7 >= 16
+    chessStationPlies8 >= 16
+    chessStationPlies9 >= 16
+    chessStationPlies10 >= 16
+    chessStationPlies11 >= 16
   }
 }

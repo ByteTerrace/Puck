@@ -1,0 +1,524 @@
+// The Moth, the first avatar: her body (body.puck), her head (head.puck), the suits she owns (suits.puck) and how all of
+// them move. The standard player module reads her through her contract (contract.puck); this document is what the
+// contract names: the look rows each form wears, the gait curves and followers her rig reads, and the rules that ease
+// her actions' hooks into the poses her rig plays (the jetpack's flight pose and burn, the heel jets' boost, the dash,
+// the mantle) and close her eyes now and then. It authors no kit, camera, seat, light, air or floor: the player module
+// and the world that seats her do.
+//
+// `moth.style` swaps her look live for playtesting: each painted slot (the plates, the undersuit, her skin, hair and
+// fittings) shades plain or with the standard's cel look by the mothStyle row, which changes only those materials'
+// style rows and programs and bakes nothing. She boots Cel, the debug world's treatment.
+import "../../../standard/inputs"
+import "../../../standard/rig"
+import "body"
+import "suits"
+import "../../../standard/menu"
+import "../../../standard/companion-roster"
+import "../../companion-roster"
+import "contract"
+
+// What an importer binds: the cell her body's hold pose reads, which a world's rules write to have her hold the
+// handheld (devices.puck's brick).
+exports {
+  reads [pilotHold]
+  actions [pilotHold]
+  // The worn screen's raise, which the player's camera focus reads (player.puck's `wornScreenFocus`).
+  bindings [menuRaiseLeft, menuRaiseRight]
+}
+
+// Her menu, shown on a screen worn on her forearm (../../../standard/menu.puck, ../../../standard/worn-screen.puck),
+// and the companions she keeps in the roster (../../companion-roster.puck): every character of the set starts with
+// Mintstitch and Tangerine. The screen mounts on both suits' forearms (contract.puck's `mothWristMount`) and, slimmer,
+// on her own body's (`mothBodyWristMount`).
+menuPlay(kinds: rosterKinds)
+companionRoster(kinds: rosterKinds, granted: [1, 2])
+rosterCreatures()
+
+// The font her worn screen letters the menu in.
+text {
+  defaultFont: "inter"
+  fonts [
+    {
+      name: "inter"
+      source: "../../fonts/inter-regular.ttf"
+      hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
+      codePointRanges ["U+0020-U+007E"]
+    }
+  ]
+}
+
+// Each form's look. Lane 0 stays 0: it is every weathering's default lane, so the suits' plates keep their pristine
+// floor (the worn screen's glass glows always, under its cover). Lane 1 is the jets: dark out of flight mode, a pilot
+// flame at a fifth when flight mode is on, full burn as she flies. Lane 2 is flight mode itself, the heel and nozzle
+// glows it lights. Lane 3 is the heel jets' flame under the air jump. The scout suit grants no jetpack and no air jump,
+// so only its dash lights its pods.
+looks [
+  {
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+      lanes [
+        0
+        maximum(bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body]), dashPose[$body])
+        maximum(bodyState($body, flightFuel) / 1000, dashPose[$body])
+        bootBoost[$body]
+      ]
+      poses {
+        blink: "state.blink.$body"
+      }
+    }
+    name: "moth"
+    scale: 1
+    source: creation(prototypeId: moth)
+  }
+  {
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+      lanes [0, dashPose[$body], dashPose[$body], 0]
+      poses {
+        blink: "state.blink.$body"
+      }
+    }
+    name: "moth-scout"
+    scale: 1
+    source: creation(prototypeId: `moth-scout`)
+  }
+  {
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+      // Lane 0 stays 0: it is every weathering's default lane.
+      lanes [0]
+      // The first holding frame wins, so she keeps her eyes open while she holds the handheld.
+      poses {
+        hold: "state.pilotHold.$body"
+        blink: "state.blink.$body"
+      }
+    }
+    name: "moth-pilot"
+    scale: 1
+    source: creation(prototypeId: `moth-pilot`)
+  }
+]
+
+// The rig's followers (her suits' drivers read them): the flight pose and wing deploy, the turn her hips trail, the
+// lean her planar acceleration builds, her pace, her vertical speed for the air pose and the landing give, the heel
+// jets' flame, and the mantle's reach and pull.
+// The moth's gait as curves of her pace in metres per second (X), each knot's tangent and curvature those of the
+// function it samples. moth-stride is radians of stride per metre, π(1.25 + 0.5v)/v: her step rate rises linearly
+// from 1.5 steps a second at 0.5 m/s to 3.75 at 5 m/s while her stride opens from 0.7 m to 2.7 m. moth-gait scales
+// every stride swing from half at a walk to whole at a run, and moth-run fades in what only a run has: the bob, the
+// forward lean and the bent elbows.
+curves [
+  {
+    name: "moth-stride"
+    knots [
+      {
+        position [0.5, 0, 9.42478]
+        tangentYaw: -1.50722
+        curvature: 0.016113
+      }
+      {
+        position [0.75, 0, 6.80678]
+        tangentYaw: -1.428525
+        curvature: 0.053072
+      }
+      {
+        position [1, 0, 5.49779]
+        tangentYaw: -1.321448
+        curvature: 0.118027
+      }
+      {
+        position [1.5, 0, 4.18879]
+        tangentYaw: -1.050498
+        curvature: 0.285923
+      }
+      {
+        position [2, 0, 3.53429]
+        tangentYaw: -0.776188
+        curvature: 0.356734
+      }
+      {
+        position [2.5, 0, 3.14159]
+        tangentYaw: -0.560982
+        curvature: 0.305147
+      }
+      {
+        position [3, 0, 2.87979]
+        tangentYaw: -0.41143
+        curvature: 0.223972
+      }
+      {
+        position [4, 0, 2.55254]
+        tangentYaw: -0.240679
+        curvature: 0.11241
+      }
+      {
+        position [5, 0, 2.35619]
+        tangentYaw: -0.155806
+        curvature: 0.060576
+      }
+    ]
+  }
+  {
+    name: "moth-gait"
+    knots [
+      {
+        position [1, 0, 0.5]
+        tangentYaw: 0
+        curvature: 0.244898
+      }
+      {
+        position [1.875, 0, 0.57812]
+        tangentYaw: 0.159352
+        curvature: 0.117854
+      }
+      {
+        position [2.75, 0, 0.75]
+        tangentYaw: 0.211093
+        curvature: 0
+      }
+      {
+        position [3.625, 0, 0.92188]
+        tangentYaw: 0.159352
+        curvature: -0.117854
+      }
+      {
+        position [4.5, 0, 1]
+        tangentYaw: 0
+        curvature: -0.244898
+      }
+    ]
+  }
+  {
+    name: "moth-run"
+    knots [
+      {
+        position [1.5, 0, 0]
+        tangentYaw: 0
+        curvature: 0.666667
+      }
+      {
+        position [2.25, 0, 0.15625]
+        tangentYaw: 0.358771
+        curvature: 0.27363
+      }
+      {
+        position [3, 0, 0.5]
+        tangentYaw: 0.463648
+        curvature: 0
+      }
+      {
+        position [3.75, 0, 0.84375]
+        tangentYaw: 0.358771
+        curvature: -0.27363
+      }
+      {
+        position [4.5, 0, 1]
+        tangentYaw: 0
+        curvature: -0.666667
+      }
+    ]
+  }
+]
+
+// Her mantle, keyed over the move: each curve is one joint's share of its pose against the move's progress, eased in
+// and out of every key (the standard rig's `easedCurve`), and her rigs play them on the `mantle` driver, which reads
+// `mantlePose` (the progress) as one turn and takes her joints from every other layer while it runs. The move rises
+// straight up beside the face before it carries her in over the top (WorldBody's MantleMove), with her feet on that
+// path, so her hips drop toward her tucked feet (`mantle-fold` on the pelvis's slide) and keep her shoulders low over
+// the lip. Her arms snap up for the catch (0.08) as her chest arches back and her head looks up at the lip; her hands
+// plant on the top (the rigs' mantle hand effectors, weighted by `mantle-plant`) and her elbows bend as she pulls; her
+// chest drives over her hands and her knees tuck up under her (0.6), her feet clearing the lip; her hands push until her
+// chest is over them and let go (0.8); her leading leg reaches over the top and her trailing leg pushes off (0.92), and
+// every joint is back in her run's pose at the landing (1), so she steps out running.
+function mantleCurve(name, keys) = easedCurve(name, keys)
+curves [
+  // The upper arms' swing forward and up (1), which the hand effectors take over while the hands are planted.
+  mantleCurve("mantle-reach", [[0, 0], [0.08, 1], [0.3, 0.6], [0.6, 0.2], [0.8, 0.05], [0.9, -0.05], [1, 0]])
+  // The elbows' bend.
+  mantleCurve("mantle-elbow", [[0, 0], [0.08, 0.1], [0.22, 1], [0.45, 0.2], [0.8, 0.1], [1, 0]])
+  // The chest's lean over her hands (1), arched back at the catch (negative).
+  mantleCurve("mantle-chest", [[0, 0], [0.08, -0.3], [0.3, 0.4], [0.55, 1], [0.8, 0.5], [1, 0]])
+  // The head's look up at the lip (1) and down over the top (negative).
+  mantleCurve("mantle-look", [[0, 0], [0.08, 1], [0.4, 0.5], [0.65, -0.4], [0.9, -0.1], [1, 0]])
+  // The knees' tuck: the leading leg's hip lifts and reaches over the top, the trailing leg's pushes back off it.
+  mantleCurve("mantle-tuck-lead", [[0, 0], [0.1, 0.15], [0.4, 0.85], [0.6, 1], [0.8, 0.75], [0.92, 0.45], [1, 0]])
+  mantleCurve("mantle-tuck-trail", [[0, 0], [0.1, 0.15], [0.4, 0.85], [0.6, 1], [0.8, 0.4], [0.92, -0.15], [1, 0]])
+  // The knees' fold, and the hips' drop toward the tucked feet.
+  mantleCurve("mantle-fold", [[0, 0], [0.1, 0.2], [0.4, 0.9], [0.6, 1], [0.8, 0.5], [0.92, 0.15], [1, 0]])
+  // How firmly her hands hold the top: on at the catch, held through the push, let go once her chest is over them. A
+  // weight read at the driver's phase, so its X is the phase itself (2π a move).
+  easedCurve("mantle-plant", [[0, 0], [0.02, 0], [0.16, 1], [0.7, 1], [0.84, 0], [1, 0]], span: 2 * pi)
+]
+
+dynamics [
+  {
+    f: 3
+    name: "flight-pose"
+    r: 0.5
+    zeta: 0.9
+  }
+  {
+    f: 1.2
+    name: "wing-deploy"
+    r: 0.2
+    zeta: 0.8
+  }
+  // The moth rig's followers: the turn her hips trail and settle from, and the lean her planar acceleration builds.
+  {
+    f: 2.2
+    name: "body-turn"
+    r: 0
+    zeta: 0.55
+  }
+  {
+    f: 1.8
+    name: "body-lean"
+    r: 0
+    zeta: 0.75
+  }
+  // Her pace, the speed her gait curves read, settles without overshoot so a stick sweep eases the stride open.
+  {
+    f: 3
+    name: "gait-pace"
+    r: 0
+    zeta: 1
+  }
+  // Her vertical speed for the air pose: quick and critically damped, so the tuck follows the arc closely.
+  {
+    f: 5
+    name: "body-air"
+    r: 0
+    zeta: 1
+  }
+  // Her vertical speed for the landing give: slow enough to still read the fall a beat after touchdown, and
+  // underdamped so the crouch springs back up past rest.
+  {
+    f: 2.2
+    name: "body-land"
+    r: 0
+    zeta: 0.5
+  }
+  // The boot jets' flame: lit within a few frames of the air jump and out within a quarter second of its cut.
+  {
+    f: 6
+    name: "boot-boost"
+    r: 0
+    zeta: 1
+  }
+]
+
+// The mantle's progress, 0 to 1 over the move and 0 between mantles: the phase her rigs' mantle curves play at.
+state {
+  world {
+    row {
+      name: "mantlePose"
+      kind: "Fixed"
+      capacity: 1
+      cells [{ key: "0", value: "0" }]
+    }
+  }
+}
+
+// Fly: a player pressing rise without jump (the fly bindings, not Space or South, which press both) switches flight mode
+// on, so she takes off and climbs. Only the mech suit carries the jetpack. One rule over every player's body, a seat's
+// or a visitor's.
+rule "fly" {
+  when channel(each, rise) >= 1 and channel(each, jump) == 0 and bodyState(each, flightFuel) == 0 and bodyState(
+      each,
+      suit
+    ) == 1
+  mode: Level
+  forEach: $players
+  setBodyState(key: $each, state: "flightFuel", expression: 1000)
+}
+
+// Out of the mech suit she has no jetpack, so flight mode she wore when it came off ends.
+rule "suit-off-flight" {
+  when bodyState(each, suit) != 1 and bodyState(each, flightFuel) > 0
+  mode: Level
+  forEach: $players
+  setBodyState(key: $each, state: "flightFuel", expression: 0)
+}
+
+// The flight pose and wings deploy only in flight mode, in the mech suit; an ordinary jump keeps her upright.
+rule "airborne-on" {
+  when fact(each, Airborne) == 1 and bodyState(each, flightFuel) > 0 and bodyState(each, suit) == 1
+  mode: Edge
+  forEach: airPose
+  airPose[$each] = 1
+  airWings[$each] = 1
+}
+
+rule "airborne-off" {
+  when fact(each, Airborne) == 0 or bodyState(each, flightFuel) == 0
+  mode: Edge
+  forEach: airPose
+  airPose[$each] = 0
+  airWings[$each] = 0
+}
+
+// The air jump spends her last jump: the heel jets fire for a quarter second, then ease out.
+rule "boot-boost-on" {
+  when bodyState(each, jumps) == 0 and fact(each, Airborne) == 1 and bodyState(each, flightFuel) == 0
+  mode: Edge
+  forEach: bootBoost
+  bootBoost[$each] = 1
+  schedule bootBoostEnd[$each] in 0.25s
+}
+
+rule "boot-boost-off" {
+  when bootBoost[$each] == 1 and $tick >= bootBoostEnd[$each]
+  mode: Level
+  forEach: bootBoost
+  bootBoost[$each] = 0
+}
+
+rule "blink-close" {
+  when blink[$each] == 0 and $tick >= blinkAt[$each]
+  mode: Level
+  forEach: blink
+  blink[$each] = 1
+  schedule blinkAt[$each] in 0.12s
+}
+
+rule "blink-open" {
+  when blink[$each] == 1 and $tick >= blinkAt[$each]
+  mode: Level
+  forEach: blink
+  blink[$each] = 0
+  generate(row: blinkRest)
+  blinkAt[$each] = $tick + blinkRest
+}
+
+// The mantle's timer counts down the seconds the move has left; her pose plays at the share of it gone. A climb's own
+// mantle, longer than hers, holds the pose at its start until the last of it.
+rule "mantle-pose-on" {
+  when bodyState(each, mantling) > 0
+  mode: Level
+  forEach: mantlePose
+  mantlePose[$each] = maximum(0, 1 - bodyState(each, mantling) / mothMantleSeconds)
+}
+
+rule "mantle-pose-off" {
+  when bodyState(each, mantling) == 0
+  mode: Edge
+  forEach: mantlePose
+  mantlePose[$each] = 0
+}
+
+state {
+  enums [
+    { name: "MothStyle", members ["Plain", "Cel"] }
+  ]
+
+  world {
+    // Her look (mothStyles): Plain shades every slot continuously, Cel her painted slots with the standard's celStyle.
+    slot mothStyle: MothStyle = 1
+
+    row {
+      name: "dashPose"
+      kind: "Fixed"
+      capacity: 1
+      cells [{ key: "0", value: "0", dynamics { row: "flight-pose" } }]
+    }
+    row {
+      cells [
+        {
+          dynamics {
+            row: "flight-pose"
+          }
+          key: "0"
+          value: "0"
+        }
+      ]
+      capacity: 1
+      kind: "Fixed"
+      name: "airPose"
+    }
+    row {
+      cells [
+        {
+          dynamics {
+            row: "wing-deploy"
+          }
+          key: "0"
+          value: "0"
+        }
+      ]
+      kind: "Fixed"
+      name: "airWings"
+    }
+    row {
+      cells [
+        {
+          dynamics {
+            row: "boot-boost"
+          }
+          key: "0"
+          value: "0"
+        }
+      ]
+      capacity: 1
+      kind: "Fixed"
+      name: "bootBoost"
+    }
+    table bootBoostEnd {
+      "0" = 0
+    }
+    table blink capacity(1) {
+      "0" = 0
+    }
+    table blinkAt {
+      "0" = 90
+    }
+    row {
+      draw {
+        generator {
+          bound: 1
+          mode: "WithReplacement"
+          rangeMax: 150
+          rangeMin: 75
+          source: "UniformRange"
+        }
+        skip: 0
+        timing: "Event"
+      }
+      kind: "Int"
+      name: "blinkRest"
+      value: 90
+    }
+  }
+}
+
+commands [
+  {
+    name: "moth.style"
+    help: "Swaps the Moth's look for playtesting: Plain shades every slot of her suit continuously, Cel her painted slots with the standard's cel look (the default). Writes the mothStyle row her palette's look selection reads; only her materials' style rows and programs change, so nothing bakes."
+    parameters [
+      { name: "style", kind: Choice, values ["Plain", "Cel"] }
+    ]
+    lines [
+      "world.state.cell.set mothStyle $value {style}"
+    ]
+  }
+]
+
+// The simulation timer drives one eased presentation cell for the torso lean and back-pod burn.
+rule "dash-pose-on" {
+  when bodyState(each, dashActive) > 0
+  mode: Edge
+  forEach: dashPose
+  dashPose[$each] = 1
+}
+rule "dash-pose-off" {
+  when bodyState(each, dashActive) == 0
+  mode: Edge
+  forEach: dashPose
+  dashPose[$each] = 0
+}

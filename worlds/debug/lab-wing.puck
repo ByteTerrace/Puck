@@ -5,13 +5,13 @@
 // and its glass shows the lab live while you stand outside. The debug world imports this file whole.
 //
 // The doors are layout.puck's `labWingPlan`, one row a lab: its bay along the aisle, its document and its plaque. An open
-// lab's door leads to its entry of the portal library (portal-library.puck), which declares its destination; a row whose
-// `open` is false stands its door and plaque with OPENING SOON on the glass and no portal, and names no destination, so
-// a lab whose document has not landed costs nothing and opens by setting `open` alone.
+// lab's door is wired to its lab (destinations.puck's `debugLabs`), whose destination this file declares; a row whose
+// `open` is false stands its door unconnected, a mirror, and names no destination, so a lab whose document has not
+// landed costs nothing and opens by setting `open` alone.
 
 import "../standard/portal"
 import "labs/lab-kit"
-import "portal-library"
+import "destinations"
 import "gallery/layout"
 
 // Each lab's door as a portal, on its bay's centre and the wing's tile row, its glass facing -z.
@@ -24,9 +24,18 @@ let labDoors = map(labWingPlan, lab => portalOf(
   site: gallerySite,
   parent: "gallery",
   look: portalStanding(color: labFrameColor, roughness: 0.4, specular: 0.3, post: labFramePost),
-  to: (lab.open ? galleryRoute($"lab-{lab.id}") : null),
+  to: (lab.open ? debugRoute($"lab-{lab.id}") : null),
   plaque: { title: lab.title, note: lab.note }
 ))
+
+references: portalReferences(debugLabs)
+destinations: portalDestinations(debugLabs)
+
+state {
+  world {
+    portalState(portals: labDoors)
+  }
+}
 
 prototypes {
   portalPrototypes(portals: labDoors)

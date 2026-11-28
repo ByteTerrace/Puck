@@ -93,7 +93,7 @@ half of these rules on every command, with no exemptions.
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
 | [`puck baselines`](#puck-baselinestest-baselines) | records a committed test baseline (the browser parity hashes) from a fresh run of the test that holds it, or checks it with `--check`. |
 | [`puck benchmark`](#puck-benchmarkthe-route-benchmark) | plays a route (the `test` blocks of a `.puck` source) through a fresh paused World in real time on each backend and reports every chapter's frame statistics, hitches, GPU passes and counters; `--against` and `compare` compare reports and refuse unlike runs by name. |
-| [`puck bench`](#puck-benchthe-puckmaths-microscope) | measurement lanes: `puck bench kernels` is the on-demand micro-benchmark microscope over the Maths, SDF, and state kernels, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` measures the server tick path, `puck bench startup` measures real-process world readiness, `puck bench loops` times the edit loops (boot, a `.puck` edit, its revert and a restart), and `puck bench state-evidence` replays the cost schedule's instruction evidence or, with `--capture`, compiles the pinned reference lowerings and walks each kernel's maximum permitted path afresh. |
+| [`puck bench`](#puck-benchthe-puckmaths-microscope) | measurement lanes: `puck bench kernels` is the on-demand micro-benchmark microscope over the Maths, SDF, and state kernels, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` measures the server tick path, `puck bench rules` measures what each quantity the rule work sheet prices costs on this machine and prints the device calibration admission converts the sheet to time with, `puck bench startup` measures real-process world readiness, `puck bench loops` times the edit loops (boot, a `.puck` edit, its revert and a restart), and `puck bench state-evidence` replays the cost schedule's instruction evidence or, with `--capture`, compiles the pinned reference lowerings and walks each kernel's maximum permitted path afresh. |
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
@@ -3039,7 +3039,7 @@ legitimately names out-of-repo files).
 
 A code span outside a fenced block that is shaped like a dotted C# name—two or
 more segments, each opening with a capital, optionally ending in an argument
-list, type arguments dropped (`RuleCapacity.MaxWorkUnitsPerTick`,
+list, type arguments dropped (`RuleCapacity.MaxEffectsPerRule`,
 `DocsCommand.Create()`)—must resolve. It resolves to a type, member, namespace,
 project, package id or source-file stem declared under `src/` or `tests/`, read
 from the syntax index `puck declarations` uses; to a dotted name the code spells
@@ -3644,6 +3644,29 @@ derive Native AOT control flow, approve reviewed loop formulas, resolve helper
 bodies, or calibrate memory service. `--capture` derives the control flow and the
 prices; approving a reviewed formula and calibrating memory service remain
 separate evidence, and unresolved rows remain unmodeled.
+
+### `puck bench rules`
+
+Measures what each quantity the rule work sheet prices costs on the machine it runs on, and prints the
+`rules { ... }` block a device profile carries (`WorldDeviceProfile.Rules`, a `RuleCostCalibration`):
+picoseconds per setup unit, binding judged, check unit, firing, door (a cell write's or an effect arm's fixed
+cost, `RuleWorkBudget.DoorUnits` on the sheet), other effect unit, host unit and arena growth unit. It builds
+seven scenario worlds, each adding one quantity to the one before it, runs them in this process with every binding
+judged in place every tick (the sheet's worst case), times each tick's rule part (`HostFrameWorkPart.TickRules`)
+and divides by the evaluator's own spent counts (`WorldRuleHost.SpentTotals`). Growth is timed apart against
+`StateArena.ReservationWork`. The host passes are not measured and take the check figure, which the build note
+says.
+
+```text
+puck lease quiet --holder <lane> --wait 600 --settle 30 -- puck bench rules --device rtx4070 --output rtx4070-rules.json
+puck compile worlds/debug/debug.puck --validate --budget 5 --rule-calibration rtx4070-rules.json
+puck bench rules --emit <directory>
+```
+
+`--rounds` (default 9) and `--ticks` (default 60) set the interleaved rounds and the ticks a scenario runs a round;
+each figure is read from the median round. `--emit` writes the scenario sources for `puck compile --validate` and
+measures nothing. A figure that solves below zero is taken as zero and named on standard error. Exit 0 when the
+figures were measured, 1 when a scenario did not load or the rule part read no time.
 
 ### `puck bench world`
 
@@ -4495,9 +4518,11 @@ may report elapsed time, peak process working set, managed allocation and live
 managed bytes with `--measure`, then the five sources that charged the most evaluation work units (the
 `DocumentEvaluationBudget` count that PUCK047 refuses past its 16 million limit), each with its share of that limit;
 these measurements are observations, not gates. With `--validate --budget <lines>` it prints each composed world's
-rule price sheet, the one `world.budget.rules` reads in a running World: the tick's work units against
-`RuleCapacity.MaxWorkUnitsPerTick`, each module instance's summed lines, and the costliest `<lines>` lines with
-their check and firing units and how each is priced. A world its work alone refuses is priced too. It
+rule price sheet, the one `world.budget.rules` reads in a running World: the tick's work units, the worst tick in
+time on every device the world authors against the rules' budget (`WorldRuleTimePricing`), each module instance's
+summed lines, and the costliest `<lines>` lines with their check and firing units and how each is priced. With
+`--rule-calibration <file>` the sheet is priced as though every device carried that calibration (the JSON
+`puck bench rules --output` writes), which reads what admission would say before the figures are authored. A world its work alone refuses is priced too. It
 compiles only those paths, in the supplied order within one process. Each
 source gets its normal adjacent `.world.json` or
 `.cartridge.json` output; the first failure stops the batch, leaving earlier

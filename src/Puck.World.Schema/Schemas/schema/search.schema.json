@@ -390,6 +390,14 @@
               "null"
             ],
             "default": null
+          },
+          "member": {
+            "description": "The one family index the job\u0027s judge binds every sweep over a row family to, for a job over one member of a set of rules (a game station\u0027s own game among a room of stations), or null for every member: its candidates judge that member\u0027s bindings alone, and a row only another member\u0027s bindings reach is no input of the job, so a move at another member never restarts it.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [

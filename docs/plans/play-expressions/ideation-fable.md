@@ -19,7 +19,7 @@ Concepts 1 and 2 are the owner's bard. Concepts 3 to 9 are outside the lead's fr
 - Breath: trigger pressure sets how hard the pods blow, shown as chest swell and nozzle flare.
 - Aim: the right stick or gyro points the bell.
 
-Each note vents a small burst of thrust away from the bell. That is the authored effect the standard dash already uses (`planarImpulse` in `dashAbility` [S2]). A held low note is a hover, a staccato run is a strafe, and a phrase is a path across the floor. "The avatar will move as one might expect" becomes literal: she leans against her own recoil.
+Each note vents a small burst of thrust away from the bell. That is the authored effect the standard dash already uses (`planarImpulse` in `dashAction` [S2]). A held low note is a hover, a staccato run is a strafe, and a phrase is a path across the floor. "The avatar will move as one might expect" becomes literal: she leans against her own recoil.
 
 Notes are judged against the music clock, which is simulation state, using the press's time inside its tick. A debug-world fixture already does this with `clock(pulse, phaseErrorAt, 1, inside, Press, 0)` and grades at sub-millisecond precision [S3].
 
@@ -213,7 +213,7 @@ The class name is text derived from the slots (Horn with Footwork reads as a bar
 - A body register already picks how the Moth moves and looks: "the look and kit assignments select by it" [S18].
 - The game design page describes "a binding overlay swapped by a row" [S8].
 - The world model lists "Loadout presets. A named set of slot values and something that applies them—authored data plus a batch of writes" [S19].
-- An ability is already a template expanded into a kit (`dashAbility` [S2]).
+- An ability is already a template expanded into a kit (`dashAction` [S2]).
 
 So a tool is a standard-package template. It contributes a shape parented to a hand or the back, rig poses, kit actions, an input page and rules. The owner's ruling "A character claims, a world clamps" [S20] covers the rest: the loadout is the character's, and each world admits or restyles tools.
 
@@ -255,8 +255,8 @@ These are things a concept needs that the round did not find in the engine. Each
 
 ## Sources
 
-- [S1] [The Moth flight studio](../../../worlds/debug/avatars/moth.md)
-- [S2] [The standard abilities](../../../worlds/standard/abilities.puck)
+- [S1] [The Moth flight studio](../../../worlds/debug/avatars/moth/moth.md)
+- [S2] [The standard abilities](../../../worlds/standard/player/actions.puck)
 - [S3] [The input clock fixture](../../../worlds/debug/input-clock-fixture.puck)
 - [S4] [Audio mixer, synthesis, and music direction](../../reference/audio.md)
 - [S5] [Readable interaction](../readable-interaction.md)

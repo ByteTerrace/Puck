@@ -426,17 +426,34 @@ rule placed between `income` and `bankrupt` written `phase`, both firings would
 be charged; placed before `income` or after `bankrupt`, it changes nothing the
 two can read in one tick.
 
-### The ceiling
+### The budget
 
-`RuleCapacity.MaxWorkUnitsPerTick` is 4,400,000. A world whose sheet is
-unmodeled, overflowed, or above the ceiling is refused, and the refusal names
-the three costliest lines. The value was sized against a 30 Hz tick: it
-reserves about 7 ms of a 33.3 ms tick, a little over a fifth, for the rule
-sweep, at about 1.6 ns a unit.
+A sheet is admitted in time, not units. Each device profile a world authors
+(`render.devices`) carries what `puck bench rules` measured each priced
+quantity costs there (`WorldDeviceProfile.Rules`, a `RuleCostCalibration`):
+picoseconds per setup unit, check unit and effect unit, per door (a cell
+write's or an effect arm's fixed cost, `RuleWorkBudget.DoorUnits` on the
+sheet), per binding judged and per firing (fixed costs the units leave out),
+per host unit and per arena growth unit. `WorldRuleTimePricing` converts every
+line with each device's figures, tallies the same exclusion tree in
+picoseconds, and holds the slowest device's worst tick to the rules' budget:
+`simulation.rulePercent` of the tick period, or
+`WorldSimulationDefaults.DefaultRulePercent` where the world authors none.
+Nothing reads the machine the check runs on, so a document admitted on one
+machine is admitted on every machine and by every authority. A device without
+figures borrows the slowest calibrated device's, and a world with none
+calibrated is priced at `RuleCostCalibration.Uncalibrated`, the 1.6 ns a unit
+the unit ceiling assumed; `world.budget.rules` names which figures priced each
+device. A world whose sheet is unmodeled, overflowed, or over the budget is
+refused, and the refusal names the three costliest lines in time.
 
-The search jobs run in the same tick, right after the rules, and draw on the
-same ceiling: a job's allowance is what the ceiling leaves after the sheet and
-the jobs' input stamps ([Search](search.md#work-is-priced-in-units)). One
+An arena growth while a tick runs is charged in the same time: the growth and
+its rollback, at the slowest device's growth figure, must fit what the budget
+leaves after the worst tick (`WorldRuleTimePricing.RefuseGrowth`), and the
+sheet's time line reports that headroom.
+
+The search jobs run in the same tick, right after the rules, on a lane of their
+own ([Search](search.md#work-is-priced-in-units)). One
 judge run is priced by the same sheet over the job's judge rules, so an
 over-priced rule costs the search twice, once in the sheet and once in every
 candidate.
@@ -706,6 +723,17 @@ station and card (worlds/games/patience-station.puck). There the binding's own
 member is the one `$member` names: `pile[$member]` and `$zones[i]` select the
 binding's station, a read `pile[$member][$each]` is a cell of it, and a cell
 `table[$member]` of a row keyed by station is reached as `RowReach.MemberKey`.
+A cell of the binding's own member read under its own key, `pile[$member][$each]`, is reached as that one cell
+(`CellReach.MemberEach`, kept as `RowReach.MemberEach`): a move of cell `k` of member `m` marks member `m`'s binding
+keyed `k`, so a rule about one station's pieces judges and prices the piece that moved. A reserved channel whose
+argument names the binding's own member, `board(mask, board[$member], 1, 6)` or `physics(quiescent, pieces[$member])`,
+compiles once per member with that member's row in the argument (`MemberOperand`), each member's read reaching its
+member's bindings alone; a pose names a member's board the same way (`poseCell(topology: board[$member], …)`). A
+family of slots is read and written by its member, `turn[$member]` over `slot turn[n]`; a family member's literal cell
+is `move[$member].from`; a family of tallies counts and empties by member (`counts[$member][key] += 1`,
+`counts[$member] = 0`); and `copyRow` and `boardCombine` take a member at either end. A Level line that writes the
+cell its gate compares, a fixed row's or the binding's own member's, closes its own gate the same way
+(`RuleResponse.Prove`).
 The due list keeps one snapshot of (member, key) positions per family
 (`RuleDueList.FamilySnapshot`): a move of member `m`'s row, or of the cell keyed
 `m` that a rule reads under `$member`, marks member `m`'s bindings; a move of a
@@ -771,7 +799,7 @@ See [Keep the latch with the state it describes](rules.md#keep-the-latch-with-th
 ## When merged content collides with a capacity
 
 Every ceiling in the state engine bounds one whole document: the work sheet's
-`RuleCapacity.MaxWorkUnitsPerTick`, the arena's byte ceiling, and declaration
+time budget (`WorldRuleTimePricing`), the arena's byte ceiling, and declaration
 counts such as `StateCapacity.MaxRows` (1,024). A world that imports several
 districts or games merges them into one document, so content that fits
 comfortably on its own can cross a ceiling once it's merged. When the work

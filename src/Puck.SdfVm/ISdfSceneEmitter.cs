@@ -48,6 +48,12 @@ public interface ISdfSceneEmitter {
     /// landed keeps drawing the one it drew, with the same motion identity at the same index, until it does
     /// (<see cref="SdfMeshPathBake"/>'s stand-ins).</summary>
     IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges => [];
+    /// <summary>Gets the dynamic slots each form of an owner with several forms rides, as the latest
+    /// <see cref="PackDynamicTransforms"/> placed them (<see cref="SdfMeshFormRange"/>): the bake draws one form of each
+    /// owner, the one it drew until every group of the named one has landed, and keeps the others baked and resident.
+    /// An owner with one form is not listed. The default, an empty list, is correct for an emitter whose geometry has no
+    /// alternatives.</summary>
+    IReadOnlyList<SdfMeshFormRange> MeshForms => [];
     /// <summary>Gets the rigid copies posed by the latest pack.</summary>
     IReadOnlyList<SdfMeshInstance> MeshInstances => [];
     /// <summary>Gets the indices into <see cref="MeshInstances"/> of the copies whose row the latest

@@ -1280,7 +1280,7 @@ screens [
 ]
 
 // Out of her suit and at her full size, the Moth picks the Humble Gaming Brick up to play it: while her seat is engaged
-// on it (screen 0), her pilotHold cell holds 1, so her look raises its hold pose (avatars/moth-pilot.puck), the brick
+// on it (screen 0), her pilotHold cell holds 1, so her look raises its hold pose (avatars/moth/body.puck), the brick
 // leaves its rest (its placement's `respond`) and its screen rides her hands (its row's `carry`). Leaving it puts it
 // back. In the suit, or at a quarter her size, where the brick is a third her height, she plays it on its rest.
 rule "brick-pick-up" {

@@ -1,70 +1,30 @@
-// The debug world set's portal library: every world a portal of the gallery may lead to, and level 3's twelve portals
-// that lead to them. A module library: it hands its importers lets and emits no document. gallery/portals.puck stands
-// the twelve and declares the library's references and destinations; the painting wing (paintings.puck) and the lab
-// wing (lab-wing.puck) hang fixed portals onto entries of it.
+// The gallery's portal wiring: the library its portals may lead to, and level 3's twelve portals. A module library: it
+// hands its importers lets and emits no document. gallery/portals.puck stands the twelve and declares the library's
+// references and destinations; gallery.puck passes their panels' terminals to the gallery's one `terminalPlay`.
 //
-// An entry is a route of the standard's portal module (../standard/portal.puck): the destination it opens, the document
-// that world is (named as this package's entries name it), the face a traveller steps out of there, the colour a glass
-// shows past the deepest window inside a window, and the title and note a panel shows. The showcase worlds come first,
-// then every open lab of the lab wing (gallery/layout.puck's `labWingPlan`), so a lab that opens joins the library.
+// The gallery wires no destination (the owner's ruling): its library is empty, so every portal is a mirror and the
+// gallery booted alone (gallery-root.puck) starts no other world. An artist wires the gallery here, as the standard's
+// portal module says (../standard/portal.puck): an entry in `galleryPortalLibrary`, and the entry a portal starts on in
+// `galleryPortalWiring`. Wiring portal-south-5 to the garden:
+//
+//   let galleryPortalLibrary = [portalEntry(destination: "garden", document: "garden", title: "THE GARDEN", note: "A sunset plot.")]
+//   let galleryPortalWiring = [{ portal: "portal-south-5", route: 0 }]
+//
+// A portal with a library stands its panel, which lists the library and MIRROR; a portal the wiring leaves out starts
+// as a mirror.
 
 import "../standard/portal"
 import "../standard/panel"
 import "gallery/layout"
 
-// What a lab's glass shows past the deepest window inside a window: a lab's neutral studio grey.
-let labFallback = "#8C8A86"
+// The library: one list of the worlds the gallery's portals may lead to, each a `portalEntry`.
+let galleryPortalLibrary = []
+// The entry each portal starts on, `{ portal, route }` by its id; a portal it leaves out starts as a mirror.
+let galleryPortalWiring = []
 
-let galleryShowcase = [
-  {
-    destination: "garden", document: "garden", counterpart: "arrival/glass", fallback: "#FF9A4D"
-    title: "THE GARDEN", note: "A sunset plot beyond the glass. Walk or jump in; the frame behind you leads back."
-  }
-  {
-    destination: "night", document: "night", counterpart: "arrival/glass", fallback: "#070B16"
-    title: "THE NIGHT FIELD", note: "A snowfield under the stars. Step in; turn round to come back."
-  }
-  {
-    destination: "city", document: "city", counterpart: "arrival/glass", fallback: "#E8C48A"
-    title: "THE CITY", note: "A town on a river bend, its market, terraces, works and quay. Step in; the frame behind you leads back."
-  }
-  {
-    destination: "hearth", document: "hearth", counterpart: "arrival/glass", fallback: "#3A160C"
-    title: "THE HEARTH", note: "A warm room behind the garden. Its frame leads on into the garden, and the garden's leads home."
-  }
-  {
-    destination: "moon", document: "moon", counterpart: "arrival/glass", fallback: "#CFC8BC"
-    title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on."
-  }
-  {
-    destination: "galaxy", document: "galaxy", counterpart: "arrival/glass", fallback: "#02030A"
-    title: "THE PLANETOIDS", note: "Six small worlds in open space, each with gravity of its own shape. The glowing pads launch you from one to the next."
-  }
-  {
-    destination: "sun", document: "sun", counterpart: "arrival/glass", fallback: "#02030A"
-    title: "PERIHELION", note: "A rock the sun passes once a day, the same sun that lights the valley. Keep to the rock while it passes."
-  }
-  {
-    destination: "globe", document: "globe", counterpart: "arrival/glass", fallback: "#1B2330"
-    title: "THE BOTTLE WORLD", note: "A room whose gravity the gallery owns: someone out here can turn you over."
-  }
-]
-let galleryLabRoutes = map(filter(labWingPlan, lab => lab.open), lab => {
-  destination: $"lab-{lab.id}"
-  document: lab.document
-  counterpart: "arrival/glass"
-  fallback: labFallback
-  title: lab.title
-  note: lab.note
-})
-let galleryPortalLibrary = concat(galleryShowcase, galleryLabRoutes)
-// The library's entry for a destination.
-function galleryRoute(destination) = first(galleryPortalLibrary, entry => (entry.destination == destination), null)
-
-// Level 3's portals stand at gallery/layout.puck's `galleryPortalBays`, one a row, `portalStandOff` in from the wall
-// the row names, toward the gallery its glass faces; each wears a freestanding frame in the canyon workshop's teal over
-// a brass lip, and starts on the library's first twelve entries, in the rows' order (south then north, west to east). A
-// portal's id names its gallery and bay.
+// Level 3's portals stand at gallery/layout.puck's `galleryPortalBays`, one a row, `portalStandOff` in from the wall the
+// row names, toward the gallery its glass faces, in a freestanding frame of the canyon workshop's teal over a brass lip.
+// A portal's id names its gallery and bay.
 let portalStandOff = 0.5
 let galleryPortalLook = {
   proud: 0
@@ -74,7 +34,7 @@ let galleryPortalLook = {
   ]
   plaque: "post"
 }
-let galleryPortals = map(galleryPortalBays, (place, i) => portalOf(
+let galleryPortals = map(galleryPortalBays, place => portalOf(
   id: $"portal-{place.side}-{place.bay}",
   x: place.at[0],
   y: place.at[1],
@@ -84,7 +44,7 @@ let galleryPortals = map(galleryPortalBays, (place, i) => portalOf(
   parent: "gallery",
   look: galleryPortalLook,
   library: galleryPortalLibrary,
-  route: i
+  route: first(galleryPortalWiring, wired => (wired.portal == $"portal-{place.side}-{place.bay}"), wired => wired.route, null)
 ))
 // The gallery's panel set: level 3's portal panels (panel.puck's `panelSet`).
 let galleryPanels = panelSet(portalPanels(galleryPortals))

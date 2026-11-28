@@ -176,7 +176,7 @@ Engine facts those worlds exercised, which hold for any world:
   (`MachineCartridgeLawTests`).
 - **Derived limits.** Sixteen drive-reach ordinals across channels and target
   registers; aggregate physical-region primer and sampled-surface byte budgets; and the rule budget
-  `RuleCapacity.MaxWorkUnitsPerTick`, where a
+  (`WorldRuleTimePricing`, a share of the tick on the slowest device), where a
   body-pair interaction costs capacity squared.
 - **Placement policy.** `placements.policy` is optional, and whole when
   authored (a partial block refuses at parse naming the missing member).
@@ -357,7 +357,7 @@ Law suite: `tests/Puck.World.Server.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 
 **Shared content is authored, never an engine default.** The live debug world
-and garden take the Moth avatar (`avatars/moth.puck`: body, channels, bindings,
+and garden take the Moth avatar (`avatars/moth/suits.puck`: body, channels, bindings,
 kit, motion programs, camera, seat camera feel) as their basis and import
 `worlds/standard/standard.puck` (the authored inputs, quality presets, skin,
 cursor, key hints, icons, binding bar, play wheel, camera feel and editor) as a

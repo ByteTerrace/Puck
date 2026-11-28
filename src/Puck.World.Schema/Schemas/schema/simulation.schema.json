@@ -25,6 +25,14 @@
         "Watched": "A world someone stands in observes it through a surface they stand near, or an observer the host knows nothing more about (another process) holds a session on it.",
         "Occupied": "Someone stands in the world."
       }
+    },
+    "rulePercent": {
+      "description": "The percent of the tick period the world\u0027s rules may take at worst on the slowest device it authors (WorldRuleTimePricing), 1 to 100. Absent is DefaultRulePercent.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
     }
   },
   "required": [

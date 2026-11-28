@@ -101,6 +101,13 @@ A document's `schema:` field selects its vocabulary, never the filename.
   So a hand-built `row { name: $"…" kind: … cells: map(…) }` or a raw `families [ ]`
   list is a defect in waiting: write the declaration
   ([dsl reference](../../../docs/reference/dsl.md#row-declarations-tableslotpilegrid)).
+  The one exception is a family of rows a declaration cannot spell (a board with an
+  `inverse` or its own topology, a tally): a `for` of `row { }` beside a `families`
+  entry in the `state` block (worlds/games/chess.puck's `chessBoardGrids`). A rule
+  reads a family member by index wherever it reads a row: `turn[$member]` over
+  `slot turn[n]`, a member's literal cell `move[$member].from`, a reserved channel's
+  argument `board(mask, board[$member], 1, 6)`
+  ([analysis](../../../docs/reference/state/analysis.md#visit-only-the-rules-that-are-due)).
 - **An import names, never spells a file.** `import "skies"`, not
   `import "skies.puck"` (**PUCK121**). The named file decides what comes in: a
   module library (a source emitting no document) hands over its `let`s and

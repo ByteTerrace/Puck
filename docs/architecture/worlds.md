@@ -211,7 +211,7 @@ the package `worlds/debug/`:
 worlds/debug/
   manifest.json
   debug.puck  garden.puck  quality.puck  skies.puck  shapes.puck  ...
-  avatars/moth.puck
+  avatars/moth/suits.puck
   fonts/  tunes/  cartridges/<target>/  pipelines/
 ```
 

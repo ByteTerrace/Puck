@@ -3,25 +3,25 @@
 // (../standard/chess-pieces.puck), materialized from the station's own chess game (chess.puck) by the station's
 // holodeck pool (../standard/holodeck.puck) and released when the station shows another game. A player lifts a piece,
 // sets it down on another square, or knocks pieces over; the game is judged from where they settle, by chess.puck's
-// physical judge, never by a second implementation. A module library, in two parts: what the world holds once or keys
-// by station (the pieces' prototypes, looks and kit, the board's paints and the inks they read), and what each
-// station's instance holds (its board, its piece bodies, its state and its rules):
+// physical judge, never by a second implementation. A module library: what the world holds per station (each station's
+// board placement and piece bodies, its board's paints) and the one set of rules every station plays, which sweep the
+// stations (`$member` a station's place in the world's list) as chess.puck's do:
 //
 //   import "chess-station"
-//   chessStationSet(stations [s])                  // at the world's top level: the looks and the pieces' kit
-//   prototypes { gameStationPrototype(station: s, catalog: c, boardPanels: chessStationPanels(s))  chessStationPrototypes() }
-//   state { world { chessStationDisplayState(stations [s]) } }
-//   module games(station) {
-//     placements { chessStationBoard(station: station) }
-//     state { chessStationGrid()  world { chessGameState(settleTicks: 9, placed: true)  chessStationState(station: station) } }
-//     chessJudge(settleTicks: 9, scope: "pieceCode")  …  chessStationPlay(station: station, game: 0, settleTicks: 9)
-//     chessPutDown(settleTicks: 9)  chessPutJudged(settleTicks: 9, restoresCells: true)  chessFreshGame()
-//     chessStationHolodeck(station: station, game: 0)  chessPutSettled()  chessStationGlass(station: station, game: 0)
+//   chessStationSet(stations: ss)                  // at the world's top level: the looks and the pieces' kit
+//   prototypes { gameStationPrototype(station: s, index: i, catalog: c, boardPanels: chessStationPanels(s, i))  chessStationPrototypes() }
+//   placements { chessStationBoard(station: s, index: i) }   // each station's
+//   state {
+//     chessStationGrids(count: length(ss))
+//     world { chessGameState(keys: map(ss, chessStationKeys), settleTicks: 9, placed: true)  chessStationState(stations: ss)  chessStationDisplayState(stations: ss) }
 //   }
+//   chessJudge(settleTicks: 9)  …  chessStationPlay(game: 0, settleTicks: 9)
+//   chessPutDown(settleTicks: 9)  chessPutJudged(settleTicks: 9, restoresCells: true)  chessFreshGame()
+//   chessStationHolodeck(game: 0)  chessPutSettled()  chessStationGlass(game: 0)
 //
-// The game's cells are the truth and the bodies follow them, so the order of the instance's rules matters: the judge
-// reads the settled bodies into the cells, the play and the doors write the cells, and the holodeck runs after every
-// writer of a cell, standing each body where its cell says. ../../debug/game-stations.puck is the worked order.
+// The game's cells are the truth and the bodies follow them, so the order of the rules matters: the judge reads the
+// settled bodies into the cells, the play and the doors write the cells, and the holodeck runs after every writer of a
+// cell, standing each body where its cell says. ../../debug/game-stations.puck is the worked order.
 //
 // The board is 15 cm squares centred on the board area, its columns running +X and its rows +Z from the near chair, so
 // a square's cell is the chess board's own (8 * row + column): rank 1 nearest the near chair and the a-file (column 7)
@@ -91,16 +91,20 @@ let chessStationKinds = flatMap(
 // The slots a pawn starts in: the only pieces whose code, and so whose look, changes while their body stands.
 let chessStationPawnSlots = filter(range(0, 32), i => absolute(initialPieceCodes[i]) == 1)
 
-// The key of a station's one holodeck pool, its 32 pieces, in its instance's pool rows.
-let chessStationPool = "pieces"
+// The holodeck rows of the stations' pieces, apart from the patience cards' (patience-station.puck): each piece body's
+// cells keyed by its placement, and each station's pool keyed by its place in the list.
+let chessHoloRows = { live: "chessLive", at: "chessAt", shown: "chessShown", since: "chessSince" }
 
-// The holodeck's bodies for one station: piece `n` is `piece<n>`, as chess.puck's rows key it, spawning over its
-// starting square in the board's frame. A pawn wears a look of its station's own (`<station>-pawn<n>`), which its rules
-// change when it is queened; every other piece wears its kind's look.
+// A station's piece keys, in piece order: the names of its piece placements, which key its cells in chess.puck's rows.
+function chessStationKeys(station) = map(range(0, 32), i => $"{station.id}-piece{i}")
+
+// The holodeck's bodies for one station: piece `n` is `<station>-piece<n>`, spawning over its starting square in the
+// board's frame. A pawn wears a look of its own named for its body, which its rules change when it is queened; every
+// other piece wears its kind's look.
 function chessStationBodies(station) = map(range(0, 32), i => {
-  id: $"piece{i}"
+  id: $"{station.id}-piece{i}"
   prototype: chessStationPrototypeOf(initialPieceCodes[i])
-  look: ((absolute(initialPieceCodes[i]) == 1) ? $"{station.id}-pawn{i}" : chessStationPrototypeOf(initialPieceCodes[i]))
+  look: ((absolute(initialPieceCodes[i]) == 1) ? $"{station.id}-piece{i}" : chessStationPrototypeOf(initialPieceCodes[i]))
   at [
     chessStationSquareAt(initialPieceCells[i])[0],
     (gameStationSurface + chessStationSpawn)
@@ -132,32 +136,33 @@ template chessStationSet(stations) {
   )
 }
 function chessStationPawnLooks(stations) = flatMap(stations, station => map(chessStationPawnSlots, i => {
-  name: $"{station.id}-pawn{i}"
+  name: $"{station.id}-piece{i}"
   prototype: chessStationPrototypeOf(initialPieceCodes[i])
 }))
 
-function chessStationSquarePaints(station, cell) = [
+// A square's two paints on station `index`'s glass: its fill in the station's board ink and its ring in its own.
+function chessStationSquarePaints(station, index, cell) = [
   displayFill(
     gameStationWorld(station, chessStationSquareAt(cell)[0], chessStationSquareAt(cell)[1]),
     [0.073, 0.073],
-    ((chessStationParity[cell] == 0) ? $"state.chessStationBoardInk.{station.id}-light" :
-      $"state.chessStationBoardInk.{station.id}-dark"),
+    ((chessStationParity[cell] == 0) ? $"state.chessStationBoardInkOf{index}.light" :
+      $"state.chessStationBoardInkOf{index}.dark"),
     0.004
   )
   displayRing(
     gameStationWorld(station, chessStationSquareAt(cell)[0], chessStationSquareAt(cell)[1]),
     [0.066, 0.066],
-    $"state.chessStationRingInk.{station.id}-{cell}",
+    $"state.chessStationRingInkOf{index}.{cell}",
     0.009
   )
 ]
 
 // The board area's panels for a station's prototype: two ranks a panel, from the board area's near edge to its far
 // edge, so each carries 32 paints.
-function chessStationPanels(station) = map([0, 2, 4, 6], first => {
+function chessStationPanels(station, index) = map([0, 2, 4, 6], first => {
   z0: ((first == 0) ? gameStationBoard.z0 : (chessStationZ0 + (chessStationSquare * first)))
   z1: ((first == 6) ? gameStationBoard.z1 : (chessStationZ0 + (chessStationSquare * (first + 2))))
-  paints: flatMap(range((8 * first), (8 * (first + 2))), cell => chessStationSquarePaints(station, cell))
+  paints: flatMap(range((8 * first), (8 * (first + 2))), cell => chessStationSquarePaints(station, index, cell))
 })
 
 template chessStationPrototypes() {
@@ -165,24 +170,16 @@ template chessStationPrototypes() {
   gameStationTokenBlank(id: "chessStationBlank")
 }
 
-// What the world holds for the stations' boards: each square's ring ink, keyed `<station>-<cell>`, each station's two
-// square inks, the inks and status lines every station's rules copy from, the creation each piece code wears (keyed by
-// the code), and the pawns' looks.
+// What the world holds for the stations' boards: each station's square rings' inks (a member a station keyed by cell)
+// and its two square inks, the inks and status lines every station's rules copy from, the creation each piece code
+// wears (keyed by the code), and the pawns' looks.
 template chessStationDisplayState(stations, look = gameStationLook) {
-  row {
-    name: "chessStationRingInk"
-    kind: Text
-    capacity: (64 * length(stations))
-    cells: flatMap(stations, station => map(range(0, 64), cell => { key: $"{station.id}-{cell}", value: look.off }))
-  }
-  row {
-    name: "chessStationBoardInk"
-    kind: Text
-    capacity: (2 * length(stations))
-    cells: flatMap(
-      stations,
-      station => [{ key: $"{station.id}-light", value: look.light }, { key: $"{station.id}-dark", value: look.dark }]
-    )
+  let count = length(stations)
+
+  table chessStationRingInkOf[count] capacity(64) = map(range(0, 64), cell => look.off)
+  table chessStationBoardInkOf[count] capacity(2) {
+    light = look.light
+    dark = look.dark
   }
   row {
     name: "chessStationInks"
@@ -212,427 +209,446 @@ template chessStationDisplayState(stations, look = gameStationLook) {
   holodeckLookState(looks: chessStationPawnLooks(stations))
 }
 
-// A station's board, inside its instance: a placement at the station that anchors the chess board's grid (chess.puck's
-// rows, which a settled piece's square is read against and a pose stands a body on), and the holodeck's 32 piece bodies.
-template chessStationBoard(station) {
-  placement "chess-board" {
+// Station `index`'s board: a placement at the station that anchors its chess board's grid (chess.puck's
+// `chessBoard<index>`, which a settled piece's square is read against and a pose stands a body on), and the holodeck's
+// 32 piece bodies, its pool keyed by the station's place.
+template chessStationBoard(station, index) {
+  placement $"{station.id}-chess-board" {
     prototype: "chessStationBlank"
     board {
-      move: "move"
-      occupancy: "board"
-      plan: "plan"
-      topology: "chessBoard"
-      turn: "turn"
-      verdict: "verdict"
+      occupancy: $"chessBoard{index}"
+      topology: $"chessBoard{index}"
     }
     position: station.at
   }
   holodeckPool(
     bodies: chessStationBodies(station),
     kit: "chessStationPiece",
-    pool: chessStationPool,
-    parent: "chess-board"
+    pool: $"{index}",
+    parent: $"{station.id}-chess-board",
+    rows: chessHoloRows
   )
 }
 
-// The board's grid, inside the instance's `state` block: 15 cm squares on the glass, in the board placement's frame,
-// which its board facet anchors, so a pose and a settled read both land in it with no `frame:` of their own. A
-// piece counts as standing on a square while its foot is within 12 cm over the glass.
-template chessStationGrid() {
-  chessBoardGrid(
+// Every station's board grid, inside the world's `state` block: 15 cm squares on the glass, in the frame of the board
+// placement that anchors it, so a pose and a settled read both land in it with no `frame:` of their own. A piece counts
+// as standing on a square while its foot is within 12 cm over the glass.
+template chessStationGrids(count) {
+  chessBoardGrids(
+    count: count,
     cellSize: chessStationSquare,
     origin: [chessStationX0, gameStationSurface, chessStationZ0],
     band: 0.12
   )
 }
 
-// A station's chess state, inside its instance: each chair's cursor, lifted square (-1 for none) and last pointed pick
-// cell, whether the board was last drawn shown and the status line's last code; keyed `<station>-<cell>` (the world's
-// ring ink's own keys) each square's cell and its ring's code; the code each piece's body was last materialized
-// wearing; the turn and start the last legal arrangement was saved at and a fresh game's request to stand every body
-// again; a station that plays itself (`autoplay`) its opening, the turn it last counted and the tick its game stalls at;
-// and the turns played (`chessStationPlies`, counted across fresh games) and games set up afresh (`chessStationGames`).
-template chessStationState(station) {
-  table chessStationCursor capacity(auto) {
+// The stations' chess state, inside the world's `state.world` block, a member a station of each family: each chair's
+// cursor, lifted square (-1 for none) and last pointed pick cell, whether the board was last drawn shown and the status
+// line's last code; each square's ring code, keyed by cell (`chessStationCellNo` reads a key's cell); the code each piece's
+// body was last materialized wearing; the turn and start the last legal arrangement was saved at and a fresh game's
+// request to stand every body again; a station that plays itself its opening, the turn it last counted and the tick its
+// game stalls at (`autoplay`: each station's `{ start, stall, opening }`, or null when none plays itself); the turns
+// played (`chessStationPlies`, counted across fresh games) and games set up afresh (`chessStationGames`); and the pieces'
+// holodeck rows.
+template chessStationState(stations, autoplay = null) {
+  let count = length(stations)
+
+  table chessStationCursorOf[count] capacity(2) {
     near = 11
     far = 51
   }
-  table chessStationPicked capacity(auto) {
+  table chessStationPickedOf[count] capacity(2) {
     near = -1
     far = -1
   }
-  table chessStationPointer capacity(auto) {
+  table chessStationPointerOf[count] capacity(2) {
     near = -1
     far = -1
   }
-  table chessStationShow capacity(auto) {
+  table chessStationShowOf[count] capacity(2) {
     shown = 1
     status = -1
   }
-  row {
-    name: "chessStationCellNo"
-    kind: Int
-    capacity: 64
-    cells: map(range(0, 64), cell => { key: $"{station.id}-{cell}", value: cell })
+  table chessStationCellNo capacity(64) = range(0, 64)
+  table chessStationRingCodeOf[count] capacity(64) = map(range(0, 64), cell => chessStationRings.rest)
+  table chessStationLookCodeOf[count] as s capacity(32) {
+    for i in range(0, 32) {
+      [chessStationKeys(stations[s])[i]] = initialPieceCodes[i]
+    }
   }
-  row {
-    name: "chessStationRingCode"
-    kind: Int
-    capacity: 64
-    cells: map(range(0, 64), cell => { key: $"{station.id}-{cell}", value: chessStationRings.rest })
-  }
-  row {
-    name: "chessStationLookCode"
-    kind: Int
-    capacity: 32
-    cells: map(range(0, 32), i => { key: $"piece{i}", value: initialPieceCodes[i] })
-  }
-  table chessStationSaved capacity(auto) {
+  table chessStationSavedOf[count] capacity(4) {
     turn = -1
     started = -1
     fresh = 0
     stood = 0
   }
-  table chessStationSelf capacity(auto) {
+  table chessStationSelfOf[count] capacity(3) {
     opened = 0
     turn = 0
     due = 0
   }
-  holodeckState(bodies: chessStationBodies(station), pools: [chessStationPool])
-  slot chessStationPlies = 0
-  slot chessStationGames = 0
+  if autoplay != null {
+    table chessStationAutoOf[count] as s capacity(4) {
+      start = autoplay[s].start
+      stall = autoplay[s].stall
+      from = autoplay[s].opening[0]
+      to = autoplay[s].opening[1]
+    }
+  }
+  holodeckState(
+    bodies: flatMap(stations, station => chessStationBodies(station)),
+    pools: map(range(0, count), s => $"{s}"),
+    rows: chessHoloRows
+  )
+  slot chessStationPlies[count] = 0
+  slot chessStationGames[count] = 0
 }
 
-// The chairs' play and the game's upkeep, inside the instance, after the judge and the doors and ahead of chess.puck's
-// put-down templates. Every rule here is live only (`search(ply) == 0`): the computer's search judges the game's own rules,
-// never these. While another game is shown the chess game holds: the computer searches nothing, the doors take nothing
-// and the judge reads no body.
+// The chairs' play and the game's upkeep, one set for every station after the judge and the doors and ahead of
+// chess.puck's put-down templates. Every rule here is live only (`search(ply) == 0`): the computer's search judges the
+// game's own rules, never these. While another game is shown the chess game holds: the computer searches nothing, the
+// doors take nothing and the judge reads no body.
 //
-// `autoplay`, when given, has the computer play both sides from its own start: `{ start, stall, opening }` opens with
-// White's move `opening` ([from, to] cells) through the move door the console's `station.chess` uses, once the board has
-// first rested and `start` ticks have passed, then hands each side to the computer as its turn comes. A game that passes
-// no turn for `stall` ticks (a draw limit, a mate) is set up afresh.
-template chessStationPlay(station, game, settleTicks, autoplay = null) {
-  let key = station.id
+// With `autoplay`, the computer plays both sides from each station's own start (chessStationState's `autoplay`): it opens
+// with White's move through the move door the console's `station.chess` uses, once the board has first rested and the
+// station's start has passed, then hands each side to the computer as its turn comes. A game that passes no turn for the
+// station's stall (a draw limit, a mate) is set up afresh.
+template chessStationPlay(game, settleTicks, autoplay = false) {
   let pick = gameStationBits.pick
 
-  rule $"chess-station-{key}-hold" {
-    local held = gameStationGame[key] != game
-    when search(ply) == 0 and chessHold != held
+  rule "chess-station-hold" {
+    local held = gameStationGame[$member] != game
+    when search(ply) == 0 and chessHold[$member] != held
     mode: Level
-    chessHold = held
+    forEach: gameStationOf
+    chessHold[$member] = held
   }
 
-  if autoplay == null {
-    // The computer plays the side whose chair stands empty: Black with both empty, neither with both taken.
-    rule $"chess-station-{key}-sides" {
-      local white = gameStationChair.near != 0
-      local black = gameStationChair.far != 0
-      local side = white ? (black ? -1 : 1) : (black ? 0 : 1)
-      when search(ply) == 0 and aiSide != side
+  if autoplay {
+    // The turns played, counted across fresh games, each putting off the tick the game is called stalled at.
+    rule "chess-station-plies" {
+      when search(ply) == 0 and chessTurn[$member] != chessStationSelfOf[$member].turn
       mode: Level
-      aiSide = side
+      forEach: gameStationOf
+      chessStationSelfOf[$member].turn = chessTurn[$member]
+      chessStationPlies[$member] += 1
+      chessStationSelfOf[$member].due = $tick + chessStationAutoOf[$member].stall
+    }
+
+    rule "chess-station-self-open" {
+      when (search(ply) == 0 and
+        chessStationSelfOf[$member].opened == 0 and
+        chessHold[$member] == 0 and
+        chessGameStarted[$member] == 1 and
+        chessSettleHold[$member] == settleTicks and
+        $tick >= chessStationAutoOf[$member].start)
+      mode: Level
+      forEach: gameStationOf
+      chessInputOf[$member].from = chessStationAutoOf[$member].from
+      chessInputOf[$member].to = chessStationAutoOf[$member].to
+      chessInputOf[$member].request = 1
+      chessStationSelfOf[$member].opened = 1
+      chessStationSelfOf[$member].due = $tick + chessStationAutoOf[$member].stall
+    }
+
+    rule "chess-station-self-side" {
+      when search(ply) == 0 and chessStationSelfOf[$member].opened == 1 and chessAiSide[$member] != chessTurn[$member]
+      mode: Level
+      forEach: gameStationOf
+      chessAiSide[$member] = chessTurn[$member]
+    }
+
+    rule "chess-station-self-stalled" {
+      when search(ply) == 0 and chessStationSelfOf[$member].opened == 1 and $tick >= chessStationSelfOf[$member].due
+      mode: Level
+      forEach: gameStationOf
+      chessFreshOf[$member].request = 1
+      chessStationSavedOf[$member].fresh = 1
+      chessStationGames[$member] += 1
+      chessStationSelfOf[$member].opened = 0
+      chessStationSelfOf[$member].turn = 0
+      chessAiSide[$member] = 1
+    }
+  } else {
+    // The computer plays the side whose chair stands empty: Black with both empty, neither with both taken.
+    rule "chess-station-sides" {
+      local white = gameStationChairOf[$member].near != 0
+      local black = gameStationChairOf[$member].far != 0
+      local side = white ? (black ? -1 : 1) : (black ? 0 : 1)
+      when search(ply) == 0 and chessAiSide[$member] != side
+      mode: Level
+      forEach: gameStationOf
+      chessAiSide[$member] = side
     }
 
     // The turns played, counted across fresh games.
-    rule $"chess-station-{key}-plies" {
-      when search(ply) == 0 and turn != chessStationSelf.turn
+    rule "chess-station-plies" {
+      when search(ply) == 0 and chessTurn[$member] != chessStationSelfOf[$member].turn
       mode: Level
-      chessStationSelf.turn = turn
-      chessStationPlies += 1
-    }
-  } else {
-    // The turns played, counted across fresh games, each putting off the tick the game is called stalled at.
-    rule $"chess-station-{key}-plies" {
-      when search(ply) == 0 and turn != chessStationSelf.turn
-      mode: Level
-      chessStationSelf.turn = turn
-      chessStationPlies += 1
-      chessStationSelf.due = $tick + autoplay.stall
-    }
-
-    rule $"chess-station-{key}-self-open" {
-      when (search(ply) == 0 and
-        chessStationSelf.opened == 0 and
-        chessHold == 0 and
-        gameStarted == 1 and
-        settleHold == settleTicks and
-        $tick >= autoplay.start)
-      mode: Level
-      chessInput.from = autoplay.opening[0]
-      chessInput.to = autoplay.opening[1]
-      chessInput.request = 1
-      chessStationSelf.opened = 1
-      chessStationSelf.due = $tick + autoplay.stall
-    }
-
-    rule $"chess-station-{key}-self-side" {
-      when search(ply) == 0 and chessStationSelf.opened == 1 and aiSide != turn
-      mode: Level
-      aiSide = turn
-    }
-
-    rule $"chess-station-{key}-self-stalled" {
-      when search(ply) == 0 and chessStationSelf.opened == 1 and $tick >= chessStationSelf.due
-      mode: Level
-      chessFresh.request = 1
-      chessStationSaved.fresh = 1
-      chessStationGames += 1
-      chessStationSelf.opened = 0
-      chessStationSelf.turn = 0
-      aiSide = 1
+      forEach: gameStationOf
+      chessStationSelfOf[$member].turn = chessTurn[$member]
+      chessStationPlies[$member] += 1
     }
   }
 
-
   // NEW GAME sets every piece back and starts the game afresh.
-  rule $"chess-station-{key}-new" {
-    when search(ply) == 0 and gameStationGame[key] == game and (gameStationEdges.near & gameStationBits.action) != 0
+  rule "chess-station-new" {
+    when search(ply) == 0 and gameStationGame[$member] == game and (gameStationEdgesOf[$member].near & gameStationBits.action) != 0
     mode: Level
-    chessFresh.request = 1
-    chessStationSaved.fresh = 1
-    chessStationPicked.near = -1
-    chessStationPicked.far = -1
+    forEach: gameStationOf
+    chessFreshOf[$member].request = 1
+    chessStationSavedOf[$member].fresh = 1
+    chessStationPickedOf[$member].near = -1
+    chessStationPickedOf[$member].far = -1
   }
 
   // The last legal arrangement, saved whole each time the turn passes and when a game starts: what an arrangement judged
-  // illegal is put back to (chess.puck's put-down revert reads `putBefore`, which a set-down also saves).
-  rule $"chess-station-{key}-save" {
-    when search(ply) == 0 and (turn != chessStationSaved.turn or gameStarted != chessStationSaved.started)
+  // illegal is put back to (chess.puck's put-down revert reads `chessPutBeforeOf`, which a set-down also saves).
+  rule "chess-station-save" {
+    when search(ply) == 0 and (chessTurn[$member] != chessStationSavedOf[$member].turn or chessGameStarted[$member] != chessStationSavedOf[$member].started)
     mode: Level
-    transform copyRow(row: putBefore, from: pieceCell)
-    transform copyRow(row: putBeforeCode, from: pieceCode)
-    chessStationSaved.turn = turn
-    chessStationSaved.started = gameStarted
+    forEach: gameStationOf
+    transform copyRow(row: chessPutBeforeOf[$member], from: chessPieceCellOf[$member])
+    transform copyRow(row: chessPutBeforeCodeOf[$member], from: chessPieceCodeOf[$member])
+    chessStationSavedOf[$member].turn = chessTurn[$member]
+    chessStationSavedOf[$member].started = chessGameStarted[$member]
   }
 
   // A settled board that changed and was judged illegal with no set-down awaiting its verdict (a piece knocked over or
   // pushed off its square) is put back as the last legal arrangement stood.
-  rule $"chess-station-{key}-restore" {
+  rule "chess-station-restore" {
     when (search(ply) == 0 and
-      chessHold == 0 and
-      gameStarted == 1 and
-      settleHold == settleTicks and
-      verdict == 0 and
-      boardChanged and
-      putDown.judging == 0 and
-      putDown.revert == 0)
+      chessHold[$member] == 0 and
+      chessGameStarted[$member] == 1 and
+      chessSettleHold[$member] == settleTicks and
+      chessVerdict[$member] == 0 and
+      chessBoardChanged[$member] and
+      chessPutDownOf[$member].judging == 0 and
+      chessPutDownOf[$member].revert == 0)
     mode: Level
-    putDown.revert = 1
+    forEach: gameStationOf
+    chessPutDownOf[$member].revert = 1
   }
 
   for chair in chessStationChairs {
     // The pointer puts the chair's cursor on the square under it whenever it moves onto another pick cell over the board.
-    rule $"chess-station-{key}-point-{chair.name}" {
-      local pointed = gameStationPointer[chair.name]
+    rule $"chess-station-point-{chair.name}" {
+      local pointed = gameStationPointerOf[$member][chair.name]
       local x = gameStationCellX(pointed) - chessStationX0
       local z = gameStationCellZ(pointed) - chessStationZ0
       local onBoard = (
         (pointed >= 0) and (x >= 0) and (x < 8 * chessStationSquare) and (z >= 0) and (z < 8 * chessStationSquare)
       )
-      when search(ply) == 0 and gameStationGame[key] == game and pointed != chessStationPointer[chair.name]
+      when search(ply) == 0 and gameStationGame[$member] == game and pointed != chessStationPointerOf[$member][chair.name]
       mode: Level
+      forEach: gameStationOf
       if onBoard {
-        chessStationCursor[chair.name] = 8 * toInt(z / chessStationSquare) + toInt(x / chessStationSquare)
+        chessStationCursorOf[$member][chair.name] = 8 * toInt(z / chessStationSquare) + toInt(x / chessStationSquare)
       }
-      chessStationPointer[chair.name] = pointed
+      chessStationPointerOf[$member][chair.name] = pointed
     }
 
     // A step moves the chair's cursor a square in its own frame: ahead away from the chair, right to its right.
-    rule $"chess-station-{key}-step-{chair.name}" {
-      local edges = gameStationEdges[chair.name]
+    rule $"chess-station-step-{chair.name}" {
+      local edges = gameStationEdgesOf[$member][chair.name]
       local ahead = ((edges & gameStationBits.ahead) != 0) - ((edges & gameStationBits.behind) != 0)
       local right = ((edges & gameStationBits.right) != 0) - ((edges & gameStationBits.left) != 0)
-      when search(ply) == 0 and gameStationGame[key] == game and (ahead or right)
+      when search(ply) == 0 and gameStationGame[$member] == game and (ahead or right)
       mode: Level
-      chessStationCursor[chair.name] = seatStepCellOn(chair.side, chessStationCursor[chair.name], 8, 8, ahead, right)
+      forEach: gameStationOf
+      chessStationCursorOf[$member][chair.name] = seatStepCellOn(chair.side, chessStationCursorOf[$member][chair.name], 8, 8, ahead, right)
     }
 
     // On its side's turn, a pick lifts a piece of that side off a board at rest, lifts another in its place, puts the
     // lifted piece back on its own square, or sets it down on the cursor's square: the game's apply path relocates the
-    // move (chess.puck's `ai` cells) and the settled board is judged against what the set-down saved (`putDown`).
-    rule $"chess-station-{key}-pick-{chair.name}" {
-      local cursor = chessStationCursor[chair.name]
-      local picked = chessStationPicked[chair.name]
-      local own = (board[cursor] * (1 - 2 * turn)) > 0
-      local ours = (turn == chair.turn) and (aiSide != turn) and (ai.pending == 0) and (putDown.judging == 0)
-      when search(ply) == 0 and gameStationGame[key] == game and (gameStationEdges[chair.name] & pick) != 0
+    // move (chess.puck's `chessAiOf` cells) and the settled board is judged against what the set-down saved
+    // (`chessPutDownOf`).
+    rule $"chess-station-pick-{chair.name}" {
+      local turn = chessTurn[$member]
+      local cursor = chessStationCursorOf[$member][chair.name]
+      local picked = chessStationPickedOf[$member][chair.name]
+      local own = (chessBoard[$member][cursor] * (1 - 2 * turn)) > 0
+      local ours = (turn == chair.turn) and (chessAiSide[$member] != turn) and (chessAiOf[$member].pending == 0) and (chessPutDownOf[$member].judging == 0)
+      when search(ply) == 0 and gameStationGame[$member] == game and (gameStationEdgesOf[$member][chair.name] & pick) != 0
       mode: Level
+      forEach: gameStationOf
       if picked < 0 {
-        if own and ours and settleHold == settleTicks {
-          chessStationPicked[chair.name] = cursor
+        if own and ours and chessSettleHold[$member] == settleTicks {
+          chessStationPickedOf[$member][chair.name] = cursor
         }
       } else if cursor == picked {
-        chessStationPicked[chair.name] = -1
+        chessStationPickedOf[$member][chair.name] = -1
       } else if own and ours {
-        chessStationPicked[chair.name] = cursor
+        chessStationPickedOf[$member][chair.name] = cursor
       } else if ours {
-        ai.from = picked
-        ai.to = cursor
-        ai.mover = board[picked]
-        ai.pending = 1
-        putDown.judging = 1
-        chessStationPicked[chair.name] = -1
+        chessAiOf[$member].from = picked
+        chessAiOf[$member].to = cursor
+        chessAiOf[$member].mover = chessBoard[$member][picked]
+        chessAiOf[$member].pending = 1
+        chessPutDownOf[$member].judging = 1
+        chessStationPickedOf[$member][chair.name] = -1
       }
     }
 
     // The lifted piece is put back by the cancel button, by standing up, by another game taking the glass, and once its
     // square no longer holds a piece of the side to move.
-    rule $"chess-station-{key}-cancel-{chair.name}" {
-      local picked = chessStationPicked[chair.name]
-      when search(ply) == 0 and picked >= 0 and ((gameStationEdges[chair.name] & gameStationBits.cancel) != 0 or
-          gameStationChair[chair.name] == 0 or
-          gameStationGame[key] != game or
-          (board[picked] * (1 - 2 * turn)) <= 0)
+    rule $"chess-station-cancel-{chair.name}" {
+      local picked = chessStationPickedOf[$member][chair.name]
+      when search(ply) == 0 and picked >= 0 and ((gameStationEdgesOf[$member][chair.name] & gameStationBits.cancel) != 0 or
+          gameStationChairOf[$member][chair.name] == 0 or
+          gameStationGame[$member] != game or
+          (chessBoard[$member][picked] * (1 - 2 * chessTurn[$member])) <= 0)
       mode: Level
-      chessStationPicked[chair.name] = -1
+      forEach: gameStationOf
+      chessStationPickedOf[$member][chair.name] = -1
     }
   }
 }
 
-// The holodeck, inside the instance after every writer of a piece's cell (the judge, the doors, the put-down's revert
-// and the fresh game) and ahead of chess.puck's `chessPutSettled`. The pool stands while the station shows chess, one
-// write whatever the pieces; within it each piece's body stands while the piece is on the board wearing its code's look,
-// and a queened pawn's look is rewritten and its body asked for afresh. A standing body is posed over its square
+// The holodeck, one set for every station after every writer of a piece's cell (the judge, the doors, the put-down's
+// revert and the fresh game) and ahead of chess.puck's `chessPutSettled`. A station's pool stands while it shows chess,
+// one write whatever the pieces; within it each piece's body stands while the piece is on the board wearing its code's
+// look, and a queened pawn's look is rewritten and its body asked for afresh. A standing body is posed over its square
 // whenever its cell is not the square it was last posed at in this showing; a lifted one hovers over its chair's cursor;
 // a put-back arrangement and a fresh game stand every body again.
-template chessStationHolodeck(station, game) {
-  let key = station.id
-
-  rule $"chess-station-{key}-shown" {
-    local shown = gameStationGame[key] == game
-    when search(ply) == 0 and holodeckShown[chessStationPool] != shown
+template chessStationHolodeck(game) {
+  rule "chess-station-shown" {
+    local shown = gameStationGame[$member] == game
+    when search(ply) == 0 and chessShown[$member] != shown
     mode: Level
-    holodeckShow(pool: chessStationPool, shown: shown)
+    forEach: gameStationOf
+    holodeckShow(pool: $member, shown: shown, shownRow: chessShown, since: chessSince)
   }
 
-  rule $"chess-station-{key}-holodeck" {
-    local want = (pieceCell[$each] >= 0) and (chessStationLookCode[$each] == pieceCode[$each])
-    when search(ply) == 0 and holodeckLive[$each] != want
-    forEach: pieceCode
+  rule "chess-station-holodeck" {
+    local want = (chessPieceCellOf[$member][$each] >= 0) and (chessStationLookCodeOf[$member][$each] == chessPieceCodeOf[$member][$each])
+    when search(ply) == 0 and chessLive[$each] != want
+    forEach: chessPieceCodeOf
     mode: Level
-    holodeckSet(live: want)
+    holodeckSet(live: want, liveRow: chessLive, at: chessAt)
   }
 
-  for i in chessStationPawnSlots {
-    rule $"chess-station-{key}-look-{i}" {
-      when search(ply) == 0 and chessStationLookCode[$"piece{i}"] != pieceCode[$"piece{i}"]
-      mode: Level
-      setState(
-        state: holodeckLook,
-        key: $"{key}-pawn{i}",
-        fromState: chessStationCodeLooks,
-        fromKey: pieceCode[$"piece{i}"]
-      )
-      chessStationLookCode[$"piece{i}"] = pieceCode[$"piece{i}"]
-    }
+  // A pawn queened on the last rank (or a queen back to a pawn in a fresh game) wears its code's look: its look, named for
+  // its body, is rewritten, and the holodeck asks for its body afresh.
+  rule "chess-station-look" {
+    when search(ply) == 0 and chessStationLookCodeOf[$member][$each] != chessPieceCodeOf[$member][$each]
+    mode: Level
+    forEach: chessPieceCodeOf
+    setState(state: holodeckLook, key: $each, fromState: chessStationCodeLooks, fromKey: chessPieceCodeOf[$member][$each])
+    chessStationLookCodeOf[$member][$each] = chessPieceCodeOf[$member][$each]
   }
 
   // A put-back arrangement and a fresh game stand every body again in one write: the place rule poses a body
-  // whenever its last pose (`holodeckAt`, the mark of its square plus 64 for this parity) is not its square's mark under
+  // whenever its last pose (`chessAt`, the mark of its square plus 64 for this parity) is not its square's mark under
   // the parity now.
-  rule $"chess-station-{key}-stand" {
-    when search(ply) == 0 and (putDown.revert == 1 or chessStationSaved.fresh == 1)
+  rule "chess-station-stand" {
+    when search(ply) == 0 and (chessPutDownOf[$member].revert == 1 or chessStationSavedOf[$member].fresh == 1)
     mode: Level
-    chessStationSaved.stood = 1 - chessStationSaved.stood
-    chessStationSaved.fresh = 0
+    forEach: gameStationOf
+    chessStationSavedOf[$member].stood = 1 - chessStationSavedOf[$member].stood
+    chessStationSavedOf[$member].fresh = 0
   }
 
   for chair in chessStationChairs {
-    rule $"chess-station-{key}-hover-{chair.name}" {
+    rule $"chess-station-hover-{chair.name}" {
       when (search(ply) == 0 and
-        chessStationPicked[chair.name] >= 0 and
-        pieceCell[$each] == chessStationPicked[chair.name] and
-        holodeckStands(chessStationPool))
-      forEach: pieceCode
+        chessStationPickedOf[$member][chair.name] >= 0 and
+        chessPieceCellOf[$member][$each] == chessStationPickedOf[$member][chair.name] and
+        holodeckStands($member, chessLive, chessAt, chessShown, chessSince))
+      forEach: chessPieceCodeOf
       mode: Level
       // The lifted square holds one piece.
       maxFirings: 1
       poseCell(
         key: `placement:$each`,
-        topology: chessBoard,
-        expression: chessStationCursor[chair.name],
+        topology: chessBoard[$member],
+        expression: chessStationCursorOf[$member][chair.name],
         offset: [0, chessStationHover, 0]
       )
-      holodeckTidy()
+      holodeckTidy(at: chessAt)
     }
   }
 
-  rule $"chess-station-{key}-place" {
-    local square = pieceCell[$each]
-    local posed = holodeckMark(chessStationPool, square + 64 * chessStationSaved.stood)
-    local lifted = (square == chessStationPicked.near) or (square == chessStationPicked.far)
-    when search(ply) == 0 and square >= 0 and holodeckAt[$each] != posed and lifted == 0 and holodeckStands(
-        chessStationPool
+  rule "chess-station-place" {
+    local square = chessPieceCellOf[$member][$each]
+    local posed = holodeckMark($member, square + 64 * chessStationSavedOf[$member].stood, chessSince)
+    local lifted = (square == chessStationPickedOf[$member].near) or (square == chessStationPickedOf[$member].far)
+    when search(ply) == 0 and square >= 0 and chessAt[$each] != posed and lifted == 0 and holodeckStands(
+        $member,
+        chessLive,
+        chessAt,
+        chessShown,
+        chessSince
       )
-    forEach: pieceCode
+    forEach: chessPieceCodeOf
     mode: Level
     poseCell(
       key: `placement:$each`,
-      topology: chessBoard,
+      topology: chessBoard[$member],
       expression: square,
       offset: [0, chessStationDrop, 0]
     )
-    holodeckAt[$each] = posed
+    chessAt[$each] = posed
   }
 }
 
-// The glass, inside the instance after the holodeck: the board's fills, the squares' rings and the status line.
-template chessStationGlass(station, game) {
-  let key = station.id
-
+// The glass, one set for every station after the holodeck: the board's fills, the squares' rings and the status line.
+template chessStationGlass(game) {
   // The board's fills show while chess is shown and take the bare glass's colour otherwise: two writes when it changes.
-  rule $"chess-station-{key}-board" {
-    local shown = gameStationGame[key] == game
-    when search(ply) == 0 and chessStationShow.shown != shown
+  rule "chess-station-board" {
+    local shown = gameStationGame[$member] == game
+    when search(ply) == 0 and chessStationShowOf[$member].shown != shown
     mode: Level
+    forEach: gameStationOf
     if shown {
-      setState(state: chessStationBoardInk, key: $"{key}-light", fromState: chessStationInks, fromKey: light)
-      setState(state: chessStationBoardInk, key: $"{key}-dark", fromState: chessStationInks, fromKey: dark)
+      setState(state: chessStationBoardInkOf[$member], key: light, fromState: chessStationInks, fromKey: light)
+      setState(state: chessStationBoardInkOf[$member], key: dark, fromState: chessStationInks, fromKey: dark)
     } else {
-      setState(state: chessStationBoardInk, key: $"{key}-light", fromState: chessStationInks, fromKey: 5)
-      setState(state: chessStationBoardInk, key: $"{key}-dark", fromState: chessStationInks, fromKey: 5)
+      setState(state: chessStationBoardInkOf[$member], key: light, fromState: chessStationInks, fromKey: 5)
+      setState(state: chessStationBoardInkOf[$member], key: dark, fromState: chessStationInks, fromKey: 5)
     }
-    chessStationShow.shown = shown
+    chessStationShowOf[$member].shown = shown
   }
 
   // The rings: each square's shows, in order of precedence, a lifted piece's square, the near chair's cursor and the far
   // chair's while someone sits there, the last legal move's two squares, and otherwise the bare glass, as does every ring
   // while chess is not shown. A ring is written only when what it shows changes, at most four a tick, so a cursor's step
   // relights its two squares at once.
-  rule $"chess-station-{key}-rings" {
+  rule "chess-station-rings" {
     local cell = chessStationCellNo[$each]
-    local shown = gameStationGame[key] == game
+    local shown = gameStationGame[$member] == game
     local want = (
       (shown == 0) ? chessStationRings.rest :
-      ((chessStationPicked.near == cell) or (chessStationPicked.far == cell)) ? chessStationRings.picked :
-      ((gameStationChair.near != 0) and (chessStationCursor.near == cell)) ? chessStationRings.cursor :
-      ((gameStationChair.far != 0) and (chessStationCursor.far == cell)) ? chessStationRings.rival :
-      ((verdict == 1) and ((move.from == cell) or (move.to == cell))) ? chessStationRings.last :
+      ((chessStationPickedOf[$member].near == cell) or (chessStationPickedOf[$member].far == cell)) ? chessStationRings.picked :
+      ((gameStationChairOf[$member].near != 0) and (chessStationCursorOf[$member].near == cell)) ? chessStationRings.cursor :
+      ((gameStationChairOf[$member].far != 0) and (chessStationCursorOf[$member].far == cell)) ? chessStationRings.rival :
+      ((chessVerdict[$member] == 1) and ((chessMoveOf[$member].from == cell) or (chessMoveOf[$member].to == cell))) ? chessStationRings.last :
       chessStationRings.rest
     )
-    when search(ply) == 0 and chessStationRingCode[$each] != want
+    when search(ply) == 0 and chessStationRingCodeOf[$member][$each] != want
     mode: Level
-    forEach: chessStationRingCode
+    forEach: chessStationRingCodeOf
     maxFirings: 4
-    chessStationRingCode[$each] = want
-    setState(state: chessStationRingInk, key: $each, fromState: chessStationInks, fromKey: chessStationRingCode[$each])
+    chessStationRingCodeOf[$member][$each] = want
+    setState(state: chessStationRingInkOf[$member], key: $each, fromState: chessStationInks, fromKey: chessStationRingCodeOf[$member][$each])
   }
 
   // The status line while chess is shown: whose move it is, a check, the computer at work or a draw.
-  rule $"chess-station-{key}-status" {
+  rule "chess-station-status" {
+    local turn = chessTurn[$member]
     local code = (
-      (gameStationGame[key] != game) ? -1 :
-      ((halfmoveClock >= 150) or (repetitionCount >= 5)) ? 5 :
-      (aiSide == turn) ? 4 :
-      (inCheck[turn] == 1) ? (2 + turn) :
+      (gameStationGame[$member] != game) ? -1 :
+      ((chessHalfmoveClock[$member] >= 150) or (chessRepetitionCount[$member] >= 5)) ? 5 :
+      (chessAiSide[$member] == turn) ? 4 :
+      (chessInCheckOf[$member][turn] == 1) ? (2 + turn) :
       turn
     )
-    when search(ply) == 0 and chessStationShow.status != code
+    when search(ply) == 0 and chessStationShowOf[$member].status != code
     mode: Level
-    chessStationShow.status = code
+    forEach: gameStationOf
+    chessStationShowOf[$member].status = code
     if code >= 0 {
-      setState(state: gameStationStatus, key: $"{key}", fromState: chessStationLines, fromKey: chessStationShow.status)
+      setState(state: gameStationStatus, key: $member, fromState: chessStationLines, fromKey: chessStationShowOf[$member].status)
     }
   }
 }

@@ -683,7 +683,7 @@ public sealed partial class WorldRuleHost {
     // drive-gate or grant check, since a gated body is one a rule still needs to move.
     private bool FirePoseCell(WorldPoseCellEffect effect, bool preflight, in EffectValues values, out EffectRefusal refusal) {
         var index = ResolveWorldBodyRef(bodyRef: effect.Body);
-        var topology = WorldTopologyCompilation.Find(definition: Host.Definition, name: effect.Topology);
+        var topology = ((effect.TopologyFor(member: RuleReads.BoundOwnIndex(reader: this)) is { } named) ? WorldTopologyCompilation.Find(definition: Host.Definition, name: named) : null);
 
         if (Host.Body(index: index) is not { } body) {
             return Refuse(code: WorldRuleEffectRefusal.BodyInactive, reason: $"body:{index} is inactive", refusal: out refusal);

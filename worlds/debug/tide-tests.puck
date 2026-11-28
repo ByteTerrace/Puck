@@ -6,7 +6,7 @@
 // `puck test worlds/debug/tide-tests.puck --reproduce`.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "tide-tests"
 
 import "../standard/place"

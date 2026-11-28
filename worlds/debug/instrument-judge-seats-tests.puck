@@ -3,7 +3,7 @@
 // phrase through its bindings while seat 2 holds the instrument down, and seat 2's judge cells and register stay as they
 // were. A press scheduled in tick T lands in interval T plus 2 (see the 30 Hz scenarios).
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "instrument-judge-seats-tests"
 import "../standard/standard"
 import "../standard/instrument"

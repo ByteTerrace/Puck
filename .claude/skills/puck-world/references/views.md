@@ -44,7 +44,7 @@ census implies a body (`bodies.capacity > 0`), the same derived refusal
 `kits` carries, and a seatless document may author none. The chase camera is the
 standard's `chaseCamera` template (`worlds/standard/camera.puck`, a library),
 which an avatar expands in a document of its own with its body offsets. The
-Moth's is `worlds/debug/avatars/moth-camera.puck`, imported by the Moth basis
+Moth's is `worlds/debug/avatars/moth/contract.puck`, imported by the Moth basis
 that the debug world and the garden inherit; her inspection layouts stay in the
 basis's own `views` block:
 
@@ -90,7 +90,7 @@ cannot stand on: each clearance case becomes a `blend` of its `-ground` and
 writes that row from the `HoldingUnwalkable` fact, and the row's `dynamics`
 trait (`camera-wall`) eases what the rig reads, so the eye draws back and looks
 up the face as a climber takes it and returns as she lets go or mantles. The
-debug world's Moth opts in (`worlds/debug/avatars/moth-camera.puck`).
+debug world's Moth opts in (`worlds/debug/avatars/moth/contract.puck`).
 
 The document members are `views.layouts`, `views.seatControl`, `views.seatRig`
 and `seatDefaults.seatCameraFeel` (C# `WorldDefinition.PlayerDefaults.SeatLook`,
@@ -403,7 +403,7 @@ still write `Turn`, and a drive kit may interpret its left-stick roles
 according to their own motion program. In the debug world the left-stick
 press (and N) toggles the `run` channel, Left Shift holds it, West/J dash, and the
 left trigger's page turns the stick presses into autorun and autofly
-([the Moth's controls](../../../../worlds/debug/avatars/moth.md#controls)).
+([the Moth's controls](../../../../worlds/debug/avatars/moth/moth.md#controls)).
 
 ## Camera programs and layouts
 
@@ -768,7 +768,7 @@ Free Cam do not alter the logical movement basis.
 - `view.annotate [on|off|toggle|clear|undo|list|add <cx> <cy> <rx> [<ry>]]` —
   the on-screen annotation outlines (`WorldAnnotationCommandModule`, core
   registered, Immediate, bindable; the debug world binds F3 to `toggle` in
-  `avatars/moth.puck`, through the row's `text` payload). Bare lists. `list`
+  `avatars/moth/suits.puck`, through the row's `text` payload). Bare lists. `list`
   echoes `[view.annotate: on|off circles=N/16]` and one
   `[view.annotate: <i> center=<x>,<y> radius=<rx>,<ry>]` line per outline,
   fractions of the window's width and height, origin top-left, numbered as the

@@ -2288,16 +2288,20 @@ public static partial class ExpressionSpelling {
                                 if ((m_kind != Lexeme.Name) || m_quoted || m_value.Contains(value: '.')) {
                                     throw Fail(message: "a static pool field expects one unquoted field name after '.'");
                                 }
-                                if (!int.TryParse(
+                                if (int.TryParse(
                                     s: key,
                                     style: NumberStyles.None,
                                     provider: CultureInfo.InvariantCulture,
                                     result: out var slot
                                 )) {
-                                    throw Fail(message: "a static pool field expects a non-negative Int32 slot inside '[...]'");
+                                    typedName = StateChannelRef.OfStaticPoolField(field: m_value, pool: stateName, slot: slot);
+                                    key = null;
+                                } else {
+                                    // A family member chosen live, then its literal cell: `move[$member].from` reads
+                                    // `move[$member]["from"]`, as `pile[$member][card]` reads a computed one.
+                                    stateName = $"{stateName}[{key}]";
+                                    key = m_value;
                                 }
-                                typedName = StateChannelRef.OfStaticPoolField(field: m_value, pool: stateName, slot: slot);
-                                key = null;
                                 Advance();
                             }
                         }

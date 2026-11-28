@@ -194,7 +194,13 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <see langword="true"/>. Off, every rule judges every binding in place every tick, which is the evaluation
     /// every one of those stands for: a replay or a law runs both and compares the state, so a kept verdict or an
     /// unvisited binding that would have answered otherwise shows as a difference.</summary>
-    public bool SchedulingEnabled { get; set; } = true;
+    public bool SchedulingEnabled { get => (m_schedulingEnabled && (MemberScope is null)); set => m_schedulingEnabled = value; }
+    private bool m_schedulingEnabled = true;
+    /// <summary>Gets or sets the one family index a sweep over a row family binds, or <see langword="null"/> to bind every
+    /// member: a search job for one member of a set of rules judges that member's bindings alone. A scope judges every
+    /// binding it keeps in place (<see cref="SchedulingEnabled"/> reads <see langword="false"/>), since a due list
+    /// visits every member's.</summary>
+    public int? MemberScope { get; set; }
 
     /// <summary>Returns the read schedule this evaluator holds for a rule, deriving it when the rule has not been
     /// scheduled yet: what the measured sheet and <c>--why</c> print beside a rule's counts.</summary>
@@ -485,7 +491,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         var arena = m_host.Arena;
 
         for (var member = 0; (member <= RuleCompiler.FamilySpan(family: family)); member++) {
-            if (!family.TryGetOrdinal(index: member, ordinal: out var ordinal)) {
+            if (((MemberScope is { } scope) && (scope != member)) || !family.TryGetOrdinal(index: member, ordinal: out var ordinal)) {
                 continue;
             }
 

@@ -356,7 +356,7 @@ tip's origin sits exactly its rest height above the sole. `body.rig` appends
 ## How the moth moves
 
 Every part of the moth's motion is a driver, a swing or an effector in
-`avatars/moth.puck`; nothing is special-cased in the client.
+`avatars/moth/suits.puck`; nothing is special-cased in the client.
 
 | Motion | Driver | Where |
 |---|---|---|

@@ -158,10 +158,17 @@ public sealed record WorldPlacementPolicyDefaults(
 /// replayed. Absent is <see cref="WorldAttention.Unobserved"/>: the world steps whoever observes it, and its state
 /// never depends on attention. A lapse is authority input, so a world that authors a higher value states that
 /// observation may decide what happens in it.</param>
+/// <param name="RulePercent">The percent of the tick period the world's rules may take at worst on the slowest device
+/// it authors (<see cref="WorldRuleTimePricing"/>), 1 to 100. Absent is <see cref="DefaultRulePercent"/>.</param>
 public sealed record WorldSimulationDefaults(
     int RateHz,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldAttention StepsAt = WorldAttention.Unobserved
-);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldAttention StepsAt = WorldAttention.Unobserved,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? RulePercent = null
+) {
+    /// <summary>The percent of the tick period a world's rules may take when it authors none: a quarter, leaving the
+    /// rest of the tick to motion, contact, fields, delivery and the machines.</summary>
+    public const int DefaultRulePercent = 25;
+}
 /// <summary>
 /// How the world boots its presentation shell — the closed vocabulary <see cref="WorldHostDefaults.Presentation"/> and
 /// the <c>--headless</c> CLI reflection resolve to (see <c>Puck.World.WorldHostSettings.Headless</c>/<c>.Offscreen</c>).

@@ -5,7 +5,7 @@
 // its far chair (`rival`), and the context button sits a seat down at the glass. The station's id is `station`.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "game-station"
 
 import "set-controls"
@@ -45,7 +45,6 @@ state {
   }
 }
 
-use gameStationGames as station(station: rootStation, index: 0)
 
 render {
   farDistance: 200

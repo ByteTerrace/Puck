@@ -24,11 +24,13 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
     /// <param name="rules">The judge rules, in the order they evaluate.</param>
     /// <param name="score">The compiled score program read in <see cref="CellKind.Int"/>, or
     /// <see langword="null"/> for a job that compares no plies.</param>
+    /// <param name="member">The one family index the judge binds a sweep over a row family to, for a job over one member
+    /// of a set of rules (<see cref="RuleEvaluator.MemberScope"/>), or <see langword="null"/> for every member.</param>
     /// <exception cref="ArgumentNullException"><paramref name="host"/> or <paramref name="rules"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Two of <paramref name="rules"/> share a name, so they would share latch
     /// state and one could read the other's crossing within a candidate.</exception>
-    public RuleArenaSearchJudge(ArenaSearchEffectHost host, CompiledRule[] rules, CompiledProgram? score = null) {
+    public RuleArenaSearchJudge(ArenaSearchEffectHost host, CompiledRule[] rules, CompiledProgram? score = null, int? member = null) {
         ArgumentNullException.ThrowIfNull(argument: host);
         ArgumentNullException.ThrowIfNull(argument: rules);
 
@@ -41,11 +43,12 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
         }
 
         // Each candidate runs once over a fresh latch. There is no prior evaluation to memoize.
-        m_evaluator = new RuleEvaluator(host: host) { SchedulingEnabled = false };
+        m_evaluator = new RuleEvaluator(host: host) { MemberScope = member, SchedulingEnabled = false };
         m_host = host;
         m_rules = rules;
         m_score = score;
         m_keyRows = RuleDataflow.KeyRows(
+            member: member,
             rules: rules,
             score: score
         );

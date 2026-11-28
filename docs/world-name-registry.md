@@ -6286,6 +6286,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lanes[].name` | `WorldRenderLane.Name` | a render lane's name, which a creation's lane members write |
 | `render.devices[].name` | `WorldDeviceProfile.Name` | a device profile's name, which a host selects the profile by (WorldDeviceProfiles.Find) |
 | `render.devices[].match` | `WorldDeviceProfile.Match` | a device match pattern |
+| `render.devices[].rules.build` | `RuleCostCalibration.Build` | what measured a rule cost calibration |
 | `screens[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `screens[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].source[session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
@@ -6736,6 +6737,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].routes.fallback.destination` | `WorldFaceRoute.Destination` | a destination name |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].routes.fallback.counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].routes.fallback.fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -7186,6 +7190,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].routes.fallback.destination` | `WorldFaceRoute.Destination` | a destination name |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].routes.fallback.counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].routes.fallback.fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -7636,6 +7643,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.destination` | `WorldFaceRoute.Destination` | a destination name |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -7982,6 +7992,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
 | `placements.rows[].faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
 | `placements.rows[].faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
+| `placements.rows[].faceSources[].routes.fallback.destination` | `WorldFaceRoute.Destination` | a destination name |
+| `placements.rows[].faceSources[].routes.fallback.counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `placements.rows[].faceSources[].routes.fallback.fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `placements.rows[].board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `placements.rows[].deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `placements.rows[].spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -8409,6 +8422,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.destination` | `WorldFaceRoute.Destination` | a destination name |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `rules[].effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `rules[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -8876,6 +8892,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.destination` | `WorldFaceRoute.Destination` | a destination name |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -9361,6 +9380,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].routes.fallback.destination` | `WorldFaceRoute.Destination` | a destination name |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].routes.fallback.counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].routes.fallback.fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -9819,6 +9841,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].destination` | `WorldFaceRoute.Destination` | a destination name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].routes.entries[].fallback` | `WorldFaceRoute.Fallback` | a fallback color |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.destination` | `WorldFaceRoute.Destination` | a destination name |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.counterpart` | `WorldFaceRoute.Counterpart` | a counterpart in the destination world |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].routes.fallback.fallback` | `WorldFaceRoute.Fallback` | a fallback color |
 | `interactions.interactions[].effects[][upsertPlacement].placement.board.engage.channel` | `WorldTabletopEngage.Channel` | logical input channels |
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |

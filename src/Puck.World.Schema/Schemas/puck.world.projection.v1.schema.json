@@ -929,6 +929,68 @@
                 "additionalProperties": false,
                 "default": null,
                 "title": "WorldFrameBar"
+              },
+              "rules": {
+                "description": "What the device spends on each quantity the rule work sheet prices, as puck bench rules measured it there. Rule admission converts the sheet to time with each device\u0027s figures and holds the slowest device the world authors to the tick\u0027s rule budget (WorldRuleTimePricing); a device without figures is priced at the slowest calibrated device\u0027s, and says so.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "setup": {
+                    "description": "Picoseconds per setup unit: one key a sweep snapshots, or one distance test an interaction charges before its evaluations.",
+                    "type": "integer"
+                  },
+                  "binding": {
+                    "description": "Picoseconds per binding judged, beyond the units its gate prices.",
+                    "type": "integer"
+                  },
+                  "check": {
+                    "description": "Picoseconds per check unit: an operand read, an operation or a comparison of a gate or local.",
+                    "type": "integer"
+                  },
+                  "firing": {
+                    "description": "Picoseconds per firing, beyond the units its effects price.",
+                    "type": "integer"
+                  },
+                  "door": {
+                    "description": "Picoseconds per door an effect charges (Doors): an arena cell write, an effect arm\u0027s dispatch.",
+                    "type": "integer"
+                  },
+                  "effect": {
+                    "description": "Picoseconds per effect unit that is not a door: a source\u0027s operand reads and operations, a transform\u0027s element moves, the host\u0027s commit work.",
+                    "type": "integer"
+                  },
+                  "host": {
+                    "description": "Picoseconds per unit of the passes a host runs beside the rules (flock affinities, decision perception).",
+                    "type": "integer"
+                  },
+                  "growth": {
+                    "description": "Picoseconds per arena growth unit (ReservationWork): copying and reindexing a changed reservation, or taking it back.",
+                    "type": "integer"
+                  },
+                  "build": {
+                    "description": "What measured these figures (the device, the build\u0027s version and commit, the date), as the bench wrote it; absent for figures an author wrote by hand.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "setup",
+                  "binding",
+                  "check",
+                  "firing",
+                  "door",
+                  "effect",
+                  "host",
+                  "growth"
+                ],
+                "additionalProperties": false,
+                "default": null,
+                "title": "RuleCostCalibration"
               }
             },
             "required": [
@@ -7096,6 +7158,14 @@
             "Watched": "A world someone stands in observes it through a surface they stand near, or an observer the host knows nothing more about (another process) holds a session on it.",
             "Occupied": "Someone stands in the world."
           }
+        },
+        "rulePercent": {
+          "description": "The percent of the tick period the world\u0027s rules may take at worst on the slowest device it authors (WorldRuleTimePricing), 1 to 100. Absent is DefaultRulePercent.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
         }
       },
       "required": [
@@ -16932,7 +17002,7 @@
           "type": "string"
         },
         "entries": {
-          "description": "The routes, chosen by their 0-based place in this list. At least one, at most MaxEntries; each names a different destination.",
+          "description": "The routes, chosen by their 0-based place in this list. At most MaxEntries; each names a different destination. None leaves the face on its fallback for good: an unconnected door.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/WorldFaceRoute"
@@ -16945,6 +17015,16 @@
             "null"
           ],
           "default": null
+        },
+        "fallback": {
+          "$ref": "#/$defs/WorldFaceRoute",
+          "description": "The route a cell naming no entry takes, or null for the face itself, a mirror (SelfDestination).",
+          "default": null
+        },
+        "closes": {
+          "description": "Whether a cell naming no entry closes the door instead of taking a fallback route. Refused beside Fallback.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -20055,6 +20135,43 @@
       "additionalProperties": false,
       "title": "WorldEffectStartTimer"
     },
+    "WorldEffectMantle": {
+      "description": "Pulls a kit\u0027s own body up over a ledge in front of it, on any surface, with no hold row and no holdable grip: the direction the body is commanded to move must meet a steep face within Reach, and the body\u0027s own sweep must prove a place to stand past its top, higher than the kit\u0027s step and no higher than Height above the feet. The body travels there over Seconds as an exclusive move (rising beside the face, then in over the edge) and leaves it at Carry of the speed it was commanding, so it runs on the moment it is up. A firing that finds no such ledge is refused whole, so a timer or a spend beside it is not paid. A kit\u0027s own action only.",
+      "properties": {
+        "$type": {
+          "const": "mantle"
+        },
+        "height": {
+          "description": "The highest ledge above the body\u0027s feet it pulls up over, in body-sized world units. Positive.",
+          "type": "number"
+        },
+        "depth": {
+          "description": "How far past the face the body steps in, in body-sized world units. Positive.",
+          "type": "number"
+        },
+        "seconds": {
+          "description": "How long the pull takes, an exact whole number of engine ticks. Positive.",
+          "type": "number"
+        },
+        "reach": {
+          "description": "How far ahead of the body, in body-sized world units, the face may stand. Not negative.",
+          "type": "number",
+          "default": 0.5
+        },
+        "carry": {
+          "description": "The fraction of the commanded move speed the body keeps when the pull ends, in [0, 1].",
+          "type": "number",
+          "default": 1
+        }
+      },
+      "required": [
+        "height",
+        "depth",
+        "seconds"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectMantle"
+    },
     "WorldBodyDesignationKind": {
       "description": "How a rule-triggered body designation chooses its target.",
       "enum": [
@@ -20961,6 +21078,9 @@
         },
         {
           "$ref": "#/$defs/WorldEffectStartTimer"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectMantle"
         },
         {
           "$ref": "#/$defs/WorldEffectDesignate"

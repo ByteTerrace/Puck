@@ -29,6 +29,10 @@ namespace Puck.World;
 /// <param name="FrameBar">The device's frame bar: the window size its frame time is judged at and the rate it must hold
 /// there. A host started with <c>--frame-bar</c> opens its window at this size, and a benchmark run judges its iterations
 /// against this rate's period. Absent where the world states no bar for the device.</param>
+/// <param name="Rules">What the device spends on each quantity the rule work sheet prices, as <c>puck bench rules</c>
+/// measured it there. Rule admission converts the sheet to time with each device's figures and holds the slowest device
+/// the world authors to the tick's rule budget (<see cref="WorldRuleTimePricing"/>); a device without figures is priced
+/// at the slowest calibrated device's, and says so.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldDeviceProfile(
     [property: DocumentText("a device profile's name, which a host selects the profile by (WorldDeviceProfiles.Find)")] string Name,
@@ -37,7 +41,8 @@ public sealed record WorldDeviceProfile(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DeviceMemoryMiB = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? HostMemoryMiB = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? Table = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFrameBar? FrameBar = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFrameBar? FrameBar = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.State.Rules.RuleCostCalibration? Rules = null
 ) {
     /// <summary>Gets the device pool's memory bar in bytes, or <see langword="null"/> when the profile states none.</summary>
     [JsonIgnore]

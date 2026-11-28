@@ -2,7 +2,8 @@
 // `puck test worlds/debug/labs/portals-tests.puck --reproduce --jobs 1`. The portal's face routes by its panel's
 // `panelChoice` cell (the engine's `WorldFaceRoutes`): the authority's door scan reads the cell once a tick and the
 // crossing it mints leads to that route's destination. The invariant is that one decision: a write to the cell, by a tap
-// or a console line, moves where the next crossing lands, and a cell naming no route closes the door.
+// or a console line, moves where the next crossing lands, and a cell naming no entry, or an entry the portal cannot
+// reach, makes the door a mirror that steps the traveller back out of itself.
 //
 // A headless seat's camera faces -Z, so `body.fly 1 …` walks her -Z from the portal's own spawn point (3.2 m before its
 // glass) into it. The routes the scenarios take are the library's two labs, whose way-back frames show no window, so a
@@ -52,12 +53,12 @@ test "a repoint moves where the next crossing lands" {
   }
 }
 
-// The control for both: with the cell past the library's last route the door is closed, so she walks through the empty
-// frame and out behind it, still in the lab.
-test "a cell that names no route closes the door, and a body walks through its frame" {
+// The mirror: the panel's last row, MIRROR, leaves the portal unconnected, so walking into its glass steps her back out
+// of the same portal, turned about, into the lab, never behind the frame and never into another world.
+test "an unconnected portal is a mirror, and walking into it steps you back out into the room" {
   when {
     ticks 5
-    seat1: world.state.cell.set panelChoice portal 99
+    seat1: world.state.cell.set panelChoice portal 6
     ticks 25
     seat1: body.pose spawn:portal 0
     ticks 10
@@ -65,7 +66,25 @@ test "a cell that names no route closes the door, and a body walks through its f
     ticks 70
   }
   expect {
-    panelShownAt.portal == 0
-    bodyPosition(body, 0, z) < -3
+    panelShownAt.portal == 6
+    bodyPosition(body, 0, z) > -2.5
+  }
+}
+
+// A destination that cannot be reached falls back to the mirror: NOWHERE names a world with no document, so the portal
+// cannot start it, and she steps back out of the same portal rather than meeting a wall or falling.
+test "a portal pointed at a missing world falls back to the mirror" {
+  when {
+    ticks 5
+    seat1: world.state.cell.set panelChoice portal 5
+    ticks 25
+    seat1: body.pose spawn:portal 0
+    ticks 10
+    seat1: body.fly 1 0 0 0 0 0 2
+    ticks 70
+  }
+  expect {
+    panelShownAt.portal == 5
+    bodyPosition(body, 0, z) > -2.5
   }
 }

@@ -40,16 +40,24 @@ object (ticks, rate, shed, tick cost, named tick parts); `puck benchmark` reads
 a headless remote authority this way.
 
 **One live world.** The debug world, the asset package `worlds/debug/` (entry
-`debug.puck`, basis `avatars/moth`), is the only live world, with the
+`debug.puck`, basis `stage`), is the only live world, with the
 garden (`garden.puck`) and the night field (`night.puck`) its painting wing's portals open onto
 (`paintings.puck`, in the gallery hall); `debug.md` and `paintings.md` beside them are the
-portal demo and its inspection verbs. It boots on the Moth's seat chase
-camera: the first authored `views` layout is what a boot shows, and the Moth's
-is `play`, followed by inspection layouts (`three-quarter`, `front`, …) that
-`view.override layout <name>` selects. The Moth basis (`avatars/moth.puck`)
-authors the body and its motion programs, and expands the standard's
-`chaseCamera` template with her body offsets for its camera (`avatars/moth-camera.puck`,
-rig `moth-camera`). A new rule or feature for
+portal demo and its inspection verbs. It boots on the player's seat chase
+camera: the first authored `views` layout is what a boot shows, and the player
+module's is `play`, followed by the stage's inspection layouts (`three-quarter`,
+`front`, …) that `view.override layout <name>` selects. Three documents split
+what one Moth basis used to hold: `stage.puck` is the set's world settings
+(floor, sun, sky, air, gravity, bodies, spawn points, inspection cameras) and
+imports `player.puck`, which expands the standard player module
+(`worlds/standard/player/player.puck`, `player(avatar)`) with the Moth's
+contract (`avatars/moth/contract.puck`: her body and two suits, each a form with
+its kit tuning, camera offsets and granted actions); her avatar document
+(`avatars/moth/moth.puck`) holds her look rows, gait curves, followers and the
+rules that ease her actions' hooks into poses, beside `suits.puck`, `body.puck`
+and `head.puck`, her creations. The player module owns the kits, the `suit`
+register's switch, the chase camera (rig `moth-camera`) and the play layout; an
+avatar or suit authors no world setting. A new rule or feature for
 the live world goes in `debug.puck` (or a scratch `.puck` world booted with
 `--world`). Every other world (the island
 `puck.world.json`, its districts, the games) and their canary, parity and
@@ -897,8 +905,8 @@ check the flag: the owner may be holding the pad.
   their own.
 - **Presentation modes** (`host.presentation`): windowed, `offscreen` (GPU
   composition to images, what `puck parity` boots) and `none`
-  (`WorldSimulation`, full authority, no GPU, so no capture). The Moth
-  basis authors `Windowed`, so the debug world boots windowed. `--headless`
+  (`WorldSimulation`, full authority, no GPU, so no capture). The stage
+  (`stage.puck`, the debug world's basis) authors `Windowed`, so the debug world boots windowed. `--headless`
   (or `--headless true`) forces `none` for one run and `--headless false`
   forces windowed; offscreen is a document's `host.presentation`. Check the
   effective mode, overrides included.
@@ -1202,7 +1210,13 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   once a tick and records the route beside the door's closure
   (`WorldPortalClosures.SetRoute`); the crossing, the window's session and the
   counterpart a window fits through all follow that one record
-  (`WorldFaceRouting.On`/`To`), and a cell naming no route closes the door.
+  (`WorldFaceRouting.On`/`To`). A cell naming no entry takes the fallback
+  route: the face itself by default (`WorldFaceRoutes.SelfDestination`, a
+  mirror: the window observes its own world, sharing that world's one image,
+  fits a reflection, and the crossing steps the traveller back out of the
+  face), an authored `fallback`, or `closes`. A destination that does not
+  resolve, cannot start or refuses falls back to the mirror too
+  (`DeclaredSessions`' selves, `ReturnRefusedPortalCrossing`).
   `world.portals` names a routed door's `route=<n>/<count>`. The standard's
   portal module routes a portal by its control panel's `panelChoice`
   (`worlds/standard/portal.puck`, `panel.puck`; gallery.md, "The portals").

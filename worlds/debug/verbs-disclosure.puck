@@ -7,7 +7,7 @@
 // may run; any answer that differs between two variants is a verb that reads what seat2 cannot.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "verbs-disclosure"
 
 bodies {

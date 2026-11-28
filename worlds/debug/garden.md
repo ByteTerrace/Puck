@@ -14,7 +14,7 @@ only schedules ([pond.puck](pond.puck)):
   once she is within ten metres (`stalk-visitor`), turn to face her
   (`FaceSensorTarget`) and stand off her.
 - **The crawl.** Driven into a wall or a ceiling, a spider takes the standard's
-  crawl hold (`crawlHold` in [abilities.puck](../standard/abilities.puck),
+  crawl hold (`crawlHold` in [player/actions.puck](../standard/player/actions.puck),
   expanded for the spider kit in [pond-crawl.puck](pond-crawl.puck)): a `Pull`
   hold that lays it on the face and spends its `crawlStamina` Counter, three seconds
   of it, refilled the moment it stands on the ground. The den is two walls and

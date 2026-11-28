@@ -1,6 +1,6 @@
 // The pool: the swimmable end of the river. A basin sunk 2.4 m into the lawn (the floor opens for it, lawn.puck) holds a
 // medium lattice, one row of water whose value is the depth over the basin's floor and whose surface the Moth floats on
-// (avatars/moth.puck's swim hold). The lattice is the river's last reach as the player sees it: every lattice step sets
+// (avatars/moth/contract.puck's swim). The lattice is the river's last reach as the player sees it: every lattice step sets
 // the pool to `poolLevel`, the depth water.puck's chain gives the river in its last cell above the pool's permanent
 // depth, so the pool's surface sinks and rises with the river. Three steps in the basin's east end, beside the path, let a
 // swimmer climb out. `debug.go pool` stands a body on the path's end facing the water.

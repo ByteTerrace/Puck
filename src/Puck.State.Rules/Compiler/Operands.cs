@@ -57,7 +57,7 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
         ArgumentNullException.ThrowIfNull(argument: into);
 
         if (RowFrom is { } live) {
-            live.CollectReads(into: into);
+            live.CollectCellReads(into: into, key: KeyFrom);
         } else {
             into.Add(item: new CellAccess(
                 Key: ((KeyFrom is null)
@@ -599,6 +599,78 @@ public sealed class PhaseOperand : RuleOperand {
         kind: CellKind.Int,
         value: frame.Arena.PhaseSequence(rowOrdinal: RowOrdinal)
     );
+}
+/// <summary>A reserved channel read whose argument names a family member under the binding's own key
+/// (<c>board(mask, board[$member], 1, 6)</c>, <c>physics(quiescent, pieces[$member])</c>): the channel compiled once per
+/// member with that member's row in the argument, and the binding's member's read answered. A family index the sweep
+/// binds that selects no member reads absent.</summary>
+/// <remarks>Every member's operand is compiled from one spelling that differs only in the row, so they declare the same
+/// addresses and are read with the same resolved keys. A read one member makes and the others do not reaches only the
+/// bindings of that member (<see cref="CellReach.Member"/>).</remarks>
+public sealed class MemberOperand : RuleOperand, ICompositeFact {
+    private readonly IRuleOperand?[] m_members;
+    private readonly OperandAddress[] m_addresses;
+
+    /// <summary>Initializes the operand.</summary>
+    /// <param name="members">Each family index's operand, <see langword="null"/> at a gap.</param>
+    /// <param name="valueKind">The kind every member answers in.</param>
+    public MemberOperand(IRuleOperand?[] members, CellKind valueKind) : base(valueKind: valueKind) {
+        ArgumentNullException.ThrowIfNull(argument: members);
+
+        m_members = members;
+        m_addresses = (Array.Find(array: members, match: static member => (member is not null))?.Addresses.ToArray() ?? []);
+    }
+
+    /// <inheritdoc/>
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
+    /// <summary>Gets each family index's operand, <see langword="null"/> at a gap.</summary>
+    public IReadOnlyList<IRuleOperand?> Members => m_members;
+    /// <inheritdoc/>
+    public IReadOnlyList<ICompiledFact?> Parts => m_members;
+
+    /// <inheritdoc/>
+    public override void CollectReads(List<CellAccess> into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        var each = new List<CellAccess>[m_members.Length];
+        List<CellAccess>? shared = null;
+
+        for (var index = 0; (index < m_members.Length); index++) {
+            if (m_members[index] is not { } member) {
+                continue;
+            }
+
+            member.CollectReads(into: (each[index] = []));
+            shared = ((shared is null) ? [.. each[index]] : shared.FindAll(match: each[index].Contains));
+        }
+        foreach (var access in (shared ?? [])) {
+            into.Add(item: access);
+        }
+        for (var index = 0; (index < each.Length); index++) {
+            foreach (var access in (each[index] ?? [])) {
+                if (!shared!.Contains(item: access)) {
+                    into.Add(item: (access.Key.IsValid ? access : (access with { Member = index, Reach = CellReach.Member })));
+                }
+            }
+        }
+    }
+    /// <inheritdoc/>
+    public override RuleWork Cost(IRuleCostContext context) {
+        var cost = RuleWork.Zero;
+
+        foreach (var member in m_members) {
+            if (member is not null) {
+                cost = RuleWork.Max(left: cost, right: member.Cost(context: context));
+            }
+        }
+
+        return cost;
+    }
+    /// <inheritdoc/>
+    public override Fact Read(ref EvaluationFrame frame, scoped ReadOnlySpan<ResolvedKey> keys) => ((RuleReads.BoundOwnIndex(reader: frame.Reader) is { } index) &&
+        (((ulong)index) < ((ulong)m_members.Length)) && (m_members[index] is { } member)
+        ? member.Read(frame: ref frame, keys: keys)
+        : Fact.Absent(kind: ValueKind));
 }
 /// <summary>A bounded discrete topology query over a board row (the <c>$board:</c> channel).</summary>
 public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {

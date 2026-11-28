@@ -1,13 +1,11 @@
 import "layout"
 import "../game-stations"
 // The gallery's board game room on level 2 (layout.puck's galleryGameStations: twelve stations in two rows of six), as
-// the gallery booted alone stands it (gallery-root.puck imports this file), the plan's first eleven
-// (`galleryRoomStations`; the rule work sheet has no room for the twelfth yet): each the debug world set's station
-// (../game-stations.puck) holding its own games, chess, whose pieces its holodeck stands on the glass as bodies while
-// chess is shown, and Klondike and FreeCell, whose cards it stands the same way. Each is its own instance, aliased by
-// the station's id, so a move at one station never touches another. The debug world stands only the first
-// (../game-station-deck.puck). Both wait on the stations' rules becoming one set over every station for the rest
-// (game-station.md, "Cost"); a station added here is one more `use` line once `galleryRoomStood` admits it. ../game-station.md says how to play and drive them.
+// the gallery booted alone stands it (gallery-root.puck imports this file), all twelve (`galleryRoomStations`): each the
+// debug world set's station (../game-stations.puck) holding its own games, chess, whose pieces its holodeck stands on the
+// glass as bodies while chess is shown, and Klondike and FreeCell, whose cards it stands the same way. Every station
+// plays one set of rules, each station's game its own, so a move at one station never touches another. The debug world
+// stands only the first (../game-station-deck.puck). ../game-station.md says how to play and drive them.
 
 gameStationSet(stations: galleryRoomStations)
 
@@ -43,16 +41,3 @@ state {
     Black
   }
 }
-
-// One instance a station, aliased by the station's id.
-use gameStationGames as a1(station: galleryRoomStations[0], index: 0)
-use gameStationGames as a2(station: galleryRoomStations[1], index: 1)
-use gameStationGames as a3(station: galleryRoomStations[2], index: 2)
-use gameStationGames as a4(station: galleryRoomStations[3], index: 3)
-use gameStationGames as a5(station: galleryRoomStations[4], index: 4)
-use gameStationGames as a6(station: galleryRoomStations[5], index: 5)
-use gameStationGames as b1(station: galleryRoomStations[6], index: 6)
-use gameStationGames as b2(station: galleryRoomStations[7], index: 7)
-use gameStationGames as b3(station: galleryRoomStations[8], index: 8)
-use gameStationGames as b4(station: galleryRoomStations[9], index: 9)
-use gameStationGames as b5(station: galleryRoomStations[10], index: 10)

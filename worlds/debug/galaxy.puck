@@ -17,7 +17,7 @@
 // frame on home. galaxy.md beside this file says how to get here and what to try.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "galaxy"
 
 // The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's size.

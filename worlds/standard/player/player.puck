@@ -1,0 +1,249 @@
+// The player module: a player and their standard controls, whatever avatar they choose. A module library: it hands its
+// importers functions and templates and emits no document. A world seats its players by importing it beside an avatar
+// module and expanding `player` with that avatar's contract once:
+//
+//   import "../standard/player/player"
+//   import "avatars/moth/contract"
+//   player(avatar: mothAvatar)
+//
+// Three contracts meet here, and the module reads nothing of an avatar but them:
+//
+//   form     one way a body stands in the world: an avatar's own body, or that body in one of its suits. It names the
+//            kit and look rows it wears, its capsule (`height`, `radius`), its pace and step, the actions it grants
+//            with their tuning (actions.puck), the camera's offsets on it, and, for a suit, the worn screen's
+//            attachment points. `playerForm` builds one.
+//   suit     a form worn over the avatar's body, whose `value` is the register value that wears it (1 up; 0 is the
+//            body itself). What it looks like is its own creation, its look row the avatar module's; what it grants
+//            (thrusters a jetpack, gloves a climb) is its action list. Every suit carries a worn screen slot.
+//   avatar   a body form, the suits it owns, the one it is born wearing, the body register that holds the worn suit,
+//            and the companion's place beside it. `playerAvatar` builds one.
+//
+// What the module authors from them: the body registers every listed action uses, declared once; one kit per form; the
+// kit and look selection by the worn-suit register, so a rule, a replay or the console that writes the register moves
+// both on the same tick; the press that cycles the suits; the chase camera on the worn form's offsets; the play layout;
+// and the default seat kit. World settings (light, air, floor, gravity, bodies, spawn points) are never a player's or
+// an avatar's: the world that seats the player authors them.
+
+import "../kits"
+import "../motion"
+import "../camera"
+import "../companion"
+import "actions"
+
+// The chase camera's offsets on a body `height` metres tall, in its own frame: the look's pivot, the targets it
+// migrates to as geometry shortens the boom (fading the body, or cutting away above it), and the first-person eye.
+function bodyCamera(height) = {
+  pivot [0, (height * 0.485), 0]
+  fadeClose [0, (height * 0.845), 0]
+  cutawayClose [0, (height * 0.752), 0]
+  eye [0, (height * 0.85), 0.2]
+}
+
+// A suit's worn screen slot (../worn-screen.puck): `mount` is where the screen sits, in the suit look's left-side frame
+// (`part` the forearm it rides, `at` the middle of its face, `shoulder` and `elbow` the pivots its raise turns about),
+// mirrored for the right; `screens` the palette slots of the left and right glass; `side` the body register that says
+// which side wears it (the menu's `wornScreenSide`). A form with no slot (null) carries no screen.
+function wornScreenMount(mount, screens, side = "wornScreenSide") = { mount: mount, screens: screens, side: side }
+
+// One form, as the contract above describes it. `value` is the worn-suit register's value for a suit, 0 for the
+// body; `snap` the ground the kit follows down, metres; `camera` the camera's offsets (bodyCamera's shape).
+function playerForm(name, kit, look, height, radius, value = 0, speed = 4, stepHeight = 0.3, snap = 0.3, actions = [], camera = null, wornScreen = null) = {
+  name: name
+  kit: kit
+  look: look
+  value: value
+  height: height
+  radius: radius
+  speed: speed
+  stepHeight: stepHeight
+  snap: snap
+  actions: actions
+  camera: ((camera == null) ? bodyCamera(height) : camera)
+  wornScreen: wornScreen
+}
+
+// One avatar, as the contract above describes it. `worn` is the value of the suit a body is born wearing (0, its own
+// body, when it owns none); `companion` the companion's offset from the body when it arrives, metres in its frame.
+function playerAvatar(name, body, suits = [], worn = null, companion = null) = {
+  name: name
+  body: body
+  suits: suits
+  worn: ((worn == null) ? ((length(suits) > 0) ? suits[0].value : 0) : worn)
+  forms: concat([body], suits)
+  companion: ((companion == null) ? [-1.2, (body.height * 0.9), 1] : companion)
+}
+
+// The form an avatar's body is born in.
+function wornForm(avatar) = first(avatar.forms, f => (f.value == avatar.worn), avatar.body)
+
+// What a form's kit holds, rests under and moves at, read from its actions.
+function formRestore(form) = first(form.actions, a => (a.restore != null), a => a.restore, null)
+function formSpeed(form) = first(
+  form.actions,
+  a => (a.speedHeld != null),
+  a => { value: form.speed, held: a.speedHeld },
+  { value: form.speed }
+)
+function restoring(hold, restore) = ((restore == null) ? hold : (hold with { restore: restore }))
+
+// The kit a form wears: its capsule standing `height` tall from the ground on spheres of `radius`, the standard walk
+// with its pace and step, every action's holds ahead of the ground and fall rows (in the order the actions list them),
+// every action's shaping ahead of the walk's own, and every action's programs.
+template playerKit(form) {
+  kits [
+    {
+      name: $"{form.kit}"
+      bodyContact: Solid
+      bodyMotionProgram: "walk"
+      collider: capsule(endpoint: [0, (form.height - (2 * form.radius)), 0], radius: form.radius)
+      mass: 0
+      motion: walkerMotion with {
+        holds: concat(
+          flatMap(form.actions, a => a.holds),
+          [restoring(groundHold, formRestore(form)), restoring(fallHold, formRestore(form))]
+        )
+        shaping: concat(flatMap(form.actions, a => a.shaping), walkerMotion.shaping)
+        speed: formSpeed(form)
+        stepHeight: form.stepHeight
+        groundSnap: form.snap
+      }
+      actions: reduce(form.actions, {}, (merged, a) => merged with a.actions)
+    }
+  ]
+}
+
+// The player: everything the module authors from one avatar's contract (see the head of this file). `rig` names the
+// chase camera's rig, `wall` its framing on a wall (camera.puck's `wallFraming`) and `focus` its framing while the
+// menu is open (../worn-screen.puck's `wornScreenFocus`). The `suit` register holds the worn form's value, and the
+// `suit` channel's press steps it to the next the avatar owns, its own body counting as one.
+template player(avatar, rig = "player-camera", wall = wallFraming(), focus = null) {
+  walkMotion()
+
+  let worn = wornForm(avatar)
+  let unworn = filter(avatar.forms, f => (f.value != avatar.worn))
+  let last = maximum(map(avatar.forms, f => f.value))
+
+  defaultSeatKit: $"{worn.kit}"
+
+  state {
+    body: distinct(flatMap(avatar.forms, f => flatMap(f.actions, a => a.registers)))
+  }
+
+  if length(avatar.suits) > 0 {
+    state {
+      body [
+        {
+          name: "suit"
+          kind: "Counter"
+          initial: avatar.worn
+          envelope { $type: "set", values: map(avatar.forms, f => f.value) }
+        }
+      ]
+    }
+  }
+
+  for form in avatar.forms {
+    playerKit(form)
+  }
+
+  looks {
+    assignment {
+      rows [$"{worn.look}"]
+      sequence {
+        name: "r1"
+        offset: 0
+        step: 0
+      }
+    }
+  }
+
+  // Every body holds the register, born at the worn value, so the cases name only the others: a case naming the worn
+  // value would select every body, a chess piece included. A body whose register names no case keeps what it was
+  // given, the seat kit and look for a player in the suit they were born wearing. The selector is named `form`, so a
+  // world that reads more than the suit (the debug world's noclip and craft) refines it by that name.
+  if length(avatar.suits) > 0 {
+    kits {
+      assignment {
+        rows []
+        sequence {
+          name: "index"
+          offset: 0
+          step: 0
+        }
+        select [
+          {
+            name: "form"
+            bodyState: "suit"
+            cases: map(unworn, f => { value: f.value, row: $"{f.kit}" })
+          }
+        ]
+      }
+    }
+
+    looks {
+      assignment {
+        select [
+          {
+            name: "form"
+            bodyState: "suit"
+            cases: map(unworn, f => { value: f.value, row: $"{f.look}" })
+          }
+        ]
+      }
+    }
+  }
+
+  // A press steps a standing player's body to its next form, back to its own body after the last suit; a press in the
+  // air fires only if it is still held when the body lands. One rule over every player's body, a seat's or a visitor's.
+  if length(avatar.suits) > 0 {
+    rule "suit-cycle" {
+      when channel(each, suit) >= 1 and fact(each, Airborne) == 0
+      mode: Edge
+      forEach: $players
+      setBodyState(
+        key: $each,
+        state: "suit",
+        expression: (bodyState(each, suit) >= last) ? 0 : (bodyState(each, suit) + 1)
+      )
+    }
+  }
+
+  chaseCamera(
+    rig: rig,
+    pivotOffset: worn.camera.pivot,
+    fadeCloseTarget: worn.camera.fadeClose,
+    cutawayCloseTarget: worn.camera.cutawayClose,
+    eyePoint: worn.camera.eye,
+    wall: wall,
+    focus: focus
+  )
+
+  // The seat's own camera comes first, so it is what a boot shows; a world's named inspection layouts follow it.
+  views {
+    layout "play" {
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+    }
+  }
+}
+
+// The player's companion: the standard companion (../companion.puck) for the seat `owner`, its body in the world's
+// slot `slot`, arriving at the avatar's companion offset. The world supplies the slot, since it owns its population,
+// and its interests and senses through `companionDesign`; `roster` dresses it as the owner's active roster kind.
+template playerCompanion(avatar, owner, slot, attention = 4, lead = 3, roster = false) {
+  companion(
+    owner: owner,
+    slot: slot,
+    position: avatar.companion,
+    attention: attention,
+    lead: lead,
+    roster: roster
+  )
+}

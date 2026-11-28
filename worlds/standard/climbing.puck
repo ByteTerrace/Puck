@@ -8,7 +8,7 @@
 // z 0 and it stands out toward -Z, so a world places a hold on a face at the face's plane, turned as the face is.
 //
 // Only the face is meant to be held: a world gives the face's placement `grip { holdable: true }` (the standard's
-// `climbAbility` climbs what is holdable) and leaves the frame, the holds and the pad without it. The face's plates are
+// `climbAction` climbs what is holdable) and leaves the frame, the holds and the pad without it. The face's plates are
 // drawn only (`detail: true`), so a climber's contact is the face's flat backing and the climb's hold probe reads one
 // plane however the plates and holds stand out of it; the hands and feet a rig plants on the drawn surface find them.
 import "paths"

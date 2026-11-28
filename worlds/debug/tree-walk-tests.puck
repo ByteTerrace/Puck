@@ -28,7 +28,7 @@ documentId: "lab-tree"
 import "gallery/layout"
 import "tree-walk"
 
-// The walker's contact skin, metres (avatars/moth.puck's collision.contactSkin): no step may end a solve pushing this
+// The walker's contact skin, metres (stage.puck's collision.contactSkin): no step may end a solve pushing this
 // deep. The longest airborne run and the longest run of driven steps that do not move the body, seconds, that a walk
 // along the authored path may hold: well under the walker's own stall verdict (WorldSeatDriver.StallTicks).
 let treeWalkSkin = 0.02

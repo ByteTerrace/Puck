@@ -1,0 +1,31 @@
+// The worlds the debug world wires its portals to: the showcase worlds its painting wing hangs (paintings.puck) and the
+// labs its lab wing opens (lab-wing.puck), each a library entry of the standard's portal module
+// (../standard/portal.puck's `portalEntry`). A module library: it hands its importers lets and emits no document. The
+// debug world is a consumer of the module like any other world: the gallery wires none of these by itself, so the
+// gallery booted alone (gallery-root.puck) starts no destination.
+
+import "../standard/portal"
+import "gallery/layout"
+
+// What a lab's glass shows past the deepest window inside a window: a lab's neutral studio grey.
+let labFallback = "#8C8A86"
+
+let debugShowcase = [
+  portalEntry(destination: "garden", document: "garden", fallback: "#FF9A4D", title: "THE GARDEN", note: "A sunset plot beyond the glass. Walk or jump in; the frame behind you leads back.")
+  portalEntry(destination: "night", document: "night", fallback: "#070B16", title: "THE NIGHT FIELD", note: "A snowfield under the stars. Step in; turn round to come back.")
+  portalEntry(destination: "city", document: "city", fallback: "#E8C48A", title: "THE CITY", note: "A town on a river bend, its market, terraces, works and quay. Step in; the frame behind you leads back.")
+  portalEntry(destination: "moon", document: "moon", fallback: "#CFC8BC", title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on.")
+  portalEntry(destination: "galaxy", document: "galaxy", fallback: "#02030A", title: "THE PLANETOIDS", note: "Six small worlds in open space, each with gravity of its own shape. The glowing pads launch you from one to the next.")
+  portalEntry(destination: "sun", document: "sun", fallback: "#02030A", title: "PERIHELION", note: "A rock the sun passes once a day, the same sun that lights the valley. Keep to the rock while it passes.")
+  portalEntry(destination: "globe", document: "globe", fallback: "#1B2330", title: "THE BOTTLE WORLD", note: "A room whose gravity the gallery owns: someone out here can turn you over.")
+]
+// Every open lab of the lab wing (gallery/layout.puck's `labWingPlan`), so a lab that opens is wired.
+let debugLabs = map(filter(labWingPlan, lab => lab.open), lab => portalEntry(
+  destination: $"lab-{lab.id}",
+  document: lab.document,
+  fallback: labFallback,
+  title: lab.title,
+  note: lab.note
+))
+// The entry for a destination, or null for none.
+function debugRoute(destination) = first(concat(debugShowcase, debugLabs), entry => (entry.destination == destination), null)

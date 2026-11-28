@@ -517,9 +517,8 @@ item 3 with the board games' performance and memory solved; item 1 starts only a
    - coloured light through glass;
    - emitters too weak at night;
    - the haze, the black smudge and the pier blotches.
-3. [high] [Card tables in the board game room](#card-tables-in-the-board-game-room): twelve game stations under
-   the work sheet ceiling. The ordered remainder (the chairs, chess, placing the twelve, room in the debug world) is
-   that packet's first item.
+3. [high] [Card tables in the board game room](#card-tables-in-the-board-game-room): physical cards on the holodeck,
+   and the twelve stations' set's dearest lines (that packet's items).
 4. [medium] The verification still owed from that session:
    - the affine bounds lane's laws and its review-only skip review (`SdfMeshPathBake.Classify`, `FixedAffineForms`);
    - a long sampled `puck test` run, to see whether the multi-GB growth the RTX 2060 measured survives the
@@ -771,7 +770,7 @@ Open calls, each with its sides:
   plan, which comes before its slices are dispatched.
 - **Which of the Moth's halves is right** where they do not mirror: the right
   back pod's 40 parts (ids 1200 to 1240) are rotated differently from the left
-  pod's (1100 to 1140), and `sideLock`'s position, `blinkCrease`'s position and
+  pod's (1100 to 1140), and `sideLock`'s position and
   `kneeGuard`'s profile differ. Either construct above then mirrors the chosen
   half.
 - **The chase camera with its back to the stair wall**: swing the boom, rise
@@ -1553,6 +1552,15 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   in kit partitions
   ([the kit advance split](engine-job-system.md#the-steps-phases)) over one
   frozen pose image; this transaction is what the state-writing kits wait on.
+- [high] Rule admission is priced in time (`WorldRuleTimePricing`), but no device profile in
+  `worlds/standard/quality.puck` carries measured figures yet, so every world is priced at
+  `RuleCostCalibration.Uncalibrated`. Run `puck bench rules --device <profile> --output <file>` in a quiet
+  window on the RTX 4070 and the RTX 2060 and author each `rules { ... }` block. What the figures leave unpriced:
+  the rule part's fixed per-tick host work (`WorldRuleHost.EvaluateWorldRules`' fact derivation, arena publication
+  and delivery), which the bench's empty scenario measures and the sheet charges nowhere; host effects that charge a
+  door without counting it (`WorldIdentityFactEffect`'s write, `WorldPlacementEffectCost.DocumentCost`, a document write and revalidation), priced as element
+  units; the host passes, priced at the check figure; and the search lane, still a unit allowance
+  (`SearchCapacity.MaxWorkUnitsPerStep`).
 - [medium] The rule phase's remaining volatile and visit costs are the memo's
   ([rule evaluation stays serial](engine-job-system.md#rule-evaluation-stays-serial)).
 - [medium] Rule programs and gates evaluate as closure trees
@@ -1563,9 +1571,7 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   valid until a binding's firing commits; order-free folds (`all`, `any`,
   `count`) over a row's cells in vector lanes, `sum` staying scalar for its
   overflow fault; and gates a dataflow proof shows binding-invariant decided
-  once per sweep. The rule work price (`RuleCapacity.MaxWorkUnitsPerTick`'s
-  1.6 ns a unit) is recalibrated against a measured board sweep once the lead's
-  quiet window has read the closures. A tree deeper than
+  once per sweep. A tree deeper than
   `ProgramClosures.MaxDepth` (only an expression nested to its token ceiling
   inside calls nested to theirs) answers `Domain` where the interpreter it
   replaced answered a value; the cause fix is a lowering that evaluates such a
@@ -2218,13 +2224,14 @@ Next: fill the engine gaps first
   The thresholds (`folds > 0` amber, `flipped > 0` red) are right and are not
   loosened. A per-axis narrowing was worse over the whole world, and moving
   the lattice off a face only moves which exhibit is red.
-- [high] The Moth's shin blend groups (`shin-*`, `shinCavity-*`, `archBand-*`,
-  `archBandHollow-*`, `archBandBack-*`, `sidePanel-*`) carry seven tenths of
-  her flipped triangles in two groups, nearly all under a square millimetre
-  and strung along the blades' edges: each blade tapers to a rim thinner than
-  the 2 mm floor, two creases in one cell, which one vertex a patch cannot
-  hold. `blinkCrease-*` and `nozzleGlow-*` are next on her, and the Humble
-  Brick's face is the worst of a wider sample; none of those three is examined. The contour needs a rule for a face it cannot
+- [high] A blade that tapers to a rim thinner than the 2 mm floor (two creases
+  in one cell, which one vertex a patch cannot hold) contours as strings of
+  flipped triangles under a square millimetre along its edges. The Moth's shin
+  blades (her ivory arch bands and side panels as dilated shells) carried seven
+  tenths of her flipped triangles until they became paints; the measurements
+  below were read in them. `nozzleGlow-*` still shows it on
+  her, and the Humble Brick's face is the worst of a wider sample; none of
+  the two is examined. The contour needs a rule for a face it cannot
   resolve (close it to one crease, as `SdfSampledLattice.CloseSheets` closes a
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
@@ -2239,8 +2246,8 @@ Next: fill the engine gaps first
   bottom face at offsets 0.3 mm apart, and the triangles between that vertex
   and its neighbours (0.3 mm high) turn over. The audit also counts each
   material-cut piece of a turned triangle: with the cut off, the group reads
-  417 flipped, not 902. Read the shins in a device store audit (the CPU-taps
-  item above) before changing their contour.
+  417 flipped, not 902. Read a remaining example in a device store audit (the
+  CPU-taps item above) before changing the contour.
 - [high] `shape-blend-xor`'s flipped triangles lie along the pinch curves
   where the sphere crosses the box's faces, where the XOR's two solids touch
   along a line, nearly all with a ring cell's merged vertex (a 15 mm cell's 24
@@ -3529,7 +3536,7 @@ intent is in its guide.
     palette, rig and bake cost carry no weight. The suit, the off-suit pilot
     and the shared head.
   - The suited Moth toward the mech-suit sheets 01, 02, 03 and 10
-    ([moth.md](../../worlds/debug/avatars/moth.md#geometry-and-motion)).
+    ([moth.md](../../worlds/debug/avatars/moth/moth.md#geometry-and-motion)).
   - Her back thrusters to references 07, 08, 09, 12 and 13: proportions from
     the straight rear view; each wing a hollow casing around a dark core,
     leaning in at the top, with domed shoulders; the shell a chain of band
@@ -3717,17 +3724,34 @@ door frames. Nothing of the plan is built.
 - [medium] A door on a row whose position reads a state cell fires where the
   row first stood: the face catalog caches its frame (`WorldFaceCatalog`).
   Step 1 fixes it, and its lane first writes the scenario that fails today.
-- [high] A way back leads to one fixed door, not the door a traveller came by.
-  A destination's `arrival` frame names one counterpart in one document (the
-  garden's leads to `painting-garden` in `debug`), so a traveller who reached
-  the garden through a routed portal on the gallery's level 3, the portal lab
-  or the gallery booted alone (`gallery-root.puck`) comes home to the debug
-  world's painting wing, and a gallery-root or lab visit starts the whole debug
-  world. Carry the source door with the traveller (the transfer already records
-  its border, `WorldInstanceHost.TransferResolution`'s `Border`) and let a way
-  back whose counterpart names a return route land at that door. Check: a
-  crossing from `portal-south-5` into the garden and back lands before
-  `portal-south-5`, in the instance it left.
+- [high] The way home travels with the traveller (the owner's rulings,
+  [decision](../decisions/play.md#portals-and-their-panels), "Designed, not
+  built"). Today a destination's `arrival` frame names one counterpart in one
+  document (the garden's leads to `painting-garden` in `debug`), so a traveller
+  who reached the garden through the portal lab comes home to the debug world's
+  painting wing. Build the carried origin record (a bounded stack on the
+  mobility identity, in custody and checkpoints), a `$origin` route and a
+  `portal.return [all]` verb beside `$self`, a transfer to an existing named
+  instance with no destinations row, and a fallback to the home world's arrival
+  when the origin is gone; then make the destination worlds' and labs' way-back
+  frames origin routes, so no destination names its caller. Check: a crossing
+  from the portal lab into the garden and back lands before the lab's portal, in
+  the lab's instance; with the lab stopped, it lands at the traveller's home
+  arrival.
+- [medium] A federated portal group as a library entry (the owner's rulings,
+  [decision](../decisions/play.md#portals-and-their-panels)): a hub's membership
+  row that members join by agreement and follow, expanding in place in a
+  library's one list. Missing: routes whose entries come from a row rather than
+  the document (`WorldFaceRoutes.Entries`), and destinations minted at runtime
+  for a member's remote world. Check: a world that joins appears in every
+  member portal's panel at the tick its follow adopts the row, and a portal
+  pointed at a member that leaves shows the mirror.
+- [medium] A mirror's crossing turns the traveller about through the face's
+  centre line (the self pair's half turn, `WorldFrameIsometry.MapVector`), so a
+  body that enters left of centre steps out right of it, while the glass shows
+  a true reflection. A reflected crossing (position and heading mirrored across
+  the glass, the seat's camera mirrored with it) would match the picture; it
+  needs a mirrored arrival in `WorldBody.CrossInPlace` and its replay tap.
 - [medium] A routed door draws no straddle clip (`WorldPortalStraddle` skips a
   face with routes, whose destination is state its per-document derivation
   cannot read). Same-world routes are rare; derive the clip per recorded route
@@ -3942,7 +3966,7 @@ grow:
   table on every send; its step 3 measures that before removing the ring.
 - [medium] A world's tick rate could follow its load. One deterministic world
   per authority makes EVE-style tick dilation per world possible: a world over
-  its work allowance (`RuleCapacity.MaxWorkUnitsPerTick`) steps slower in wall
+  its rule budget (`WorldRuleTimePricing`) steps slower in wall
   time, not skipping ticks, so its state stays one fixed history and its
   neighbours are unaffected. Weigh it in [the MMO foundations register](mmo-foundations/synthesis.md#4-puck-native-combinations)
   against shedding load by splitting the place at runtime, for which the
@@ -5654,7 +5678,7 @@ their lane order; this packet keeps the single duplicates and leads.
   not credit an abstract or interface member called through a derived type,
   so treat its interface results as leads.
 - The `.puck` sources still under-use the language:
-  `worlds/debug/avatars/moth.puck` holds thousands of decimal literals and
+  `worlds/debug/avatars/moth/suits.puck` holds thousands of decimal literals and
   raw quaternions, with the pod's band groups pasted (a uniform row table
   waits on a template leaving a member out, G13 in
   [state and language](state-and-language.md)); `worlds/standard/cards.puck`
@@ -5817,8 +5841,8 @@ Looks and rules of play held in engine code:
   `WorldTabletopEngage.Pitch` range stops below it, and report a pitch above
   it by name.
 - [low] Flight and fuel are authored only in the Moth
-  (`worlds/debug/avatars/moth.puck`); the assisted-flight pass is a standard
-  ability template, as `dashAbility` is.
+  (`worlds/debug/avatars/moth/suits.puck`); the assisted-flight pass is a standard
+  ability template, as `dashAction` is.
 
 The standard's own surface:
 
@@ -5870,7 +5894,7 @@ The standard's own surface:
   and the night field RB opens no wheel and reads unbound.
 - Helpers that belong in the standard, transform maths first: rotation and
   transform maths (turns in degrees, axis-angle, composition, mirroring); a
-  mirrored-pair template; a toggle ability beside `dashAbility`; a tabletop
+  mirrored-pair template; a toggle ability beside `dashAction`; a tabletop
   kit (grid board, cell placement, piece prototypes), which chess, Go and
   Reversi each wrote; a named base-materials palette; scenario-step templates
   (tap, hold, wait until settled); the pad slot list and a mirrored bar-table
@@ -5898,7 +5922,7 @@ confirming its site in the debug world and its work-budget share.
 ### Card tables in the board game room
 
 Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
-ordinary, the owner's direction · Next: physical cards on the holodeck (below); twelve game stations on the work sheet;
+ordinary, the owner's direction · Next: physical cards on the holodeck (below); the stations' set's dearest lines;
 the windowed look at the game station's holodeck chess, Klondike and FreeCell, close and wide, in the board games lab
 (`worlds/debug/labs/board-games.puck`, `worlds/debug/game-station.md`); then Spider.
 
@@ -5931,39 +5955,16 @@ shell, each usable alone, each named for what it does.
   prototype, at most 16 volumes) would let a king topple as a king does, and a queened pawn would need its kit chosen by
   its code.
 
-- [high] Twelve game stations on the work sheet. The engine sweeps a set of stations per binding: a family member
-  the binding's key selects and a zone table over families are reached and priced as that station's alone, and a rule
-  may sweep a row family itself (`forEach: pile`, `$each` the card, `$member` the station), due per (member, key) and
-  priced at one member's bindings (docs/reference/state/analysis.md). Klondike, FreeCell and the patience layout are
-  one set of rules over every station (worlds/games/klondike.puck, freecell.puck, patience-station.puck
-  `patienceSetRules`). With holodeck chess, one station prices 359 thousand, twelve playing themselves (the board games
-  stress lab) 2.71 million, the debug world with its one station 3.54 million (`puck compile <world> --validate
-  --budget 40`; worlds/debug/game-station.md, "Cost"); each station past the first adds about 214 thousand, most of it
-  chess's instance lines; a switch is one write of the pool's cell (`WorldPlacementInhabit.Pool`), a settle reads only
-  the pieces that came to rest (`fact(placement, $each, Resting)`), and the 32-binding pose a switch or a put-back
-  opens (18 thousand) is the largest chess line left. In order: (1) the chairs (worlds/standard/game-station.puck
-  `gameStationRules`) as a set over the stations, writing rows keyed by the station's number
-  (`gameStationChairNear[i]`, `gameStationEdgesNear[i]`, `gameStationPointerNear[i]`, ...) so `patienceStationRules`
-  and chess-station join their sets; that needs a host fact over a family member (`board(pointer, <id>Cells, seat)`,
-  `seatAtSide`; `BoardSeat` matches its anchor by topology, WorldFactsVocabulary.Operands.cs, so stations sharing one
-  pick grid need it found by occupancy row) and per-binding channel versions, so a `$each` channel read is due only
-  when that station's seat input moves. (2) chess.puck's digital form and chess-station.puck as family sweeps (a
-  station's pieces and cells as members, `forEach: chessPiecesOf`): `board(…)` over a family member, and one search
-  job per station whose key rows are that station's cells only, with no clock-reading rules (`world.search` prints
-  `lastRestart=`); the repetition count is no longer a sweep of the 75 ages (`tabletop-board-history` counts a
-  position key in the tally row `positionCounts`). (3) The
-  instances go and the twelve are placed: delete the module instances and their `use` lines, place all twelve in
-  gallery-root (which stands eleven today, gallery/layout.puck `galleryRoomStood`, at 4.38 million of the 4.4) and
-  in debug (which stands one, worlds/debug/game-station-deck.puck), let game-station-root boot a list, and re-key
-  `station.game`, `station.chess` and the station rows (`gameStationGame`, `gameStationStatus`, `gameStationPick`,
-  `gameStationRowInk`, the paints' `state.gameStationStatus.<id>`) by the station's number, the spelling the
-  Klondike and FreeCell commands use. (4) Room in the debug world: `go-sync-mark` and `go-sync-keep` (200 and 189
-  thousand: one `goSync` pulse, a scalar every binding reads, opens all 361 stones; mark only the stones whose
-  indexed cell moved), `reversi-read-discs` (67), `go-play-1`/`-2` (56 each, judged every tick),
-  `terminal-console-key-1`..`4` (47 each, judged in place). (5) The parser gaps: an interpolated family pile name in
-  a declaration (`pile $"x{k}Of"[n]`, so FreeCell's sixteen and Klondike's nineteen pile lines become a `for`), and
-  the patience pose line's eight member-cell reads (its check is 118 units a card; a face row the reads write would
-  cut it to one).
+- [medium] The game stations' set prices a firing at every station for a line whose firing does not provably close its
+  own gate (`RuleResponse.Prove`): `chess-play-revert-codes`, `patience-pick`, `chess-station-save`,
+  `chess-station-pick-near`/`-far` and `chess-put` cost 37 to 65 thousand each in the gallery booted alone, which stands
+  all twelve at 3.19 million (`puck compile worlds/debug/gallery-root.puck --validate --budget 40`). Each waits on a cell
+  it does not write (a put-down's revert, a press's edge, a settle), so its gate holds while it waits; a gate that closes
+  on its own write (a request it clears, a mirror it copies) prices one station's firing. The chairs' presses
+  (`game-station-near`/`-far`) read seat channels for literal seats, unversioned for a sweep, so they are judged every
+  tick at every station; per-binding channel versions would make them due only when that station's seat input moves.
+  The debug world stands one station at 4.28 million, 6.84 ms of its 8.33 ms on the RTX 4070: more there needs room (`go-sync-mark` and `go-sync-keep`, one
+  `goSync` pulse opening all 361 stones; `reversi-read-discs`; `go-play-1`/`-2`; `terminal-console-key-1`..`4`).
 - [low] A rule sweeping per-seat private piles is refused at compile: `RuleCompiler.RequireTransformControlAudience`
   pairs every candidate a live end can select with every other read, so `transfer(from: hand[$each], to: …)` over a
   family whose members each admit only their own seat reads seat 1's hand into seat 2's audience on paper, though a
@@ -6028,8 +6029,8 @@ shell, each usable alone, each named for what it does.
   [settlement](#settlement-trust-roles-and-revocation). The stake rows serve
   every product row, so the owner's deferred casino call waits on nothing
   here.
-- The rules' work-budget cost is the table's price (`world.budget` against
-  `RuleCapacity.MaxWorkUnitsPerTick`): a transfer between named piles costs a
+- The rules' work-budget cost is the table's price (`world.budget` against the
+  tick's rule budget): a transfer between named piles costs a
   few thousand units where one between piles a live zone table picks costs
   about 140,000, so every deal, gather and move is a rule pinned on its
   literal piles, and the table reads one pile a tick (`kSync.scan`).
@@ -6386,7 +6387,7 @@ built and wired into the debug world (`worlds/debug/targeting.puck`).
   `readersFrom` row from membership closes it.
 - [medium] Edges over a moving input (`lock-press`, `ping-press`, `mark-press`)
   are priced as every binding firing every tick, so the debug world's sheet
-  sits within about sixteen thousand units of `RuleCapacity.MaxWorkUnitsPerTick`.
+  sits within about sixteen thousand units of the unit ceiling the time budget replaced.
   A sweep of the step's input events (`inputEvents(…)`) binds only presses.
 - [medium] `marks-<s>` reads its seat's character records every tick
   (`$record:` is unversioned); an identity record revision the rule host

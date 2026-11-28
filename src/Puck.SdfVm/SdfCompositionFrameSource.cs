@@ -109,6 +109,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource, IDispos
     private readonly List<long> m_meshInstanceRevisions = [];
     private readonly List<int> m_meshAssetSlots = [];
     private readonly List<SdfMeshTemplateRange> m_meshTemplateRanges = [];
+    private readonly List<SdfMeshFormRange> m_meshForms = [];
     private readonly Puck.Abstractions.Gpu.GpuChangedRows m_copyChanges = new();
     private readonly SdfMovedTransforms m_moved = new();
 
@@ -899,8 +900,15 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource, IDispos
         // Every emitter writes its templates into the one composed program, so its ranges are already that program's.
         m_meshTemplateRanges.Clear();
         for (var owner = 0; (owner < m_emitters.Count); owner++) { m_meshTemplateRanges.AddRange(collection: m_emitters[owner].MeshTemplateRanges); }
+        // Each emitter's forms ride its own slot range of the one table, which its pack placed them in. They describe the
+        // emitters' latest emission, so a frame holding the previous program while its successor builds keeps the forms
+        // that program was emitted with: the bake must never judge one form by another's groups at the same slots.
+        if (m_building is null) {
+            m_meshForms.Clear();
+            for (var owner = 0; (owner < m_emitters.Count); owner++) { m_meshForms.AddRange(collection: m_emitters[owner].MeshForms); }
+        }
         dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshInstances: m_meshInstances, meshTemplateRanges: m_meshTemplateRanges, sampled: m_sampled, slotClips: ComposeSlotClips(),
-            copyChanges: m_copyChanges.Reader, copyChangesSerial: m_copyChanges.Serial);
+            copyChanges: m_copyChanges.Reader, copyChangesSerial: m_copyChanges.Serial, meshForms: m_meshForms);
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         if (Frames == 0) { Console.Error.WriteLine(value: $"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.WordCount} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }
         Frames++;

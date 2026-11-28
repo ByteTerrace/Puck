@@ -202,7 +202,7 @@ These are recorded in the decision registers ([rendering](../../decisions/render
 - Percentage-closer soft-shadow cascades.
 - Exact resolve inputs.
 - One deterministic world per authority. A new option follows from it: EVE-style tick dilation per world, driven by
-  `RuleCapacity.MaxWorkUnitsPerTick`.
+  the tick's rule budget (`WorldRuleTimePricing`).
 - Deterministic work budgets.
 - Exact SDF contact.
 
@@ -225,7 +225,7 @@ in `sdf-resolve.comp.hlsl`; `SdfMeshCollapse.CellShares`; `SdfFieldEvaluator.Try
 `SdfFieldEvaluator.Certified.cs`, with callers only in tests); the main bake's use of `program.StepScale` described in
 finding 3; `WorldInterestFrame.Project`; `WorldFederationCodec.WriteEntity`; `SdfMeshStoreCodec`'s octahedral width and
 its zlib `Fastest` level; `SdfWorldPackage.TemporalPeriod` and the eight-sample Halton sequence in `SdfTemporalHistory`;
-`viewsRate` in `worlds/standard/quality.puck`; `IndexVersions` and `RuleCapacity.MaxWorkUnitsPerTick`.
+`viewsRate` in `worlds/standard/quality.puck`; `IndexVersions` and `WorldSimulationDefaults.DefaultRulePercent`.
 
 Not reopened, and therefore the audit's word and not this page's: the resolve's nine extra loads, nine fog integrals and
 16-tap history, the bake's eleven readback rounds and four tetrahedral gradient taps, the probe gather's 16 probes and

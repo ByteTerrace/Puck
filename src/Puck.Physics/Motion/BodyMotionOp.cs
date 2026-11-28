@@ -54,4 +54,12 @@ public enum BodyMotionOp : byte {
     Designate,
     Generate,
     TimedMove,
+
+    /// <summary>Pulls the body up over a ledge in front of it, on any surface: the commanded direction must meet a
+    /// steep face within reach, and the body's own sweep must prove a place to stand past its top, no higher than the
+    /// authored height above the feet and higher than a step. The body then travels there as an exclusive timed move
+    /// and leaves it at the speed it was commanding. A firing that finds no such ledge is refused, so nothing it would
+    /// have spent is spent. The instruction carries its reach, height and depth as <c>Direction</c>'s X, Y and Z, the
+    /// fraction of the commanded speed it keeps as <c>Value</c>, and its length as <c>DurationTicks</c>.</summary>
+    Mantle,
 }

@@ -1053,6 +1053,10 @@ public sealed partial class RuleEvaluator {
     private Step FireTallyAdd(TallyAddEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
 
+        if (!TrySelectedRow(effect: effect, firing: in firing, live: effect.RowFrom, own: effect.RowOrdinal, rowOrdinal: out var rowOrdinal, step: out var selected)) {
+            return selected;
+        }
+
         var key = effect.LiteralKey;
 
         if (effect.KeyFrom is { } keyFrom) {
@@ -1078,7 +1082,7 @@ public sealed partial class RuleEvaluator {
 
         var arena = m_host.Arena;
         var time = m_host.Time;
-        var probe = StateTally.Find(arena: arena, capacity: effect.Capacity, key: key, rowOrdinal: effect.RowOrdinal, time: in time);
+        var probe = StateTally.Find(arena: arena, capacity: effect.Capacity, key: key, rowOrdinal: rowOrdinal, time: in time);
 
         switch (probe.Case) {
             case TallyProbeCase.Found: {
@@ -1090,14 +1094,14 @@ public sealed partial class RuleEvaluator {
                         RefuseSource(effect: effect, fault: ExpressionFault.Domain, firing: in firing);
                         return Step.Faulted;
                     }
-                    return WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.CountCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: count);
+                    return WriteTallyCell(rowOrdinal: rowOrdinal, cell: StateTally.CountCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: count);
                 }
             case TallyProbeCase.Free when (probe.Entries < effect.Capacity): {
-                    var step = WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.KeyCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: key);
+                    var step = WriteTallyCell(rowOrdinal: rowOrdinal, cell: StateTally.KeyCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: key);
 
-                    if (step == Step.Done) { step = WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.CountCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: amount); }
-                    if (step == Step.Done) { step = WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.StampCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: probe.Epoch); }
-                    if (step == Step.Done) { step = WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.EntriesCell, effect: effect, firing: in firing, moved: ref moved, value: (probe.Entries + 1L)); }
+                    if (step == Step.Done) { step = WriteTallyCell(rowOrdinal: rowOrdinal, cell: StateTally.CountCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: amount); }
+                    if (step == Step.Done) { step = WriteTallyCell(rowOrdinal: rowOrdinal, cell: StateTally.StampCell(bucket: probe.Bucket), effect: effect, firing: in firing, moved: ref moved, value: probe.Epoch); }
+                    if (step == Step.Done) { step = WriteTallyCell(rowOrdinal: rowOrdinal, cell: StateTally.EntriesCell, effect: effect, firing: in firing, moved: ref moved, value: (probe.Entries + 1L)); }
                     return step;
                 }
             case TallyProbeCase.Free:
@@ -1115,9 +1119,13 @@ public sealed partial class RuleEvaluator {
     private Step FireTallyReset(TallyResetEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
 
+        if (!TrySelectedRow(effect: effect, firing: in firing, live: effect.RowFrom, own: effect.RowOrdinal, rowOrdinal: out var rowOrdinal, step: out var selected)) {
+            return selected;
+        }
+
         var time = m_host.Time;
 
-        StateTally.ReadHeader(arena: m_host.Arena, entries: out var entries, epoch: out var epoch, rowOrdinal: effect.RowOrdinal, time: in time);
+        StateTally.ReadHeader(arena: m_host.Arena, entries: out var entries, epoch: out var epoch, rowOrdinal: rowOrdinal, time: in time);
         if (entries == 0L) {
             return Step.Done;
         }
@@ -1126,11 +1134,40 @@ public sealed partial class RuleEvaluator {
             return Step.Faulted;
         }
 
-        var step = WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.EpochCell, effect: effect, firing: in firing, moved: ref moved, value: (epoch + 1L));
+        var step = WriteTallyCell(rowOrdinal: rowOrdinal, cell: StateTally.EpochCell, effect: effect, firing: in firing, moved: ref moved, value: (epoch + 1L));
 
         return ((step == Step.Done)
-            ? WriteTallyCell(rowOrdinal: effect.RowOrdinal, cell: StateTally.EntriesCell, effect: effect, firing: in firing, moved: ref moved, value: 0L)
+            ? WriteTallyCell(rowOrdinal: rowOrdinal, cell: StateTally.EntriesCell, effect: effect, firing: in firing, moved: ref moved, value: 0L)
             : step);
+    }
+    // The row a firing writes: its fixed row, or the row its live selection names this firing. A selection that names
+    // none refuses the firing: the author wrote a value and it would go nowhere. One whose index faulted faults it.
+    private bool TrySelectedRow(IRuleEffect effect, in EffectFiring firing, LiveRow? live, int own, out int rowOrdinal, out Step step) {
+        step = Step.Done;
+        rowOrdinal = own;
+
+        if (live is null) {
+            return true;
+        }
+
+        var selected = live.Resolve(reader: m_host);
+
+        if (selected.TryNamed(value: out rowOrdinal)) {
+            return true;
+        }
+
+        ReportRefusal(
+            detail: ((selected.Case == FaultCase.Faulted)
+                ? $"{RuleReads.KeyFaultReason}; '{live.Spelling}' selects no row"
+                : $"{RuleEvaluation.DescribeFault(fault: ExpressionFault.Absent)}; '{live.Spelling}' selects no row"),
+            effect: effect.Describe,
+            refusal: RuleEffectRefusal.Arithmetic,
+            ruleName: firing.RuleName,
+            tick: firing.Tick
+        );
+        step = ((selected.Case == FaultCase.Faulted) ? Step.Faulted : Step.Refused);
+
+        return false;
     }
     private Step WriteTallyCell(IRuleEffect effect, in EffectFiring firing, int rowOrdinal, int cell, long value, ref bool moved) {
         var step = Apply(
@@ -1323,24 +1360,8 @@ public sealed partial class RuleEvaluator {
         // A live destination picks its row per firing. An index that selects none is an absence, not a no-op: the
         // author wrote a value and it would go nowhere, so the firing rewinds exactly as an absent source does. The
         // negative-ordinal skip below is the separate, compile-time-absent case.
-        if (write.RowFrom is { } selection) {
-            var selected = selection.Resolve(reader: m_host);
-
-            if (!selected.TryNamed(value: out ordinal)) {
-                ReportRefusal(
-                    detail: ((selected.Case == FaultCase.Faulted)
-                        ? $"{RuleReads.KeyFaultReason}; '{selection.Spelling}' selects no row"
-                        : $"{RuleEvaluation.DescribeFault(fault: ExpressionFault.Absent)}; '{selection.Spelling}' selects no row"),
-                    effect: effect.Describe,
-                    refusal: RuleEffectRefusal.Arithmetic,
-                    ruleName: firing.RuleName,
-                    tick: firing.Tick
-                );
-
-                return ((selected.Case == FaultCase.Faulted)
-                    ? Step.Faulted
-                    : Step.Refused);
-            }
+        if (!TrySelectedRow(effect: effect, firing: in firing, live: write.RowFrom, own: ordinal, rowOrdinal: out ordinal, step: out var selected)) {
+            return selected;
         }
         if (ordinal < 0) {
             return Step.Done;

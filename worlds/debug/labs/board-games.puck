@@ -25,7 +25,7 @@
 // `board-games-stress.puck` beside this file is twelve stations, each playing chess against itself.
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth"
+basis: "../stage"
 documentId: "board-games"
 
 import "../set-controls"
@@ -74,7 +74,6 @@ state {
   }
 }
 
-use gameStationGames as station(station: rootStation, index: 0)
 
 render {
   farDistance: 200

@@ -810,6 +810,7 @@ public sealed partial class SdfMeshPathBake {
             // of priorities (Prioritize) run on the measure's lane while the frame is dressed and recorded.
             Retier(frame: frame);
             ReleaseStandIns();
+            TakeForms(frame: frame);
             PostMeasure();
             scope.Continue(site: BakeGate.Judge);
             JudgeFloors();

@@ -1,7 +1,7 @@
 // The leader follows-tests.puck follows: a bare world that owns an advancing day and a counter its own rule writes.
 // Its authority runs beside the test world, which observes it as a session and adopts both rows from its delivery.
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "follows-leader"
 
 admission [

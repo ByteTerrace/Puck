@@ -138,35 +138,53 @@ public sealed record WorldPortalGate(
 /// presentation draws all follow that one record, so the glass never shows one world while the door leads to another.
 /// A presentation never reads the cell: it draws the session the authority holds for the face's screen.</para>
 /// <para>Before the first scan records a route, the face shows and leads where its own portal and source say. A cell
-/// that holds no whole number naming a route (absent, negative or past the last route) closes the door as an unmet
-/// <see cref="WorldPlacementPortal.Open"/> does: it fires nothing and holds no session.</para>
+/// that holds no whole number naming a route (absent, negative or past the last route) takes the fallback route: by
+/// default the face itself (<see cref="SelfDestination"/>), a mirror whose glass shows this world reflected through the
+/// face and whose crossing sets a traveller back out of the same face, turned about, into the room it left; or the
+/// authored <paramref name="Fallback"/> route; or, when <paramref name="Closes"/>, no route, the door closed as an unmet
+/// <see cref="WorldPlacementPortal.Open"/> closes it. A destination the authority cannot resolve or that refuses the
+/// face falls back to the face itself too, for both the crossing and the window, so a door is never a wall.</para>
 /// <para>Everyone sees the route the world's cell holds. A per-viewer route (a player's own screen pointing a door for
 /// that player alone) is a second, viewer-keyed cell read by the presentation for its own viewer's session, beside this
 /// one; nothing here assumes it is absent.</para>
 /// </remarks>
 /// <param name="State">The numeric state row whose cell chooses the route (never <see cref="CellKind.Text"/>).</param>
-/// <param name="Entries">The routes, chosen by their 0-based place in this list. At least one, at most
-/// <see cref="MaxEntries"/>; each names a different destination.</param>
+/// <param name="Entries">The routes, chosen by their 0-based place in this list. At most <see cref="MaxEntries"/>; each
+/// names a different destination. None leaves the face on its fallback for good: an unconnected door.</param>
 /// <param name="Key">The cell inside <paramref name="State"/>, or <see langword="null"/> for its slot cell.</param>
+/// <param name="Fallback">The route a cell naming no entry takes, or <see langword="null"/> for the face itself, a
+/// mirror (<see cref="SelfDestination"/>).</param>
+/// <param name="Closes">Whether a cell naming no entry closes the door instead of taking a fallback route. Refused
+/// beside <paramref name="Fallback"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFaceRoutes(
     [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string State,
     IReadOnlyList<WorldFaceRoute> Entries,
     [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFaceRoute? Fallback = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Closes = false
 ) {
-    /// <summary>The route the scan records for a door whose cell names none: the door stands closed.</summary>
+    /// <summary>The route the scan records for a door whose cell names no entry and whose routes close it.</summary>
     public const int Closed = -1;
     /// <summary>The most routes one face carries: a representation bound, sized for a world's whole library.</summary>
     public const int MaxEntries = 1024;
+    /// <summary>The destination a face leads to and shows on its self route: the world it stands in, through the face
+    /// itself. A reserved name no <c>destinations</c> row carries; the authority resolves it to the face's own instance.</summary>
+    public const string SelfDestination = "$self";
+
+    /// <summary>Gets the route a cell naming no entry takes: the place after the last entry, unless the routes close
+    /// the door (<see cref="Closed"/>).</summary>
+    [JsonIgnore]
+    public int FallbackRoute => (Closes ? Closed : Entries.Count);
 
     /// <summary>Reads the route the cell chooses: its whole value when it names one of <see cref="Entries"/>, else
-    /// <see cref="Closed"/>.</summary>
+    /// <see cref="FallbackRoute"/>.</summary>
     /// <param name="definition">The document to read.</param>
     /// <param name="tick">The tick to read the cell as of.</param>
     /// <param name="engineTick">The engine tick to read the cell as of.</param>
     /// <param name="arena">The live store.</param>
-    /// <returns>The 0-based route, or <see cref="Closed"/>.</returns>
+    /// <returns>The 0-based route (the fallback's place after the entries), or <see cref="Closed"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public int Pick(WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
@@ -174,7 +192,7 @@ public sealed record WorldFaceRoutes(
         return (WorldStateReader.TryReadWhole(arena: arena, definition: definition, engineTick: engineTick, key: Key, rowName: State, tick: tick, whole: out var whole) &&
             (whole >= 0L) && (whole < Entries.Count))
             ? ((int)whole)
-            : Closed;
+            : FallbackRoute;
     }
 }
 /// <summary>One of a face's <see cref="WorldFaceRoutes"/>: where the face leads and what its window shows while the
@@ -203,7 +221,10 @@ public static class WorldFaceRouting {
 
     /// <summary>Returns the face as it stands on route <paramref name="route"/>: its portal leading to the route's
     /// destination through the route's counterpart, and its session source observing that destination with the
-    /// route's fallback. A face with no routes, or a route outside them, answers the face itself.</summary>
+    /// route's fallback. The place after the last entry is the fallback route (<see cref="WorldFaceRoutes.FallbackRoute"/>):
+    /// the authored fallback, or the self route, whose portal and source name <see cref="WorldFaceRoutes.SelfDestination"/>
+    /// and whose counterpart is the face itself. A face with no routes, or a route outside them, answers the face
+    /// itself.</summary>
     /// <param name="face">The authored face row.</param>
     /// <param name="route">The 0-based route.</param>
     /// <returns>The face on that route.</returns>
@@ -211,12 +232,29 @@ public static class WorldFaceRouting {
     public static WorldPlacementFace On(WorldPlacementFace face, int route) {
         ArgumentNullException.ThrowIfNull(argument: face);
 
-        if ((face.Routes is not { } routes) || (route < 0) || (route >= routes.Entries.Count)) {
+        if ((face.Routes is not { } routes) || (route < 0) || (route > routes.Entries.Count)) {
             return face;
         }
 
         return Faces.GetValue(key: face, derive: Derive)[route];
     }
+    /// <summary>Returns the face as it stands on its self route: the fallback a door takes when the destination it
+    /// names cannot be reached (unresolved, refused), whatever its routes author.</summary>
+    /// <param name="face">The authored face row.</param>
+    /// <returns>The face leading to and showing its own world through itself.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="face"/> is <see langword="null"/>.</exception>
+    public static WorldPlacementFace Self(WorldPlacementFace face) {
+        ArgumentNullException.ThrowIfNull(argument: face);
+
+        return SelfFaces.GetValue(key: face, derive: static authored => Toward(face: authored, entry: new WorldFaceRoute(Destination: WorldFaceRoutes.SelfDestination)));
+    }
+    /// <summary>Returns whether a face, as it stands on a route, leads to and shows its own world through itself.</summary>
+    /// <param name="face">The face on a route (<see cref="On"/>, <see cref="To"/>, <see cref="Self"/>).</param>
+    /// <returns><see langword="true"/> for the self route.</returns>
+    public static bool IsSelf(WorldPlacementFace? face) => (
+        (face?.Portal is { Destination: WorldFaceRoutes.SelfDestination }) ||
+        (face?.Source is WorldScreenSource.Session { Destination: WorldFaceRoutes.SelfDestination })
+    );
     /// <summary>Returns the face as it stands on the route that leads to <paramref name="destination"/>, or the face
     /// itself when none does: how a reader holding the session the authority opened finds the route it shows.</summary>
     /// <param name="face">The authored face row.</param>
@@ -235,8 +273,11 @@ public static class WorldFaceRouting {
                 return On(face: face, route: index);
             }
         }
+        if (string.Equals(a: routes.Fallback?.Destination, b: destination, comparisonType: StringComparison.Ordinal)) {
+            return On(face: face, route: routes.Entries.Count);
+        }
 
-        return face;
+        return (string.Equals(a: destination, b: WorldFaceRoutes.SelfDestination, comparisonType: StringComparison.Ordinal) ? Self(face: face) : face);
     }
     /// <summary>Returns whether a session is the one the face shows on its own or on one of its routes: what a
     /// presentation accepts the authority's session for the face's screen against.</summary>
@@ -251,24 +292,35 @@ public static class WorldFaceRouting {
         return (Equals(objA: face.Source, objB: session) || Equals(objA: To(face: face, destination: session.Destination).Source, objB: session));
     }
 
+    // Each face's self route, built once per face row.
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldPlacementFace, WorldPlacementFace> SelfFaces = new();
+
+    // The faces on every entry, then the fallback route's face: the authored fallback, or the self route.
     private static WorldPlacementFace[] Derive(WorldPlacementFace face) {
-        var entries = face.Routes!.Entries;
-        var faces = new WorldPlacementFace[entries.Count];
+        var routes = face.Routes!;
+        var entries = routes.Entries;
+        var faces = new WorldPlacementFace[(entries.Count + 1)];
 
         for (var index = 0; (index < entries.Count); index++) {
-            var entry = entries[index];
-
-            faces[index] = face with {
-                Portal = ((face.Portal is { } portal)
-                    ? portal with { Destination = entry.Destination, Counterpart = (entry.Counterpart ?? portal.Counterpart) }
-                    : null),
-                Source = ((face.Source is WorldScreenSource.Session session)
-                    ? session with { Destination = entry.Destination, Fallback = (entry.Fallback ?? session.Fallback) }
-                    : face.Source),
-            };
+            faces[index] = Toward(face: face, entry: entries[index]);
         }
+        faces[entries.Count] = ((routes.Fallback is { } fallback) ? Toward(face: face, entry: fallback) : Self(face: face));
 
         return faces;
+    }
+    // The face led toward one route. The self route keeps no counterpart: its counterpart is the face itself, which a
+    // crossing and a window fit read from the face's own frame.
+    private static WorldPlacementFace Toward(WorldPlacementFace face, WorldFaceRoute entry) {
+        var self = string.Equals(a: entry.Destination, b: WorldFaceRoutes.SelfDestination, comparisonType: StringComparison.Ordinal);
+
+        return face with {
+            Portal = ((face.Portal is { } portal)
+                ? portal with { Destination = entry.Destination, Counterpart = (self ? null : (entry.Counterpart ?? portal.Counterpart)), Arrival = WorldPortalArrival.Mapped }
+                : null),
+            Source = ((face.Source is WorldScreenSource.Session session)
+                ? session with { Destination = entry.Destination, Fallback = (entry.Fallback ?? session.Fallback) }
+                : face.Source),
+        };
     }
 }
 /// <summary>Parses and resolves a <see cref="WorldPlacementPortal.Counterpart"/> string — the one spelling shared by

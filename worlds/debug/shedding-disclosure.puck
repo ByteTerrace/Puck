@@ -8,7 +8,7 @@
 // replica and a presentation session read the same way in each.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth"
+basis: "stage"
 documentId: "shedding-disclosure"
 import "shedding"
 import "../standard/cards"

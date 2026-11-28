@@ -14,7 +14,7 @@
 // and the `arrival` frame on the plaza leads back there.
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth"
+basis: "../stage"
 documentId: "lab-light"
 
 import "light-noon"

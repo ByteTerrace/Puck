@@ -13,10 +13,20 @@ public static partial class CompileCommand {
     // The rule price sheet of a composed, validated world, as `world.budget.rules` reads it from a running one: the tick's
     // total against the ceiling, the share of each module instance (a line's name before its generated joiner) and of
     // the world's own lines, then the costliest `lines` lines.
-    private static void PrintRuleBudget(System.Text.Json.Nodes.JsonObject composed, int lines, string name) {
+    // A calibration given on the command line stands in for every device's own figures, or for a device of its own in a
+    // world that authors none.
+    private static void PrintRuleBudget(System.Text.Json.Nodes.JsonObject composed, int lines, string name, Puck.State.Rules.RuleCostCalibration? calibration) {
         if (!WorldDefinitionFileSource.TryReadDocument(definition: out var definition, json: composed.ToJsonString(), reason: out var reason, refusal: out _, sourceName: name) || (definition is null)) {
             Console.Error.WriteLine(value: $"budget: '{name}' could not be read for pricing: {reason}");
             return;
+        }
+        if (calibration is not null) {
+            var render = definition.Render;
+            var devices = (render.Devices is { Count: > 0 } authored)
+                ? authored.Select(selector: device => device with { Rules = calibration }).ToArray()
+                : [new WorldDeviceProfile(Match: string.Empty, Name: "calibrated", Quality: Puck.Abstractions.Presentation.QualityTier.High, Rules: calibration)];
+
+            definition = definition with { RenderRaw = render with { Devices = devices } };
         }
 
         WorldRuleCompilation compilation;
@@ -29,7 +39,10 @@ public static partial class CompileCommand {
         }
         var contributors = compilation.WorkContributors;
 
-        Console.WriteLine(value: $"budget '{name}': {compilation.WorkBudget.WorkUnitsPerTick} of {Puck.State.RuleCapacity.MaxWorkUnitsPerTick} work units a tick, {contributors.Count} lines");
+        Console.WriteLine(value: $"budget '{name}': {compilation.WorkBudget.WorkUnitsPerTick} work units a tick, {contributors.Count} lines");
+        foreach (var line in compilation.Pricing.Describe(prefix: "  rules")) {
+            Console.WriteLine(value: line);
+        }
         foreach (var share in contributors
             .GroupBy(keySelector: static line => (line.Name.Contains(value: Puck.State.GeneratedName.Joiner) ? line.Name[..line.Name.IndexOf(value: Puck.State.GeneratedName.Joiner)] : "(world)"), comparer: StringComparer.Ordinal)
             .Select(selector: static group => (Owner: group.Key, Units: group.Sum(selector: static line => (line.WorkUnits.IsKnown ? line.WorkUnits.Units : 0L)), Lines: group.Count()))
@@ -41,7 +54,7 @@ public static partial class CompileCommand {
             Console.WriteLine(value: $"  {line.WorkUnits,10} {line.Name} x{line.Multiplier} check {line.CheckUnits} fire {line.FiringUnits}: {line.Response}");
         }
     }
-    private static int ExecuteWorldCompilation(string source, string sourcePath, string? outputPath, ImportHandling imports, bool strict, bool validate, bool updateAssets, IDictionary<string, string>? written = null, int budgetLines = 0) {
+    private static int ExecuteWorldCompilation(string source, string sourcePath, string? outputPath, ImportHandling imports, bool strict, bool validate, bool updateAssets, IDictionary<string, string>? written = null, int budgetLines = 0, Puck.State.Rules.RuleCostCalibration? ruleCalibration = null) {
         var compilation = WorldCompileSession.Shared.Compile(source, sourcePath: sourcePath, imports: imports, allowMultiple: true, updateAssets: updateAssets);
         var diagnostics = compilation.Diagnostics;
 
@@ -70,7 +83,7 @@ public static partial class CompileCommand {
                     // A world refused for its work alone is the one whose sheet matters most, so a composed world is priced
                     // whatever its validation found.
                     if ((budgetLines > 0) && (validated is not null)) {
-                        PrintRuleBudget(composed: validated, lines: budgetLines, name: output.Name);
+                        PrintRuleBudget(calibration: ruleCalibration, composed: validated, lines: budgetLines, name: output.Name);
                     }
                 }
             }

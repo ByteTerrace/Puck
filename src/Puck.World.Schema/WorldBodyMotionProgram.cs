@@ -197,6 +197,17 @@ public static partial class BodyActionSpecFactory {
             Target: timer.Target,
             StateName: timer.State
         ),
+            WorldEffect.Mantle mantle => new CompiledBodyInstruction(
+            Operation: BodyMotionOp.Mantle,
+            Value: NumericLiteral.ToFixed(value: mantle.Carry),
+            Direction: new FixedVector3(
+                X: NumericLiteral.ToFixed(value: mantle.Reach),
+                Y: NumericLiteral.ToFixed(value: mantle.Height),
+                Z: NumericLiteral.ToFixed(value: mantle.Depth)
+            ),
+            DurationTicks: FixedTickConversion.DurationEngineTicks(seconds: mantle.Seconds),
+            StateSlot: -1
+        ),
             // Nothing is resolved at kit-compile time: the generator row and the destination row are world-global
             // `state` rows, not this kit's per-body slot table, so both names ride through to the mutation compose
             // boundary that owns their existence checks.
@@ -231,8 +242,8 @@ public static partial class BodyActionSpecFactory {
             throw new BodyMotionProgramException(
                 refusal: BodyMotionProgramRefusal.OpcodeInadmissible,
                 programName: program.Name,
-                detail: ((instruction.Operation == BodyMotionOp.TimedMove)
-                    ? $"action '{actionName}' timedMove requires a yaw-frame program with CommitPose"
+                detail: ((instruction.Operation is BodyMotionOp.TimedMove or BodyMotionOp.Mantle)
+                    ? $"action '{actionName}' {((instruction.Operation == BodyMotionOp.Mantle) ? "mantle" : "timedMove")} requires a yaw-frame program with CommitPose"
                     : $"action '{actionName}' opcode '{instruction.Operation}' is inadmissible for program kind '{program.Kind}'")
             );
         }

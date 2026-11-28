@@ -55,6 +55,11 @@ public enum RowReach : byte {
     /// <summary>The cell under the key a sweep over a row family binds to <c>$member</c>: a move of the cell keyed
     /// <c>m</c> reaches the bindings of member <c>m</c>.</summary>
     MemberKey = 32,
+
+    /// <summary>The cell under the binding's <c>$each</c> key of the family member its own <c>$member</c> selects
+    /// (<see cref="RuleSchedule.MemberIndices"/>): a move of cell <c>k</c> reaches the one binding of that member keyed
+    /// <c>k</c>, and a move of the row whole that member's bindings.</summary>
+    MemberEach = 64,
 }
 /// <summary>A rule's or a binding's memoized read schedule: every dependency one judgement can have — the arena rows
 /// its locals, live-row selection and gate read, and the host facts they read, each versioned — and, for a sweep, the
@@ -197,15 +202,16 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
         foreach (var access in reads) {
             Row(ordinal: access.RowOrdinal);
             // A row two family indices reach is no one binding's member, so any move of it reaches every binding.
-            var member = (access.IsMember && (!members.TryGetValue(key: access.RowOrdinal, value: out var held) || (held == access.Member)));
+            var member = (access.OwnMember && (!members.TryGetValue(key: access.RowOrdinal, value: out var held) || (held == access.Member)));
 
-            if (access.IsMember) {
+            if (access.OwnMember) {
                 members[access.RowOrdinal] = (member ? access.Member : -1);
             }
             Reach(ordinal: access.RowOrdinal, reach: (access.Reach switch {
                 CellReach.Each => RowReach.Each,
                 CellReach.Members => RowReach.Members,
                 CellReach.Member when member => RowReach.Member,
+                CellReach.MemberEach when member => RowReach.MemberEach,
                 CellReach.MemberKey => RowReach.MemberKey,
                 CellReach.Key when access.Key.IsValid => RowReach.Cells,
                 _ => RowReach.Any,
@@ -247,7 +253,7 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
         ) {
             Cells = [.. cells.Where(predicate: cell => seen.Contains(item: cell.RowOrdinal))],
             Reaches = [.. seen.Select(selector: ordinal => reaches.GetValueOrDefault(key: ordinal, defaultValue: RowReach.Any))],
-            MemberIndices = [.. seen.Select(selector: ordinal => (((reaches.GetValueOrDefault(key: ordinal) & ~RowReach.Members) == RowReach.Member) ? members.GetValueOrDefault(key: ordinal, defaultValue: -1) : -1))],
+            MemberIndices = [.. seen.Select(selector: ordinal => (((reaches.GetValueOrDefault(key: ordinal) & ~RowReach.Members) is RowReach.Member or RowReach.MemberEach) ? members.GetValueOrDefault(key: ordinal, defaultValue: -1) : -1))],
         };
     }
     /// <summary>Spells the schedule for a read-back: the rows and host facts it depends on by name, and every reason it

@@ -567,6 +567,7 @@ public sealed partial class WorldServer {
             plans[index] = resolved;
             judges[index] = new RuleArenaSearchJudge(
                 host: host,
+                member: definition.Search.Rows[index].Member,
                 rules: judgeRules[index],
                 score: scores[index]
             );

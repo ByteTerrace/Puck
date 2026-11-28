@@ -608,8 +608,11 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     footprintStill = (footprintStill && !accepted);
     // A tap stands still when its draw has not moved since the preceding frame (sdfMeshDrawUnmoved), which proves its
     // previous point is its current one without reading the triangle: a moved draw counts as moving even where one of
-    // its triangles held still, which only declines the window there.
+    // its triangles held still, which only declines the window there. The receiver the window was kept for must stand
+    // too (sdfHistoryReceiverStill): still taps under an unchanged camera say nothing of what left the footprint, and a
+    // body that moved off the pixel would leave its samples in the window.
     [branch] if (footprintStill) {
+        footprintStill = sdfHistoryReceiverStill(historySurface[sdfHistoryWord(pixelIndex, 0u, extent)]);
         [loop] for (uint tap = 0u; tap < 9u; tap++) {
             uint2 pixel = sdfResolveClamp((nearest + int2((int)(tap % 3u) - 1, (int)(tap / 3u) - 1)), render);
             uint record = sdfVisibilityRecord(pixel, 0u, render);

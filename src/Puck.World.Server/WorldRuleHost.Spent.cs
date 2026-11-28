@@ -2,8 +2,67 @@ using System.Globalization;
 
 namespace Puck.World.Server;
 
+/// <summary>What the evaluator ran since the latches began, summed over every rule and interaction, with the units it
+/// spent at the sheet's own prices: what <c>puck bench rules</c> divides a measured rule pass by.</summary>
+/// <param name="Ticks">The ticks counted.</param>
+/// <param name="Sweeps">The sweeps that snapshotted their keys.</param>
+/// <param name="SetupUnits">The setup units those sweeps spent.</param>
+/// <param name="Judged">The evaluations that ran (evaluations less skips).</param>
+/// <param name="CheckUnits">The check units those evaluations spent.</param>
+/// <param name="Firings">The firings.</param>
+/// <param name="EffectUnits">The effect units those firings spent, their doors' units included.</param>
+/// <param name="Doors">The doors those firings charged (<see cref="RuleCost.Doors"/>), each
+/// <see cref="RuleWorkBudget.DoorUnits"/> of <paramref name="EffectUnits"/>.</param>
+public readonly record struct WorldRuleSpent(long Ticks, long Sweeps, long SetupUnits, long Judged, long CheckUnits, long Firings, long EffectUnits, long Doors);
 public sealed partial class WorldRuleHost {
     private readonly record struct SpentLine(string Name, bool IsInteraction, RuleLatch.RuleSpent Spent, long Work, string Schedule);
+
+    // Each line's sheet price by name: what one sweep's setup, one evaluation and one firing spend.
+    private Dictionary<(string Name, bool IsInteraction), RuleCost> SpentPrices() {
+        var prices = new Dictionary<(string Name, bool IsInteraction), RuleCost>();
+
+        foreach (var contributor in (m_growthCompilation?.WorkContributors ?? [])) {
+            prices[(contributor.Name, contributor.IsInteraction)] = contributor.Cost;
+        }
+        return prices;
+    }
+    // A component the sheet could not bound prices nothing here; the worst-case sheet already names it.
+    private static long SpentPrice(RuleWork work) => (work.IsKnown ? work.Units : 0L);
+
+    /// <summary>Sums what the evaluator ran since the latches began over every rule and interaction, at the sheet's own
+    /// prices. Every count is deterministic.</summary>
+    /// <returns>The totals.</returns>
+    public WorldRuleSpent SpentTotals() {
+        var prices = SpentPrices();
+        var totals = new WorldRuleSpent(Ticks: m_ruleGateHeld.SpentTicks, Sweeps: 0L, SetupUnits: 0L, Judged: 0L, CheckUnits: 0L, Firings: 0L, EffectUnits: 0L, Doors: 0L);
+
+        m_evaluator.SettleSpent();
+        Sum(compiled: m_rules, isInteraction: false, latch: m_ruleGateHeld);
+        Sum(compiled: m_interactions, isInteraction: true, latch: m_interactionGateHeld);
+        return totals;
+
+        void Sum(CompiledRule[] compiled, bool isInteraction, RuleLatch latch) {
+            foreach (var rule in compiled) {
+                if (!latch.TryGetRule(name: rule.Name, state: out var state)) {
+                    continue;
+                }
+
+                var spent = state.Spent;
+                var cost = (prices.TryGetValue(key: (rule.Name, isInteraction), value: out var priced) ? priced : default);
+                var ran = (spent.Evaluations - spent.Skips);
+
+                totals = totals with {
+                    Sweeps = (totals.Sweeps + spent.Sweeps),
+                    SetupUnits = (totals.SetupUnits + (spent.Sweeps * SpentPrice(work: cost.Setup))),
+                    Judged = (totals.Judged + ran),
+                    CheckUnits = (totals.CheckUnits + (ran * SpentPrice(work: cost.Check))),
+                    Firings = (totals.Firings + spent.Firings),
+                    EffectUnits = (totals.EffectUnits + (spent.Firings * SpentPrice(work: cost.Effects))),
+                    Doors = (totals.Doors + (spent.Firings * cost.Doors)),
+                };
+            }
+        }
+    }
 
     // A rule's read schedule, and beside it the schedule its Level firing stands on once it has changed nothing.
     private string DescribeSchedule(CompiledRule rule, RuleLatch latch) {
@@ -18,7 +77,7 @@ public sealed partial class WorldRuleHost {
     /// verdict or due list (<see cref="RuleEvaluator.SchedulingEnabled"/> off): the evaluation those stand for, which
     /// a replay runs against a recording that used them. Either change forgets every cached verdict, since none was
     /// kept while the schedules were off.</summary>
-    internal bool JudgesEveryBinding {
+    public bool JudgesEveryBinding {
         get => !m_evaluator.SchedulingEnabled;
         set {
             if (value == JudgesEveryBinding) {
@@ -38,12 +97,7 @@ public sealed partial class WorldRuleHost {
     /// <param name="top">The most lines to print.</param>
     /// <returns>The sheet's lines, the summary first.</returns>
     public IReadOnlyList<string> DescribeSpent(int top) {
-        var prices = new Dictionary<(string Name, bool IsInteraction), RuleCost>();
-
-        foreach (var contributor in (m_growthCompilation?.WorkContributors ?? [])) {
-            prices[(contributor.Name, contributor.IsInteraction)] = contributor.Cost;
-        }
-
+        var prices = SpentPrices();
         var lines = new List<SpentLine>(capacity: (m_rules.Length + m_interactions.Length));
 
         m_evaluator.SettleSpent();
@@ -101,13 +155,10 @@ public sealed partial class WorldRuleHost {
                     Name: rule.Name,
                     Schedule: DescribeSchedule(latch: latch, rule: rule),
                     Spent: spent,
-                    Work: (((spent.Sweeps * Price(work: cost.Setup)) + (ran * Price(work: cost.Check))) + (spent.Firings * Price(work: cost.Effects)))
+                    Work: (((spent.Sweeps * SpentPrice(work: cost.Setup)) + (ran * SpentPrice(work: cost.Check))) + (spent.Firings * SpentPrice(work: cost.Effects)))
                 ));
             }
         }
-
-        // A component the sheet could not bound prices nothing here; the worst-case sheet already names it.
-        static long Price(RuleWork work) => (work.IsKnown ? work.Units : 0L);
     }
     /// <summary>Spells the read schedule of every rule or interaction compiled under a name: the rows it depends on
     /// and why it is volatile when it is.</summary>

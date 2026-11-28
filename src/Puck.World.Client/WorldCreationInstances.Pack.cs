@@ -299,6 +299,7 @@ public sealed partial class WorldCreationInstances {
         PackGuess(client: client, deltaSeconds: deltaSeconds, moved: moved, parkPosition: parkPosition, slotBase: slotBase, transforms: transforms);
         WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Packs);
         PublishRates(client: client, slotBase: slotBase);
+        PublishForms(slotBase: slotBase);
 
         // The runs are composed again, in pool order, only in a pack that changed a registration's clip. Keep unchanged
         // runs by value; the row writer compares them in order and visits only changed slots.
@@ -382,6 +383,8 @@ public sealed partial class WorldCreationInstances {
         Posed,
         // Its rig reads another body, so the last pass decides it.
         Deferred,
+        // A form its body neither wears nor is drawn in: its slots took the rest pose on the root (WorldCreationInstances.Forms).
+        Rested,
     }
     // One pool entry's pack between its passes: what the first pass decided and read, and what its pose changed.
     private struct PackStep {
@@ -538,6 +541,19 @@ public sealed partial class WorldCreationInstances {
         step.PackedSlots = packedSlots;
         step.ShapeCount = shapeCount;
 
+        // A form its body neither wears nor is drawn in rests on the root (WorldCreationInstances.Forms); one that stops
+        // resting poses in full at once, as a registration new to its entry does, cut from the pose it rested in.
+        if (Rests(live: live)) {
+            RestStep(index: index, live: live, moved: moved, parkPosition: parkPosition, step: ref step, transforms: transforms);
+
+            return;
+        }
+        if (live.Rested) {
+            live.Rested = false;
+            live.RootEpoch = -1;
+            m_packedRegistrations[index] = null;
+        }
+
         if (
             !moved.Everything &&
             !ReferenceEquals(
@@ -669,6 +685,13 @@ public sealed partial class WorldCreationInstances {
         }
 
         var live = m_pool[index]!;
+
+        if (live.Rested) {
+            EndRest(deltaSeconds: deltaSeconds, index: index, live: live, moved: moved, step: ref step, transforms: transforms);
+
+            return;
+        }
+
         var rootSlot = step.RootSlot;
         var posed = (step.Stage == PackStage.Posed);
 
@@ -710,7 +733,12 @@ public sealed partial class WorldCreationInstances {
 
         // The volume list is rebuilt (PackTransforms) only when a volume-bearing registration's membership, scale or
         // hidden set changed, so each registration only compares itself here.
-        if (m_hasAnyVolumes && (live.Creation.EngineDocument.Volumes is { Count: > 0 })) {
+        if (m_hasAnyVolumes && !Shows(live: live)) {
+            if (m_volumeActive[index]) {
+                m_volumeActive[index] = false;
+                m_packVolumesChanged = true;
+            }
+        } else if (m_hasAnyVolumes && (live.Creation.EngineDocument.Volumes is { Count: > 0 })) {
             if (!m_volumeActive[index] || (m_volumeScale[index] != placementScale) || !ReferenceEquals(objA: m_volumeHidden[index], objB: live.Hidden)) {
                 m_volumeActive[index] = true;
                 m_volumeScale[index] = placementScale;
@@ -746,7 +774,7 @@ public sealed partial class WorldCreationInstances {
         // The root slot holds the pose the shapes were packed under, followers included, whether or not this frame
         // repacked it.
         SetMeshDraw(
-            draw: ((live.Mesh is { } mesh)
+            draw: ((Shows(live: live) && (live.Mesh is { } mesh))
                 ? WorldPlacementStamper.MeshDrawOf(
                     identity: live,
                     material: live.MeshMaterial,

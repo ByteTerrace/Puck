@@ -1,3 +1,5 @@
+using System.Globalization;
+using Puck.Maths;
 using Puck.Physics.Motion;
 
 namespace Puck.World;
@@ -325,6 +327,23 @@ public static partial class WorldDefinitionValidator {
                     name: new Subject(Member: ".seconds", Path: path),
                     errors: errors
                 );
+                break;
+            case WorldEffect.Mantle mantle:
+                if (!(mantle.Height > 0m) || !NumericLiteral.TryToFixed(value: mantle.Height, result: out _)) {
+                    errors.Add(item: $"{path}.height must be a positive Q48.16 length.");
+                }
+                if (!(mantle.Depth > 0m) || !NumericLiteral.TryToFixed(value: mantle.Depth, result: out _)) {
+                    errors.Add(item: $"{path}.depth must be a positive Q48.16 length.");
+                }
+                if ((mantle.Reach < 0m) || !NumericLiteral.TryToFixed(value: mantle.Reach, result: out _)) {
+                    errors.Add(item: $"{path}.reach must be a non-negative Q48.16 length.");
+                }
+                if ((mantle.Carry < 0m) || (mantle.Carry > 1m)) {
+                    errors.Add(item: $"{path}.carry {mantle.Carry.ToString(provider: CultureInfo.InvariantCulture)} is outside [0, 1].");
+                }
+                if (!FixedTickConversion.TryDurationEngineTicksExact(seconds: mantle.Seconds, ticks: out var mantleTicks) || (mantleTicks == 0UL)) {
+                    errors.Add(item: $"{path}.seconds {mantle.Seconds.ToString(provider: CultureInfo.InvariantCulture)} is not a positive exact whole-engine-tick duration.");
+                }
                 break;
             case ActionEffect.Generate generate:
                 // The ONE effect admissible at both scopes: its names address world `state` rows, so they resolve
